@@ -37,4 +37,27 @@ describe("MCP gateway policy", () => {
 
     expect(tools.map((tool) => tool.name)).toEqual(["createPullRequest"]);
   });
+
+  it("returns defensive tool copies instead of mutable connector objects", () => {
+    const sourceConnector = {
+      ...sampleConnector,
+      tools: sampleConnector.tools.map((tool) => ({
+        ...tool,
+        roles: [...tool.roles]
+      }))
+    };
+    const tools = computeVisibleTools({
+      connectors: [sourceConnector],
+      projectConnectorIds: ["connector_assets"],
+      skillPermissions: ["assets:read"],
+      agentRole: "builder",
+      approvalState: "not_required"
+    });
+
+    tools[0]!.roles.push("deployer");
+    tools[0]!.permission = "git:write";
+
+    expect(sourceConnector.tools[0]!.roles).toEqual(["planner", "builder", "reviewer"]);
+    expect(sourceConnector.tools[0]!.permission).toBe("assets:read");
+  });
 });

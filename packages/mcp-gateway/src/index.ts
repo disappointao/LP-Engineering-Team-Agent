@@ -11,13 +11,13 @@ export interface MCPToolDefinition {
 export interface MCPConnectorDefinition {
   id: string;
   name: string;
-  tools: MCPToolDefinition[];
+  tools: readonly MCPToolDefinition[];
 }
 
 export interface VisibleToolInput {
-  connectors: MCPConnectorDefinition[];
-  projectConnectorIds: string[];
-  skillPermissions: string[];
+  connectors: readonly MCPConnectorDefinition[];
+  projectConnectorIds: readonly string[];
+  skillPermissions: readonly string[];
   agentRole: AgentRole;
   approvalState: ApprovalState;
 }
@@ -51,4 +51,8 @@ export const computeVisibleTools = (
     .filter((tool) => input.skillPermissions.includes(tool.permission))
     .filter(
       (tool) => !tool.requiresApproval || input.approvalState === "approved"
-    );
+    )
+    .map((tool) => ({
+      ...tool,
+      roles: [...tool.roles]
+    }));
