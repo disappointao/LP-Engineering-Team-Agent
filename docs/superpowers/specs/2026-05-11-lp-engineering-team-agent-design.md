@@ -1,7 +1,7 @@
 # LP Engineering Team Agent v1 Design
 
 Date: 2026-05-11
-Status: draft for written-spec review
+Status: approved for implementation planning
 
 ## Summary
 
