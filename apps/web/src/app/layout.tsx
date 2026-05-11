@@ -1,14 +1,23 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
+import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 
-export const metadata = {
-  title: "LP Engineering Team Agent",
-  description: "Static landing page generation workbench"
-};
+export async function generateMetadata() {
+  const requestHeaders = await headers();
+  const copy = getWorkbenchCopy(
+    resolveLocaleFromAcceptLanguage(requestHeaders.get("accept-language"))
+  );
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+  return copy.metadata;
+}
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const requestHeaders = await headers();
+  const locale = resolveLocaleFromAcceptLanguage(requestHeaders.get("accept-language"));
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>{children}</body>
     </html>
   );

@@ -1,5 +1,6 @@
 import { bundleSingleFileHtml, type StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
+import type { ExportLabels } from "./i18n";
 
 export interface ArtifactDownloadLink {
   label: string;
@@ -8,18 +9,32 @@ export interface ArtifactDownloadLink {
   bytes: number;
 }
 
-export function createArtifactDownloadLinks(artifacts: StaticArtifacts): ArtifactDownloadLink[] {
+export function createArtifactDownloadLinks(
+  artifacts: StaticArtifacts,
+  labels: Pick<ExportLabels, "singleHtml" | "indexHtml" | "stylesCss" | "scriptJs"> = {
+    singleHtml: "Export Single HTML",
+    indexHtml: "Export index.html",
+    stylesCss: "Export styles.css",
+    scriptJs: "Export script.js"
+  }
+): ArtifactDownloadLink[] {
   const singleFileHtml = bundleSingleFileHtml(artifacts);
 
   return [
-    toDownloadLink("Export Single HTML", "index.single.html", "text/html", singleFileHtml),
-    toDownloadLink("Export index.html", "index.html", "text/html", artifacts.indexHtml),
-    toDownloadLink("Export styles.css", "styles.css", "text/css", artifacts.stylesCss),
-    toDownloadLink("Export script.js", "script.js", "text/javascript", artifacts.scriptJs)
+    toDownloadLink(labels.singleHtml, "index.single.html", "text/html", singleFileHtml),
+    toDownloadLink(labels.indexHtml, "index.html", "text/html", artifacts.indexHtml),
+    toDownloadLink(labels.stylesCss, "styles.css", "text/css", artifacts.stylesCss),
+    toDownloadLink(labels.scriptJs, "script.js", "text/javascript", artifacts.scriptJs)
   ];
 }
 
-export function createDeploymentHandoffLink(handoff: DeploymentHandoff): ArtifactDownloadLink {
+export function createDeploymentHandoffLink(
+  handoff: DeploymentHandoff,
+  labels: Pick<ExportLabels, "handoff" | "handoffNextAction"> = {
+    handoff: "Export PR Handoff",
+    handoffNextAction: "Apply these files to the target repository branch and open a provider PR."
+  }
+): ArtifactDownloadLink {
   const manifest = {
     id: handoff.id,
     projectId: handoff.projectId,
@@ -29,11 +44,11 @@ export function createDeploymentHandoffLink(handoff: DeploymentHandoff): Artifac
     pullRequestUrl: handoff.pullRequestUrl,
     files: [...handoff.files],
     status: handoff.status,
-    nextAction: "Apply these files to the target repository branch and open a provider PR."
+    nextAction: labels.handoffNextAction
   };
 
   return toDownloadLink(
-    "Export PR Handoff",
+    labels.handoff,
     "deployment-handoff.json",
     "application/json",
     JSON.stringify(manifest, null, 2)

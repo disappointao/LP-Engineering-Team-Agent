@@ -63,4 +63,31 @@ describe("artifact export links", () => {
       nextAction: "Apply these files to the target repository branch and open a provider PR."
     });
   });
+
+  it("allows localized labels for export links", () => {
+    const artifacts: StaticArtifacts = {
+      indexHtml: [
+        "<!doctype html><html><head>",
+        "<link rel=\"stylesheet\" href=\"styles.css\">",
+        "</head><body>",
+        "  <script src=\"script.js\"></script>",
+        "</body></html>"
+      ].join(""),
+      stylesCss: "body { color: #111827; }",
+      scriptJs: "window.lpAgent = true;"
+    };
+    const links = createArtifactDownloadLinks(artifacts, {
+      singleHtml: "导出单文件 HTML",
+      indexHtml: "导出 index.html",
+      stylesCss: "导出 styles.css",
+      scriptJs: "导出 script.js"
+    });
+
+    expect(links.map((link) => link.label)).toEqual([
+      "导出单文件 HTML",
+      "导出 index.html",
+      "导出 styles.css",
+      "导出 script.js"
+    ]);
+  });
 });
