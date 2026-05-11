@@ -38,10 +38,31 @@ describe("model gateway", () => {
       prompt: "Generate HTML",
       projectId: "project_1",
       context: {
-        skillIds: ["skill_brand"],
-        toolNames: ["searchAssets"],
-        approvalState: "not_required",
-        artifactWorkspaceMode: "memory"
+        skills: [
+          {
+            id: "skill_brand",
+            name: "Brand LP",
+            version: "0.1.0",
+            scope: "project",
+            permissions: ["brief:read", "artifact:write"],
+            entrypoints: ["templates/brand.md"]
+          }
+        ],
+        mcpTools: [
+          {
+            connectorId: "connector_assets",
+            name: "searchAssets",
+            permission: "assets:read",
+            requiresApproval: false
+          }
+        ],
+        approval: {
+          state: "not_required"
+        },
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        }
       }
     });
 
@@ -54,10 +75,26 @@ describe("model gateway", () => {
       model: "code-model",
       promptLength: 13,
       context: {
-        skillIds: ["skill_brand"],
-        toolNames: ["searchAssets"],
-        approvalState: "not_required",
-        artifactWorkspaceMode: "memory"
+        skills: [
+          {
+            id: "skill_brand",
+            permissions: ["brief:read", "artifact:write"]
+          }
+        ],
+        mcpTools: [
+          {
+            connectorId: "connector_assets",
+            name: "searchAssets",
+            permission: "assets:read"
+          }
+        ],
+        approval: {
+          state: "not_required"
+        },
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        }
       }
     });
   });
@@ -68,9 +105,9 @@ describe("model gateway", () => {
         return {
           provider: "remote-openai",
           model: `${request.role}-model`,
-          text: `${request.context?.toolNames.join(",") ?? "no-tools"}`,
+          text: `${request.context?.mcpTools.map((tool) => tool.name).join(",") ?? "no-tools"}`,
           usage: {
-            inputTokens: request.context?.skillIds.length ?? 0,
+            inputTokens: request.context?.skills.length ?? 0,
             outputTokens: 1
           }
         };
@@ -82,10 +119,33 @@ describe("model gateway", () => {
       prompt: "Plan",
       projectId: "project_1",
       context: {
-        skillIds: ["skill_brand"],
-        toolNames: ["searchAssets"],
-        approvalState: "approved",
-        artifactWorkspaceMode: "filesystem"
+        skills: [
+          {
+            id: "skill_brand",
+            name: "Brand LP",
+            version: "0.1.0",
+            scope: "project",
+            permissions: ["brief:read"],
+            entrypoints: ["templates/brand.md"]
+          }
+        ],
+        mcpTools: [
+          {
+            connectorId: "connector_assets",
+            name: "searchAssets",
+            permission: "assets:read",
+            requiresApproval: false
+          }
+        ],
+        approval: {
+          state: "approved",
+          approvedByUserId: "reviewer_1"
+        },
+        artifactWorkspace: {
+          mode: "filesystem",
+          basePath: "/tmp/lp-agent/project_1",
+          writableFiles: ["index.html"]
+        }
       }
     });
 

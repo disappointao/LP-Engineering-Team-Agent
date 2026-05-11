@@ -10,11 +10,38 @@ export type ModelRoutingPolicy = Record<AgentRole, ModelRoute>;
 export type ModelApprovalState = "not_required" | "pending" | "approved";
 export type ArtifactWorkspaceMode = "memory" | "filesystem";
 
+export interface ModelSkillContext {
+  id: string;
+  name: string;
+  version: string;
+  scope: string;
+  permissions: string[];
+  entrypoints: string[];
+}
+
+export interface ModelMCPToolContext {
+  connectorId: string;
+  name: string;
+  permission: string;
+  requiresApproval: boolean;
+}
+
+export interface ModelApprovalContext {
+  state: ModelApprovalState;
+  approvedByUserId?: string;
+}
+
+export interface ModelArtifactWorkspaceContext {
+  mode: ArtifactWorkspaceMode;
+  basePath?: string;
+  writableFiles: string[];
+}
+
 export interface ModelRequestContext {
-  skillIds: string[];
-  toolNames: string[];
-  approvalState: ModelApprovalState;
-  artifactWorkspaceMode: ArtifactWorkspaceMode;
+  skills: ModelSkillContext[];
+  mcpTools: ModelMCPToolContext[];
+  approval: ModelApprovalContext;
+  artifactWorkspace: ModelArtifactWorkspaceContext;
 }
 
 export interface ModelRequest {
@@ -105,10 +132,17 @@ export class InMemoryModelGateway implements ModelGateway {
 
 function cloneModelRequestContext(context: ModelRequestContext): ModelRequestContext {
   return {
-    skillIds: [...context.skillIds],
-    toolNames: [...context.toolNames],
-    approvalState: context.approvalState,
-    artifactWorkspaceMode: context.artifactWorkspaceMode
+    skills: context.skills.map((skill) => ({
+      ...skill,
+      permissions: [...skill.permissions],
+      entrypoints: [...skill.entrypoints]
+    })),
+    mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
+    approval: { ...context.approval },
+    artifactWorkspace: {
+      ...context.artifactWorkspace,
+      writableFiles: [...context.artifactWorkspace.writableFiles]
+    }
   };
 }
 

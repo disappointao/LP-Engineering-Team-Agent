@@ -265,10 +265,17 @@ function toRuntimeContextLoadedEvent(
 
 function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext {
   return {
-    skillIds: context.skills.map((skill) => skill.id),
-    toolNames: context.mcpTools.map((tool) => tool.name),
-    approvalState: context.approval.state,
-    artifactWorkspaceMode: context.artifactWorkspace.mode
+    skills: context.skills.map((skill) => ({
+      ...skill,
+      permissions: [...skill.permissions],
+      entrypoints: [...skill.entrypoints]
+    })),
+    mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
+    approval: { ...context.approval },
+    artifactWorkspace: {
+      ...context.artifactWorkspace,
+      writableFiles: [...context.artifactWorkspace.writableFiles]
+    }
   };
 }
 

@@ -217,10 +217,33 @@ describe("local agent runtime adapter", () => {
       "run.completed"
     ]);
     expect(gateway.requests[0]?.context).toEqual({
-      skillIds: ["skill_brand"],
-      toolNames: ["searchAssets"],
-      approvalState: "approved",
-      artifactWorkspaceMode: "filesystem"
+      skills: [
+        {
+          id: "skill_brand",
+          name: "Brand LP",
+          version: "0.1.0",
+          scope: "project",
+          permissions: ["brief:read", "artifact:write"],
+          entrypoints: ["templates/brand.md"]
+        }
+      ],
+      mcpTools: [
+        {
+          connectorId: "connector_assets",
+          name: "searchAssets",
+          permission: "assets:read",
+          requiresApproval: false
+        }
+      ],
+      approval: {
+        state: "approved",
+        approvedByUserId: "reviewer_1"
+      },
+      artifactWorkspace: {
+        mode: "filesystem",
+        basePath: "/tmp/lp-agent/project_1",
+        writableFiles: ["index.html", "styles.css", "script.js"]
+      }
     });
   });
 

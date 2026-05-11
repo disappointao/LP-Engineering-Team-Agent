@@ -1,11 +1,12 @@
 import { LPPreview } from "../components/lp-preview";
 import { createDemoWorkbenchSnapshot } from "../lib/demo-workbench";
-import { createArtifactDownloadLinks } from "../lib/export-links";
+import { createArtifactDownloadLinks, createDeploymentHandoffLink } from "../lib/export-links";
 
 export default async function HomePage() {
   const snapshot = await createDemoWorkbenchSnapshot();
   const { project, brief, pageVersion, deployment, singleFileHtml } = snapshot;
   const downloadLinks = createArtifactDownloadLinks(pageVersion.artifacts);
+  const handoffLink = createDeploymentHandoffLink(deployment);
   const singleFileLink = downloadLinks[0];
   const threeFileLinks = downloadLinks.slice(1);
   const primaryCta = pageVersion.artifacts.indexHtml.includes("Shop the sale")
@@ -102,11 +103,13 @@ export default async function HomePage() {
               </div>
               <div className="runItem">
                 <strong>Deployer</strong>
-                <p>{deployment.branch} opened at {deployment.pullRequestUrl}</p>
+                <p>{deployment.branch} prepared for provider PR handoff.</p>
               </div>
             </div>
             <div className="actions">
-              <a className="button" href={deployment.pullRequestUrl}>Open PR Handoff</a>
+              <a className="button" download={handoffLink.filename} href={handoffLink.href}>
+                {handoffLink.label}
+              </a>
               {threeFileLinks.map((link) => (
                 <a
                   className="button buttonSecondary"

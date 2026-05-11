@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
-import { createArtifactDownloadLinks } from "./export-links";
+import type { DeploymentHandoff } from "@lp-agent/git-deployment";
+import { createArtifactDownloadLinks, createDeploymentHandoffLink } from "./export-links";
 
 describe("artifact export links", () => {
   it("creates data URL download links for single-file and three-file LP exports", () => {
@@ -29,5 +30,37 @@ describe("artifact export links", () => {
     expect(decodeURIComponent(links[1]?.href.split(",")[1] ?? "")).toBe(artifacts.indexHtml);
     expect(decodeURIComponent(links[2]?.href.split(",")[1] ?? "")).toBe(artifacts.stylesCss);
     expect(decodeURIComponent(links[3]?.href.split(",")[1] ?? "")).toBe(artifacts.scriptJs);
+  });
+
+  it("creates a downloadable deployment handoff manifest instead of a mock external action", () => {
+    const handoff: DeploymentHandoff = {
+      id: "deployment_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      branch: "lp-agent/project_1/version_1",
+      commitSha: "mock_commit_1",
+      pullRequestUrl: "https://git.example.local/pr/deployment_1",
+      files: ["index.html", "styles.css", "script.js"],
+      status: "pr_opened"
+    };
+
+    const link = createDeploymentHandoffLink(handoff);
+    const manifest = JSON.parse(decodeURIComponent(link.href.split(",")[1] ?? "")) as {
+      id: string;
+      branch: string;
+      files: string[];
+      nextAction: string;
+    };
+
+    expect(link).toMatchObject({
+      label: "Export PR Handoff",
+      filename: "deployment-handoff.json"
+    });
+    expect(manifest).toMatchObject({
+      id: "deployment_1",
+      branch: "lp-agent/project_1/version_1",
+      files: ["index.html", "styles.css", "script.js"],
+      nextAction: "Apply these files to the target repository branch and open a provider PR."
+    });
   });
 });
