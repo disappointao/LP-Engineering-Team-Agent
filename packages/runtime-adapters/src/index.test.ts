@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sampleBrief } from "@lp-agent/lp-schema";
-import { InMemoryModelGateway, createDefaultModelPolicy, type ModelRequest, type ModelResponse } from "@lp-agent/model-gateway";
+import {
+  InMemoryModelGateway,
+  createDefaultModelPolicy,
+  type ModelRequest,
+  type ModelResponse
+} from "@lp-agent/model-gateway";
 import { LocalAgentRuntimeAdapter } from "./index";
 import type { RuntimeEvent, RuntimeRunRequest, RuntimeRunResult } from "./index";
 
@@ -116,6 +121,38 @@ describe("local agent runtime adapter", () => {
     expect(result.artifacts).toBeUndefined();
   });
 
+  it("reports findings for every hero section missing a CTA", async () => {
+    const adapter = new LocalAgentRuntimeAdapter();
+    const briefWithMultipleHeroIssues = {
+      ...sampleBrief,
+      sections: [
+        sampleBrief.sections[0]!,
+        {
+          ...sampleBrief.sections[0]!,
+          id: "section_secondary_hero",
+          cta: undefined
+        },
+        {
+          ...sampleBrief.sections[0]!,
+          id: "section_tertiary_hero",
+          cta: undefined
+        }
+      ]
+    };
+
+    const result = await adapter.run({
+      runId: "run_review_2",
+      projectId: "project_1",
+      role: "reviewer",
+      input: { brief: briefWithMultipleHeroIssues }
+    });
+
+    expect(result.findings?.map((finding) => finding.target)).toEqual([
+      "section:section_secondary_hero",
+      "section:section_tertiary_hero"
+    ]);
+  });
+
   it("serializes the brief as the model prompt when no explicit prompt is provided", async () => {
     const gateway = new RecordingModelGateway();
     const adapter = new LocalAgentRuntimeAdapter(gateway);
@@ -128,6 +165,40 @@ describe("local agent runtime adapter", () => {
     });
 
     expect(gateway.requests[0]?.prompt).toBe(JSON.stringify(sampleBrief));
+  });
+
+  it("returns a structured failed result when the model gateway rejects", async () => {
+    const adapter = new LocalAgentRuntimeAdapter(new FailingModelGateway());
+
+    const result = await adapter.run({
+      runId: "run_failed_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan a page" }
+    });
+
+    expect(result.state).toBe("failed");
+    expect(result.events.map((event) => event.type)).toEqual(["run.started", "run.failed"]);
+    expect(result.events[1]).toMatchObject({
+      type: "run.failed",
+      message: "Model gateway unavailable",
+      runId: "run_failed_1",
+      role: "planner",
+      state: "failed"
+    });
+  });
+
+  it("narrows runtime events by type", async () => {
+    const adapter = new LocalAgentRuntimeAdapter();
+    const result = await adapter.run({
+      runId: "run_builder_3",
+      projectId: "project_1",
+      role: "builder",
+      input: { brief: sampleBrief }
+    });
+
+    const artifactEvent = result.events.find(isArtifactCreatedEvent);
+    expect(artifactEvent?.artifactId).toBe("artifact_run_builder_3");
   });
 });
 
@@ -142,4 +213,20 @@ class RecordingModelGateway extends InMemoryModelGateway {
     this.requests.push(request);
     return super.complete(request);
   }
+}
+
+class FailingModelGateway extends InMemoryModelGateway {
+  constructor() {
+    super(createDefaultModelPolicy());
+  }
+
+  override async complete(): Promise<ModelResponse> {
+    throw new Error("Model gateway unavailable");
+  }
+}
+
+function isArtifactCreatedEvent(
+  event: RuntimeEvent
+): event is Extract<RuntimeEvent, { type: "artifact.created" }> {
+  return event.type === "artifact.created";
 }

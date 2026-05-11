@@ -19,16 +19,46 @@ export interface RuntimeRunRequest {
   input: RuntimeRunInput;
 }
 
-export interface RuntimeEvent {
-  type: "run.started" | "model.completed" | "artifact.created" | "review.completed" | "run.completed";
-  message: string;
-  runId?: string;
-  role?: AgentRole;
-  provider?: string;
-  model?: string;
-  artifactId?: string;
-  state?: RunState;
-}
+export type RuntimeEvent =
+  | {
+      type: "run.started";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+    }
+  | {
+      type: "model.completed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      provider: string;
+      model: string;
+    }
+  | {
+      type: "artifact.created";
+      message: string;
+      runId?: string;
+      artifactId: string;
+    }
+  | {
+      type: "review.completed";
+      message: string;
+      runId?: string;
+    }
+  | {
+      type: "run.completed";
+      message: string;
+      runId?: string;
+      state: RunState;
+    }
+  | {
+      type: "run.failed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      state: "failed";
+      errorName?: string;
+    };
 
 export interface RuntimeRunResult {
   runId: string;
@@ -60,11 +90,24 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         role: request.role
       }
     ];
-    const modelResponse = await this.modelGateway.complete({
-      role: request.role,
-      projectId: request.projectId,
-      prompt: toModelPrompt(request)
-    });
+    let modelResponse: ModelResponse;
+    try {
+      modelResponse = await this.modelGateway.complete({
+        role: request.role,
+        projectId: request.projectId,
+        prompt: toModelPrompt(request)
+      });
+    } catch (error) {
+      events.push(toRunFailedEvent(request, error));
+      return {
+        runId: request.runId,
+        projectId: request.projectId,
+        role: request.role,
+        state: "failed",
+        events
+      };
+    }
+
     events.push(toModelCompletedEvent(request, modelResponse));
 
     const artifacts = request.role === "builder" && request.input.brief
@@ -137,19 +180,25 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
   };
 }
 
-function reviewHeroCta(brief: LPBrief): ReviewFinding[] {
-  const hero = brief.sections.find((section) => section.type === "hero");
-  if (!hero || hero.cta) {
-    return [];
-  }
+function toRunFailedEvent(request: RuntimeRunRequest, error: unknown): RuntimeEvent {
+  return {
+    type: "run.failed",
+    message: error instanceof Error ? error.message : "Runtime run failed.",
+    runId: request.runId,
+    role: request.role,
+    state: "failed",
+    errorName: error instanceof Error ? error.name : undefined
+  };
+}
 
-  return [
-    {
+function reviewHeroCta(brief: LPBrief): ReviewFinding[] {
+  return brief.sections
+    .filter((section) => section.type === "hero" && !section.cta)
+    .map((section): ReviewFinding => ({
       severity: "blocking",
-      target: `section:${hero.id}`,
+      target: `section:${section.id}`,
       explanation: "Hero section is missing a CTA.",
       suggestedFix: "Add a primary CTA to the hero section.",
       blocksDeployment: true
-    }
-  ];
+    }));
 }
