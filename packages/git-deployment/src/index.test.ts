@@ -45,6 +45,41 @@ describe("git deployment adapter", () => {
     ).rejects.toThrow("Deployment handoff requires approval.");
   });
 
+  it("rejects deployment handoff creation with incomplete static artifacts", async () => {
+    const adapter = new InMemoryGitDeploymentAdapter();
+
+    await expect(
+      adapter.createHandoff({
+        projectId: "project_1",
+        pageVersionId: "page_version_1",
+        artifacts: { ...artifacts, scriptJs: " " },
+        approved: true
+      })
+    ).rejects.toThrow("Deployment handoff requires complete static artifacts.");
+  });
+
+  it("rejects branch-unsafe project and page version identifiers", async () => {
+    const adapter = new InMemoryGitDeploymentAdapter();
+
+    await expect(
+      adapter.createHandoff({
+        projectId: "../project",
+        pageVersionId: "page_version_1",
+        artifacts,
+        approved: true
+      })
+    ).rejects.toThrow("Deployment handoff identifiers must be branch safe.");
+
+    await expect(
+      adapter.createHandoff({
+        projectId: "project_1",
+        pageVersionId: "page/version",
+        artifacts,
+        approved: true
+      })
+    ).rejects.toThrow("Deployment handoff identifiers must be branch safe.");
+  });
+
   it("creates deterministic pull request handoff records for approved artifacts", async () => {
     const adapter: GitDeploymentAdapter = new InMemoryGitDeploymentAdapter();
 
@@ -81,5 +116,31 @@ describe("git deployment adapter", () => {
       files: ["index.html", "styles.css", "script.js"],
       status: "pr_opened"
     });
+  });
+
+  it("returns the existing handoff when the same page version is retried", async () => {
+    const adapter = new InMemoryGitDeploymentAdapter();
+
+    const first = await adapter.createHandoff({
+      projectId: "project_1",
+      pageVersionId: "page_version_1",
+      artifacts,
+      approved: true
+    });
+    const retry = await adapter.createHandoff({
+      projectId: "project_1",
+      pageVersionId: "page_version_1",
+      artifacts,
+      approved: true
+    });
+    const next = await adapter.createHandoff({
+      projectId: "project_1",
+      pageVersionId: "page_version_2",
+      artifacts,
+      approved: true
+    });
+
+    expect(retry).toEqual(first);
+    expect(next.id).toBe("deployment_2");
   });
 });
