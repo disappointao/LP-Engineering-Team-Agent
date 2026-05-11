@@ -146,12 +146,92 @@ model PageVersion {
   reviewStatus ReviewStatus
   project      Project      @relation(fields: [projectId], references: [id])
   brief        LPBrief      @relation(fields: [briefId], references: [id])
+  artifacts    Artifact[]
   deployments  Deployment[]
   createdAt    DateTime     @default(now())
 
   @@index([projectId])
   @@index([briefId])
   @@index([reviewStatus])
+}
+
+model Artifact {
+  id            String      @id @default(cuid())
+  pageVersionId String
+  filename      String
+  mimeType      String
+  kind          String
+  byteSize      Int
+  checksum      String?
+  storage       Json
+  pageVersion   PageVersion @relation(fields: [pageVersionId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@unique([pageVersionId, filename])
+  @@index([pageVersionId, kind])
+}
+
+model MCPConnector {
+  id        String    @id
+  scope     SkillScope
+  targetKey String
+  name      String
+  transport String
+  config    Json
+  enabled   Boolean   @default(true)
+  tools     MCPTool[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([scope, targetKey])
+  @@index([enabled])
+}
+
+model MCPTool {
+  id               String       @id @default(cuid())
+  connectorId      String
+  name             String
+  permission       String
+  roles            String[]
+  requiresApproval Boolean      @default(false)
+  connector        MCPConnector @relation(fields: [connectorId], references: [id])
+  createdAt        DateTime     @default(now())
+
+  @@unique([connectorId, name])
+  @@index([permission])
+}
+
+model ModelProvider {
+  id        String               @id
+  scope     SkillScope
+  targetKey String
+  name      String
+  provider  String
+  config    Json
+  enabled   Boolean              @default(true)
+  policies  ModelRoutingPolicy[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([scope, targetKey])
+  @@index([provider, enabled])
+}
+
+model ModelRoutingPolicy {
+  id         String        @id @default(cuid())
+  scope      SkillScope
+  targetKey  String
+  role       String
+  providerId String
+  model      String
+  fallback   Json?
+  settings   Json?
+  provider   ModelProvider @relation(fields: [providerId], references: [id])
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([scope, targetKey, role])
+  @@index([providerId])
 }
 
 model Skill {

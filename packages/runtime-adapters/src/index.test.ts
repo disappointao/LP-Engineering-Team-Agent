@@ -3,10 +3,11 @@ import { sampleBrief, type LPBrief } from "@lp-agent/lp-schema";
 import {
   InMemoryModelGateway,
   createDefaultModelPolicy,
+  type ModelGateway,
   type ModelRequest,
   type ModelResponse
 } from "@lp-agent/model-gateway";
-import { LocalAgentRuntimeAdapter } from "./index";
+import { createDefaultRuntimeContext, LocalAgentRuntimeAdapter } from "./index";
 import type { RuntimeEvent, RuntimeRunRequest, RuntimeRunResult } from "./index";
 
 describe("local agent runtime adapter", () => {
@@ -167,6 +168,79 @@ describe("local agent runtime adapter", () => {
     expect(gateway.requests[0]?.prompt).toBe(JSON.stringify(sampleBrief));
   });
 
+  it("passes scoped skills, visible MCP tools, approval, and workspace context into model calls", async () => {
+    const gateway = new RecordingPortableGateway();
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+    const context = {
+      skills: [
+        {
+          id: "skill_brand",
+          name: "Brand LP",
+          version: "0.1.0",
+          scope: "project",
+          permissions: ["brief:read", "artifact:write"],
+          entrypoints: ["templates/brand.md"]
+        }
+      ],
+      mcpTools: [
+        {
+          connectorId: "connector_assets",
+          name: "searchAssets",
+          permission: "assets:read",
+          requiresApproval: false
+        }
+      ],
+      approval: {
+        state: "approved",
+        approvedByUserId: "reviewer_1"
+      },
+      artifactWorkspace: {
+        mode: "filesystem",
+        basePath: "/tmp/lp-agent/project_1",
+        writableFiles: ["index.html", "styles.css", "script.js"]
+      }
+    } satisfies RuntimeRunRequest["context"];
+
+    const result = await adapter.run({
+      runId: "run_builder_context",
+      projectId: "project_1",
+      role: "builder",
+      input: { brief: sampleBrief },
+      context
+    });
+
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "artifact.created",
+      "run.completed"
+    ]);
+    expect(gateway.requests[0]?.context).toEqual({
+      skillIds: ["skill_brand"],
+      toolNames: ["searchAssets"],
+      approvalState: "approved",
+      artifactWorkspaceMode: "filesystem"
+    });
+  });
+
+  it("creates a defensive default runtime context for deterministic local runs", () => {
+    const context = createDefaultRuntimeContext();
+    context.artifactWorkspace.writableFiles.push("mutated.html");
+
+    expect(createDefaultRuntimeContext()).toEqual({
+      skills: [],
+      mcpTools: [],
+      approval: {
+        state: "not_required"
+      },
+      artifactWorkspace: {
+        mode: "memory",
+        writableFiles: ["index.html", "styles.css", "script.js"]
+      }
+    });
+  });
+
   it("returns a structured failed result when the model gateway rejects", async () => {
     const adapter = new LocalAgentRuntimeAdapter(new FailingModelGateway());
 
@@ -244,6 +318,23 @@ class RecordingModelGateway extends InMemoryModelGateway {
   override async complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);
     return super.complete(request);
+  }
+}
+
+class RecordingPortableGateway implements ModelGateway {
+  readonly requests: ModelRequest[] = [];
+
+  async complete(request: ModelRequest): Promise<ModelResponse> {
+    this.requests.push(request);
+    return {
+      provider: "portable",
+      model: `${request.role}-model`,
+      text: "ok",
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1
+      }
+    };
   }
 }
 

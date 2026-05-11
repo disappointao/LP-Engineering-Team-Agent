@@ -3,6 +3,7 @@ import {
   InMemoryModelGateway,
   createDefaultModelPolicy,
   type AgentRole,
+  type ModelGateway,
   type ModelAuditEntry,
   type ModelRoutingPolicy
 } from "./index";
@@ -35,7 +36,13 @@ describe("model gateway", () => {
     const result = await gateway.complete({
       role: "builder",
       prompt: "Generate HTML",
-      projectId: "project_1"
+      projectId: "project_1",
+      context: {
+        skillIds: ["skill_brand"],
+        toolNames: ["searchAssets"],
+        approvalState: "not_required",
+        artifactWorkspaceMode: "memory"
+      }
     });
 
     expect(result.usage).toEqual({ inputTokens: 4, outputTokens: 32 });
@@ -45,7 +52,51 @@ describe("model gateway", () => {
       projectId: "project_1",
       provider: "mock-anthropic",
       model: "code-model",
-      promptLength: 13
+      promptLength: 13,
+      context: {
+        skillIds: ["skill_brand"],
+        toolNames: ["searchAssets"],
+        approvalState: "not_required",
+        artifactWorkspaceMode: "memory"
+      }
+    });
+  });
+
+  it("can be replaced by a provider-neutral gateway implementation", async () => {
+    const gateway: ModelGateway = {
+      async complete(request) {
+        return {
+          provider: "remote-openai",
+          model: `${request.role}-model`,
+          text: `${request.context?.toolNames.join(",") ?? "no-tools"}`,
+          usage: {
+            inputTokens: request.context?.skillIds.length ?? 0,
+            outputTokens: 1
+          }
+        };
+      }
+    };
+
+    const result = await gateway.complete({
+      role: "planner",
+      prompt: "Plan",
+      projectId: "project_1",
+      context: {
+        skillIds: ["skill_brand"],
+        toolNames: ["searchAssets"],
+        approvalState: "approved",
+        artifactWorkspaceMode: "filesystem"
+      }
+    });
+
+    expect(result).toMatchObject({
+      provider: "remote-openai",
+      model: "planner-model",
+      text: "searchAssets",
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1
+      }
     });
   });
 

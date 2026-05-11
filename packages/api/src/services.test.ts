@@ -135,6 +135,48 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("passes default skill, MCP, approval, and artifact workspace context into runtime runs", async () => {
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const reviewerRuntime = new RecordingRuntime({ state: "completed", findings: [] });
+    const service = new DemoWorkbenchService({
+      builderRuntime,
+      reviewerRuntime,
+      now: fixedClock()
+    });
+
+    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+    await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
+
+    expect(builderRuntime.requests[0]?.context).toMatchObject({
+      skills: [
+        {
+          id: "skill_brand",
+          scope: "project",
+          permissions: ["brief:read", "artifact:write", "assets:read"]
+        }
+      ],
+      mcpTools: [
+        {
+          connectorId: "connector_assets",
+          name: "searchAssets",
+          permission: "assets:read"
+        }
+      ],
+      approval: {
+        state: "not_required"
+      },
+      artifactWorkspace: {
+        mode: "memory",
+        writableFiles: ["index.html", "styles.css", "script.js"]
+      }
+    });
+    expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
+      "searchAssets"
+    ]);
+  });
+
   it("fails page generation when the builder runtime fails", async () => {
     const service = new DemoWorkbenchService({
       builderRuntime: new StaticRuntime({ state: "failed", artifacts: undefined }),
@@ -357,6 +399,15 @@ class MutableRuntime implements AgentRuntimeAdapter {
       artifacts: this.result.artifacts,
       findings: this.result.findings
     };
+  }
+}
+
+class RecordingRuntime extends StaticRuntime {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  override async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    this.requests.push(request);
+    return super.run(request);
   }
 }
 

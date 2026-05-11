@@ -14,8 +14,10 @@
     "@lp-agent/artifacts": "workspace:*",
     "@lp-agent/git-deployment": "workspace:*",
     "@lp-agent/lp-schema": "workspace:*",
+    "@lp-agent/mcp-gateway": "workspace:*",
     "@lp-agent/model-gateway": "workspace:*",
-    "@lp-agent/runtime-adapters": "workspace:*"
+    "@lp-agent/runtime-adapters": "workspace:*",
+    "@lp-agent/skills": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

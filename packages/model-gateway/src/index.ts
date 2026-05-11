@@ -7,10 +7,21 @@ export interface ModelRoute {
 
 export type ModelRoutingPolicy = Record<AgentRole, ModelRoute>;
 
+export type ModelApprovalState = "not_required" | "pending" | "approved";
+export type ArtifactWorkspaceMode = "memory" | "filesystem";
+
+export interface ModelRequestContext {
+  skillIds: string[];
+  toolNames: string[];
+  approvalState: ModelApprovalState;
+  artifactWorkspaceMode: ArtifactWorkspaceMode;
+}
+
 export interface ModelRequest {
   role: AgentRole;
   prompt: string;
   projectId: string;
+  context?: ModelRequestContext;
 }
 
 export interface ModelResponse {
@@ -27,6 +38,11 @@ export interface ModelAuditEntry extends ModelRoute {
   role: AgentRole;
   projectId: string;
   promptLength: number;
+  context?: ModelRequestContext;
+}
+
+export interface ModelGateway {
+  complete(request: ModelRequest): Promise<ModelResponse>;
 }
 
 const agentRoles: AgentRole[] = ["planner", "builder", "reviewer", "deployer"];
@@ -45,7 +61,7 @@ export class ModelRouteNotConfiguredError extends Error {
   }
 }
 
-export class InMemoryModelGateway {
+export class InMemoryModelGateway implements ModelGateway {
   private readonly auditEntries: ModelAuditEntry[] = [];
   private readonly policy: Partial<ModelRoutingPolicy>;
 
@@ -64,7 +80,8 @@ export class InMemoryModelGateway {
       projectId: request.projectId,
       provider: route.provider,
       model: route.model,
-      promptLength: request.prompt.length
+      promptLength: request.prompt.length,
+      context: request.context ? cloneModelRequestContext(request.context) : undefined
     });
 
     return {
@@ -79,8 +96,20 @@ export class InMemoryModelGateway {
   }
 
   getAuditLog(): readonly ModelAuditEntry[] {
-    return this.auditEntries.map((entry) => ({ ...entry }));
+    return this.auditEntries.map((entry) => ({
+      ...entry,
+      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
+    }));
   }
+}
+
+function cloneModelRequestContext(context: ModelRequestContext): ModelRequestContext {
+  return {
+    skillIds: [...context.skillIds],
+    toolNames: [...context.toolNames],
+    approvalState: context.approvalState,
+    artifactWorkspaceMode: context.artifactWorkspaceMode
+  };
 }
 
 function clonePolicy(policy: ModelRoutingPolicy): Partial<ModelRoutingPolicy> {

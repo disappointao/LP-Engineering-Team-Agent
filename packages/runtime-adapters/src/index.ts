@@ -4,6 +4,8 @@ import {
   InMemoryModelGateway,
   createDefaultModelPolicy,
   type AgentRole,
+  type ModelGateway,
+  type ModelRequestContext,
   type ModelResponse
 } from "@lp-agent/model-gateway";
 
@@ -12,11 +14,49 @@ export interface RuntimeRunInput {
   brief?: LPBrief;
 }
 
+export type RuntimeApprovalState = "not_required" | "pending" | "approved";
+export type RuntimeArtifactWorkspaceMode = "memory" | "filesystem";
+
+export interface RuntimeSkillContext {
+  id: string;
+  name: string;
+  version: string;
+  scope: string;
+  permissions: string[];
+  entrypoints: string[];
+}
+
+export interface RuntimeMCPToolContext {
+  connectorId: string;
+  name: string;
+  permission: string;
+  requiresApproval: boolean;
+}
+
+export interface RuntimeApprovalContext {
+  state: RuntimeApprovalState;
+  approvedByUserId?: string;
+}
+
+export interface RuntimeArtifactWorkspace {
+  mode: RuntimeArtifactWorkspaceMode;
+  basePath?: string;
+  writableFiles: string[];
+}
+
+export interface RuntimeRunContext {
+  skills: RuntimeSkillContext[];
+  mcpTools: RuntimeMCPToolContext[];
+  approval: RuntimeApprovalContext;
+  artifactWorkspace: RuntimeArtifactWorkspace;
+}
+
 export interface RuntimeRunRequest {
   runId: string;
   projectId: string;
   role: AgentRole;
   input: RuntimeRunInput;
+  context?: RuntimeRunContext;
 }
 
 export type RuntimeEvent =
@@ -33,6 +73,15 @@ export type RuntimeEvent =
       role?: AgentRole;
       provider: string;
       model: string;
+    }
+  | {
+      type: "runtime.context.loaded";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      skillCount: number;
+      toolCount: number;
+      approvalState: RuntimeApprovalState;
     }
   | {
       type: "artifact.created";
@@ -75,13 +124,16 @@ export interface AgentRuntimeAdapter {
 }
 
 export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
-  private readonly modelGateway: InMemoryModelGateway;
+  private readonly modelGateway: ModelGateway;
 
-  constructor(modelGateway = new InMemoryModelGateway(createDefaultModelPolicy())) {
+  constructor(modelGateway: ModelGateway = new InMemoryModelGateway(createDefaultModelPolicy())) {
     this.modelGateway = modelGateway;
   }
 
   async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    const context = request.context
+      ? cloneRuntimeContext(request.context)
+      : createDefaultRuntimeContext();
     const events: RuntimeEvent[] = [
       {
         type: "run.started",
@@ -90,11 +142,15 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         role: request.role
       }
     ];
+    if (request.context) {
+      events.push(toRuntimeContextLoadedEvent(request, context));
+    }
     try {
       const modelResponse = await this.modelGateway.complete({
         role: request.role,
         projectId: request.projectId,
-        prompt: toModelPrompt(request)
+        prompt: toModelPrompt(request),
+        context: toModelRequestContext(context)
       });
       events.push(toModelCompletedEvent(request, modelResponse));
 
@@ -156,6 +212,20 @@ export type AgentRunRequest = RuntimeRunRequest;
 export type AgentRunEvent = RuntimeEvent;
 export type AgentRunResult = RuntimeRunResult;
 
+export function createDefaultRuntimeContext(): RuntimeRunContext {
+  return {
+    skills: [],
+    mcpTools: [],
+    approval: {
+      state: "not_required"
+    },
+    artifactWorkspace: {
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    }
+  };
+}
+
 function toModelPrompt(request: RuntimeRunRequest): string {
   const prompt = request.input.prompt?.trim();
   if (prompt) {
@@ -175,6 +245,30 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
     role: request.role,
     provider: response.provider,
     model: response.model
+  };
+}
+
+function toRuntimeContextLoadedEvent(
+  request: RuntimeRunRequest,
+  context: RuntimeRunContext
+): RuntimeEvent {
+  return {
+    type: "runtime.context.loaded",
+    message: "Runtime capability context loaded",
+    runId: request.runId,
+    role: request.role,
+    skillCount: context.skills.length,
+    toolCount: context.mcpTools.length,
+    approvalState: context.approval.state
+  };
+}
+
+function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext {
+  return {
+    skillIds: context.skills.map((skill) => skill.id),
+    toolNames: context.mcpTools.map((tool) => tool.name),
+    approvalState: context.approval.state,
+    artifactWorkspaceMode: context.artifactWorkspace.mode
   };
 }
 
@@ -199,4 +293,20 @@ function reviewHeroCta(brief: LPBrief): ReviewFinding[] {
       suggestedFix: "Add a primary CTA to the hero section.",
       blocksDeployment: true
     }));
+}
+
+function cloneRuntimeContext(context: RuntimeRunContext): RuntimeRunContext {
+  return {
+    skills: context.skills.map((skill) => ({
+      ...skill,
+      permissions: [...skill.permissions],
+      entrypoints: [...skill.entrypoints]
+    })),
+    mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
+    approval: { ...context.approval },
+    artifactWorkspace: {
+      ...context.artifactWorkspace,
+      writableFiles: [...context.artifactWorkspace.writableFiles]
+    }
+  };
 }

@@ -76,12 +76,18 @@ importers:
       '@lp-agent/lp-schema':
         specifier: workspace:*
         version: link:../lp-schema
+      '@lp-agent/mcp-gateway':
+        specifier: workspace:*
+        version: link:../mcp-gateway
       '@lp-agent/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
       '@lp-agent/runtime-adapters':
         specifier: workspace:*
         version: link:../runtime-adapters
+      '@lp-agent/skills':
+        specifier: workspace:*
+        version: link:../skills
     devDependencies:
       typescript:
         specifier: ^5.7.0

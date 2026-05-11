@@ -5,11 +5,14 @@ import {
   type GitDeploymentAdapter
 } from "@lp-agent/git-deployment";
 import { sampleBrief, type LPBrief, type ReviewFinding } from "@lp-agent/lp-schema";
+import { computeVisibleTools, sampleConnector, type ApprovalState } from "@lp-agent/mcp-gateway";
 import { InMemoryModelGateway, createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
   LocalAgentRuntimeAdapter,
-  type AgentRuntimeAdapter
+  type AgentRuntimeAdapter,
+  type RuntimeRunContext
 } from "@lp-agent/runtime-adapters";
+import { canUseSkill, sampleTemplateSkill, type SkillManifest } from "@lp-agent/skills";
 
 export interface ProjectRecord {
   id: string;
@@ -137,7 +140,8 @@ export class DemoWorkbenchService {
       input: {
         brief: copyBrief(brief.brief),
         prompt: brief.prompt
-      }
+      },
+      context: createWorkbenchRuntimeContext("builder")
     });
 
     if (result.state === "failed") {
@@ -183,7 +187,8 @@ export class DemoWorkbenchService {
       input: {
         brief: copyBrief(brief.brief),
         prompt: "Review for launch blockers."
-      }
+      },
+      context: createWorkbenchRuntimeContext("reviewer")
     });
 
     if (result.state === "failed") {
@@ -296,6 +301,63 @@ export function createDemoWorkbenchService(): DemoWorkbenchService {
 
 function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
   return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(createDefaultModelPolicy()));
+}
+
+function createWorkbenchRuntimeContext(
+  role: "planner" | "builder" | "reviewer" | "deployer",
+  approvalState: ApprovalState = "not_required"
+): RuntimeRunContext {
+  const skill = createDefaultWorkbenchSkill();
+  const grantedPermissions = [...skill.permissions];
+  const skills = canUseSkill({
+    manifest: skill,
+    boundSkillIds: [skill.id],
+    grantedPermissions
+  })
+    ? [toRuntimeSkill(skill)]
+    : [];
+  const mcpTools = computeVisibleTools({
+    connectors: [sampleConnector],
+    projectConnectorIds: [sampleConnector.id],
+    skillPermissions: grantedPermissions,
+    agentRole: role,
+    approvalState
+  }).map((tool) => ({
+    connectorId: sampleConnector.id,
+    name: tool.name,
+    permission: tool.permission,
+    requiresApproval: tool.requiresApproval
+  }));
+
+  return {
+    skills,
+    mcpTools,
+    approval: {
+      state: approvalState
+    },
+    artifactWorkspace: {
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    }
+  };
+}
+
+function createDefaultWorkbenchSkill(): SkillManifest {
+  return {
+    ...sampleTemplateSkill,
+    permissions: [...sampleTemplateSkill.permissions, "assets:read"]
+  };
+}
+
+function toRuntimeSkill(skill: SkillManifest): RuntimeRunContext["skills"][number] {
+  return {
+    id: skill.id,
+    name: skill.name,
+    version: skill.version,
+    scope: skill.scope,
+    permissions: [...skill.permissions],
+    entrypoints: [...skill.entrypoints]
+  };
 }
 
 function copyProject(project: ProjectRecord): ProjectRecord {

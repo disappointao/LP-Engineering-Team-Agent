@@ -1,9 +1,13 @@
 import { LPPreview } from "../components/lp-preview";
 import { createDemoWorkbenchSnapshot } from "../lib/demo-workbench";
+import { createArtifactDownloadLinks } from "../lib/export-links";
 
 export default async function HomePage() {
   const snapshot = await createDemoWorkbenchSnapshot();
   const { project, brief, pageVersion, deployment, singleFileHtml } = snapshot;
+  const downloadLinks = createArtifactDownloadLinks(pageVersion.artifacts);
+  const singleFileLink = downloadLinks[0];
+  const threeFileLinks = downloadLinks.slice(1);
   const primaryCta = pageVersion.artifacts.indexHtml.includes("Shop the sale")
     ? "Shop the sale"
     : brief.brief.cta.label;
@@ -102,11 +106,26 @@ export default async function HomePage() {
               </div>
             </div>
             <div className="actions">
-              <button className="button" type="button">Approve PR Handoff</button>
-              <button className="button buttonSecondary" type="button">Export Three Files</button>
-              <button className="button buttonSecondary" type="button">
-                Export Single HTML ({singleFileHtml.length} bytes)
-              </button>
+              <a className="button" href={deployment.pullRequestUrl}>Open PR Handoff</a>
+              {threeFileLinks.map((link) => (
+                <a
+                  className="button buttonSecondary"
+                  download={link.filename}
+                  href={link.href}
+                  key={link.filename}
+                >
+                  {link.label}
+                </a>
+              ))}
+              {singleFileLink ? (
+                <a
+                  className="button buttonSecondary"
+                  download={singleFileLink.filename}
+                  href={singleFileLink.href}
+                >
+                  {singleFileLink.label} ({singleFileHtml.length} bytes)
+                </a>
+              ) : null}
             </div>
           </section>
         </div>

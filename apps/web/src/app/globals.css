@@ -26,6 +26,7 @@ body {
 }
 
 button,
+a,
 iframe {
   font: inherit;
 }
@@ -212,10 +213,14 @@ iframe {
   border: 0;
   border-radius: 6px;
   padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #ffffff;
   background: var(--accent);
   font-weight: 800;
-  cursor: default;
+  cursor: pointer;
+  text-decoration: none;
 }
 
 .buttonSecondary {
