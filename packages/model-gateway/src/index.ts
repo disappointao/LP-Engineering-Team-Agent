@@ -29,6 +29,8 @@ export interface ModelAuditEntry extends ModelRoute {
   promptLength: number;
 }
 
+const agentRoles: AgentRole[] = ["planner", "builder", "reviewer", "deployer"];
+
 export const createDefaultModelPolicy = (): ModelRoutingPolicy => ({
   planner: { provider: "mock-openai", model: "planning-model" },
   builder: { provider: "mock-anthropic", model: "code-model" },
@@ -36,14 +38,28 @@ export const createDefaultModelPolicy = (): ModelRoutingPolicy => ({
   deployer: { provider: "mock-local", model: "tool-model" }
 });
 
-export class InMemoryModelGateway {
-  readonly auditLog: ModelAuditEntry[] = [];
+export class ModelRouteNotConfiguredError extends Error {
+  constructor(role: AgentRole) {
+    super(`Model route not configured for role: ${role}`);
+    this.name = "ModelRouteNotConfiguredError";
+  }
+}
 
-  constructor(private readonly policy: ModelRoutingPolicy) {}
+export class InMemoryModelGateway {
+  private readonly auditEntries: ModelAuditEntry[] = [];
+  private readonly policy: Partial<ModelRoutingPolicy>;
+
+  constructor(policy: ModelRoutingPolicy) {
+    this.policy = clonePolicy(policy);
+  }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
     const route = this.policy[request.role];
-    this.auditLog.push({
+    if (!route) {
+      throw new ModelRouteNotConfiguredError(request.role);
+    }
+
+    this.auditEntries.push({
       role: request.role,
       projectId: request.projectId,
       provider: route.provider,
@@ -61,4 +77,32 @@ export class InMemoryModelGateway {
       }
     };
   }
+
+  getAuditLog(): readonly ModelAuditEntry[] {
+    return this.auditEntries.map((entry) => ({ ...entry }));
+  }
+}
+
+function clonePolicy(policy: ModelRoutingPolicy): Partial<ModelRoutingPolicy> {
+  return agentRoles.reduce<Partial<ModelRoutingPolicy>>((cloned, role) => {
+    const route = policy[role];
+    if (isModelRoute(route)) {
+      cloned[role] = { provider: route.provider, model: route.model };
+    }
+
+    return cloned;
+  }, {});
+}
+
+function isModelRoute(route: unknown): route is ModelRoute {
+  if (!route || typeof route !== "object") {
+    return false;
+  }
+
+  const candidate = route as Partial<ModelRoute>;
+  return isNonEmptyString(candidate.provider) && isNonEmptyString(candidate.model);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
