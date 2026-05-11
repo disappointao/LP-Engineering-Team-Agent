@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { generateStaticArtifacts } from "@lp-agent/artifacts";
+import { sampleBrief } from "@lp-agent/lp-schema";
 import { InMemoryGitDeploymentAdapter } from "./index";
 import type {
   DeploymentHandoff,
@@ -6,18 +8,14 @@ import type {
   GitDeploymentAdapter
 } from "./index";
 
-const artifact = {
-  indexHtml: "<!doctype html><html><body>Landing page</body></html>",
-  stylesCss: "body { margin: 0; }",
-  scriptJs: "window.lpAgentReady = true;"
-};
+const artifacts = generateStaticArtifacts(sampleBrief);
 
 describe("git deployment adapter", () => {
   it("exports the deployment handoff contract used by orchestration packages", () => {
     const input: DeploymentHandoffInput = {
       projectId: "project_1",
       pageVersionId: "page_version_1",
-      artifact,
+      artifacts,
       approved: true
     };
     const handoff: DeploymentHandoff = {
@@ -41,7 +39,7 @@ describe("git deployment adapter", () => {
       adapter.createHandoff({
         projectId: "project_1",
         pageVersionId: "page_version_1",
-        artifact,
+        artifacts,
         approved: false
       })
     ).rejects.toThrow("Deployment handoff requires approval.");
@@ -53,13 +51,13 @@ describe("git deployment adapter", () => {
     const first = await adapter.createHandoff({
       projectId: "project_1",
       pageVersionId: "page_version_1",
-      artifact,
+      artifacts,
       approved: true
     });
     const second = await adapter.createHandoff({
       projectId: "project_2",
       pageVersionId: "page_version_2",
-      artifact,
+      artifacts,
       approved: true
     });
 

@@ -1,11 +1,9 @@
+import type { StaticArtifacts } from "@lp-agent/artifacts";
+
 export interface DeploymentHandoffInput {
   projectId: string;
   pageVersionId: string;
-  artifact: {
-    indexHtml: string;
-    stylesCss: string;
-    scriptJs: string;
-  };
+  artifacts: StaticArtifacts;
   approved: boolean;
 }
 
