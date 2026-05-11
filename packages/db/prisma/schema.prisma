@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectRole {
+  owner
+  admin
+  member
+  reviewer
+}
+
+enum SkillType {
+  workflow
+  template
+  deployment
+}
+
+enum SkillScope {
+  global
+  organization
+  workspace
+  project
+}
+
+enum RunState {
+  queued
+  running
+  needs_input
+  needs_approval
+  failed
+  completed
+  cancelled
+}
+
+model Organization {
+  id         String      @id @default(cuid())
+  name       String
+  workspaces Workspace[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Workspace {
+  id             String            @id @default(cuid())
+  organizationId String
+  name           String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  members        WorkspaceMember[]
+  projects       Project[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model WorkspaceMember {
+  id          String      @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        ProjectRole
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  createdAt   DateTime    @default(now())
+
+  @@unique([workspaceId, userId])
+}
+
+model Project {
+  id          String          @id @default(cuid())
+  workspaceId String
+  name        String
+  repository  String?
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id])
+  members     ProjectMember[]
+  briefs      LPBrief[]
+  versions    PageVersion[]
+  runs        Run[]
+  deployments Deployment[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole
+  project   Project     @relation(fields: [projectId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@unique([projectId, userId])
+}
+
+model LPBrief {
+  id        String        @id @default(cuid())
+  projectId String
+  title     String
+  data      Json
+  project   Project       @relation(fields: [projectId], references: [id])
+  versions  PageVersion[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model PageVersion {
+  id           String       @id @default(cuid())
+  projectId    String
+  briefId      String
+  artifactData Json
+  reviewStatus String
+  project      Project      @relation(fields: [projectId], references: [id])
+  brief        LPBrief      @relation(fields: [briefId], references: [id])
+  deployments  Deployment[]
+  createdAt    DateTime     @default(now())
+}
+
+model Skill {
+  id        String         @id
+  name      String
+  type      SkillType
+  scope     SkillScope
+  versions  SkillVersion[]
+  createdAt DateTime       @default(now())
+}
+
+model SkillVersion {
+  id          String   @id @default(cuid())
+  skillId     String
+  version     String
+  manifest    Json
+  content     String
+  reviewState String
+  skill       Skill    @relation(fields: [skillId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Run {
+  id        String   @id
+  projectId String
+  role      String
+  state     RunState
+  events    Json
+  project   Project  @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Deployment {
+  id             String      @id
+  projectId      String
+  pageVersionId  String
+  branch         String
+  commitSha      String
+  pullRequestUrl String
+  status         String
+  project        Project     @relation(fields: [projectId], references: [id])
+  pageVersion    PageVersion @relation(fields: [pageVersionId], references: [id])
+  createdAt      DateTime    @default(now())
+}
