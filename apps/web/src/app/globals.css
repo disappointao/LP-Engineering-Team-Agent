@@ -223,7 +223,7 @@ iframe {
   background: #e5ebf3;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1220px) {
   .shell {
     grid-template-columns: 1fr;
   }
