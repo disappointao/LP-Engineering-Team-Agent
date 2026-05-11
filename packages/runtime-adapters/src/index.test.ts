@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sampleBrief } from "@lp-agent/lp-schema";
+import { sampleBrief, type LPBrief } from "@lp-agent/lp-schema";
 import {
   InMemoryModelGateway,
   createDefaultModelPolicy,
@@ -188,6 +188,34 @@ describe("local agent runtime adapter", () => {
     });
   });
 
+  it("returns a structured failed result when artifact generation rejects", async () => {
+    const adapter = new LocalAgentRuntimeAdapter();
+    const invalidBrief = {
+      ...sampleBrief,
+      brandProfile: undefined
+    } as unknown as LPBrief;
+
+    const result = await adapter.run({
+      runId: "run_failed_2",
+      projectId: "project_1",
+      role: "builder",
+      input: { brief: invalidBrief }
+    });
+
+    expect(result.state).toBe("failed");
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "model.completed",
+      "run.failed"
+    ]);
+    expect(result.events[2]).toMatchObject({
+      type: "run.failed",
+      runId: "run_failed_2",
+      role: "builder",
+      state: "failed"
+    });
+  });
+
   it("narrows runtime events by type", async () => {
     const adapter = new LocalAgentRuntimeAdapter();
     const result = await adapter.run({
@@ -199,6 +227,10 @@ describe("local agent runtime adapter", () => {
 
     const artifactEvent = result.events.find(isArtifactCreatedEvent);
     expect(artifactEvent?.artifactId).toBe("artifact_run_builder_3");
+
+    const completedEvent = result.events.find(isRunCompletedEvent);
+    const completedState: "completed" | undefined = completedEvent?.state;
+    expect(completedState).toBe("completed");
   });
 });
 
@@ -229,4 +261,10 @@ function isArtifactCreatedEvent(
   event: RuntimeEvent
 ): event is Extract<RuntimeEvent, { type: "artifact.created" }> {
   return event.type === "artifact.created";
+}
+
+function isRunCompletedEvent(
+  event: RuntimeEvent
+): event is Extract<RuntimeEvent, { type: "run.completed" }> {
+  return event.type === "run.completed";
 }

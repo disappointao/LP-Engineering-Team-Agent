@@ -49,7 +49,7 @@ export type RuntimeEvent =
       type: "run.completed";
       message: string;
       runId?: string;
-      state: RunState;
+      state: "completed";
     }
   | {
       type: "run.failed";
@@ -90,13 +90,54 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         role: request.role
       }
     ];
-    let modelResponse: ModelResponse;
     try {
-      modelResponse = await this.modelGateway.complete({
+      const modelResponse = await this.modelGateway.complete({
         role: request.role,
         projectId: request.projectId,
         prompt: toModelPrompt(request)
       });
+      events.push(toModelCompletedEvent(request, modelResponse));
+
+      const artifacts = request.role === "builder" && request.input.brief
+        ? generateStaticArtifacts(request.input.brief)
+        : undefined;
+      if (artifacts) {
+        events.push({
+          type: "artifact.created",
+          message: "Static LP artifacts created",
+          runId: request.runId,
+          artifactId: `artifact_${request.runId}`
+        });
+      }
+
+      const findings = request.role === "reviewer" && request.input.brief
+        ? reviewHeroCta(request.input.brief)
+        : undefined;
+      if (findings) {
+        events.push({
+          type: "review.completed",
+          message: "Reviewer checks completed",
+          runId: request.runId
+        });
+      }
+
+      const state = "completed";
+      events.push({
+        type: "run.completed",
+        message: `${request.role} run completed`,
+        runId: request.runId,
+        state
+      });
+
+      return {
+        runId: request.runId,
+        projectId: request.projectId,
+        role: request.role,
+        state,
+        events,
+        artifacts,
+        findings
+      };
     } catch (error) {
       events.push(toRunFailedEvent(request, error));
       return {
@@ -107,49 +148,6 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         events
       };
     }
-
-    events.push(toModelCompletedEvent(request, modelResponse));
-
-    const artifacts = request.role === "builder" && request.input.brief
-      ? generateStaticArtifacts(request.input.brief)
-      : undefined;
-    if (artifacts) {
-      events.push({
-        type: "artifact.created",
-        message: "Static LP artifacts created",
-        runId: request.runId,
-        artifactId: `artifact_${request.runId}`
-      });
-    }
-
-    const findings = request.role === "reviewer" && request.input.brief
-      ? reviewHeroCta(request.input.brief)
-      : undefined;
-    if (findings) {
-      events.push({
-        type: "review.completed",
-        message: "Reviewer checks completed",
-        runId: request.runId
-      });
-    }
-
-    const state: RunState = "completed";
-    events.push({
-      type: "run.completed",
-      message: `${request.role} run completed`,
-      runId: request.runId,
-      state
-    });
-
-    return {
-      runId: request.runId,
-      projectId: request.projectId,
-      role: request.role,
-      state,
-      events,
-      artifacts,
-      findings
-    };
   }
 }
 
