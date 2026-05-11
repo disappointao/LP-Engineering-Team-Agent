@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { sampleBrief } from "@lp-agent/lp-schema";
+import { InMemoryModelGateway, createDefaultModelPolicy, type ModelRequest, type ModelResponse } from "@lp-agent/model-gateway";
 import { LocalAgentRuntimeAdapter } from "./index";
+import type { RuntimeEvent, RuntimeRunRequest, RuntimeRunResult } from "./index";
 
 describe("local agent runtime adapter", () => {
+  it("exports the runtime adapter contract names used by orchestration packages", () => {
+    const request: RuntimeRunRequest = {
+      runId: "run_contract_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan a page" }
+    };
+    const event: RuntimeEvent = { type: "run.started", message: "planner run started" };
+    const result: RuntimeRunResult = {
+      runId: request.runId,
+      state: "completed",
+      events: [event]
+    };
+
+    expect(result.events[0]?.type).toBe("run.started");
+  });
+
   it("runs a builder flow through the model gateway and creates static artifacts", async () => {
     const adapter = new LocalAgentRuntimeAdapter();
 
@@ -24,23 +43,39 @@ describe("local agent runtime adapter", () => {
       "run.completed"
     ]);
     expect(result.events).toEqual([
-      { type: "run.started", runId: "run_builder_1", role: "builder" },
+      {
+        type: "run.started",
+        message: "builder run started",
+        runId: "run_builder_1",
+        role: "builder"
+      },
       {
         type: "model.completed",
+        message: "builder model call completed",
         runId: "run_builder_1",
         role: "builder",
         provider: "mock-anthropic",
         model: "code-model"
       },
-      { type: "artifact.created", runId: "run_builder_1", artifactId: "artifact_run_builder_1" },
-      { type: "run.completed", runId: "run_builder_1", state: "completed" }
+      {
+        type: "artifact.created",
+        message: "Static LP artifacts created",
+        runId: "run_builder_1",
+        artifactId: "artifact_run_builder_1"
+      },
+      {
+        type: "run.completed",
+        message: "builder run completed",
+        runId: "run_builder_1",
+        state: "completed"
+      }
     ]);
-    expect(result.artifact).toMatchObject({
+    expect(result.artifacts).toMatchObject({
       indexHtml: expect.stringContaining("Spring essentials, ready today"),
       stylesCss: expect.stringContaining(":root"),
       scriptJs: expect.stringContaining("lp-agent-track")
     });
-    expect(result.findings).toEqual([]);
+    expect(result.findings).toBeUndefined();
   });
 
   it("runs a reviewer flow and blocks deployment when the hero section has no CTA", async () => {
@@ -66,6 +101,7 @@ describe("local agent runtime adapter", () => {
     expect(result.events.map((event) => event.type)).toEqual([
       "run.started",
       "model.completed",
+      "review.completed",
       "run.completed"
     ]);
     expect(result.findings).toEqual([
@@ -77,6 +113,33 @@ describe("local agent runtime adapter", () => {
         blocksDeployment: true
       }
     ]);
-    expect(result.artifact).toBeUndefined();
+    expect(result.artifacts).toBeUndefined();
+  });
+
+  it("serializes the brief as the model prompt when no explicit prompt is provided", async () => {
+    const gateway = new RecordingModelGateway();
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+
+    await adapter.run({
+      runId: "run_builder_2",
+      projectId: "project_1",
+      role: "builder",
+      input: { brief: sampleBrief }
+    });
+
+    expect(gateway.requests[0]?.prompt).toBe(JSON.stringify(sampleBrief));
   });
 });
+
+class RecordingModelGateway extends InMemoryModelGateway {
+  readonly requests: ModelRequest[] = [];
+
+  constructor() {
+    super(createDefaultModelPolicy());
+  }
+
+  override async complete(request: ModelRequest): Promise<ModelResponse> {
+    this.requests.push(request);
+    return super.complete(request);
+  }
+}

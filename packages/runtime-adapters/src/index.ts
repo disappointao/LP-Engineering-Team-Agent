@@ -7,54 +7,41 @@ import {
   type ModelResponse
 } from "@lp-agent/model-gateway";
 
-export interface AgentRunInput {
+export interface RuntimeRunInput {
   prompt?: string;
   brief?: LPBrief;
 }
 
-export interface AgentRunRequest {
+export interface RuntimeRunRequest {
   runId: string;
   projectId: string;
   role: AgentRole;
-  input: AgentRunInput;
+  input: RuntimeRunInput;
 }
 
-export type AgentRunEvent =
-  | {
-      type: "run.started";
-      runId: string;
-      role: AgentRole;
-    }
-  | {
-      type: "model.completed";
-      runId: string;
-      role: AgentRole;
-      provider: string;
-      model: string;
-    }
-  | {
-      type: "artifact.created";
-      runId: string;
-      artifactId: string;
-    }
-  | {
-      type: "run.completed";
-      runId: string;
-      state: RunState;
-    };
+export interface RuntimeEvent {
+  type: "run.started" | "model.completed" | "artifact.created" | "review.completed" | "run.completed";
+  message: string;
+  runId?: string;
+  role?: AgentRole;
+  provider?: string;
+  model?: string;
+  artifactId?: string;
+  state?: RunState;
+}
 
-export interface AgentRunResult {
+export interface RuntimeRunResult {
   runId: string;
-  projectId: string;
-  role: AgentRole;
   state: RunState;
-  events: AgentRunEvent[];
-  artifact?: StaticArtifacts;
-  findings: ReviewFinding[];
+  events: RuntimeEvent[];
+  artifacts?: StaticArtifacts;
+  findings?: ReviewFinding[];
+  projectId?: string;
+  role?: AgentRole;
 }
 
 export interface AgentRuntimeAdapter {
-  run(request: AgentRunRequest): Promise<AgentRunResult>;
+  run(request: RuntimeRunRequest): Promise<RuntimeRunResult>;
 }
 
 export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
@@ -64,8 +51,15 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
     this.modelGateway = modelGateway;
   }
 
-  async run(request: AgentRunRequest): Promise<AgentRunResult> {
-    const events: AgentRunEvent[] = [{ type: "run.started", runId: request.runId, role: request.role }];
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    const events: RuntimeEvent[] = [
+      {
+        type: "run.started",
+        message: `${request.role} run started`,
+        runId: request.runId,
+        role: request.role
+      }
+    ];
     const modelResponse = await this.modelGateway.complete({
       role: request.role,
       projectId: request.projectId,
@@ -73,19 +67,36 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
     });
     events.push(toModelCompletedEvent(request, modelResponse));
 
-    const artifact = request.role === "builder" && request.input.brief
+    const artifacts = request.role === "builder" && request.input.brief
       ? generateStaticArtifacts(request.input.brief)
       : undefined;
-    if (artifact) {
+    if (artifacts) {
       events.push({
         type: "artifact.created",
+        message: "Static LP artifacts created",
         runId: request.runId,
         artifactId: `artifact_${request.runId}`
       });
     }
 
+    const findings = request.role === "reviewer" && request.input.brief
+      ? reviewHeroCta(request.input.brief)
+      : undefined;
+    if (findings) {
+      events.push({
+        type: "review.completed",
+        message: "Reviewer checks completed",
+        runId: request.runId
+      });
+    }
+
     const state: RunState = "completed";
-    events.push({ type: "run.completed", runId: request.runId, state });
+    events.push({
+      type: "run.completed",
+      message: `${request.role} run completed`,
+      runId: request.runId,
+      state
+    });
 
     return {
       runId: request.runId,
@@ -93,28 +104,32 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
       role: request.role,
       state,
       events,
-      artifact,
-      findings: request.role === "reviewer" && request.input.brief
-        ? reviewHeroCta(request.input.brief)
-        : []
+      artifacts,
+      findings
     };
   }
 }
 
-function toModelPrompt(request: AgentRunRequest): string {
+export type AgentRunInput = RuntimeRunInput;
+export type AgentRunRequest = RuntimeRunRequest;
+export type AgentRunEvent = RuntimeEvent;
+export type AgentRunResult = RuntimeRunResult;
+
+function toModelPrompt(request: RuntimeRunRequest): string {
   const prompt = request.input.prompt?.trim();
   if (prompt) {
     return prompt;
   }
 
   return request.input.brief
-    ? `${request.role} run for ${request.input.brief.title}`
+    ? JSON.stringify(request.input.brief)
     : `${request.role} run`;
 }
 
-function toModelCompletedEvent(request: AgentRunRequest, response: ModelResponse): AgentRunEvent {
+function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelResponse): RuntimeEvent {
   return {
     type: "model.completed",
+    message: `${request.role} model call completed`,
     runId: request.runId,
     role: request.role,
     provider: response.provider,
