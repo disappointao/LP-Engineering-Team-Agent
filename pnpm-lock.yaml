@@ -18,6 +18,19 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.18)
 
+  packages/artifacts:
+    dependencies:
+      '@lp-agent/lp-schema':
+        specifier: workspace:*
+        version: link:../lp-schema
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.18)
+
   packages/lp-schema:
     dependencies:
       zod:
