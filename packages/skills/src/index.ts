@@ -13,11 +13,11 @@ export const SkillManifestSchema = z.object({
   type: SkillTypeSchema,
   scope: SkillScopeSchema,
   description: z.string().min(1),
-  permissions: z.array(z.string()).default([]),
-  requiredSecrets: z.array(z.string()).default([]),
-  entrypoints: z.array(z.string()).default([]),
+  permissions: z.array(z.string().min(1)).default([]),
+  requiredSecrets: z.array(z.string().min(1)).default([]),
+  entrypoints: z.array(z.string().min(1)).default([]),
   reviewState: z.enum(["draft", "validated", "published", "deprecated", "archived"])
-});
+}).strict();
 export type SkillManifest = z.infer<typeof SkillManifestSchema>;
 
 export type SkillPublisherRole = "owner" | "admin" | "member" | "reviewer";
@@ -47,6 +47,10 @@ export const canPublishSkill = (
   SkillManifestSchema.parse(manifest);
 
   if (manifest.type === "deployment") {
+    if (manifest.reviewState !== "validated" && manifest.reviewState !== "published") {
+      return { allowed: false, reason: "deployment skills must be validated before publishing" };
+    }
+
     if (role === "owner" || role === "admin") {
       return { allowed: true, reason: `${role} can publish reviewed deployment skills` };
     }
@@ -62,13 +66,13 @@ export const canPublishSkill = (
 };
 
 export const canUseSkill = (input: {
-  skillId: string;
+  manifest: SkillManifest;
   boundSkillIds: string[];
-  requiredPermissions: string[];
   grantedPermissions: string[];
 }): boolean => {
-  const isBound = input.boundSkillIds.includes(input.skillId);
-  const hasPermissions = input.requiredPermissions.every((permission) =>
+  const manifest = SkillManifestSchema.parse(input.manifest);
+  const isBound = input.boundSkillIds.includes(manifest.id);
+  const hasPermissions = manifest.permissions.every((permission) =>
     input.grantedPermissions.includes(permission)
   );
 

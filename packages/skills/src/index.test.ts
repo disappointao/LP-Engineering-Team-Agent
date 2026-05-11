@@ -36,20 +36,52 @@ describe("skills registry rules", () => {
     const result = canPublishSkill("admin", {
       ...sampleTemplateSkill,
       type: "deployment",
+      reviewState: "validated",
       permissions: ["git:write", "ci:trigger"]
     });
 
     expect(result.allowed).toBe(true);
   });
 
+  it("blocks deployment skill publication before validation", () => {
+    const result = canPublishSkill("admin", {
+      ...sampleTemplateSkill,
+      type: "deployment",
+      reviewState: "draft",
+      permissions: ["git:write", "ci:trigger"]
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      reason: "deployment skills must be validated before publishing"
+    });
+  });
+
   it("checks project skill bindings before use", () => {
     expect(
       canUseSkill({
-        skillId: "skill_brand",
+        manifest: sampleTemplateSkill,
         boundSkillIds: ["skill_brand"],
-        requiredPermissions: ["artifact:write"],
         grantedPermissions: ["artifact:write", "brief:read"]
       })
     ).toBe(true);
+  });
+
+  it("denies unbound skills and missing permissions", () => {
+    expect(
+      canUseSkill({
+        manifest: sampleTemplateSkill,
+        boundSkillIds: [],
+        grantedPermissions: ["artifact:write", "brief:read"]
+      })
+    ).toBe(false);
+
+    expect(
+      canUseSkill({
+        manifest: sampleTemplateSkill,
+        boundSkillIds: ["skill_brand"],
+        grantedPermissions: ["brief:read"]
+      })
+    ).toBe(false);
   });
 });
