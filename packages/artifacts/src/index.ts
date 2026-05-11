@@ -14,9 +14,68 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
+const safeUrl = (value: string | undefined): string => {
+  if (!value) {
+    return "#";
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.startsWith("//")) {
+    return "#";
+  }
+
+  if (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("./") ||
+    trimmed.startsWith("../")
+  ) {
+    return trimmed;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" || url.protocol === "tel:") {
+      return trimmed;
+    }
+  } catch {
+    return "#";
+  }
+
+  return "#";
+};
+
+const safeCssColor = (value: string | undefined, fallback: string): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  const isHex = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(trimmed);
+  const isFunctionalColor = /^(?:rgb|rgba|hsl|hsla)\(\s*[-+.\d%]+(?:\s*,\s*[-+.\d%]+){2,3}\s*\)$/.test(trimmed);
+  const namedColors = new Set(["black", "white", "transparent", "currentColor"]);
+
+  return isHex || isFunctionalColor || namedColors.has(trimmed) ? trimmed : fallback;
+};
+
+const safeFontFamily = (value: string | undefined): string => {
+  if (!value) {
+    return "system-ui";
+  }
+
+  const trimmed = value.trim();
+  return /^[\w\s"',-]+$/.test(trimmed) ? trimmed : "system-ui";
+};
+
+const escapeStyleContent = (value: string): string =>
+  value.replace(/<\/style/gi, "<\\/style");
+
+const escapeScriptContent = (value: string): string =>
+  value.replace(/<\/script/gi, "<\\/script");
+
 const toSectionHtml = (section: LPSection): string => {
   const cta = section.cta
-    ? `<a class="button" href="${escapeHtml(section.cta.href)}" data-track="cta:${escapeHtml(section.id)}">${escapeHtml(section.cta.label)}</a>`
+    ? `<a class="button" href="${escapeHtml(safeUrl(section.cta.href))}" data-track="cta:${escapeHtml(section.id)}">${escapeHtml(section.cta.label)}</a>`
     : "";
 
   return [
@@ -38,7 +97,7 @@ const productGridHtml = (brief: LPBrief): string => {
 
   const cards = brief.productData.map((product) => [
     `<article class="product-card" data-track="product:${escapeHtml(product.id)}">`,
-    product.imageUrl ? `  <img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.name)}">` : "",
+    product.imageUrl ? `  <img src="${escapeHtml(safeUrl(product.imageUrl))}" alt="${escapeHtml(product.name)}">` : "",
     `  <h3>${escapeHtml(product.name)}</h3>`,
     `  <p>${escapeHtml(product.description)}</p>`,
     product.price ? `  <strong>${escapeHtml(product.price)}</strong>` : "",
@@ -49,9 +108,10 @@ const productGridHtml = (brief: LPBrief): string => {
 };
 
 export const generateStaticArtifacts = (brief: LPBrief): StaticArtifacts => {
-  const primaryColor = brief.brandProfile.colors[0] ?? "#0f766e";
-  const accentColor = brief.brandProfile.colors[1] ?? "#f59e0b";
-  const textColor = brief.brandProfile.colors[2] ?? "#111827";
+  const primaryColor = safeCssColor(brief.brandProfile.colors[0], "#0f766e");
+  const accentColor = safeCssColor(brief.brandProfile.colors[1], "#f59e0b");
+  const textColor = safeCssColor(brief.brandProfile.colors[2], "#111827");
+  const fontFamily = safeFontFamily(brief.brandProfile.typography);
   const sectionHtml = brief.sections.map(toSectionHtml).join("\n\n");
   const products = productGridHtml(brief);
 
@@ -62,13 +122,13 @@ export const generateStaticArtifacts = (brief: LPBrief): StaticArtifacts => {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(brief.seo.title)}</title>
   <meta name="description" content="${escapeHtml(brief.seo.description)}">
-  ${brief.seo.socialImage ? `<meta property="og:image" content="${escapeHtml(brief.seo.socialImage)}">` : ""}
+  ${brief.seo.socialImage ? `<meta property="og:image" content="${escapeHtml(safeUrl(brief.seo.socialImage))}">` : ""}
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <strong>${escapeHtml(brief.brandProfile.name)}</strong>
-    <a href="${escapeHtml(brief.cta.href)}" data-track="cta:header">${escapeHtml(brief.cta.label)}</a>
+    <a href="${escapeHtml(safeUrl(brief.cta.href))}" data-track="cta:header">${escapeHtml(brief.cta.label)}</a>
   </header>
   <main data-page-title="${escapeHtml(brief.title)}">
 ${sectionHtml}
@@ -83,7 +143,7 @@ ${products}
   --color-accent: ${accentColor};
   --color-text: ${textColor};
   --color-bg: #ffffff;
-  --font-body: ${brief.brandProfile.typography};
+  --font-body: ${fontFamily};
 }
 
 * { box-sizing: border-box; }
@@ -184,7 +244,19 @@ p {
   return { indexHtml, stylesCss, scriptJs };
 };
 
-export const bundleSingleFileHtml = (artifact: StaticArtifacts): string =>
-  artifact.indexHtml
-    .replace('<link rel="stylesheet" href="styles.css">', `<style>\n${artifact.stylesCss}\n</style>`)
-    .replace('  <script src="script.js"></script>', `  <script>\n${artifact.scriptJs}\n  </script>`);
+export const bundleSingleFileHtml = (artifact: StaticArtifacts): string => {
+  const stylesheetMarker = '<link rel="stylesheet" href="styles.css">';
+  const scriptMarker = '  <script src="script.js"></script>';
+
+  if (!artifact.indexHtml.includes(stylesheetMarker)) {
+    throw new Error("Cannot bundle HTML without expected stylesheet marker.");
+  }
+
+  if (!artifact.indexHtml.includes(scriptMarker)) {
+    throw new Error("Cannot bundle HTML without expected script marker.");
+  }
+
+  return artifact.indexHtml
+    .replace(stylesheetMarker, `<style>\n${escapeStyleContent(artifact.stylesCss)}\n</style>`)
+    .replace(scriptMarker, `  <script>\n${escapeScriptContent(artifact.scriptJs)}\n  </script>`);
+};
