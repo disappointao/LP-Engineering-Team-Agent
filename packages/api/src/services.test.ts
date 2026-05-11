@@ -161,6 +161,22 @@ describe("demo workbench service", () => {
     ).rejects.toThrow("Builder run did not return artifacts.");
   });
 
+  it("rejects incomplete builder artifacts before creating a page version", async () => {
+    const service = new DemoWorkbenchService({
+      builderRuntime: new StaticRuntime({
+        state: "completed",
+        artifacts: { ...completeArtifacts(), stylesCss: " " }
+      }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+
+    await expect(
+      service.generatePageVersion({ projectId: project.id, briefId: brief.id })
+    ).rejects.toThrow("Builder run returned incomplete artifacts.");
+  });
+
   it("does not create a page version from a non-completed builder run", async () => {
     const service = new DemoWorkbenchService({
       builderRuntime: new StaticRuntime({ state: "needs_input", artifacts: completeArtifacts() }),
@@ -234,6 +250,67 @@ describe("demo workbench service", () => {
     ).rejects.toThrow("Reviewer run did not complete.");
   });
 
+  it("does not let re-review invalidate a deployed page version", async () => {
+    const laterBlockingFinding: ReviewFinding = {
+      severity: "blocking",
+      target: "section:section_hero",
+      explanation: "Later review failed.",
+      suggestedFix: "Do not mutate deployed review.",
+      blocksDeployment: true
+    };
+    const reviewerRuntime = new MutableRuntime({ state: "completed", findings: [] });
+    const service = new DemoWorkbenchService({
+      reviewerRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+    const reviewed = await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
+    const deployment = await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: version.id,
+      reviewerUserId: "reviewer_1"
+    });
+
+    reviewerRuntime.result = { state: "completed", findings: [laterBlockingFinding] };
+    const retryReview = await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(reviewed.reviewStatus).toBe("passed");
+    expect(retryReview.reviewStatus).toBe("passed");
+    expect(retryReview.findings).toEqual([]);
+    expect(snapshot.currentPageVersion?.reviewStatus).toBe("passed");
+    expect(snapshot.deployment).toEqual(deployment);
+  });
+
+  it("keeps the latest deployment visible when a newer page version is pending", async () => {
+    const service = createDemoWorkbenchService();
+    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const firstBrief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "First" });
+    const firstVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+    await service.reviewPageVersion({ projectId: project.id, pageVersionId: firstVersion.id });
+    const deployment = await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: firstVersion.id,
+      reviewerUserId: "reviewer_1"
+    });
+    const secondBrief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Second" });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(snapshot.currentPageVersion?.id).toBe(secondVersion.id);
+    expect(snapshot.currentPageVersion?.reviewStatus).toBe("pending");
+    expect(snapshot.deployment).toEqual(deployment);
+  });
+
   it("rejects requests for unknown or mismatched records", async () => {
     const service = createDemoWorkbenchService();
     const firstProject = await service.createProject({ name: "First", repository: "repo-1" });
@@ -253,6 +330,22 @@ describe("demo workbench service", () => {
 
 class StaticRuntime implements AgentRuntimeAdapter {
   constructor(private readonly result: Partial<RuntimeRunResult>) {}
+
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    return {
+      runId: request.runId,
+      projectId: request.projectId,
+      role: request.role,
+      state: this.result.state ?? "completed",
+      events: [],
+      artifacts: this.result.artifacts,
+      findings: this.result.findings
+    };
+  }
+}
+
+class MutableRuntime implements AgentRuntimeAdapter {
+  constructor(public result: Partial<RuntimeRunResult>) {}
 
   async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
     return {

@@ -149,6 +149,9 @@ export class DemoWorkbenchService {
     if (!result.artifacts) {
       throw new Error("Builder run did not return artifacts.");
     }
+    if (!hasCompleteArtifacts(result.artifacts)) {
+      throw new Error("Builder run returned incomplete artifacts.");
+    }
 
     this.pageVersionSequence += 1;
     const pageVersion: PageVersionRecord = {
@@ -167,6 +170,10 @@ export class DemoWorkbenchService {
   async reviewPageVersion(input: ReviewPageVersionInput): Promise<PageVersionRecord> {
     this.getProjectOrThrow(input.projectId);
     const pageVersion = this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId);
+    if (this.deploymentsByPageVersion.has(pageVersion.id)) {
+      return copyPageVersion(pageVersion);
+    }
+
     const brief = this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
 
     const result = await this.reviewerRuntime.run({
@@ -226,9 +233,7 @@ export class DemoWorkbenchService {
     const brief = currentPageVersion
       ? this.briefs.get(currentPageVersion.briefId)
       : this.findLatestBrief(projectId);
-    const deployment = currentPageVersion
-      ? this.deploymentsByPageVersion.get(currentPageVersion.id)
-      : undefined;
+    const deployment = this.findLatestDeployment(projectId);
 
     return {
       project: copyProject(project),
@@ -277,6 +282,12 @@ export class DemoWorkbenchService {
       .filter((pageVersion) => pageVersion.projectId === projectId)
       .at(-1);
   }
+
+  private findLatestDeployment(projectId: string): DeploymentHandoff | undefined {
+    return [...this.deploymentsByPageVersion.values()]
+      .filter((deployment) => deployment.projectId === projectId)
+      .at(-1);
+  }
 }
 
 export function createDemoWorkbenchService(): DemoWorkbenchService {
@@ -312,6 +323,18 @@ function copyPageVersion(pageVersion: PageVersionRecord): PageVersionRecord {
 
 function copyArtifacts(artifacts: StaticArtifacts): StaticArtifacts {
   return { ...artifacts };
+}
+
+function hasCompleteArtifacts(artifacts: StaticArtifacts): boolean {
+  return (
+    isNonEmptyString(artifacts.indexHtml) &&
+    isNonEmptyString(artifacts.stylesCss) &&
+    isNonEmptyString(artifacts.scriptJs)
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function copyFinding(finding: ReviewFinding): ReviewFinding {
