@@ -80,6 +80,28 @@ describe("git deployment adapter", () => {
     ).rejects.toThrow("Deployment handoff identifiers must be branch safe.");
   });
 
+  it("rejects non-string project and page version identifiers at runtime", async () => {
+    const adapter = new InMemoryGitDeploymentAdapter();
+
+    await expect(
+      adapter.createHandoff({
+        projectId: 123,
+        pageVersionId: "page_version_1",
+        artifacts,
+        approved: true
+      } as unknown as DeploymentHandoffInput)
+    ).rejects.toThrow("Deployment handoff identifiers must be branch safe.");
+
+    await expect(
+      adapter.createHandoff({
+        projectId: "project_1",
+        pageVersionId: true,
+        artifacts,
+        approved: true
+      } as unknown as DeploymentHandoffInput)
+    ).rejects.toThrow("Deployment handoff identifiers must be branch safe.");
+  });
+
   it("creates deterministic pull request handoff records for approved artifacts", async () => {
     const adapter: GitDeploymentAdapter = new InMemoryGitDeploymentAdapter();
 

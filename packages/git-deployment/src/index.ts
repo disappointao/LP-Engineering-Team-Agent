@@ -61,8 +61,8 @@ export class InMemoryGitDeploymentAdapter implements GitDeploymentAdapter {
   }
 }
 
-function assertBranchSafeIdentifier(value: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value)) {
+function assertBranchSafeIdentifier(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value)) {
     throw new Error("Deployment handoff identifiers must be branch safe.");
   }
 }
