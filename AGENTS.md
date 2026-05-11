@@ -2,37 +2,38 @@
 
 ## Project Structure & Module Organization
 
-This repository currently contains repository configuration (`.gitignore`) and local IDE metadata under `.idea/`; no application source, tests, or assets have been added yet. When code is introduced, keep the layout explicit:
+This repository is a pnpm TypeScript monorepo for the LP Engineering Team Agent MVP.
 
-- `src/` for production source code.
-- `tests/` for automated tests, mirroring `src/` paths where practical.
-- `assets/` or `public/` for static files such as images, fixtures, or sample data.
-- `docs/` for design notes, API references, and contributor documentation.
+- `apps/web/` contains the Next.js workbench.
+- `apps/agent-worker/` contains the deterministic worker demo.
+- `packages/api/` orchestrates the in-memory workbench flow.
+- `packages/lp-schema/`, `packages/artifacts/`, `packages/runtime-adapters/`, `packages/git-deployment/`, `packages/skills/`, `packages/mcp-gateway/`, and `packages/model-gateway/` contain focused domain packages.
+- `packages/db/prisma/schema.prisma` defines the Postgres data model.
+- `docs/` contains design notes, implementation plans, and contributor documentation.
 
-Avoid committing machine-local editor state. `.DS_Store` and `.idea` are already ignored at the repository root.
+Avoid committing machine-local editor state or generated build output. `.DS_Store`, `.idea`, `node_modules/`, `.next/`, `.superpowers/`, and local worktrees are ignored at the repository root.
 
 ## Build, Test, and Development Commands
 
-There is no build system or package manager configured yet. Add commands through the project’s native tool file, such as `package.json`, `Makefile`, `pyproject.toml`, or `Cargo.toml`.
-
-Document new commands here when they are added. Preferred examples:
-
-- `npm install` - install JavaScript dependencies.
-- `npm run dev` - start a local development server.
-- `npm test` - run the full test suite.
-- `make build` - produce a production build if a Makefile is used.
+- `pnpm install` - install workspace dependencies.
+- `pnpm dev` - start the Next.js web workbench.
+- `pnpm worker:dev` - run the demo agent-worker job.
+- `pnpm test` - run all Vitest tests.
+- `pnpm typecheck` - type-check all workspace packages and apps.
+- `pnpm build` - build all packages and apps that expose a build script.
+- `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` - validate the Prisma schema without connecting to a live database.
 
 ## Coding Style & Naming Conventions
 
-Follow the formatter and linter configured for the language introduced. Until tooling exists, use 2-space indentation for JSON/YAML/Markdown and the idiomatic formatter for source files, such as Prettier, Black, `gofmt`, or `rustfmt`.
+Follow TypeScript conventions already used in the workspace. Use 2-space indentation for JSON/YAML/Markdown and TypeScript/TSX files.
 
 Use descriptive names. Prefer `kebab-case` for Markdown and config files (`contributor-guide.md`), `snake_case` for Python modules, and `camelCase` or `PascalCase` according to JavaScript/TypeScript conventions.
 
 ## Testing Guidelines
 
-No test framework is configured yet. Add tests with the first source module. Place tests in `tests/` or beside source files only if the selected framework favors that pattern.
+Vitest is configured at the workspace root. Package and app tests live beside source files as `*.test.ts`.
 
-Use names that describe behavior, such as `test_parses_valid_config.py` or `user-service.test.ts`. Keep tests deterministic and avoid relying on local IDE settings or machine-specific paths.
+Use names that describe behavior, such as `services.test.ts` or `worker.test.ts`. Keep tests deterministic and avoid relying on local IDE settings or machine-specific paths.
 
 ## Commit & Pull Request Guidelines
 
@@ -42,4 +43,4 @@ Pull requests should include a brief description, the reason for the change, com
 
 ## Agent-Specific Instructions
 
-Before editing, inspect the current tree and preserve unrelated user changes. Keep generated files focused and update this guide whenever new tooling, directories, or workflows become part of the repository.
+Before editing, inspect the current tree and preserve unrelated user changes. Keep generated files focused and update this guide whenever new tooling, directories, or workflows become part of the repository. The generated LP artifact itself should remain framework-free static HTML/CSS/JS even though the workbench is a Next.js app.
