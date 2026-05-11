@@ -44,7 +44,23 @@ describe("LP brief schema", () => {
       createdAt: "2026-05-11T00:00:00.000Z"
     });
 
+    expect(version.artifact.kind).toBe("three-file-static");
+    if (version.artifact.kind !== "three-file-static") {
+      throw new Error("Expected a three-file static artifact");
+    }
     expect(version.artifact.files.stylesCss).toBe("styles.css");
+  });
+
+  it("requires three-file artifacts to include all static files", () => {
+    expect(() =>
+      ArtifactSchema.parse({
+        id: "artifact_incomplete",
+        kind: "three-file-static",
+        files: {
+          indexHtml: "index.html"
+        }
+      })
+    ).toThrow();
   });
 
   it("limits run states to explicit lifecycle values", () => {

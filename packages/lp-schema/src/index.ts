@@ -84,16 +84,28 @@ export const LPBriefSchema = z.object({
 });
 export type LPBrief = z.infer<typeof LPBriefSchema>;
 
-export const ArtifactSchema = z.object({
-  id: z.string().min(1),
-  kind: z.enum(["three-file-static", "single-file-html"]),
-  files: z.object({
-    indexHtml: z.string().min(1),
-    stylesCss: z.string().min(1).optional(),
-    scriptJs: z.string().min(1).optional()
-  })
+const ArtifactBaseSchema = z.object({
+  id: z.string().min(1)
 });
+
+export const ArtifactSchema = z.discriminatedUnion("kind", [
+  ArtifactBaseSchema.extend({
+    kind: z.literal("three-file-static"),
+    files: z.object({
+      indexHtml: z.string().min(1),
+      stylesCss: z.string().min(1),
+      scriptJs: z.string().min(1)
+    })
+  }),
+  ArtifactBaseSchema.extend({
+    kind: z.literal("single-file-html"),
+    files: z.object({
+      indexHtml: z.string().min(1)
+    })
+  })
+]);
 export type Artifact = z.infer<typeof ArtifactSchema>;
+export type ArtifactInput = z.input<typeof ArtifactSchema>;
 
 export const ReviewFindingSchema = z.object({
   severity: z.enum(["info", "warning", "blocking"]),
@@ -113,6 +125,8 @@ export const PageVersionSchema = z.object({
   createdAt: z.string().datetime()
 });
 export type PageVersion = z.infer<typeof PageVersionSchema>;
+export type LPBriefInput = z.input<typeof LPBriefSchema>;
+export type PageVersionInput = z.input<typeof PageVersionSchema>;
 
 export const sampleBrief: LPBrief = {
   title: "Spring Sale Landing Page",
