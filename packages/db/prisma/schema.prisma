@@ -37,12 +37,36 @@ enum RunState {
   cancelled
 }
 
+enum ReviewStatus {
+  pending
+  passed
+  failed
+}
+
+enum SkillReviewState {
+  draft
+  validated
+  published
+  deprecated
+  archived
+}
+
+enum DeploymentStatus {
+  pr_opened
+  ci_running
+  ci_passed
+  ci_failed
+  merged
+  closed
+}
+
 model Organization {
-  id         String      @id @default(cuid())
-  name       String
-  workspaces Workspace[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id            String         @id @default(cuid())
+  name          String
+  workspaces    Workspace[]
+  skillBindings SkillBinding[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Workspace {
@@ -52,8 +76,11 @@ model Workspace {
   organization   Organization      @relation(fields: [organizationId], references: [id])
   members        WorkspaceMember[]
   projects       Project[]
+  skillBindings  SkillBinding[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+
+  @@index([organizationId])
 }
 
 model WorkspaceMember {
@@ -65,6 +92,7 @@ model WorkspaceMember {
   createdAt   DateTime    @default(now())
 
   @@unique([workspaceId, userId])
+  @@index([userId])
 }
 
 model Project {
@@ -78,8 +106,11 @@ model Project {
   versions    PageVersion[]
   runs        Run[]
   deployments Deployment[]
+  skillBindings SkillBinding[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+
+  @@index([workspaceId])
 }
 
 model ProjectMember {
@@ -91,6 +122,7 @@ model ProjectMember {
   createdAt DateTime    @default(now())
 
   @@unique([projectId, userId])
+  @@index([userId])
 }
 
 model LPBrief {
@@ -102,6 +134,8 @@ model LPBrief {
   versions  PageVersion[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+
+  @@index([projectId])
 }
 
 model PageVersion {
@@ -109,11 +143,15 @@ model PageVersion {
   projectId    String
   briefId      String
   artifactData Json
-  reviewStatus String
+  reviewStatus ReviewStatus
   project      Project      @relation(fields: [projectId], references: [id])
   brief        LPBrief      @relation(fields: [briefId], references: [id])
   deployments  Deployment[]
   createdAt    DateTime     @default(now())
+
+  @@index([projectId])
+  @@index([briefId])
+  @@index([reviewStatus])
 }
 
 model Skill {
@@ -123,28 +161,76 @@ model Skill {
   scope     SkillScope
   versions  SkillVersion[]
   createdAt DateTime       @default(now())
+
+  @@index([type, scope])
 }
 
 model SkillVersion {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   skillId     String
   version     String
   manifest    Json
   content     String
-  reviewState String
-  skill       Skill    @relation(fields: [skillId], references: [id])
-  createdAt   DateTime @default(now())
+  reviewState SkillReviewState
+  skill       Skill            @relation(fields: [skillId], references: [id])
+  bindings    SkillBinding[]
+  createdAt   DateTime         @default(now())
+
+  @@unique([skillId, version])
+  @@index([skillId])
+  @@index([reviewState])
+}
+
+model SkillBinding {
+  id             String       @id @default(cuid())
+  skillVersionId String
+  scope          SkillScope
+  targetKey      String
+  organizationId String?
+  workspaceId    String?
+  projectId      String?
+  enabled        Boolean      @default(true)
+  settings       Json?
+  skillVersion   SkillVersion @relation(fields: [skillVersionId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  workspace      Workspace?    @relation(fields: [workspaceId], references: [id])
+  project        Project?      @relation(fields: [projectId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([skillVersionId, scope, targetKey])
+  @@index([scope, targetKey])
+  @@index([organizationId])
+  @@index([workspaceId])
+  @@index([projectId])
 }
 
 model Run {
-  id        String   @id
+  id        String     @id
   projectId String
   role      String
   state     RunState
-  events    Json
-  project   Project  @relation(fields: [projectId], references: [id])
+  project   Project    @relation(fields: [projectId], references: [id])
+  events    RunEvent[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([projectId])
+  @@index([state])
+}
+
+model RunEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  sequence  Int
+  type      String
+  payload   Json
+  run       Run      @relation(fields: [runId], references: [id])
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([runId, sequence])
+  @@index([runId, type])
+  @@index([createdAt])
 }
 
 model Deployment {
@@ -154,8 +240,12 @@ model Deployment {
   branch         String
   commitSha      String
   pullRequestUrl String
-  status         String
+  status         DeploymentStatus
   project        Project     @relation(fields: [projectId], references: [id])
   pageVersion    PageVersion @relation(fields: [pageVersionId], references: [id])
   createdAt      DateTime    @default(now())
+
+  @@unique([pageVersionId])
+  @@index([projectId])
+  @@index([status])
 }
