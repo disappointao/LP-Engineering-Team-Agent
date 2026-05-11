@@ -71,6 +71,18 @@ export const canUseSkill = (input: {
   grantedPermissions: string[];
 }): boolean => {
   const manifest = SkillManifestSchema.parse(input.manifest);
+  if (manifest.reviewState === "archived") {
+    return false;
+  }
+
+  if (
+    manifest.type === "deployment" &&
+    manifest.reviewState !== "validated" &&
+    manifest.reviewState !== "published"
+  ) {
+    return false;
+  }
+
   const isBound = input.boundSkillIds.includes(manifest.id);
   const hasPermissions = manifest.permissions.every((permission) =>
     input.grantedPermissions.includes(permission)

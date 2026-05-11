@@ -84,4 +84,37 @@ describe("skills registry rules", () => {
       })
     ).toBe(false);
   });
+
+  it("blocks unreviewed and retired deployment skills from use", () => {
+    const deploymentSkill = {
+      ...sampleTemplateSkill,
+      id: "skill_deploy",
+      type: "deployment" as const,
+      permissions: ["git:write"]
+    };
+
+    for (const reviewState of ["draft", "deprecated", "archived"] as const) {
+      expect(
+        canUseSkill({
+          manifest: {
+            ...deploymentSkill,
+            reviewState
+          },
+          boundSkillIds: ["skill_deploy"],
+          grantedPermissions: ["git:write"]
+        })
+      ).toBe(false);
+    }
+
+    expect(
+      canUseSkill({
+        manifest: {
+          ...deploymentSkill,
+          reviewState: "validated"
+        },
+        boundSkillIds: ["skill_deploy"],
+        grantedPermissions: ["git:write"]
+      })
+    ).toBe(true);
+  });
 });
