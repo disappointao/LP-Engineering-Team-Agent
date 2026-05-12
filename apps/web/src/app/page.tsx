@@ -98,28 +98,27 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
         <div className="sidebarSection">
           <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
-          {pageState.projects.length > 0 ? (
-            pageState.projects.map((project) => (
-              <div
-                className={project.id === activeProject?.id ? "projectItem projectItemActive" : "projectItem"}
-                key={project.id}
-              >
-                <strong>{project.name}</strong>
-              </div>
-            ))
-          ) : (
-            <div className="projectItem">
-              <strong>{copy.projectFlow.createTitle}</strong>
-              <form action={createProjectAction} className="sidebarProjectForm">
-                <input
-                  aria-label={copy.projectFlow.projectNameLabel}
-                  name="projectName"
-                  placeholder={copy.projectFlow.projectNamePlaceholder}
-                />
-                <button type="submit">{copy.projectFlow.createProject}</button>
-              </form>
-            </div>
-          )}
+          {pageState.projects.length > 0
+            ? pageState.projects.map((project) => (
+                <div
+                  className={project.id === activeProject?.id ? "projectItem projectItemActive" : "projectItem"}
+                  key={project.id}
+                >
+                  <strong>{project.name}</strong>
+                </div>
+              ))
+            : null}
+          <div className="projectItem">
+            <strong>{copy.projectFlow.createTitle}</strong>
+            <form action={createProjectAction} className="sidebarProjectForm">
+              <input
+                aria-label={copy.projectFlow.projectNameLabel}
+                name="projectName"
+                placeholder={copy.projectFlow.projectNamePlaceholder}
+              />
+              <button type="submit">{copy.projectFlow.createProject}</button>
+            </form>
+          </div>
         </div>
 
         <div className="sidebarSection sidebarTasks">

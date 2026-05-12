@@ -159,6 +159,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
   const tasks = new Map<string, TaskRecord>();
   const taskOrder: string[] = [];
   const messages = new Map<string, ChatMessageRecord[]>();
+  const snapshotsByTask = new Map<string, WorkbenchSnapshot>();
   let nextTaskNumber = 1;
   let nextMessageNumber = 1;
 
@@ -250,7 +251,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
         };
       }
 
-      const snapshot = task.projectId ? await service.getSnapshot(task.projectId) : undefined;
+      const snapshot = snapshotsByTask.get(task.id);
       return {
         kind: "task_ready",
         projects: currentProjects,
@@ -276,6 +277,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
 
       try {
         let projectId = requestedProjectId;
+        let taskSnapshot: WorkbenchSnapshot | undefined;
 
         if (!projectId && taskType === "lp_generation") {
           const project = await service.createProject({
@@ -294,10 +296,19 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
             projectId,
             briefId: brief.id
           });
-          await service.reviewPageVersion({
+          const reviewedPageVersion = await service.reviewPageVersion({
             projectId,
             pageVersionId: pageVersion.id
           });
+          const project = projects.get(projectId);
+          if (!project) {
+            return { ok: false, error: "project_not_found" };
+          }
+          taskSnapshot = {
+            project: { ...project },
+            brief: { ...brief },
+            currentPageVersion: { ...reviewedPageVersion }
+          };
         }
 
         const task = saveTask({
@@ -318,6 +329,9 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
               ? "LP artifacts are ready for review."
               : "I created a task thread and can continue from here."
         });
+        if (taskSnapshot) {
+          snapshotsByTask.set(task.id, taskSnapshot);
+        }
 
         return {
           ok: true,

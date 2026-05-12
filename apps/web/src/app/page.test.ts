@@ -123,6 +123,29 @@ describe("HomePage project flow errors", () => {
     expect(collectText(page)).not.toContain("Deployments");
   });
 
+  it("keeps sidebar project creation available when projects exist", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Existing LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: []
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page);
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("Existing LP");
+    expect(text).toContain("Create project");
+    expect(inputs.some((input) => input.props?.name === "projectName")).toBe(true);
+  });
+
   it("renders a general task thread without static artifact cards", async () => {
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = {

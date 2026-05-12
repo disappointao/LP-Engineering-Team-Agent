@@ -103,6 +103,41 @@ describe("web workbench store", () => {
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 
+  it("restores the LP snapshot that belongs to the requested task", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({
+      name: "Spring LP"
+    });
+
+    await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a first landing page in HTML.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a second landing page in HTML.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    const firstTaskState = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    const secondTaskState = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_2"
+    });
+
+    expect(firstTaskState.kind).toBe("task_ready");
+    expect(secondTaskState.kind).toBe("task_ready");
+    if (firstTaskState.kind !== "task_ready" || secondTaskState.kind !== "task_ready") {
+      throw new Error("Expected task-ready states.");
+    }
+    expect(firstTaskState.snapshot?.brief?.prompt).toBe("Create a first landing page in HTML.");
+    expect(secondTaskState.snapshot?.brief?.prompt).toBe("Create a second landing page in HTML.");
+  });
+
   it("returns empty state when a project task is requested through a different project", async () => {
     const store = createWebWorkbenchStore();
     const firstProject = await store.createProject({
