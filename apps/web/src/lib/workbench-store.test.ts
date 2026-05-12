@@ -96,6 +96,46 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.brief?.prompt).toBe("Create a spring ecommerce landing page.");
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
     expect(pageState.snapshot.deployment).toBeUndefined();
+    expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
+  });
+
+  it("returns empty state when a project task is requested through a different project", async () => {
+    const store = createWebWorkbenchStore();
+    const firstProject = await store.createProject({
+      name: "Spring LP"
+    });
+    const secondProject = await store.createProject({
+      name: "Summer LP"
+    });
+
+    await store.submitTaskPrompt({
+      projectId: firstProject.id,
+      prompt: "Create a spring ecommerce landing page.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    await expect(
+      store.getPageState({
+        projectId: secondProject.id,
+        taskId: "task_1"
+      })
+    ).resolves.toEqual({
+      kind: "empty",
+      projects: [
+        expect.objectContaining({
+          id: firstProject.id
+        }),
+        expect.objectContaining({
+          id: secondProject.id
+        })
+      ],
+      tasks: [
+        expect.objectContaining({
+          id: "task_1",
+          projectId: firstProject.id
+        })
+      ]
+    });
   });
 
   it("rejects prompt submission when the prompt is blank", async () => {
@@ -197,6 +237,34 @@ describe("web workbench store", () => {
     expect(pageState.tasks.map((task) => task.id)).toEqual(["task_1"]);
     expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(pageState.messages[0]?.content).toBe("帮我写一个双 11 活动方案");
+    expect(pageState.messages[1]?.content).toBe(
+      "I created a task thread and can continue from here."
+    );
+  });
+
+  it("shows a general task when the caller passes a project id", async () => {
+    const store = createWebWorkbenchStore();
+
+    await store.submitTaskPrompt({
+      prompt: "帮我写一个双 11 活动方案",
+      implicitProjectName: "未命名 LP 项目"
+    });
+
+    const pageState = await store.getPageState({
+      projectId: "project_missing",
+      taskId: "task_1"
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.task).toMatchObject({
+      id: "task_1",
+      type: "general_chat",
+      projectId: undefined
+    });
+    expect(pageState.snapshot).toBeUndefined();
   });
 
   it("submits an LP task without a project by creating an implicit local project", async () => {
@@ -235,5 +303,6 @@ describe("web workbench store", () => {
     expect(pageState.snapshot?.brief?.prompt).toBe("生成一个电商春季促销 LP，输出单文件 HTML");
     expect(pageState.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
     expect(pageState.snapshot?.deployment).toBeUndefined();
+    expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 });

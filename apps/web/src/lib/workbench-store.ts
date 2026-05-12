@@ -228,9 +228,13 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
       const currentTasks = listTasks();
       const taskId = input?.taskId ?? null;
       const task = taskId ? tasks.get(taskId) : undefined;
-      const projectId = input?.projectId ?? task?.projectId ?? null;
+      const requestedProjectId = input?.projectId ?? null;
 
-      if (!task || (projectId && !projects.has(projectId))) {
+      if (
+        !task ||
+        (task.projectId && !projects.has(task.projectId)) ||
+        (task.projectId && requestedProjectId && requestedProjectId !== task.projectId)
+      ) {
         return {
           kind: "empty",
           projects: currentProjects,
