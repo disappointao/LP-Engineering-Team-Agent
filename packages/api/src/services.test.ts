@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
+import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
 import type {
@@ -108,6 +109,38 @@ describe("demo workbench service", () => {
       brief,
       currentPageVersion: reviewed,
       deployment
+    });
+  });
+
+  it("can read records created by another service instance when repositories are shared", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const serviceA = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const serviceB = new DemoWorkbenchService({ repositories, now: fixedClock() });
+
+    const project = await serviceA.createProject({
+      name: "Repository-backed project",
+      repository: "git@example.com:shop/repo-backed.git"
+    });
+    const brief = await serviceA.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Build a repository-backed LP."
+    });
+    const pageVersion = await serviceA.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    const snapshot = await serviceB.getSnapshot(project.id);
+
+    expect(snapshot).toMatchObject({
+      project,
+      brief,
+      currentPageVersion: {
+        id: pageVersion.id,
+        projectId: project.id,
+        briefId: brief.id,
+        reviewStatus: "pending"
+      }
     });
   });
 

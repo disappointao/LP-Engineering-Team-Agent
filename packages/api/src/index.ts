@@ -1,5 +1,13 @@
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import {
+  createInMemoryWorkbenchRepositories,
+  type BriefRecord,
+  type PageVersionRecord,
+  type ProjectRecord,
+  type ReviewStatus,
+  type WorkbenchRepositories
+} from "@lp-agent/db";
+import {
   InMemoryGitDeploymentAdapter,
   type DeploymentHandoff,
   type GitDeploymentAdapter
@@ -14,32 +22,12 @@ import {
 } from "@lp-agent/runtime-adapters";
 import { canUseSkill, sampleTemplateSkill, type SkillManifest } from "@lp-agent/skills";
 
-export interface ProjectRecord {
-  id: string;
-  name: string;
-  repository: string;
-  createdAt: string;
-}
-
-export interface BriefRecord {
-  id: string;
-  projectId: string;
-  prompt: string;
-  brief: LPBrief;
-  createdAt: string;
-}
-
-export type ReviewStatus = "pending" | "passed" | "failed";
-
-export interface PageVersionRecord {
-  id: string;
-  projectId: string;
-  briefId: string;
-  artifacts: StaticArtifacts;
-  reviewStatus: ReviewStatus;
-  findings: ReviewFinding[];
-  createdAt: string;
-}
+export type {
+  BriefRecord,
+  PageVersionRecord,
+  ProjectRecord,
+  ReviewStatus
+} from "@lp-agent/db";
 
 export interface WorkbenchSnapshot {
   project: ProjectRecord;
@@ -75,6 +63,7 @@ export interface ApproveAndCreateDeploymentInput {
 }
 
 export interface DemoWorkbenchServiceOptions {
+  repositories?: WorkbenchRepositories;
   builderRuntime?: AgentRuntimeAdapter;
   reviewerRuntime?: AgentRuntimeAdapter;
   deploymentAdapter?: GitDeploymentAdapter;
@@ -85,16 +74,14 @@ export class DemoWorkbenchService {
   private projectSequence = 0;
   private briefSequence = 0;
   private pageVersionSequence = 0;
-  private readonly projects = new Map<string, ProjectRecord>();
-  private readonly briefs = new Map<string, BriefRecord>();
-  private readonly pageVersions = new Map<string, PageVersionRecord>();
-  private readonly deploymentsByPageVersion = new Map<string, DeploymentHandoff>();
+  private readonly repositories: WorkbenchRepositories;
   private readonly builderRuntime: AgentRuntimeAdapter;
   private readonly reviewerRuntime: AgentRuntimeAdapter;
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly now: () => Date;
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
+    this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter();
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter();
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
@@ -109,12 +96,12 @@ export class DemoWorkbenchService {
       repository: input.repository,
       createdAt: this.timestamp()
     };
-    this.projects.set(project.id, project);
+    await this.repositories.projects.save(project);
     return copyProject(project);
   }
 
   async createBriefFromPrompt(input: CreateBriefFromPromptInput): Promise<BriefRecord> {
-    this.getProjectOrThrow(input.projectId);
+    await this.getProjectOrThrow(input.projectId);
 
     this.briefSequence += 1;
     const brief: BriefRecord = {
@@ -124,13 +111,13 @@ export class DemoWorkbenchService {
       brief: copyBrief(sampleBrief),
       createdAt: this.timestamp()
     };
-    this.briefs.set(brief.id, brief);
+    await this.repositories.briefs.save(brief);
     return copyBriefRecord(brief);
   }
 
   async generatePageVersion(input: GeneratePageVersionInput): Promise<PageVersionRecord> {
-    this.getProjectOrThrow(input.projectId);
-    const brief = this.getBriefForProjectOrThrow(input.projectId, input.briefId);
+    await this.getProjectOrThrow(input.projectId);
+    const brief = await this.getBriefForProjectOrThrow(input.projectId, input.briefId);
     const runId = `run_builder_${this.pageVersionSequence + 1}`;
 
     const result = await this.builderRuntime.run({
@@ -167,18 +154,18 @@ export class DemoWorkbenchService {
       findings: [],
       createdAt: this.timestamp()
     };
-    this.pageVersions.set(pageVersion.id, pageVersion);
+    await this.repositories.pageVersions.save(pageVersion);
     return copyPageVersion(pageVersion);
   }
 
   async reviewPageVersion(input: ReviewPageVersionInput): Promise<PageVersionRecord> {
-    this.getProjectOrThrow(input.projectId);
-    const pageVersion = this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId);
-    if (this.deploymentsByPageVersion.has(pageVersion.id)) {
+    await this.getProjectOrThrow(input.projectId);
+    const pageVersion = await this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId);
+    if (await this.repositories.deployments.getByPageVersionId(pageVersion.id)) {
       return copyPageVersion(pageVersion);
     }
 
-    const brief = this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
+    const brief = await this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
 
     const result = await this.reviewerRuntime.run({
       runId: `run_reviewer_${pageVersion.id}`,
@@ -203,13 +190,14 @@ export class DemoWorkbenchService {
     pageVersion.reviewStatus = findings.some((finding) => finding.blocksDeployment || finding.severity === "blocking")
       ? "failed"
       : "passed";
+    await this.repositories.pageVersions.save(pageVersion);
 
     return copyPageVersion(pageVersion);
   }
 
   async approveAndCreateDeployment(input: ApproveAndCreateDeploymentInput): Promise<DeploymentHandoff> {
-    this.getProjectOrThrow(input.projectId);
-    const pageVersion = this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId);
+    await this.getProjectOrThrow(input.projectId);
+    const pageVersion = await this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId);
     if (input.reviewerUserId.trim().length === 0) {
       throw new Error("Reviewer user ID is required.");
     }
@@ -217,7 +205,7 @@ export class DemoWorkbenchService {
       throw new Error("Page version must pass review before deployment.");
     }
 
-    const existing = this.deploymentsByPageVersion.get(pageVersion.id);
+    const existing = await this.repositories.deployments.getByPageVersionId(pageVersion.id);
     if (existing) {
       return copyDeployment(existing);
     }
@@ -228,17 +216,17 @@ export class DemoWorkbenchService {
       approved: true,
       artifacts: copyArtifacts(pageVersion.artifacts)
     });
-    this.deploymentsByPageVersion.set(pageVersion.id, deployment);
+    await this.repositories.deployments.save(deployment);
     return copyDeployment(deployment);
   }
 
   async getSnapshot(projectId: string): Promise<WorkbenchSnapshot> {
-    const project = this.getProjectOrThrow(projectId);
-    const currentPageVersion = this.findLatestPageVersion(projectId);
+    const project = await this.getProjectOrThrow(projectId);
+    const currentPageVersion = await this.repositories.pageVersions.findLatestForProject(projectId);
     const brief = currentPageVersion
-      ? this.briefs.get(currentPageVersion.briefId)
-      : this.findLatestBrief(projectId);
-    const deployment = this.findLatestDeployment(projectId);
+      ? await this.repositories.briefs.getById(currentPageVersion.briefId)
+      : await this.repositories.briefs.findLatestForProject(projectId);
+    const deployment = await this.repositories.deployments.findLatestForProject(projectId);
 
     return {
       project: copyProject(project),
@@ -252,46 +240,31 @@ export class DemoWorkbenchService {
     return this.now().toISOString();
   }
 
-  private getProjectOrThrow(projectId: string): ProjectRecord {
-    const project = this.projects.get(projectId);
+  private async getProjectOrThrow(projectId: string): Promise<ProjectRecord> {
+    const project = await this.repositories.projects.getById(projectId);
     if (!project) {
       throw new Error("Project not found.");
     }
     return project;
   }
 
-  private getBriefForProjectOrThrow(projectId: string, briefId: string): BriefRecord {
-    const brief = this.briefs.get(briefId);
+  private async getBriefForProjectOrThrow(projectId: string, briefId: string): Promise<BriefRecord> {
+    const brief = await this.repositories.briefs.getById(briefId);
     if (!brief || brief.projectId !== projectId) {
       throw new Error("Brief not found for project.");
     }
     return brief;
   }
 
-  private getPageVersionForProjectOrThrow(projectId: string, pageVersionId: string): PageVersionRecord {
-    const pageVersion = this.pageVersions.get(pageVersionId);
+  private async getPageVersionForProjectOrThrow(
+    projectId: string,
+    pageVersionId: string
+  ): Promise<PageVersionRecord> {
+    const pageVersion = await this.repositories.pageVersions.getById(pageVersionId);
     if (!pageVersion || pageVersion.projectId !== projectId) {
       throw new Error("Page version not found for project.");
     }
     return pageVersion;
-  }
-
-  private findLatestBrief(projectId: string): BriefRecord | undefined {
-    return [...this.briefs.values()]
-      .filter((brief) => brief.projectId === projectId)
-      .at(-1);
-  }
-
-  private findLatestPageVersion(projectId: string): PageVersionRecord | undefined {
-    return [...this.pageVersions.values()]
-      .filter((pageVersion) => pageVersion.projectId === projectId)
-      .at(-1);
-  }
-
-  private findLatestDeployment(projectId: string): DeploymentHandoff | undefined {
-    return [...this.deploymentsByPageVersion.values()]
-      .filter((deployment) => deployment.projectId === projectId)
-      .at(-1);
   }
 }
 
