@@ -44,6 +44,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Implementation plan for removing Git repository capture and automatic deployment from the current Web flow.
    - Read this after the no-Git/no-deployment spec when implementing or auditing the current project creation, prompt submission, review, static download, and preview behavior.
 
+11. `specs/2026-05-12-conversation-first-workbench-entry-spec.md`
+   - Web entry model amendment.
+   - Read this after the no-Git/no-deployment plan. It supersedes the project-first Web entry for the current Web V1 and defines the Manus-style large composer, ordinary task mode, optional project context, and LP routing behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
