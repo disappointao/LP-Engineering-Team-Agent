@@ -44,3 +44,5 @@ Pull requests should include a brief description, the reason for the change, com
 ## Agent-Specific Instructions
 
 Before editing, inspect the current tree and preserve unrelated user changes. Keep generated files focused and update this guide whenever new tooling, directories, or workflows become part of the repository. The generated LP artifact itself should remain framework-free static HTML/CSS/JS even though the workbench is a Next.js app.
+
+When creating, renaming, replacing, or materially updating Superpowers specs or plans under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update `docs/superpowers/README.md` in the same change so the reading order and document purpose remain accurate for future agents and developers.
