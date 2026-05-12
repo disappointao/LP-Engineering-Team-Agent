@@ -1,3 +1,5 @@
+import type { ProjectFlowErrorCode } from "./workbench-store";
+
 export type Locale = "en" | "zh-CN";
 
 export interface ExportLabels {
@@ -40,6 +42,20 @@ export interface WorkbenchCopy {
     subtitle: string;
     promptLabel: string;
     actionChips: string[];
+  };
+  projectFlow: {
+    createTitle: string;
+    createDescription: string;
+    projectNameLabel: string;
+    projectNamePlaceholder: string;
+    repositoryLabel: string;
+    repositoryPlaceholder: string;
+    createProject: string;
+    localPersistenceNote: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    promptLabel: string;
+    errors: Record<ProjectFlowErrorCode, string>;
   };
   status: {
     review: string;
@@ -184,6 +200,26 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       promptLabel: "Current task",
       actionChips: ["Build LP", "Apply skill", "Check MCP", "Route model", "Export handoff"]
     },
+    projectFlow: {
+      createTitle: "Create a project",
+      createDescription: "Start with a project and repository target, then ask the LP agent to generate static files.",
+      projectNameLabel: "Project name",
+      projectNamePlaceholder: "Spring Campaign",
+      repositoryLabel: "Repository URL",
+      repositoryPlaceholder: "git@example.com:shop/spring-lp.git",
+      createProject: "Create project",
+      localPersistenceNote: "Local MVP state is kept only while this dev server is running.",
+      emptyTitle: "Project ready",
+      emptyDescription: "Send an LP request to generate a brief, static artifacts, review, and handoff.",
+      promptLabel: "LP request",
+      errors: {
+        project_name_required: "Enter a project name.",
+        repository_required: "Enter a repository URL.",
+        prompt_required: "Enter an LP request.",
+        project_not_found: "The selected project is no longer available.",
+        generation_failed: "The LP generation flow failed. Try again with a shorter request."
+      }
+    },
     status: {
       review: "Review",
       pending: "pending",
@@ -298,6 +334,26 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       subtitle: "从需求拆解、页面生成、审核到部署交接，生成物保持框架无关的静态 HTML/CSS/JS。",
       promptLabel: "当前任务",
       actionChips: ["生成 LP", "应用技能", "检查 MCP", "选择模型", "导出交接"]
+    },
+    projectFlow: {
+      createTitle: "创建项目",
+      createDescription: "先创建项目和仓库目标，然后让 LP Agent 生成静态文件。",
+      projectNameLabel: "项目名称",
+      projectNamePlaceholder: "春季活动",
+      repositoryLabel: "仓库地址",
+      repositoryPlaceholder: "git@example.com:shop/spring-lp.git",
+      createProject: "创建项目",
+      localPersistenceNote: "本地 MVP 状态只会保存在当前 dev server 运行期间。",
+      emptyTitle: "项目已就绪",
+      emptyDescription: "发送 LP 需求后会生成 brief、静态文件、审核结果和交接文件。",
+      promptLabel: "LP 需求",
+      errors: {
+        project_name_required: "请输入项目名称。",
+        repository_required: "请输入仓库地址。",
+        prompt_required: "请输入 LP 需求。",
+        project_not_found: "当前项目已经不可用。",
+        generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
+      }
     },
     status: {
       review: "审核",
