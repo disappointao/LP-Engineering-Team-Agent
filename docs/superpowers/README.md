@@ -20,7 +20,11 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Web UI slice spec.
    - Read this after the Stage 2 product spec when working on the Manus/ChatGPT-style conversation layout, fixed sidebar, tool-call process display, artifact cards, and interrupt affordance.
 
-5. `plans/2026-05-12-stage-2-persistent-repositories.md`
+5. `plans/2026-05-12-chat-agent-workbench-ui.md`
+   - Stage 2 Web UI implementation plan.
+   - Read this after the chat UI spec when implementing or auditing the conversation-first Web workbench.
+
+6. `plans/2026-05-12-stage-2-persistent-repositories.md`
    - Stage 2 Milestone 1 implementation plan.
    - Read this when implementing the first Stage 2 slice: repository contracts and repository-backed workbench state.
 
