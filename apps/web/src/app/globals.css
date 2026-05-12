@@ -181,6 +181,11 @@ button {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.projectItemActive {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
 .projectItem span,
 .artifactCard small,
 .toolEvent small {
@@ -311,6 +316,93 @@ button {
   gap: 26px;
   margin: 0 auto;
   padding: 46px 22px 34px;
+}
+
+.setupPanel,
+.emptyProjectState {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(31, 35, 40, 0.05);
+  padding: 20px;
+}
+
+.setupPanel h1,
+.emptyProjectState h1 {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.setupPanel p,
+.emptyProjectState p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.projectForm {
+  display: grid;
+  gap: 9px;
+}
+
+.projectForm label {
+  color: #42474d;
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
+.projectForm input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  padding: 0 11px;
+  outline: 0;
+}
+
+.projectForm input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.projectForm button {
+  justify-self: start;
+  min-height: 38px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0 13px;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.formError {
+  min-width: 0;
+  border: 1px solid #f2c8c1;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.setupPanel .localNote {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 0.78rem;
 }
 
 .userTurn {
@@ -636,6 +728,20 @@ button {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
+}
+
+.composerDisabled {
+  box-shadow: none;
+}
+
+.composer button:disabled,
+.composer input:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.composer input:disabled::placeholder {
+  color: var(--muted);
 }
 
 @media (max-width: 860px) {
