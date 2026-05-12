@@ -113,10 +113,26 @@ importers:
         version: 2.1.9(@types/node@22.19.18)
 
   packages/db:
+    dependencies:
+      '@lp-agent/artifacts':
+        specifier: workspace:*
+        version: link:../artifacts
+      '@lp-agent/git-deployment':
+        specifier: workspace:*
+        version: link:../git-deployment
+      '@lp-agent/lp-schema':
+        specifier: workspace:*
+        version: link:../lp-schema
     devDependencies:
       prisma:
         specifier: ^6.0.0
         version: 6.19.3(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.18)
 
   packages/git-deployment:
     dependencies:
