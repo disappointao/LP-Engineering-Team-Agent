@@ -1,7 +1,7 @@
 # Conversation-First Workbench Entry Spec
 
 Date: 2026-05-12
-Status: draft for user review
+Status: approved for implementation planning
 
 ## Summary
 

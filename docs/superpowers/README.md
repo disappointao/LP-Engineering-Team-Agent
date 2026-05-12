@@ -48,6 +48,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Web entry model amendment.
    - Read this after the no-Git/no-deployment plan. It supersedes the project-first Web entry for the current Web V1 and defines the Manus-style large composer, ordinary task mode, optional project context, and LP routing behavior.
 
+12. `plans/2026-05-12-conversation-first-workbench-entry.md`
+   - Implementation plan for the conversation-first Web entry.
+   - Read this after the conversation-first spec when implementing or auditing the task model, deterministic routing, implicit LP project creation, general chat task rendering, large empty-state composer, and sidebar task/project behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
