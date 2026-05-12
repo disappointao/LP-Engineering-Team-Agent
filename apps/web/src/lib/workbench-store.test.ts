@@ -192,6 +192,8 @@ describe("web workbench store", () => {
     expect(classifyTaskPrompt("Create a landing page for a spring sale")).toBe("lp_generation");
     expect(classifyTaskPrompt("创建项目 春季活动")).toBe("project_setup");
     expect(classifyTaskPrompt("new project for spring campaign")).toBe("project_setup");
+    expect(classifyTaskPrompt("create a landing page for my project")).toBe("lp_generation");
+    expect(classifyTaskPrompt("create project for spring campaign")).toBe("project_setup");
   });
 
   it("derives implicit LP project names from the prompt with a fallback", () => {
@@ -202,6 +204,7 @@ describe("web workbench store", () => {
       )
     ).toBe("生成一个电商春季促销 LP");
     expect(deriveImplicitProjectName("   ", "Untitled LP Project")).toBe("Untitled LP Project");
+    expect(deriveImplicitProjectName("   ", "   ")).toBe("Untitled LP Project");
   });
 
   it("submits a general task without a project and exposes a task thread", async () => {
@@ -237,6 +240,42 @@ describe("web workbench store", () => {
     expect(pageState.tasks.map((task) => task.id)).toEqual(["task_1"]);
     expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(pageState.messages[0]?.content).toBe("帮我写一个双 11 活动方案");
+    expect(pageState.messages[1]?.content).toBe(
+      "I created a task thread and can continue from here."
+    );
+  });
+
+  it("submits a project setup task without creating an implicit project", async () => {
+    const store = createWebWorkbenchStore();
+
+    const result = await store.submitTaskPrompt({
+      prompt: "create project for spring campaign",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_1",
+      taskType: "project_setup",
+      projectId: undefined
+    });
+
+    const pageState = await store.getPageState({
+      taskId: "task_1"
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.projects).toEqual([]);
+    expect(pageState.task).toMatchObject({
+      id: "task_1",
+      type: "project_setup",
+      projectId: undefined
+    });
+    expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(pageState.messages[0]?.content).toBe("create project for spring campaign");
     expect(pageState.messages[1]?.content).toBe(
       "I created a task thread and can continue from here."
     );

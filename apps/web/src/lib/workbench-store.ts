@@ -113,7 +113,7 @@ const lpKeywords = [
   "电商"
 ];
 
-const projectKeywords = ["创建项目", "new project", "project"];
+const projectKeywords = ["创建项目", "new project", "create project"];
 
 export function classifyTaskPrompt(prompt: string): TaskType {
   const normalized = prompt.trim().toLowerCase();
@@ -141,7 +141,12 @@ export function deriveImplicitProjectName(prompt: string, fallback: string): str
   const title = deriveTaskTitle(prompt)
     .replace(/[,，。.!！?？].*$/, "")
     .trim();
-  return title.length > 0 ? title : fallback;
+  const trimmedFallback = fallback.trim();
+  return title.length > 0
+    ? title
+    : trimmedFallback.length > 0
+      ? trimmedFallback
+      : "Untitled LP Project";
 }
 
 export function createWebWorkbenchStore(): WebWorkbenchStore {
@@ -269,7 +274,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
       try {
         let projectId = requestedProjectId;
 
-        if (!projectId && taskType !== "general_chat") {
+        if (!projectId && taskType === "lp_generation") {
           const project = await service.createProject({
             name: deriveImplicitProjectName(prompt.value, input.implicitProjectName)
           });
