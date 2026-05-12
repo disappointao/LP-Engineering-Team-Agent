@@ -173,6 +173,152 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("Static LP preview");
   });
 
+  it("does not show stale LP artifacts for a project-bound general task", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_2";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Existing LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_2",
+          title: "Help me write a campaign plan.",
+          type: "general_chat",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      activeTaskId: "task_2",
+      task: {
+        id: "task_2",
+        title: "Help me write a campaign plan.",
+        type: "general_chat",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_3",
+          taskId: "task_2",
+          role: "user",
+          content: "Help me write a campaign plan.",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        },
+        {
+          id: "message_4",
+          taskId: "task_2",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:02:01.000Z"
+        }
+      ],
+      snapshot: {
+        project: {
+          id: "project_1",
+          name: "Existing LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        brief: {
+          id: "brief_1",
+          projectId: "project_1",
+          prompt: "Create a stale landing page.",
+          brief: {
+            objective: "Convert paid traffic.",
+            audience: "Returning shoppers",
+            offer: "Save 25%.",
+            primaryCta: "Shop now"
+          },
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        currentPageVersion: {
+          id: "version_1",
+          projectId: "project_1",
+          briefId: "brief_1",
+          artifacts: {
+            indexHtml: [
+              "<!doctype html><html><head>",
+              "<link rel=\"stylesheet\" href=\"styles.css\">",
+              "</head><body>",
+              "<main><h1>Stale LP</h1></main>",
+              "  <script src=\"script.js\"></script>",
+              "</body></html>"
+            ].join(""),
+            stylesCss: "body { color: #111827; }",
+            scriptJs: "window.lpAgent = true;"
+          },
+          reviewStatus: "passed",
+          findings: [],
+          createdAt: "2026-05-12T08:01:00.000Z"
+        },
+        deployment: undefined
+      }
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Help me write a campaign plan.");
+    expect(text).toContain("I created a task thread and can continue from here.");
+    expect(text).not.toContain("index.single.html");
+    expect(text).not.toContain("Static LP preview");
+  });
+
+  it("renders a project setup task without a snapshot", async () => {
+    pageMocks.currentTaskId = "task_3";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [],
+      tasks: [
+        {
+          id: "task_3",
+          title: "Create project for spring campaign",
+          type: "project_setup",
+          status: "complete",
+          createdAt: "2026-05-12T08:03:00.000Z"
+        }
+      ],
+      activeTaskId: "task_3",
+      task: {
+        id: "task_3",
+        title: "Create project for spring campaign",
+        type: "project_setup",
+        status: "complete",
+        createdAt: "2026-05-12T08:03:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_5",
+          taskId: "task_3",
+          role: "user",
+          content: "Create project for spring campaign",
+          createdAt: "2026-05-12T08:03:00.000Z"
+        },
+        {
+          id: "message_6",
+          taskId: "task_3",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:03:01.000Z"
+        }
+      ]
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Create project for spring campaign");
+    expect(text).toContain("I created a task thread and can continue from here.");
+    expect(text).not.toContain("What can I help you build?");
+  });
+
   it("renders completed static artifacts without deployment UI", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";

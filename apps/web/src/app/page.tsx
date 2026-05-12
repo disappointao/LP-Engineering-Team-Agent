@@ -36,6 +36,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const completedSnapshot =
     pageState.kind === "task_ready" &&
+    activeTask?.type === "lp_generation" &&
     pageState.snapshot?.brief &&
     pageState.snapshot.currentPageVersion
       ? {
@@ -47,17 +48,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
     : undefined;
   const chat =
-    pageState.kind === "task_ready" && activeTask?.type === "general_chat"
-      ? createGeneralTaskThread({
-          copy,
-          userMessage:
-            pageState.messages.find((message) => message.role === "user")?.content ??
-            activeTask.title,
-          assistantMessage:
-            pageState.messages.find((message) => message.role === "assistant")?.content ??
-            copy.chat.generalToolOperation
-        })
-      : completedSnapshot && downloadLinks
+    pageState.kind === "task_ready"
+      ? completedSnapshot && downloadLinks
         ? createChatWorkbenchThread({
             copy,
             prompt: completedSnapshot.brief.prompt,
@@ -65,7 +57,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             pageVersion: completedSnapshot.pageVersion,
             downloadLinks
           })
-        : undefined;
+        : createGeneralTaskThread({
+            copy,
+            userMessage:
+              pageState.messages.find((message) => message.role === "user")?.content ??
+              pageState.task.title,
+            assistantMessage:
+              pageState.messages.find((message) => message.role === "assistant")?.content ??
+              copy.chat.generalToolOperation
+          })
+      : undefined;
   const composer = chat?.composer ?? {
     placeholder: copy.chat.composerPlaceholder,
     addAttachmentLabel: copy.chat.addAttachmentLabel,
