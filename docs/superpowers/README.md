@@ -32,6 +32,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Milestone 2 lightweight Web flow spec.
    - Read this after the chat UI plan and repository plan when replacing the fixed demo snapshot with project creation, prompt submission, cookie-backed current project state, and process-local in-memory Web state.
 
+8. `plans/2026-05-12-lightweight-real-web-project-flow.md`
+   - Stage 2 Milestone 2 lightweight Web flow implementation plan.
+   - Read this after the lightweight Web flow spec when implementing or auditing project creation, prompt submission, cookie-backed current project selection, and process-local Web state.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
