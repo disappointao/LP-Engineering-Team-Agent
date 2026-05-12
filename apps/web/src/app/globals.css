@@ -200,6 +200,39 @@ button {
   overflow-wrap: anywhere;
 }
 
+.sidebarProjectForm {
+  display: grid;
+  gap: 7px;
+}
+
+.sidebarProjectForm input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 9px;
+  outline: 0;
+  font-size: 0.82rem;
+}
+
+.sidebarProjectForm input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.sidebarProjectForm button {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #3d4248;
+  padding: 0 10px;
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+
 .sidebarTasks {
   flex: 1;
   align-content: start;
@@ -403,6 +436,67 @@ button {
   border-top: 1px solid var(--line);
   padding-top: 12px;
   font-size: 0.78rem;
+}
+
+.entryPanel {
+  min-height: calc(100vh - 190px);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 22px;
+  padding: 48px 0;
+}
+
+.entryPanel h1 {
+  margin: 0;
+  color: #2d3035;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.entryComposerShell {
+  width: min(100%, 720px);
+  display: grid;
+  gap: 18px;
+}
+
+.entryComposerShell p {
+  min-height: 96px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--subtle);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.entryChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.entryChipRow button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: #4a4e54;
+  padding: 0 14px;
+  font-size: 0.86rem;
+  font-weight: 760;
+}
+
+.entryChipRow button:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .userTurn {

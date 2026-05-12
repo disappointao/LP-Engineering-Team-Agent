@@ -16,12 +16,16 @@ describe("web i18n", () => {
   it("exposes localized workbench labels", () => {
     expect(getWorkbenchCopy("zh-CN").nav.workbench).toBe("工作台");
     expect(getWorkbenchCopy("zh-CN").hero.title).toBe("我能帮你生成什么 LP？");
+    expect(getWorkbenchCopy("zh-CN").entry.title).toBe("我能为你做什么？");
+    expect(getWorkbenchCopy("zh-CN").entry.implicitProjectName).toBe("未命名 LP 项目");
     expect(getWorkbenchCopy("zh-CN").chat.composerPlaceholder).toBe("发送消息给 LP Agent");
     expect(getWorkbenchCopy("zh-CN").projectFlow.createProject).toBe("创建项目");
     expect(getWorkbenchCopy("zh-CN").projectFlow.errors.prompt_required).toBe("请输入 LP 需求。");
     expect(getWorkbenchCopy("zh-CN").projectFlow.createDescription).not.toContain("仓库");
     expect(getWorkbenchCopy("zh-CN").chat.suggestions.join(" ")).not.toContain("部署");
     expect(getWorkbenchCopy("en").hero.title).toBe("What LP should we build?");
+    expect(getWorkbenchCopy("en").entry.title).toBe("What can I help you build?");
+    expect(getWorkbenchCopy("en").entry.implicitProjectName).toBe("Untitled LP Project");
     expect(getWorkbenchCopy("en").chat.composerPlaceholder).toBe("Message LP Agent");
     expect(getWorkbenchCopy("en").projectFlow.createProject).toBe("Create project");
     expect(getWorkbenchCopy("en").projectFlow.errors.prompt_required).toBe("Enter an LP request.");

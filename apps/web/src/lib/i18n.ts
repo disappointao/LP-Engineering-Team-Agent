@@ -43,6 +43,13 @@ export interface WorkbenchCopy {
     promptLabel: string;
     actionChips: string[];
   };
+  entry: {
+    title: string;
+    placeholder: string;
+    chips: string[];
+    implicitProjectName: string;
+    createStaticLp: string;
+  };
   projectFlow: {
     createTitle: string;
     createDescription: string;
@@ -203,6 +210,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       promptLabel: "Current task",
       actionChips: ["Build LP", "Apply skill", "Check MCP", "Route model", "Export handoff"]
     },
+    entry: {
+      title: "What can I help you build?",
+      placeholder: "Assign a task or ask anything",
+      chips: ["Create static LP", "Plan a campaign", "Create website", "Design", "More"],
+      implicitProjectName: "Untitled LP Project",
+      createStaticLp: "Create static LP"
+    },
     projectFlow: {
       createTitle: "Create a project",
       createDescription: "Start with a local project, then ask the LP agent to generate static files.",
@@ -343,6 +357,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       subtitle: "从需求拆解、页面生成、审核到部署交接，生成物保持框架无关的静态 HTML/CSS/JS。",
       promptLabel: "当前任务",
       actionChips: ["生成 LP", "应用技能", "检查 MCP", "选择模型", "导出交接"]
+    },
+    entry: {
+      title: "我能为你做什么？",
+      placeholder: "分配一个任务或提问任何问题",
+      chips: ["创建静态 LP", "策划活动", "创建网站", "设计", "更多"],
+      implicitProjectName: "未命名 LP 项目",
+      createStaticLp: "创建静态 LP"
     },
     projectFlow: {
       createTitle: "创建项目",

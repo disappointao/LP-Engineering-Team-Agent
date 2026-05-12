@@ -3,19 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const pageMocks = vi.hoisted(() => ({
   acceptLanguage: "en",
   currentProjectId: undefined as string | undefined,
+  currentTaskId: undefined as string | undefined,
   pageState: {
-    kind: "no_project",
-    projects: []
+    kind: "empty",
+    projects: [],
+    tasks: []
   } as unknown
 }));
 
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "accept-language": pageMocks.acceptLanguage }),
   cookies: async () => ({
-    get: () =>
-      pageMocks.currentProjectId
-        ? { name: "lp-agent-current-project", value: pageMocks.currentProjectId }
-        : undefined
+    get: (name: string) => {
+      if (name === "lp-agent-current-project" && pageMocks.currentProjectId) {
+        return { name, value: pageMocks.currentProjectId };
+      }
+
+      if (name === "lp-agent-current-task" && pageMocks.currentTaskId) {
+        return { name, value: pageMocks.currentTaskId };
+      }
+
+      return undefined;
+    }
   })
 }));
 
@@ -48,12 +57,31 @@ function collectText(node: unknown): string[] {
   return [];
 }
 
+function collectElements(node: unknown, type: string): Array<{ props?: Record<string, unknown> }> {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return [];
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap((child) => collectElements(child, type));
+  }
+  if (typeof node === "object" && "type" in node && "props" in node) {
+    const element = node as { type?: unknown; props?: { children?: unknown } };
+    return [
+      ...(element.type === type ? [element as { props?: Record<string, unknown> }] : []),
+      ...collectElements(element.props?.children, type)
+    ];
+  }
+  return [];
+}
+
 beforeEach(() => {
   pageMocks.acceptLanguage = "en";
   pageMocks.currentProjectId = undefined;
+  pageMocks.currentTaskId = undefined;
   pageMocks.pageState = {
-    kind: "no_project",
-    projects: []
+    kind: "empty",
+    projects: [],
+    tasks: []
   };
 });
 
@@ -70,14 +98,21 @@ describe("HomePage project flow errors", () => {
     expect(collectText(unknownErrorPage)).not.toContain("Enter a project name.");
   });
 
-  it("does not ask for a repository when creating a local web project", async () => {
+  it("renders a conversation-first empty state with an enabled composer", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({})
     });
     const text = collectText(page);
+    const inputs = collectElements(page, "input");
 
-    expect(text).toContain("Create a project");
+    expect(text).toContain("What can I help you build?");
+    expect(text).toContain("Create static LP");
+    expect(text).toContain("Plan a campaign");
+    expect(text).not.toContain("Start with a local project");
     expect(text).not.toContain("Repository URL");
+    expect(
+      inputs.some((input) => input.props?.name === "prompt" && input.props?.disabled === true)
+    ).toBe(false);
   });
 
   it("does not expose deployment navigation in the local web flow", async () => {
@@ -88,10 +123,61 @@ describe("HomePage project flow errors", () => {
     expect(collectText(page)).not.toContain("Deployments");
   });
 
+  it("renders a general task thread without static artifact cards", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Help me write a campaign plan.",
+          type: "general_chat",
+          status: "complete",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Help me write a campaign plan.",
+        type: "general_chat",
+        status: "complete",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Help me write a campaign plan.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        }
+      ]
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Help me write a campaign plan.");
+    expect(text).toContain("I created a task thread and can continue from here.");
+    expect(text).toContain("Assistant");
+    expect(text).not.toContain("index.single.html");
+    expect(text).not.toContain("Static LP preview");
+  });
+
   it("renders completed static artifacts without deployment UI", async () => {
     pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = {
-      kind: "project_ready",
+      kind: "task_ready",
       projects: [
         {
           id: "project_1",
@@ -99,7 +185,41 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:00.000Z"
         }
       ],
-      activeProjectId: "project_1",
+      tasks: [
+        {
+          id: "task_1",
+          title: "Create a no git spring ecommerce landing page.",
+          type: "lp_generation",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Create a no git spring ecommerce landing page.",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        }
+      ],
       snapshot: {
         project: {
           id: "project_1",

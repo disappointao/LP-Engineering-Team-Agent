@@ -2,11 +2,14 @@ import React from "react";
 import { headers } from "next/headers";
 import { createProjectAction, submitPromptAction } from "./actions";
 import { LPPreview } from "../components/lp-preview";
-import { createChatWorkbenchThread } from "../lib/chat-workbench";
+import {
+  createChatWorkbenchThread,
+  createGeneralTaskThread
+} from "../lib/chat-workbench";
 import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import { getWebWorkbenchStore, type ProjectFlowErrorCode } from "../lib/workbench-store";
-import { getCurrentProjectId } from "../lib/workbench-session";
+import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 
 interface HomePageProps {
   searchParams?: Promise<{ error?: string }>;
@@ -20,12 +23,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
   const errorCode = toProjectFlowError(params?.error);
   const currentProjectId = await getCurrentProjectId();
-  const pageState = await getWebWorkbenchStore().getPageState(currentProjectId);
-  const activeProject = pageState.kind === "project_ready" ? pageState.snapshot.project : undefined;
+  const currentTaskId = await getCurrentTaskId();
+  const pageState = await getWebWorkbenchStore().getPageState({
+    projectId: currentProjectId,
+    taskId: currentTaskId
+  });
+  const activeTask = pageState.kind === "task_ready" ? pageState.task : undefined;
+  const activeProject =
+    pageState.kind === "task_ready" && pageState.snapshot
+      ? pageState.snapshot.project
+      : pageState.projects.find((project) => project.id === currentProjectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const completedSnapshot =
-    pageState.kind === "project_ready" &&
-    pageState.snapshot.brief &&
+    pageState.kind === "task_ready" &&
+    pageState.snapshot?.brief &&
     pageState.snapshot.currentPageVersion
       ? {
           brief: pageState.snapshot.brief,
@@ -35,15 +46,26 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const downloadLinks = completedSnapshot
     ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
     : undefined;
-  const chat = completedSnapshot && downloadLinks
-    ? createChatWorkbenchThread({
-        copy,
-        prompt: completedSnapshot.brief.prompt,
-        objective: completedSnapshot.brief.brief.objective,
-        pageVersion: completedSnapshot.pageVersion,
-        downloadLinks
-      })
-    : undefined;
+  const chat =
+    pageState.kind === "task_ready" && activeTask?.type === "general_chat"
+      ? createGeneralTaskThread({
+          copy,
+          userMessage:
+            pageState.messages.find((message) => message.role === "user")?.content ??
+            activeTask.title,
+          assistantMessage:
+            pageState.messages.find((message) => message.role === "assistant")?.content ??
+            copy.chat.generalToolOperation
+        })
+      : completedSnapshot && downloadLinks
+        ? createChatWorkbenchThread({
+            copy,
+            prompt: completedSnapshot.brief.prompt,
+            objective: completedSnapshot.brief.brief.objective,
+            pageVersion: completedSnapshot.pageVersion,
+            downloadLinks
+          })
+        : undefined;
   const composer = chat?.composer ?? {
     placeholder: copy.chat.composerPlaceholder,
     addAttachmentLabel: copy.chat.addAttachmentLabel,
@@ -86,23 +108,40 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             ))
           ) : (
             <div className="projectItem">
-              <span>{copy.projectFlow.localPersistenceNote}</span>
               <strong>{copy.projectFlow.createTitle}</strong>
+              <form action={createProjectAction} className="sidebarProjectForm">
+                <input
+                  aria-label={copy.projectFlow.projectNameLabel}
+                  name="projectName"
+                  placeholder={copy.projectFlow.projectNamePlaceholder}
+                />
+                <button type="submit">{copy.projectFlow.createProject}</button>
+              </form>
             </div>
           )}
         </div>
 
         <div className="sidebarSection sidebarTasks">
           <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
-          {copy.sidebar.taskTitles.map((taskTitle, index) => (
-            <button
-              className={index === 0 ? "taskItem taskItemActive" : "taskItem"}
-              type="button"
-              key={taskTitle}
-            >
-              {taskTitle}
-            </button>
-          ))}
+          {pageState.tasks.length > 0
+            ? pageState.tasks.map((task) => (
+                <button
+                  className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                  type="button"
+                  key={task.id}
+                >
+                  {task.title}
+                </button>
+              ))
+            : copy.sidebar.taskTitles.map((taskTitle, index) => (
+                <button
+                  className={index === 0 ? "taskItem taskItemActive" : "taskItem"}
+                  type="button"
+                  key={taskTitle}
+                >
+                  {taskTitle}
+                </button>
+              ))}
         </div>
 
         <div className="sidebarMeta">
@@ -117,7 +156,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <header className="topBar">
           <div className="topBarTitle">
             <strong>{copy.chat.topbarModel}</strong>
-            <span>{activeProject?.name ?? copy.projectFlow.createTitle}</span>
+            <span>{activeProject?.name ?? activeTask?.title ?? copy.sidebar.newTask}</span>
           </div>
           <div className="topBarActions">
             <button type="button">{copy.chat.topbarShare}</button>
@@ -127,37 +166,22 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
         <div className="conversationViewport">
           <div className="conversationStack">
-            {pageState.kind === "no_project" ? (
-              <section className="setupPanel" aria-labelledby="project-setup-title">
-                <div>
-                  <h1 id="project-setup-title">{copy.projectFlow.createTitle}</h1>
-                  <p>{copy.projectFlow.createDescription}</p>
-                </div>
+            {pageState.kind === "empty" ? (
+              <section className="entryPanel" aria-labelledby="entry-title">
+                <h1 id="entry-title">{copy.entry.title}</h1>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
-                <form action={createProjectAction} className="projectForm">
-                  <label htmlFor="projectName">{copy.projectFlow.projectNameLabel}</label>
-                  <input
-                    id="projectName"
-                    name="projectName"
-                    placeholder={copy.projectFlow.projectNamePlaceholder}
-                  />
-                  <button type="submit">{copy.projectFlow.createProject}</button>
-                </form>
-                <p className="localNote">{copy.projectFlow.localPersistenceNote}</p>
+                <div className="entryComposerShell">
+                  <p>{copy.entry.placeholder}</p>
+                  <div className="entryChipRow">
+                    {copy.entry.chips.map((chip) => (
+                      <button type="button" key={chip}>{chip}</button>
+                    ))}
+                  </div>
+                </div>
               </section>
             ) : null}
 
-            {pageState.kind === "project_ready" && !completedSnapshot ? (
-              <section className="emptyProjectState" aria-labelledby="empty-project-title">
-                <div>
-                  <h1 id="empty-project-title">{copy.projectFlow.emptyTitle}</h1>
-                  <p>{copy.projectFlow.emptyDescription}</p>
-                </div>
-                {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
-              </section>
-            ) : null}
-
-            {chat && completedSnapshot ? (
+            {chat ? (
               <>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
                 <div className="userTurn" aria-label={copy.chat.userLabel}>
@@ -198,31 +222,35 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                     <p>{chat.assistantCompletion}</p>
 
-                    <section className="deliveryBlock" aria-label={copy.chat.artifactsTitle}>
-                      <div className="deliveryHeader">
-                        <strong>{copy.chat.taskComplete}</strong>
-                        <span>{copy.chat.resultRating}</span>
-                      </div>
-                      <div className="artifactGrid">
-                        {chat.artifacts.map((artifact) => (
-                          <a
-                            className="artifactCard"
-                            download={artifact.filename}
-                            href={artifact.href}
-                            key={artifact.id}
-                          >
-                            <span>{artifact.kind}</span>
-                            <strong>{artifact.filename}</strong>
-                            <small>{artifact.bytes.toLocaleString(copy.locale)} bytes</small>
-                          </a>
-                        ))}
-                      </div>
-                    </section>
+                    {completedSnapshot ? (
+                      <>
+                        <section className="deliveryBlock" aria-label={copy.chat.artifactsTitle}>
+                          <div className="deliveryHeader">
+                            <strong>{copy.chat.taskComplete}</strong>
+                            <span>{copy.chat.resultRating}</span>
+                          </div>
+                          <div className="artifactGrid">
+                            {chat.artifacts.map((artifact) => (
+                              <a
+                                className="artifactCard"
+                                download={artifact.filename}
+                                href={artifact.href}
+                                key={artifact.id}
+                              >
+                                <span>{artifact.kind}</span>
+                                <strong>{artifact.filename}</strong>
+                                <small>{artifact.bytes.toLocaleString(copy.locale)} bytes</small>
+                              </a>
+                            ))}
+                          </div>
+                        </section>
 
-                    <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
-                      <div className="previewTitle">{copy.chat.previewTitle}</div>
-                      <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
-                    </section>
+                        <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
+                          <div className="previewTitle">{copy.chat.previewTitle}</div>
+                          <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
+                        </section>
+                      </>
+                    ) : null}
                   </div>
                 </article>
 
@@ -239,9 +267,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
         <form action={submitPromptAction} className="composerDock">
           <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
-          <div className={activeProject ? "composer" : "composer composerDisabled"}>
+          <input name="implicitProjectName" type="hidden" value={copy.entry.implicitProjectName} />
+          <div className="composer">
             <button
-              disabled={!activeProject}
               type="button"
               aria-label={composer.addAttachmentLabel}
             >
@@ -249,15 +277,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </button>
             <input
               aria-label={copy.projectFlow.promptLabel}
-              disabled={!activeProject}
               name="prompt"
-              placeholder={composer.placeholder}
+              placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
             />
             <span>{composer.runtimeChip}</span>
-            <button disabled={!activeProject} type="button" className="interruptButton">
+            <button type="button" className="interruptButton">
               {composer.interruptLabel}
             </button>
-            <button disabled={!activeProject} type="submit" className="sendButton">
+            <button type="submit" className="sendButton">
               {composer.sendLabel}
             </button>
           </div>
