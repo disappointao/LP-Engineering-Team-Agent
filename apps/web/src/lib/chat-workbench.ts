@@ -1,8 +1,7 @@
-import type { createDemoWorkbenchSnapshot } from "./demo-workbench";
+import type { DeploymentHandoff } from "@lp-agent/git-deployment";
+import type { PageVersionRecord } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
-
-type DemoWorkbenchSnapshot = Awaited<ReturnType<typeof createDemoWorkbenchSnapshot>>;
 
 export type ChatToolRole = "planner" | "builder" | "reviewer" | "deployer";
 export type ChatToolStatus = "complete";
@@ -44,19 +43,25 @@ export interface ChatWorkbenchThread {
 
 interface CreateChatWorkbenchThreadInput {
   copy: WorkbenchCopy;
-  snapshot: DemoWorkbenchSnapshot;
+  prompt: string;
+  objective: string;
+  pageVersion: PageVersionRecord;
+  deployment: DeploymentHandoff;
   downloadLinks: ArtifactDownloadLink[];
   handoffLink: ArtifactDownloadLink;
 }
 
 export function createChatWorkbenchThread({
   copy,
-  snapshot,
+  prompt,
+  objective,
+  pageVersion,
+  deployment,
   downloadLinks,
   handoffLink
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
-  const reviewStatus = copy.status[snapshot.pageVersion.reviewStatus];
-  const findingsCount = snapshot.pageVersion.findings.length;
+  const reviewStatus = copy.status[pageVersion.reviewStatus];
+  const findingsCount = pageVersion.findings.length;
   const toolEvents: ChatToolEvent[] = [
     {
       id: "planner",
@@ -65,7 +70,7 @@ export function createChatWorkbenchThread({
       operation: copy.run.planner[1],
       status: "complete",
       statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.fields.objective}: ${copy.demo.objective}`
+      meta: `${copy.fields.objective}: ${objective}`
     },
     {
       id: "builder",
@@ -89,10 +94,10 @@ export function createChatWorkbenchThread({
       id: "deployer",
       role: "deployer",
       label: copy.run.deployer[0],
-      operation: `${snapshot.deployment.branch} ${copy.run.deployer[1]}`,
+      operation: `${deployment.branch} ${copy.run.deployer[1]}`,
       status: "complete",
       statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.chat.branchLabel}: ${snapshot.deployment.branch}`
+      meta: `${copy.chat.branchLabel}: ${deployment.branch}`
     }
   ];
 
@@ -110,7 +115,7 @@ export function createChatWorkbenchThread({
   ];
 
   return {
-    userMessage: copy.demo.prompt,
+    userMessage: prompt,
     assistantName: copy.chat.assistantName,
     assistantBadge: copy.chat.assistantBadge,
     assistantIntro: copy.chat.intro,

@@ -14,7 +14,15 @@ export default async function HomePage() {
   const { project, pageVersion, deployment } = snapshot;
   const downloadLinks = createArtifactDownloadLinks(pageVersion.artifacts, copy.exports);
   const handoffLink = createDeploymentHandoffLink(deployment, copy.exports);
-  const chat = createChatWorkbenchThread({ copy, snapshot, downloadLinks, handoffLink });
+  const chat = createChatWorkbenchThread({
+    copy,
+    prompt: snapshot.brief.prompt,
+    objective: copy.demo.objective,
+    pageVersion,
+    deployment,
+    downloadLinks,
+    handoffLink
+  });
 
   return (
     <main className="appShell">

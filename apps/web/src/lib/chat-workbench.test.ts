@@ -5,15 +5,23 @@ import { createChatWorkbenchThread } from "./chat-workbench";
 import { getWorkbenchCopy } from "./i18n";
 
 describe("chat workbench view model", () => {
-  it("uses localized copy and preserves the demo prompt as the user message", async () => {
+  it("uses localized copy and preserves the brief prompt as the user message", async () => {
     const copy = getWorkbenchCopy("zh-CN");
     const snapshot = await createDemoWorkbenchSnapshot();
     const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
     const handoffLink = createDeploymentHandoffLink(snapshot.deployment, copy.exports);
 
-    const thread = createChatWorkbenchThread({ copy, snapshot, downloadLinks, handoffLink });
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      deployment: snapshot.deployment,
+      downloadLinks,
+      handoffLink
+    });
 
-    expect(thread.userMessage).toBe(copy.demo.prompt);
+    expect(thread.userMessage).toBe(snapshot.brief.prompt);
     expect(thread.assistantName).toBe(copy.chat.assistantName);
     expect(thread.composer.placeholder).toBe(copy.chat.composerPlaceholder);
   });
@@ -24,7 +32,15 @@ describe("chat workbench view model", () => {
     const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
     const handoffLink = createDeploymentHandoffLink(snapshot.deployment, copy.exports);
 
-    const thread = createChatWorkbenchThread({ copy, snapshot, downloadLinks, handoffLink });
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      deployment: snapshot.deployment,
+      downloadLinks,
+      handoffLink
+    });
 
     expect(thread.toolEvents.map((event) => event.role)).toEqual([
       "planner",
@@ -41,7 +57,15 @@ describe("chat workbench view model", () => {
     const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
     const handoffLink = createDeploymentHandoffLink(snapshot.deployment, copy.exports);
 
-    const thread = createChatWorkbenchThread({ copy, snapshot, downloadLinks, handoffLink });
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      deployment: snapshot.deployment,
+      downloadLinks,
+      handoffLink
+    });
 
     expect(thread.artifacts.map((artifact) => artifact.filename)).toEqual([
       "deployment-handoff.json",
@@ -61,7 +85,15 @@ describe("chat workbench view model", () => {
     const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
     const handoffLink = createDeploymentHandoffLink(snapshot.deployment, copy.exports);
 
-    const thread = createChatWorkbenchThread({ copy, snapshot, downloadLinks, handoffLink });
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      deployment: snapshot.deployment,
+      downloadLinks,
+      handoffLink
+    });
     const reviewer = thread.toolEvents.find((event) => event.role === "reviewer");
 
     expect(reviewer?.meta).toContain(copy.status.passed);
