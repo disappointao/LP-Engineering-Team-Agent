@@ -192,6 +192,7 @@ describe("web workbench store", () => {
 
   it("routes first prompts into deterministic task types", () => {
     expect(classifyTaskPrompt("帮我写一个双 11 活动方案")).toBe("general_chat");
+    expect(classifyTaskPrompt("Help me write a campaign plan.")).toBe("general_chat");
     expect(classifyTaskPrompt("生成一个电商春季促销 LP，输出单文件 HTML")).toBe("lp_generation");
     expect(classifyTaskPrompt("Create a landing page for a spring sale")).toBe("lp_generation");
     expect(classifyTaskPrompt("创建项目 春季活动")).toBe("project_setup");
@@ -215,7 +216,7 @@ describe("web workbench store", () => {
     const store = createWebWorkbenchStore();
 
     const result = await store.submitTaskPrompt({
-      prompt: "帮我写一个双 11 活动方案",
+      prompt: "Help me write a campaign plan.",
       implicitProjectName: "未命名 LP 项目"
     });
 
@@ -238,12 +239,12 @@ describe("web workbench store", () => {
       id: "task_1",
       type: "general_chat",
       projectId: undefined,
-      title: "帮我写一个双 11 活动方案"
+      title: "Help me write a campaign plan."
     });
     expect(pageState.projects).toEqual([]);
     expect(pageState.tasks.map((task) => task.id)).toEqual(["task_1"]);
     expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
-    expect(pageState.messages[0]?.content).toBe("帮我写一个双 11 活动方案");
+    expect(pageState.messages[0]?.content).toBe("Help me write a campaign plan.");
     expect(pageState.messages[1]?.content).toBe(
       "I created a task thread and can continue from here."
     );

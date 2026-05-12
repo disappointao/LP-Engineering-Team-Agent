@@ -103,7 +103,6 @@ export function validatePromptInput(prompt: string): ValidationResult<string> {
 }
 
 const lpKeywords = [
-  "lp",
   "landing page",
   "落地页",
   "页面",
@@ -114,6 +113,7 @@ const lpKeywords = [
 ];
 
 const projectKeywords = ["创建项目", "new project", "create project"];
+const standaloneLpPattern = /\blp\b/;
 
 export function classifyTaskPrompt(prompt: string): TaskType {
   const normalized = prompt.trim().toLowerCase();
@@ -125,7 +125,10 @@ export function classifyTaskPrompt(prompt: string): TaskType {
     return "project_setup";
   }
 
-  if (lpKeywords.some((keyword) => normalized.includes(keyword))) {
+  if (
+    standaloneLpPattern.test(normalized) ||
+    lpKeywords.some((keyword) => normalized.includes(keyword))
+  ) {
     return "lp_generation";
   }
 
