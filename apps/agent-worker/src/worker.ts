@@ -18,8 +18,7 @@ export async function runDemoWorkerJob(): Promise<DemoWorkerJobResult> {
   const service = createDemoWorkbenchService();
 
   const project = await service.createProject({
-    name: "Demo LP Project",
-    repository: "git@example.com:shop/demo-lp.git"
+    name: "Demo LP Project"
   });
   const brief = await service.createBriefFromPrompt({
     projectId: project.id,

@@ -12,18 +12,14 @@ function redirectWithError(error: ProjectFlowErrorCode): never {
 export async function createProjectAction(formData: FormData): Promise<void> {
   const store = getWebWorkbenchStore();
   const name = String(formData.get("projectName") ?? "");
-  const repository = String(formData.get("repository") ?? "");
 
   try {
-    const project = await store.createProject({ name, repository });
+    const project = await store.createProject({ name });
     await setCurrentProjectId(project.id);
     revalidatePath("/");
   } catch (error) {
     const message = error instanceof Error ? error.message : "generation_failed";
-    if (
-      message === "project_name_required" ||
-      message === "repository_required"
-    ) {
+    if (message === "project_name_required") {
       redirectWithError(message);
     }
     redirectWithError("generation_failed");

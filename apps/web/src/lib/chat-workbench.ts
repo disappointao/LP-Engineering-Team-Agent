@@ -1,9 +1,8 @@
-import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { PageVersionRecord } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
-export type ChatToolRole = "planner" | "builder" | "reviewer" | "deployer";
+export type ChatToolRole = "planner" | "builder" | "reviewer";
 export type ChatToolStatus = "complete";
 
 export interface ChatToolEvent {
@@ -46,9 +45,7 @@ interface CreateChatWorkbenchThreadInput {
   prompt: string;
   objective: string;
   pageVersion: PageVersionRecord;
-  deployment: DeploymentHandoff;
   downloadLinks: ArtifactDownloadLink[];
-  handoffLink: ArtifactDownloadLink;
 }
 
 export function createChatWorkbenchThread({
@@ -56,9 +53,7 @@ export function createChatWorkbenchThread({
   prompt,
   objective,
   pageVersion,
-  deployment,
-  downloadLinks,
-  handoffLink
+  downloadLinks
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
   const reviewStatus = copy.status[pageVersion.reviewStatus];
   const findingsCount = pageVersion.findings.length;
@@ -89,30 +84,14 @@ export function createChatWorkbenchThread({
       status: "complete",
       statusLabel: copy.chat.toolStatusComplete,
       meta: `${copy.status.review}: ${reviewStatus} - ${copy.chat.findingsLabel}: ${findingsCount}`
-    },
-    {
-      id: "deployer",
-      role: "deployer",
-      label: copy.run.deployer[0],
-      operation: `${deployment.branch} ${copy.run.deployer[1]}`,
-      status: "complete",
-      statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.chat.branchLabel}: ${deployment.branch}`
     }
   ];
 
-  const artifacts: ChatArtifactCard[] = [
-    {
-      ...handoffLink,
-      id: "handoff",
-      kind: copy.chat.artifactKinds.handoff
-    },
-    ...downloadLinks.map((link, index) => ({
-      ...link,
-      id: link.filename,
-      kind: index === 0 ? copy.chat.artifactKinds.single : copy.chat.artifactKinds.static
-    }))
-  ];
+  const artifacts: ChatArtifactCard[] = downloadLinks.map((link, index) => ({
+    ...link,
+    id: link.filename,
+    kind: index === 0 ? copy.chat.artifactKinds.single : copy.chat.artifactKinds.static
+  }));
 
   return {
     userMessage: prompt,

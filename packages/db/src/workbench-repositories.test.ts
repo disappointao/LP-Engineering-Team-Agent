@@ -14,7 +14,6 @@ describe("in-memory workbench repositories", () => {
     const project: ProjectRecord = {
       id: "project_1",
       name: "Spring sale",
-      repository: "git@example.com:shop/spring.git",
       createdAt
     };
 
@@ -25,7 +24,6 @@ describe("in-memory workbench repositories", () => {
     expect(saved).toEqual({
       id: "project_1",
       name: "Spring sale",
-      repository: "git@example.com:shop/spring.git",
       createdAt
     });
   });
@@ -35,7 +33,6 @@ describe("in-memory workbench repositories", () => {
     await repositories.projects.save({
       id: "project_1",
       name: "Spring sale",
-      repository: "git@example.com:shop/spring.git",
       createdAt
     });
     await repositories.briefs.save({

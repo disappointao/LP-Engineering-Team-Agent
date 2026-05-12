@@ -7,8 +7,7 @@ describe("agent worker", () => {
 
     expect(result.project).toMatchObject({
       id: "project_1",
-      name: "Demo LP Project",
-      repository: "git@example.com:shop/demo-lp.git"
+      name: "Demo LP Project"
     });
     expect(result.brief).toMatchObject({
       id: "brief_1",

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { createProjectAction, submitPromptAction } from "./actions";
 import { LPPreview } from "../components/lp-preview";
 import { createChatWorkbenchThread } from "../lib/chat-workbench";
-import { createArtifactDownloadLinks, createDeploymentHandoffLink } from "../lib/export-links";
+import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import { getWebWorkbenchStore, type ProjectFlowErrorCode } from "../lib/workbench-store";
 import { getCurrentProjectId } from "../lib/workbench-session";
@@ -26,29 +26,22 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const completedSnapshot =
     pageState.kind === "project_ready" &&
     pageState.snapshot.brief &&
-    pageState.snapshot.currentPageVersion &&
-    pageState.snapshot.deployment
+    pageState.snapshot.currentPageVersion
       ? {
           brief: pageState.snapshot.brief,
-          pageVersion: pageState.snapshot.currentPageVersion,
-          deployment: pageState.snapshot.deployment
+          pageVersion: pageState.snapshot.currentPageVersion
         }
       : undefined;
   const downloadLinks = completedSnapshot
     ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
     : undefined;
-  const handoffLink = completedSnapshot
-    ? createDeploymentHandoffLink(completedSnapshot.deployment, copy.exports)
-    : undefined;
-  const chat = completedSnapshot && downloadLinks && handoffLink
+  const chat = completedSnapshot && downloadLinks
     ? createChatWorkbenchThread({
         copy,
         prompt: completedSnapshot.brief.prompt,
         objective: completedSnapshot.brief.brief.objective,
         pageVersion: completedSnapshot.pageVersion,
-        deployment: completedSnapshot.deployment,
-        downloadLinks,
-        handoffLink
+        downloadLinks
       })
     : undefined;
   const composer = chat?.composer ?? {
@@ -78,7 +71,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="navItem">{copy.nav.skills}</div>
           <div className="navItem">{copy.nav.mcp}</div>
           <div className="navItem">{copy.nav.models}</div>
-          <div className="navItem">{copy.nav.deployments}</div>
         </nav>
 
         <div className="sidebarSection">
@@ -89,7 +81,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 className={project.id === activeProject?.id ? "projectItem projectItemActive" : "projectItem"}
                 key={project.id}
               >
-                <span>{project.repository}</span>
                 <strong>{project.name}</strong>
               </div>
             ))
@@ -150,12 +141,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     name="projectName"
                     placeholder={copy.projectFlow.projectNamePlaceholder}
                   />
-                  <label htmlFor="repository">{copy.projectFlow.repositoryLabel}</label>
-                  <input
-                    id="repository"
-                    name="repository"
-                    placeholder={copy.projectFlow.repositoryPlaceholder}
-                  />
                   <button type="submit">{copy.projectFlow.createProject}</button>
                 </form>
                 <p className="localNote">{copy.projectFlow.localPersistenceNote}</p>
@@ -172,7 +157,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </section>
             ) : null}
 
-            {chat && handoffLink && completedSnapshot ? (
+            {chat && completedSnapshot ? (
               <>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
                 <div className="userTurn" aria-label={copy.chat.userLabel}>
@@ -192,7 +177,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <section className="processBlock" aria-label={copy.chat.toolsTitle}>
                       <div className="processHeader">
                         <strong>{copy.chat.toolsTitle}</strong>
-                        <span>{chat.toolEvents.length}/4</span>
+                        <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
                       </div>
                       <div className="toolTimeline">
                         {chat.toolEvents.map((event) => (
@@ -232,9 +217,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                           </a>
                         ))}
                       </div>
-                      <a className="allFilesCard" download={handoffLink.filename} href={handoffLink.href}>
-                        {copy.chat.allFilesLabel}
-                      </a>
                     </section>
 
                     <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
@@ -288,7 +270,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | undefined {
   if (
     value === "project_name_required" ||
-    value === "repository_required" ||
     value === "prompt_required" ||
     value === "project_not_found" ||
     value === "generation_failed"

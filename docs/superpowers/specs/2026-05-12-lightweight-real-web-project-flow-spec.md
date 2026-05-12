@@ -3,6 +3,12 @@
 Date: 2026-05-12
 Status: approved for implementation planning
 
+Revision note: the current Web V1 scope is amended by
+`2026-05-12-web-flow-no-git-no-deployment-spec.md`. That amendment removes
+repository URL capture from project creation and defers automatic deployment
+from the Web flow. Read that amendment after this document before
+implementing or auditing current Web behavior.
+
 ## Summary
 
 This Stage 2 Web slice replaces the fixed demo snapshot on the home page with a lightweight real project flow. Users can create a project, submit an LP prompt, generate the deterministic brief/page/review/deployment sequence, and refresh the page without losing the current project state.

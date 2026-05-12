@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
+  createProject: vi.fn(),
+  setCurrentProjectId: vi.fn(),
   submitPrompt: vi.fn()
 }));
 
@@ -19,16 +21,23 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("../lib/workbench-session", () => ({
   getCurrentProjectId: vi.fn(async () => mocks.currentProjectId),
-  setCurrentProjectId: vi.fn()
+  setCurrentProjectId: mocks.setCurrentProjectId
 }));
 
 vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
+    createProject: mocks.createProject,
     submitPrompt: mocks.submitPrompt
   }))
 }));
 
-import { submitPromptAction } from "./actions";
+import { createProjectAction, submitPromptAction } from "./actions";
+
+function buildProjectForm(input: { projectName?: string } = {}): FormData {
+  const formData = new FormData();
+  formData.set("projectName", input.projectName ?? "Spring LP");
+  return formData;
+}
 
 function buildPromptForm(input: { projectId?: string; prompt?: string } = {}): FormData {
   const formData = new FormData();
@@ -49,8 +58,21 @@ describe("submitPromptAction", () => {
     mocks.currentProjectId = "project_2";
     mocks.revalidatePath.mockClear();
     mocks.redirect.mockClear();
+    mocks.createProject.mockReset();
+    mocks.createProject.mockResolvedValue({ id: "project_3", name: "Spring LP", createdAt: "now" });
+    mocks.setCurrentProjectId.mockClear();
     mocks.submitPrompt.mockReset();
     mocks.submitPrompt.mockResolvedValue({ ok: true });
+  });
+
+  it("creates projects from the project name only", async () => {
+    await expectRedirect(createProjectAction(buildProjectForm()), "/");
+
+    expect(mocks.createProject).toHaveBeenCalledWith({
+      name: "Spring LP"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_3");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
   it("rejects a mismatched hidden project id without submitting a prompt", async () => {

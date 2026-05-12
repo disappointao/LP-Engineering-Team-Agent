@@ -6,7 +6,6 @@ import {
 
 export type ProjectFlowErrorCode =
   | "project_name_required"
-  | "repository_required"
   | "prompt_required"
   | "project_not_found"
   | "generation_failed";
@@ -17,7 +16,6 @@ type ValidationResult<T> =
 
 export interface CreateProjectFormInput {
   name: string;
-  repository: string;
 }
 
 export type SubmitPromptResult =
@@ -45,20 +43,15 @@ export interface WebWorkbenchStore {
 
 export function validateProjectInput(input: CreateProjectFormInput): ValidationResult<CreateProjectFormInput> {
   const name = input.name.trim();
-  const repository = input.repository.trim();
 
   if (name.length === 0) {
     return { ok: false, error: "project_name_required" };
-  }
-  if (repository.length === 0) {
-    return { ok: false, error: "repository_required" };
   }
 
   return {
     ok: true,
     value: {
-      name,
-      repository
+      name
     }
   };
 }
@@ -137,11 +130,6 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
         const reviewed = await service.reviewPageVersion({
           projectId: input.projectId,
           pageVersionId: pageVersion.id
-        });
-        await service.approveAndCreateDeployment({
-          projectId: input.projectId,
-          pageVersionId: reviewed.id,
-          reviewerUserId: "local_web_user"
         });
         return { ok: true };
       } catch {

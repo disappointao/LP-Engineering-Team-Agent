@@ -4,8 +4,7 @@ import { createDemoWorkbenchService } from "@lp-agent/api";
 export const createDemoWorkbenchSnapshot = async () => {
   const service = createDemoWorkbenchService();
   const project = await service.createProject({
-    name: "Spring Campaign",
-    repository: "git@example.com:shop/spring-lp.git"
+    name: "Spring Campaign"
   });
   const brief = await service.createBriefFromPrompt({
     projectId: project.id,
@@ -19,17 +18,11 @@ export const createDemoWorkbenchSnapshot = async () => {
     projectId: project.id,
     pageVersionId: pageVersion.id
   });
-  const deployment = await service.approveAndCreateDeployment({
-    projectId: project.id,
-    pageVersionId: reviewed.id,
-    reviewerUserId: "user_reviewer"
-  });
 
   return {
     project,
     brief,
     pageVersion: reviewed,
-    deployment,
     singleFileHtml: bundleSingleFileHtml(reviewed.artifacts)
   };
 };

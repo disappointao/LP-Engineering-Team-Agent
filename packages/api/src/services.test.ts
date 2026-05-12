@@ -22,7 +22,6 @@ describe("demo workbench service", () => {
     const project: ProjectRecord = {
       id: "project_1",
       name: "Spring sale",
-      repository: "git@example.com:acme/spring.git",
       createdAt: "2026-05-11T00:00:00.000Z"
     };
     const brief: BriefRecord = {
@@ -54,8 +53,7 @@ describe("demo workbench service", () => {
     const service = createDemoWorkbenchService();
 
     const project = await service.createProject({
-      name: "Spring sale",
-      repository: "git@example.com:acme/spring.git"
+      name: "Spring sale"
     });
     const brief = await service.createBriefFromPrompt({
       projectId: project.id,
@@ -78,8 +76,7 @@ describe("demo workbench service", () => {
 
     expect(project).toMatchObject({
       id: "project_1",
-      name: "Spring sale",
-      repository: "git@example.com:acme/spring.git"
+      name: "Spring sale"
     });
     expect(brief).toMatchObject({
       id: "brief_1",
@@ -118,8 +115,7 @@ describe("demo workbench service", () => {
     const serviceB = new DemoWorkbenchService({ repositories, now: fixedClock() });
 
     const project = await serviceA.createProject({
-      name: "Repository-backed project",
-      repository: "git@example.com:shop/repo-backed.git"
+      name: "Repository-backed project"
     });
     const brief = await serviceA.createBriefFromPrompt({
       projectId: project.id,
@@ -151,7 +147,7 @@ describe("demo workbench service", () => {
       now: fixedClock()
     });
 
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
     await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
@@ -177,7 +173,7 @@ describe("demo workbench service", () => {
       now: fixedClock()
     });
 
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
     await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
@@ -215,7 +211,7 @@ describe("demo workbench service", () => {
       builderRuntime: new StaticRuntime({ state: "failed", artifacts: undefined }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
 
     await expect(
@@ -228,7 +224,7 @@ describe("demo workbench service", () => {
       builderRuntime: new StaticRuntime({ state: "completed", artifacts: undefined }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
 
     await expect(
@@ -244,7 +240,7 @@ describe("demo workbench service", () => {
       }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
 
     await expect(
@@ -257,7 +253,7 @@ describe("demo workbench service", () => {
       builderRuntime: new StaticRuntime({ state: "needs_input", artifacts: completeArtifacts() }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
 
     await expect(
@@ -280,7 +276,7 @@ describe("demo workbench service", () => {
       }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
 
@@ -302,7 +298,7 @@ describe("demo workbench service", () => {
       reviewerRuntime: new StaticRuntime({ state: "failed" }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
 
@@ -316,7 +312,7 @@ describe("demo workbench service", () => {
       reviewerRuntime: new StaticRuntime({ state: "needs_approval", findings: [] }),
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
 
@@ -338,7 +334,7 @@ describe("demo workbench service", () => {
       reviewerRuntime,
       now: fixedClock()
     });
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
     const reviewed = await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
@@ -361,7 +357,7 @@ describe("demo workbench service", () => {
 
   it("keeps the latest deployment visible when a newer page version is pending", async () => {
     const service = createDemoWorkbenchService();
-    const project = await service.createProject({ name: "Project", repository: "repo" });
+    const project = await service.createProject({ name: "Project" });
     const firstBrief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "First" });
     const firstVersion = await service.generatePageVersion({
       projectId: project.id,
@@ -388,8 +384,8 @@ describe("demo workbench service", () => {
 
   it("rejects requests for unknown or mismatched records", async () => {
     const service = createDemoWorkbenchService();
-    const firstProject = await service.createProject({ name: "First", repository: "repo-1" });
-    const secondProject = await service.createProject({ name: "Second", repository: "repo-2" });
+    const firstProject = await service.createProject({ name: "First" });
+    const secondProject = await service.createProject({ name: "Second" });
     const brief = await service.createBriefFromPrompt({ projectId: firstProject.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: firstProject.id, briefId: brief.id });
 

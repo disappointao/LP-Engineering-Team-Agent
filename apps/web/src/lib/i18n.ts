@@ -48,8 +48,6 @@ export interface WorkbenchCopy {
     createDescription: string;
     projectNameLabel: string;
     projectNamePlaceholder: string;
-    repositoryLabel: string;
-    repositoryPlaceholder: string;
     createProject: string;
     localPersistenceNote: string;
     emptyTitle: string;
@@ -202,19 +200,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     projectFlow: {
       createTitle: "Create a project",
-      createDescription: "Start with a project and repository target, then ask the LP agent to generate static files.",
+      createDescription: "Start with a local project, then ask the LP agent to generate static files.",
       projectNameLabel: "Project name",
       projectNamePlaceholder: "Spring Campaign",
-      repositoryLabel: "Repository URL",
-      repositoryPlaceholder: "git@example.com:shop/spring-lp.git",
       createProject: "Create project",
       localPersistenceNote: "Local MVP state is kept only while this dev server is running.",
       emptyTitle: "Project ready",
-      emptyDescription: "Send an LP request to generate a brief, static artifacts, review, and handoff.",
+      emptyDescription: "Send an LP request to generate a brief, static artifacts, review, and downloadable files.",
       promptLabel: "LP request",
       errors: {
         project_name_required: "Enter a project name.",
-        repository_required: "Enter a repository URL.",
         prompt_required: "Enter an LP request.",
         project_not_found: "The selected project is no longer available.",
         generation_failed: "The LP generation flow failed. Try again with a shorter request."
@@ -263,7 +258,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       assistantBadge: "Lite",
       userLabel: "You",
       intro: "I will turn this request into a framework-free landing page and show the agent steps as they run.",
-      completion: "The landing page is ready as static HTML/CSS/JS. You can download the single HTML file or the separated files for repository handoff.",
+      completion: "The landing page is ready as static HTML/CSS/JS. You can download the single HTML file or the separated files.",
       taskComplete: "Task complete",
       toolsTitle: "Agent process",
       artifactsTitle: "Generated files",
@@ -288,7 +283,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       suggestions: [
         "Add a contact form to this HTML page",
         "Adjust the copy for a premium ecommerce audience",
-        "Prepare this LP handoff for GitHub Pages"
+        "Tighten the mobile hero copy and CTA"
       ]
     },
     exports: {
@@ -337,19 +332,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     projectFlow: {
       createTitle: "创建项目",
-      createDescription: "先创建项目和仓库目标，然后让 LP Agent 生成静态文件。",
+      createDescription: "先创建本地项目，然后让 LP Agent 生成静态文件。",
       projectNameLabel: "项目名称",
       projectNamePlaceholder: "春季活动",
-      repositoryLabel: "仓库地址",
-      repositoryPlaceholder: "git@example.com:shop/spring-lp.git",
       createProject: "创建项目",
       localPersistenceNote: "本地 MVP 状态只会保存在当前 dev server 运行期间。",
       emptyTitle: "项目已就绪",
-      emptyDescription: "发送 LP 需求后会生成 brief、静态文件、审核结果和交接文件。",
+      emptyDescription: "发送 LP 需求后会生成 brief、静态文件、审核结果和可下载文件。",
       promptLabel: "LP 需求",
       errors: {
         project_name_required: "请输入项目名称。",
-        repository_required: "请输入仓库地址。",
         prompt_required: "请输入 LP 需求。",
         project_not_found: "当前项目已经不可用。",
         generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
@@ -398,7 +390,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       assistantBadge: "Lite",
       userLabel: "你",
       intro: "我会把这个需求转换成框架无关的落地页，并在对话里展示智能体执行过程。",
-      completion: "落地页已经生成静态 HTML/CSS/JS。你可以下载单文件 HTML，也可以下载分离文件用于仓库交接。",
+      completion: "落地页已经生成静态 HTML/CSS/JS。你可以下载单文件 HTML，也可以下载分离文件。",
       taskComplete: "任务已完成",
       toolsTitle: "智能体过程",
       artifactsTitle: "生成文件",
@@ -423,7 +415,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       suggestions: [
         "为这个 HTML 页面添加联系表单",
         "把文案调整成高客单价电商风格",
-        "准备将这个 LP 交接到 GitHub Pages"
+        "优化移动端首屏文案和 CTA"
       ]
     },
     exports: {

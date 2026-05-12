@@ -10,18 +10,15 @@ describe("web workbench store", () => {
     const store = createWebWorkbenchStore();
 
     const first = await store.createProject({
-      name: "Spring LP",
-      repository: "git@example.com:shop/spring.git"
+      name: "Spring LP"
     });
     const second = await store.createProject({
-      name: "Summer LP",
-      repository: "git@example.com:shop/summer.git"
+      name: "Summer LP"
     });
 
     expect(first).toMatchObject({
       id: "project_1",
-      name: "Spring LP",
-      repository: "git@example.com:shop/spring.git"
+      name: "Spring LP"
     });
     expect(store.listProjects().map((project) => project.id)).toEqual([
       "project_1",
@@ -42,8 +39,7 @@ describe("web workbench store", () => {
   it("returns no-project page state for a stale project id", async () => {
     const store = createWebWorkbenchStore();
     await store.createProject({
-      name: "Spring LP",
-      repository: "git@example.com:shop/spring.git"
+      name: "Spring LP"
     });
 
     await expect(store.getPageState("project_missing")).resolves.toEqual({
@@ -60,8 +56,7 @@ describe("web workbench store", () => {
   it("submits a prompt and restores a completed snapshot", async () => {
     const store = createWebWorkbenchStore();
     const project = await store.createProject({
-      name: "Spring LP",
-      repository: "git@example.com:shop/spring.git"
+      name: "Spring LP"
     });
 
     const result = await store.submitPrompt({
@@ -78,14 +73,13 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.project.id).toBe(project.id);
     expect(pageState.snapshot.brief?.prompt).toBe("Create a spring ecommerce landing page.");
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
-    expect(pageState.snapshot.deployment?.status).toBe("pr_opened");
+    expect(pageState.snapshot.deployment).toBeUndefined();
   });
 
   it("rejects prompt submission when the prompt is blank", async () => {
     const store = createWebWorkbenchStore();
     const project = await store.createProject({
-      name: "Spring LP",
-      repository: "git@example.com:shop/spring.git"
+      name: "Spring LP"
     });
 
     await expect(
@@ -108,23 +102,18 @@ describe("web workbench store", () => {
   });
 
   it("validates project and prompt form values", () => {
-    expect(validateProjectInput({ name: " ", repository: "repo" })).toEqual({
+    expect(validateProjectInput({ name: " " })).toEqual({
       ok: false,
       error: "project_name_required"
-    });
-    expect(validateProjectInput({ name: "LP", repository: " " })).toEqual({
-      ok: false,
-      error: "repository_required"
     });
     expect(validatePromptInput(" ")).toEqual({
       ok: false,
       error: "prompt_required"
     });
-    expect(validateProjectInput({ name: " LP ", repository: " repo " })).toEqual({
+    expect(validateProjectInput({ name: " LP " })).toEqual({
       ok: true,
       value: {
-        name: "LP",
-        repository: "repo"
+        name: "LP"
       }
     });
     expect(validatePromptInput(" Build a page ")).toEqual({

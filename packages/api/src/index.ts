@@ -38,7 +38,6 @@ export interface WorkbenchSnapshot {
 
 export interface CreateProjectInput {
   name: string;
-  repository: string;
 }
 
 export interface CreateBriefFromPromptInput {
@@ -93,7 +92,6 @@ export class DemoWorkbenchService {
     const project: ProjectRecord = {
       id: `project_${this.projectSequence}`,
       name: input.name,
-      repository: input.repository,
       createdAt: this.timestamp()
     };
     await this.repositories.projects.save(project);

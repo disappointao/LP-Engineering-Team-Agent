@@ -36,6 +36,14 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Milestone 2 lightweight Web flow implementation plan.
    - Read this after the lightweight Web flow spec when implementing or auditing project creation, prompt submission, cookie-backed current project selection, and process-local Web state.
 
+9. `specs/2026-05-12-web-flow-no-git-no-deployment-spec.md`
+   - Stage 2 Milestone 2 scope amendment.
+   - Read this after the lightweight Web flow spec and plan. It supersedes the repository URL and automatic deployment portions of the earlier lightweight Web flow documents for the current Web V1.
+
+10. `plans/2026-05-12-web-flow-no-git-no-deployment.md`
+   - Implementation plan for removing Git repository capture and automatic deployment from the current Web flow.
+   - Read this after the no-Git/no-deployment spec when implementing or auditing the current project creation, prompt submission, review, static download, and preview behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

@@ -5,7 +5,6 @@ import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
 export interface ProjectRecord {
   id: string;
   name: string;
-  repository: string;
   createdAt: string;
 }
 
