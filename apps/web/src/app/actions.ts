@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWebWorkbenchStore, type ProjectFlowErrorCode } from "../lib/workbench-store";
-import { getCurrentProjectId, setCurrentProjectId } from "../lib/workbench-session";
+import {
+  getCurrentProjectId,
+  setCurrentProjectId,
+  setCurrentTaskId
+} from "../lib/workbench-session";
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
@@ -30,36 +34,25 @@ export async function createProjectAction(formData: FormData): Promise<void> {
 
 export async function submitPromptAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  const projectId = resolveSubmittedProjectId(
-    currentProjectId,
-    formData.get("projectId")
-  );
-  if (!projectId) {
-    redirectWithError("project_not_found");
-  }
-
   const store = getWebWorkbenchStore();
   const prompt = String(formData.get("prompt") ?? "");
+  const implicitProjectName = String(
+    formData.get("implicitProjectName") ?? "Untitled LP Project"
+  );
 
-  const result = await store.submitPrompt({ projectId, prompt });
+  const result = await store.submitTaskPrompt({
+    projectId: currentProjectId,
+    prompt,
+    implicitProjectName
+  });
   if (!result.ok) {
     redirectWithError(result.error);
   }
 
+  await setCurrentTaskId(result.taskId);
+  if (result.projectId) {
+    await setCurrentProjectId(result.projectId);
+  }
   revalidatePath("/");
   redirect("/");
-}
-
-function resolveSubmittedProjectId(
-  currentProjectId: string | undefined,
-  submittedProjectId: FormDataEntryValue | null
-): string | undefined {
-  const submitted = String(submittedProjectId ?? "").trim();
-  if (!currentProjectId) {
-    return undefined;
-  }
-  if (submitted.length > 0 && submitted !== currentProjectId) {
-    return undefined;
-  }
-  return currentProjectId;
 }
