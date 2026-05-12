@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { createDemoWorkbenchSnapshot } from "./demo-workbench";
 import { createArtifactDownloadLinks } from "./export-links";
-import { createChatWorkbenchThread } from "./chat-workbench";
+import { createChatWorkbenchThread, createGeneralTaskThread } from "./chat-workbench";
 import { getWorkbenchCopy } from "./i18n";
 
 describe("chat workbench view model", () => {
+  it("creates a general task conversation without artifacts", () => {
+    const copy = getWorkbenchCopy("en");
+    const thread = createGeneralTaskThread({
+      copy,
+      userMessage: "Help me write a campaign plan.",
+      assistantMessage: "I created a task thread and can continue from here."
+    });
+
+    expect(thread.userMessage).toBe("Help me write a campaign plan.");
+    expect(thread.assistantIntro).toBe(copy.chat.generalIntro);
+    expect(thread.assistantCompletion).toBe("I created a task thread and can continue from here.");
+    expect(thread.toolEvents.map((event) => event.role)).toEqual(["assistant"]);
+    expect(thread.artifacts).toEqual([]);
+  });
+
   it("uses localized copy and preserves the brief prompt as the user message", async () => {
     const copy = getWorkbenchCopy("zh-CN");
     const snapshot = await createDemoWorkbenchSnapshot();

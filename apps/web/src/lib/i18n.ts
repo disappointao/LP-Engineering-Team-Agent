@@ -98,6 +98,10 @@ export interface WorkbenchCopy {
     assistantBadge: string;
     userLabel: string;
     intro: string;
+    generalIntro: string;
+    generalToolLabel: string;
+    generalToolOperation: string;
+    generalToolMeta: string;
     completion: string;
     taskComplete: string;
     toolsTitle: string;
@@ -121,6 +125,7 @@ export interface WorkbenchCopy {
       static: string;
     };
     suggestions: string[];
+    generalSuggestions: string[];
   };
   exports: ExportLabels;
 }
@@ -258,6 +263,10 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       assistantBadge: "Lite",
       userLabel: "You",
       intro: "I will turn this request into a framework-free landing page and show the agent steps as they run.",
+      generalIntro: "I created a normal task thread. You can continue the conversation from here.",
+      generalToolLabel: "Assistant",
+      generalToolOperation: "Created a general task thread.",
+      generalToolMeta: "No project required",
       completion: "The landing page is ready as static HTML/CSS/JS. You can download the single HTML file or the separated files.",
       taskComplete: "Task complete",
       toolsTitle: "Agent process",
@@ -284,6 +293,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         "Add a contact form to this HTML page",
         "Adjust the copy for a premium ecommerce audience",
         "Tighten the mobile hero copy and CTA"
+      ],
+      generalSuggestions: [
+        "Turn this into a checklist",
+        "Make this more concise",
+        "Create an LP from this idea"
       ]
     },
     exports: {
@@ -390,6 +404,10 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       assistantBadge: "Lite",
       userLabel: "你",
       intro: "我会把这个需求转换成框架无关的落地页，并在对话里展示智能体执行过程。",
+      generalIntro: "我已经创建了一个普通任务对话，你可以继续补充上下文。",
+      generalToolLabel: "助手",
+      generalToolOperation: "已创建普通任务对话。",
+      generalToolMeta: "无需项目",
       completion: "落地页已经生成静态 HTML/CSS/JS。你可以下载单文件 HTML，也可以下载分离文件。",
       taskComplete: "任务已完成",
       toolsTitle: "智能体过程",
@@ -416,6 +434,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         "为这个 HTML 页面添加联系表单",
         "把文案调整成高客单价电商风格",
         "优化移动端首屏文案和 CTA"
+      ],
+      generalSuggestions: [
+        "整理成执行清单",
+        "把内容写得更简洁",
+        "基于这个想法生成 LP"
       ]
     },
     exports: {

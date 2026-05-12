@@ -2,7 +2,7 @@ import type { PageVersionRecord } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
-export type ChatToolRole = "planner" | "builder" | "reviewer";
+export type ChatToolRole = "planner" | "builder" | "reviewer" | "assistant";
 export type ChatToolStatus = "complete";
 
 export interface ChatToolEvent {
@@ -102,6 +102,44 @@ export function createChatWorkbenchThread({
     toolEvents,
     artifacts,
     suggestions: copy.chat.suggestions,
+    composer: {
+      placeholder: copy.chat.composerPlaceholder,
+      addAttachmentLabel: copy.chat.addAttachmentLabel,
+      runtimeChip: copy.chat.runtimeChip,
+      interruptLabel: copy.chat.interruptLabel,
+      sendLabel: copy.chat.sendLabel
+    }
+  };
+}
+
+export function createGeneralTaskThread({
+  copy,
+  userMessage,
+  assistantMessage
+}: {
+  copy: WorkbenchCopy;
+  userMessage: string;
+  assistantMessage: string;
+}): ChatWorkbenchThread {
+  return {
+    userMessage,
+    assistantName: copy.chat.assistantName,
+    assistantBadge: copy.chat.assistantBadge,
+    assistantIntro: copy.chat.generalIntro,
+    assistantCompletion: assistantMessage,
+    toolEvents: [
+      {
+        id: "assistant",
+        role: "assistant",
+        label: copy.chat.generalToolLabel,
+        operation: copy.chat.generalToolOperation,
+        status: "complete",
+        statusLabel: copy.chat.toolStatusComplete,
+        meta: copy.chat.generalToolMeta
+      }
+    ],
+    artifacts: [],
+    suggestions: copy.chat.generalSuggestions,
     composer: {
       placeholder: copy.chat.composerPlaceholder,
       addAttachmentLabel: copy.chat.addAttachmentLabel,
