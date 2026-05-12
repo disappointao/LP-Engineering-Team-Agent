@@ -113,6 +113,19 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
+  it("redirects with the store error when task submission fails", async () => {
+    mocks.submitTaskPrompt.mockResolvedValue({
+      ok: false,
+      error: "prompt_required"
+    });
+
+    await expectRedirect(submitPromptAction(buildPromptForm({ prompt: "" })), "/?error=prompt_required");
+
+    expect(mocks.setCurrentTaskId).not.toHaveBeenCalled();
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("submits a general task without a current project", async () => {
     mocks.currentProjectId = undefined;
     mocks.submitTaskPrompt.mockResolvedValue({
