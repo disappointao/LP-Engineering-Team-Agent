@@ -92,6 +92,10 @@ describe("web workbench store", () => {
       type: "lp_generation",
       projectId: project.id
     });
+    expect(pageState.snapshot).toBeDefined();
+    if (!pageState.snapshot) {
+      throw new Error("Expected LP snapshot.");
+    }
     expect(pageState.snapshot.project.id).toBe(project.id);
     expect(pageState.snapshot.brief?.prompt).toBe("Create a spring ecommerce landing page.");
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
@@ -339,9 +343,13 @@ describe("web workbench store", () => {
       id: "project_1",
       name: "生成一个电商春季促销 LP"
     });
-    expect(pageState.snapshot?.brief?.prompt).toBe("生成一个电商春季促销 LP，输出单文件 HTML");
-    expect(pageState.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
-    expect(pageState.snapshot?.deployment).toBeUndefined();
+    expect(pageState.snapshot).toBeDefined();
+    if (!pageState.snapshot) {
+      throw new Error("Expected LP snapshot.");
+    }
+    expect(pageState.snapshot.brief?.prompt).toBe("生成一个电商春季促销 LP，输出单文件 HTML");
+    expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
+    expect(pageState.snapshot.deployment).toBeUndefined();
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 });
