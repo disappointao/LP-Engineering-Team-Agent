@@ -29,6 +29,10 @@ export interface WorkbenchCopy {
     modeLabel: string;
     mode: string;
     localeLabel: string;
+    newTask: string;
+    projectsLabel: string;
+    tasksLabel: string;
+    taskTitles: string[];
   };
   hero: {
     eyebrow: string;
@@ -71,6 +75,38 @@ export interface WorkbenchCopy {
     audience: string;
     offer: string;
     primaryCta: string;
+  };
+  chat: {
+    topbarModel: string;
+    topbarShare: string;
+    topbarTrial: string;
+    assistantName: string;
+    assistantBadge: string;
+    userLabel: string;
+    intro: string;
+    completion: string;
+    taskComplete: string;
+    toolsTitle: string;
+    artifactsTitle: string;
+    suggestionsTitle: string;
+    resultRating: string;
+    allFilesLabel: string;
+    previewTitle: string;
+    composerPlaceholder: string;
+    addAttachmentLabel: string;
+    runtimeChip: string;
+    interruptLabel: string;
+    sendLabel: string;
+    toolStatusComplete: string;
+    branchLabel: string;
+    findingsLabel: string;
+    filesLabel: string;
+    artifactKinds: {
+      handoff: string;
+      single: string;
+      static: string;
+    };
+    suggestions: string[];
   };
   exports: ExportLabels;
 }
@@ -132,7 +168,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       team: "LP Engineering Team Agent",
       modeLabel: "Mode",
       mode: "Agent workspace",
-      localeLabel: "Language"
+      localeLabel: "Language",
+      newTask: "New task",
+      projectsLabel: "Project",
+      tasksLabel: "All tasks",
+      taskTitles: [
+        "Generate a simple static HTML LP",
+        "Create a personal blog landing page"
+      ]
     },
     hero: {
       eyebrow: "Ecommerce LP agent",
@@ -176,6 +219,42 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       offer: "Save 25% on curated spring essentials through Sunday.",
       primaryCta: "Shop the sale"
     },
+    chat: {
+      topbarModel: "LP Agent Lite",
+      topbarShare: "Share",
+      topbarTrial: "Start trial",
+      assistantName: "LP Agent",
+      assistantBadge: "Lite",
+      userLabel: "You",
+      intro: "I will turn this request into a framework-free landing page and show the agent steps as they run.",
+      completion: "The landing page is ready as static HTML/CSS/JS. You can download the single HTML file or the separated files for repository handoff.",
+      taskComplete: "Task complete",
+      toolsTitle: "Agent process",
+      artifactsTitle: "Generated files",
+      suggestionsTitle: "Suggested next prompts",
+      resultRating: "How is this result?",
+      allFilesLabel: "View all files in this task",
+      previewTitle: "Static LP preview",
+      composerPlaceholder: "Message LP Agent",
+      addAttachmentLabel: "Add context",
+      runtimeChip: "Cloud runtime",
+      interruptLabel: "Interrupt",
+      sendLabel: "Send",
+      toolStatusComplete: "Complete",
+      branchLabel: "Branch",
+      findingsLabel: "Findings",
+      filesLabel: "Files",
+      artifactKinds: {
+        handoff: "PR handoff",
+        single: "single HTML",
+        static: "static file"
+      },
+      suggestions: [
+        "Add a contact form to this HTML page",
+        "Adjust the copy for a premium ecommerce audience",
+        "Prepare this LP handoff for GitHub Pages"
+      ]
+    },
     exports: {
       handoff: "Export PR Handoff",
       singleHtml: "Export Single HTML",
@@ -204,7 +283,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       team: "LP 工程团队智能体",
       modeLabel: "模式",
       mode: "智能体工作台",
-      localeLabel: "语言"
+      localeLabel: "语言",
+      newTask: "新建任务",
+      projectsLabel: "项目",
+      tasksLabel: "所有任务",
+      taskTitles: [
+        "生成一个简单静态 HTML 落地页",
+        "生成个人博客落地页"
+      ]
     },
     hero: {
       eyebrow: "电商 LP 智能体",
@@ -247,6 +333,42 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       audience: "对限时优惠敏感的回访电商客户。",
       offer: "周日前精选春季好物 75 折。",
       primaryCta: "立即选购"
+    },
+    chat: {
+      topbarModel: "LP Agent Lite",
+      topbarShare: "分享",
+      topbarTrial: "开始免费试用",
+      assistantName: "LP Agent",
+      assistantBadge: "Lite",
+      userLabel: "你",
+      intro: "我会把这个需求转换成框架无关的落地页，并在对话里展示智能体执行过程。",
+      completion: "落地页已经生成静态 HTML/CSS/JS。你可以下载单文件 HTML，也可以下载分离文件用于仓库交接。",
+      taskComplete: "任务已完成",
+      toolsTitle: "智能体过程",
+      artifactsTitle: "生成文件",
+      suggestionsTitle: "推荐追问",
+      resultRating: "这个结果怎么样？",
+      allFilesLabel: "查看此任务中的所有文件",
+      previewTitle: "静态 LP 预览",
+      composerPlaceholder: "发送消息给 LP Agent",
+      addAttachmentLabel: "添加上下文",
+      runtimeChip: "云端运行时",
+      interruptLabel: "打断",
+      sendLabel: "发送",
+      toolStatusComplete: "完成",
+      branchLabel: "分支",
+      findingsLabel: "问题",
+      filesLabel: "文件",
+      artifactKinds: {
+        handoff: "PR 交接",
+        single: "单文件 HTML",
+        static: "静态文件"
+      },
+      suggestions: [
+        "为这个 HTML 页面添加联系表单",
+        "把文案调整成高客单价电商风格",
+        "准备将这个 LP 交接到 GitHub Pages"
+      ]
     },
     exports: {
       handoff: "导出 PR 交接",

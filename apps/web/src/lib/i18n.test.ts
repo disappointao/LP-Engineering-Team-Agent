@@ -16,6 +16,8 @@ describe("web i18n", () => {
   it("exposes localized workbench labels", () => {
     expect(getWorkbenchCopy("zh-CN").nav.workbench).toBe("工作台");
     expect(getWorkbenchCopy("zh-CN").hero.title).toBe("我能帮你生成什么 LP？");
+    expect(getWorkbenchCopy("zh-CN").chat.composerPlaceholder).toBe("发送消息给 LP Agent");
     expect(getWorkbenchCopy("en").hero.title).toBe("What LP should we build?");
+    expect(getWorkbenchCopy("en").chat.composerPlaceholder).toBe("Message LP Agent");
   });
 });
