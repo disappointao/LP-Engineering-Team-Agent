@@ -397,7 +397,9 @@ describe("demo workbench service", () => {
         {
           id: "skill_brand",
           scope: "project",
-          permissions: ["brief:read", "artifact:write", "assets:read"]
+          permissions: ["brief:read", "artifact:write", "assets:read"],
+          content: "",
+          contentType: "text/markdown"
         }
       ],
       mcpTools: [

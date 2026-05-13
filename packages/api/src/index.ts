@@ -394,7 +394,9 @@ function toRuntimeSkill(skill: SkillManifest): RuntimeRunContext["skills"][numbe
     version: skill.version,
     scope: skill.scope,
     permissions: [...skill.permissions],
-    entrypoints: [...skill.entrypoints]
+    entrypoints: [...skill.entrypoints],
+    content: "",
+    contentType: "text/markdown"
   };
 }
 
