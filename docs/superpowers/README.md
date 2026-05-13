@@ -76,6 +76,14 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Implementation plan for the Stage 2 Model Routing Configuration MVP.
    - Read this after the model routing spec when implementing repository-backed project model providers, role route configuration, runtime route resolution, and the Web Models view.
 
+19. `specs/2026-05-13-project-mcp-connector-registry-spec.md`
+   - Stage 2 MCP Connector Registry MVP spec.
+   - Read this after the model routing plan when adding project-scoped MCP connector definitions, tool approval state, role/permission visibility filtering, and runtime MCP context loading.
+
+20. `plans/2026-05-13-project-mcp-connector-registry.md`
+   - Implementation plan for the Stage 2 MCP Connector Registry MVP.
+   - Read this after the MCP connector registry spec when implementing repository-backed connector state, approval-aware visible tools, runtime context wiring, and the Web MCP view.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
