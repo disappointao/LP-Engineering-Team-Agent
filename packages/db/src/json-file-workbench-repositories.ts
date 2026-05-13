@@ -6,6 +6,10 @@ import type {
   BriefRecord,
   BriefRepository,
   DeploymentRepository,
+  MCPConnectorRecord,
+  MCPConnectorRepository,
+  MCPToolApprovalRecord,
+  MCPToolApprovalRepository,
   ModelProviderRecord,
   ModelProviderRepository,
   ModelRoutingPolicyRecord,
@@ -46,6 +50,8 @@ interface JsonFileWorkbenchState {
   skillBindings: SkillBindingRecord[];
   modelProviders: ModelProviderRecord[];
   modelRoutingPolicies: ModelRoutingPolicyRecord[];
+  mcpConnectors: MCPConnectorRecord[];
+  mcpToolApprovals: MCPToolApprovalRecord[];
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
@@ -78,6 +84,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly skillBindings: SkillBindingRepository;
   readonly modelProviders: ModelProviderRepository;
   readonly modelRoutingPolicies: ModelRoutingPolicyRepository;
+  readonly mcpConnectors: MCPConnectorRepository;
+  readonly mcpToolApprovals: MCPToolApprovalRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -92,6 +100,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.skillBindings = new JsonFileSkillBindingRepository(filePath);
     this.modelProviders = new JsonFileModelProviderRepository(filePath);
     this.modelRoutingPolicies = new JsonFileModelRoutingPolicyRepository(filePath);
+    this.mcpConnectors = new JsonFileMCPConnectorRepository(filePath);
+    this.mcpToolApprovals = new JsonFileMCPToolApprovalRepository(filePath);
   }
 }
 
@@ -257,6 +267,79 @@ class JsonFileModelRoutingPolicyRepository implements ModelRoutingPolicyReposito
   async listAll(): Promise<ModelRoutingPolicyRecord[]> {
     const state = await readState(this.filePath);
     return state.modelRoutingPolicies.map(copy);
+  }
+}
+
+class JsonFileMCPConnectorRepository implements MCPConnectorRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(connector: MCPConnectorRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.mcpConnectors = upsertBy(
+        state.mcpConnectors,
+        copy(connector),
+        (record) => record.id === connector.id
+      );
+    });
+  }
+
+  async getById(connectorId: string): Promise<MCPConnectorRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.mcpConnectors.find((connector) => connector.id === connectorId));
+  }
+
+  async listForProject(projectId: string): Promise<MCPConnectorRecord[]> {
+    const state = await readState(this.filePath);
+    return state.mcpConnectors
+      .filter((connector) => connector.scope === "project" && connector.targetKey === projectId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<MCPConnectorRecord[]> {
+    const state = await readState(this.filePath);
+    return state.mcpConnectors.map(copy);
+  }
+}
+
+class JsonFileMCPToolApprovalRepository implements MCPToolApprovalRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(approval: MCPToolApprovalRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.mcpToolApprovals = upsertBy(
+        state.mcpToolApprovals,
+        copy(approval),
+        (record) => record.id === approval.id
+      );
+    });
+  }
+
+  async getByProjectConnectorAndTool(
+    projectId: string,
+    connectorId: string,
+    toolName: string
+  ): Promise<MCPToolApprovalRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(
+      state.mcpToolApprovals.find(
+        (approval) =>
+          approval.projectId === projectId &&
+          approval.connectorId === connectorId &&
+          approval.toolName === toolName
+      )
+    );
+  }
+
+  async listForProject(projectId: string): Promise<MCPToolApprovalRecord[]> {
+    const state = await readState(this.filePath);
+    return state.mcpToolApprovals
+      .filter((approval) => approval.projectId === projectId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<MCPToolApprovalRecord[]> {
+    const state = await readState(this.filePath);
+    return state.mcpToolApprovals.map(copy);
   }
 }
 
@@ -468,7 +551,9 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       skillVersions: parsed.skillVersions ?? [],
       skillBindings: parsed.skillBindings ?? [],
       modelProviders: parsed.modelProviders ?? [],
-      modelRoutingPolicies: parsed.modelRoutingPolicies ?? []
+      modelRoutingPolicies: parsed.modelRoutingPolicies ?? [],
+      mcpConnectors: parsed.mcpConnectors ?? [],
+      mcpToolApprovals: parsed.mcpToolApprovals ?? []
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -499,7 +584,9 @@ function emptyState(): JsonFileWorkbenchState {
     skillVersions: [],
     skillBindings: [],
     modelProviders: [],
-    modelRoutingPolicies: []
+    modelRoutingPolicies: [],
+    mcpConnectors: [],
+    mcpToolApprovals: []
   };
 }
 

@@ -132,6 +132,9 @@ importers:
       '@lp-agent/lp-schema':
         specifier: workspace:*
         version: link:../lp-schema
+      '@lp-agent/mcp-gateway':
+        specifier: workspace:*
+        version: link:../mcp-gateway
       '@lp-agent/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

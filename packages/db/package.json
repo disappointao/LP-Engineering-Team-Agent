@@ -15,6 +15,7 @@
     "@lp-agent/artifacts": "workspace:*",
     "@lp-agent/git-deployment": "workspace:*",
     "@lp-agent/lp-schema": "workspace:*",
+    "@lp-agent/mcp-gateway": "workspace:*",
     "@lp-agent/model-gateway": "workspace:*",
     "@lp-agent/skills": "workspace:*"
   },
