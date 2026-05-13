@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
+import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
   classifyTaskPrompt,
   createWebWorkbenchStore,
@@ -57,6 +58,11 @@ describe("web workbench store", () => {
       skills: {
         boundSkills: [],
         availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: createDefaultModelPolicy()
       }
     });
   });
@@ -83,6 +89,11 @@ describe("web workbench store", () => {
       skills: {
         boundSkills: [],
         availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: createDefaultModelPolicy()
       }
     });
   });
@@ -280,6 +291,11 @@ describe("web workbench store", () => {
       skills: {
         boundSkills: [],
         availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: createDefaultModelPolicy()
       }
     });
   });
@@ -362,6 +378,63 @@ describe("web workbench store", () => {
     expect(result).toEqual({
       ok: false,
       error: "invalid_manifest_json"
+    });
+  });
+
+  it("creates model providers and routes through the web store", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+
+    const provider = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    if (!provider.ok) {
+      throw new Error(`Expected provider creation to succeed, got ${provider.error}.`);
+    }
+
+    const route = await store.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.value.id,
+      model: "gpt-5.4"
+    });
+    if (!route.ok) {
+      throw new Error(`Expected route upsert to succeed, got ${route.error}.`);
+    }
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.models.providers).toEqual([
+      expect.objectContaining({ id: "provider_openai", provider: "openai" })
+    ]);
+    expect(state.models.routes).toEqual([
+      expect.objectContaining({ role: "builder", model: "gpt-5.4" })
+    ]);
+    expect(state.models.resolvedPolicy.builder).toEqual({
+      provider: "provider_openai",
+      model: "gpt-5.4"
+    });
+  });
+
+  it("maps model store validation errors to stable codes", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+
+    const result = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_bad",
+      name: "Bad",
+      provider: "javascript",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "model_provider_type_unsupported"
     });
   });
 

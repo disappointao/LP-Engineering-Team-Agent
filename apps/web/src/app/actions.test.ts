@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   validateSkillVersion: vi.fn(),
   publishSkillVersion: vi.fn(),
   bindSkillVersionToProject: vi.fn(),
-  setProjectSkillBindingEnabled: vi.fn()
+  setProjectSkillBindingEnabled: vi.fn(),
+  createModelProvider: vi.fn(),
+  setModelProviderEnabled: vi.fn(),
+  upsertProjectModelRoute: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({
@@ -39,17 +42,23 @@ vi.mock("../lib/workbench-store", () => ({
     validateSkillVersion: mocks.validateSkillVersion,
     publishSkillVersion: mocks.publishSkillVersion,
     bindSkillVersionToProject: mocks.bindSkillVersionToProject,
-    setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled
+    setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
+    createModelProvider: mocks.createModelProvider,
+    setModelProviderEnabled: mocks.setModelProviderEnabled,
+    upsertProjectModelRoute: mocks.upsertProjectModelRoute
   }))
 }));
 
 import {
   bindSkillVersionAction,
+  createModelProviderAction,
   createProjectAction,
   createSkillDraftAction,
   publishSkillVersionAction,
+  setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
   submitPromptAction,
+  upsertProjectModelRouteAction,
   validateSkillVersionAction
 } from "./actions";
 
@@ -131,6 +140,21 @@ describe("submitPromptAction", () => {
     mocks.setProjectSkillBindingEnabled.mockResolvedValue({
       ok: true,
       value: { id: "skill_binding_1" }
+    });
+    mocks.createModelProvider.mockReset();
+    mocks.createModelProvider.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+    mocks.setModelProviderEnabled.mockReset();
+    mocks.setModelProviderEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+    mocks.upsertProjectModelRoute.mockReset();
+    mocks.upsertProjectModelRoute.mockResolvedValue({
+      ok: true,
+      value: { id: "model_route_1" }
     });
   });
 
@@ -426,6 +450,104 @@ describe("submitPromptAction", () => {
     );
 
     expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("creates a model provider and redirects to the models view", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.createModelProvider.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+
+    await expectRedirect(
+      createModelProviderAction(
+        buildSkillForm({
+          providerId: "provider_openai",
+          name: "OpenAI",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          secretEnvName: "OPENAI_API_KEY"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.createModelProvider).toHaveBeenCalledWith({
+      projectId: "project_1",
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+  });
+
+  it("sets a model provider enabled flag and redirects to the models view", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.setModelProviderEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+
+    await expectRedirect(
+      setModelProviderEnabledAction(
+        buildSkillForm({
+          providerId: "provider_openai",
+          enabled: "true"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.setModelProviderEnabled).toHaveBeenCalledWith({
+      projectId: "project_1",
+      providerId: "provider_openai",
+      enabled: true
+    });
+  });
+
+  it("upserts a model route and redirects to the models view", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.upsertProjectModelRoute.mockResolvedValue({
+      ok: true,
+      value: { id: "model_route_1" }
+    });
+
+    await expectRedirect(
+      upsertProjectModelRouteAction(
+        buildSkillForm({
+          role: "builder",
+          providerId: "provider_openai",
+          model: "gpt-5.4"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
+      projectId: "project_1",
+      role: "builder",
+      providerId: "provider_openai",
+      model: "gpt-5.4"
+    });
+  });
+
+  it("redirects invalid model roles before calling the store", async () => {
+    mocks.currentProjectId = "project_1";
+
+    await expectRedirect(
+      upsertProjectModelRouteAction(
+        buildSkillForm({
+          role: "writer",
+          providerId: "provider_openai",
+          model: "gpt-5.4"
+        })
+      ),
+      "/?view=models&modelError=model_role_unsupported"
+    );
+
+    expect(mocks.upsertProjectModelRoute).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 

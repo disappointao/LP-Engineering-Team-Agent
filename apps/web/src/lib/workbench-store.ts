@@ -1,5 +1,10 @@
 import {
   DemoWorkbenchService,
+  type AgentRole,
+  type ModelProviderRecord,
+  type ModelProviderType,
+  type ModelRoutingPolicyRecord,
+  type ProjectModelState,
   type ProjectRecord,
   type ProjectSkillState,
   type SkillBindingRecord,
@@ -18,6 +23,7 @@ import {
   type WorkbenchTaskStatus,
   type WorkbenchTaskType
 } from "@lp-agent/db";
+import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 
 export type ProjectFlowErrorCode =
   | "project_name_required"
@@ -42,6 +48,21 @@ export type SkillFlowErrorCode =
   | "publish_not_allowed"
   | "skill_operation_failed";
 
+export type ModelFlowErrorCode =
+  | "project_not_found"
+  | "model_provider_name_required"
+  | "model_provider_key_required"
+  | "model_provider_type_unsupported"
+  | "model_provider_already_exists"
+  | "model_provider_not_found"
+  | "model_provider_disabled"
+  | "model_role_unsupported"
+  | "model_id_required"
+  | "model_route_not_found"
+  | "model_route_provider_invalid"
+  | "model_secret_reference_invalid"
+  | "model_routing_operation_failed";
+
 type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProjectFlowErrorCode };
@@ -54,6 +75,10 @@ export type SkillActionResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: SkillFlowErrorCode };
 
+export type ModelActionResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: ModelFlowErrorCode };
+
 export interface CreateSkillDraftFormInput {
   manifestJson: string;
   content: string;
@@ -63,6 +88,22 @@ export interface CreateSkillDraftFormInput {
 export interface BindSkillVersionFormInput {
   projectId: string;
   skillVersionId: string;
+}
+
+export interface CreateModelProviderFormInput {
+  projectId: string;
+  providerId: string;
+  name: string;
+  provider: ModelProviderType | string;
+  baseUrl?: string;
+  secretEnvName?: string;
+}
+
+export interface UpsertProjectModelRouteFormInput {
+  projectId: string;
+  role: AgentRole | string;
+  providerId: string;
+  model: string;
 }
 
 export type TaskType = WorkbenchTaskType;
@@ -86,12 +127,14 @@ export type WorkbenchPageState =
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
+      models: ProjectModelState;
     }
   | {
       kind: "task_ready";
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
+      models: ProjectModelState;
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
@@ -122,6 +165,17 @@ export interface WebWorkbenchStore {
     bindingId: string;
     enabled: boolean;
   }): Promise<SkillActionResult<SkillBindingRecord>>;
+  createModelProvider(
+    input: CreateModelProviderFormInput
+  ): Promise<ModelActionResult<ModelProviderRecord>>;
+  setModelProviderEnabled(input: {
+    projectId: string;
+    providerId: string;
+    enabled: boolean;
+  }): Promise<ModelActionResult<ModelProviderRecord>>;
+  upsertProjectModelRoute(
+    input: UpsertProjectModelRouteFormInput
+  ): Promise<ModelActionResult<ModelRoutingPolicyRecord>>;
 }
 
 export interface WebWorkbenchStoreOptions {
@@ -219,6 +273,12 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     availableVersions: []
   });
 
+  const emptyModelState = (): ProjectModelState => ({
+    providers: [],
+    routes: [],
+    resolvedPolicy: createDefaultModelPolicy()
+  });
+
   const loadSkillState = async (projectId?: string | null) => {
     if (!projectId) {
       return emptySkillState();
@@ -229,6 +289,21 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const message = error instanceof Error ? error.message : "";
       if (message === "project_not_found" || message === "Project not found.") {
         return emptySkillState();
+      }
+      throw error;
+    }
+  };
+
+  const loadModelState = async (projectId?: string | null): Promise<ProjectModelState> => {
+    if (!projectId) {
+      return emptyModelState();
+    }
+    try {
+      return await service.listProjectModelState(projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "project_not_found" || message === "Project not found.") {
+        return emptyModelState();
       }
       throw error;
     }
@@ -270,7 +345,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           kind: "empty",
           projects: currentProjects,
           tasks: currentTasks,
-          skills: await loadSkillState(requestedProject?.id)
+          skills: await loadSkillState(requestedProject?.id),
+          models: await loadModelState(requestedProject?.id)
         };
       }
 
@@ -288,6 +364,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         projects: currentProjects,
         tasks: currentTasks,
         skills: await loadSkillState(activeProjectId),
+        models: await loadModelState(activeProjectId),
         activeTaskId: task.id,
         task: { ...task },
         messages: await listMessages(task.id),
@@ -415,6 +492,39 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       } catch (error) {
         return { ok: false, error: toSkillFlowError(error) };
       }
+    },
+
+    async createModelProvider(input) {
+      try {
+        const value = await service.createModelProvider({
+          ...input,
+          provider: input.provider as ModelProviderType
+        });
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toModelFlowError(error) };
+      }
+    },
+
+    async setModelProviderEnabled(input) {
+      try {
+        const value = await service.setModelProviderEnabled(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toModelFlowError(error) };
+      }
+    },
+
+    async upsertProjectModelRoute(input) {
+      try {
+        const value = await service.upsertProjectModelRoute({
+          ...input,
+          role: input.role as AgentRole
+        });
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toModelFlowError(error) };
+      }
     }
   };
 }
@@ -449,6 +559,30 @@ function toSkillFlowError(error: unknown): SkillFlowErrorCode {
     return "manifest_validation_failed";
   }
   return "skill_operation_failed";
+}
+
+function toModelFlowError(error: unknown): ModelFlowErrorCode {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message === "project_not_found" ||
+    message === "model_provider_name_required" ||
+    message === "model_provider_key_required" ||
+    message === "model_provider_type_unsupported" ||
+    message === "model_provider_already_exists" ||
+    message === "model_provider_not_found" ||
+    message === "model_provider_disabled" ||
+    message === "model_role_unsupported" ||
+    message === "model_id_required" ||
+    message === "model_route_not_found" ||
+    message === "model_route_provider_invalid" ||
+    message === "model_secret_reference_invalid"
+  ) {
+    return message;
+  }
+  if (message === "Project not found.") {
+    return "project_not_found";
+  }
+  return "model_routing_operation_failed";
 }
 
 const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   getWebWorkbenchStore,
+  type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode
 } from "../lib/workbench-store";
@@ -19,6 +20,20 @@ function redirectWithError(error: ProjectFlowErrorCode): never {
 
 function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
   redirect(`/?view=skills&skillError=${encodeURIComponent(error)}`);
+}
+
+function redirectToModelsWithError(error: ModelFlowErrorCode): never {
+  redirect(`/?view=models&modelError=${encodeURIComponent(error)}`);
+}
+
+function parseAgentRole(
+  rawValue: FormDataEntryValue | null
+): "planner" | "builder" | "reviewer" | "deployer" {
+  const value = String(rawValue ?? "");
+  if (value === "planner" || value === "builder" || value === "reviewer" || value === "deployer") {
+    return value;
+  }
+  redirectToModelsWithError("model_role_unsupported");
 }
 
 const maxSkillContentBytes = 200000;
@@ -242,4 +257,60 @@ export async function setSkillBindingEnabledAction(formData: FormData): Promise<
   }
   revalidatePath("/");
   redirect("/?view=skills");
+}
+
+export async function createModelProviderAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  if (!currentProjectId) {
+    redirectToModelsWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().createModelProvider({
+    projectId: currentProjectId,
+    providerId: String(formData.get("providerId") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    provider: String(formData.get("provider") ?? ""),
+    baseUrl: String(formData.get("baseUrl") ?? ""),
+    secretEnvName: String(formData.get("secretEnvName") ?? "")
+  });
+  if (!result.ok) {
+    redirectToModelsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=models");
+}
+
+export async function setModelProviderEnabledAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  if (!currentProjectId) {
+    redirectToModelsWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().setModelProviderEnabled({
+    projectId: currentProjectId,
+    providerId: String(formData.get("providerId") ?? ""),
+    enabled: String(formData.get("enabled") ?? "false") === "true"
+  });
+  if (!result.ok) {
+    redirectToModelsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=models");
+}
+
+export async function upsertProjectModelRouteAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  if (!currentProjectId) {
+    redirectToModelsWithError("project_not_found");
+  }
+  const role = parseAgentRole(formData.get("role"));
+  const result = await getWebWorkbenchStore().upsertProjectModelRoute({
+    projectId: currentProjectId,
+    role,
+    providerId: String(formData.get("providerId") ?? ""),
+    model: String(formData.get("model") ?? "")
+  });
+  if (!result.ok) {
+    redirectToModelsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=models");
 }
