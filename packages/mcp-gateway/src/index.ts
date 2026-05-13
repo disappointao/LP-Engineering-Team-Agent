@@ -146,8 +146,9 @@ function normalizeToolDefinition(input: unknown): MCPToolDefinition {
 }
 
 function normalizeAgentRole(input: unknown): AgentRole {
-  if (mcpAgentRoles.includes(input as AgentRole)) {
-    return input as AgentRole;
+  const role = normalizeRequiredString(input);
+  if (mcpAgentRoles.includes(role as AgentRole)) {
+    return role as AgentRole;
   }
   throw new Error("mcp_connector_validation_failed");
 }

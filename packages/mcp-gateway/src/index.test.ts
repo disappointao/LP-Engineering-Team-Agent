@@ -67,7 +67,7 @@ describe("MCP gateway policy", () => {
   });
 
   it("normalizes connector definitions with defensive tool copies", () => {
-    const inputRoles = ["planner", "builder"];
+    const inputRoles = ["planner", " builder "];
     const connector: MCPConnectorDefinition = normalizeMCPConnectorDefinition({
       id: " connector_assets ",
       name: " Internal Assets ",
@@ -99,7 +99,7 @@ describe("MCP gateway policy", () => {
     });
 
     connector.tools[0]!.roles.push("reviewer");
-    expect(inputRoles).toEqual(["planner", "builder"]);
+    expect(inputRoles).toEqual(["planner", " builder "]);
   });
 
   it("rejects invalid connector definitions", () => {
