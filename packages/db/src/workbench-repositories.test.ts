@@ -113,7 +113,11 @@ describe("in-memory workbench repositories", () => {
     });
 
     const projects = await repositories.projects.listAll();
-    projects[0].name = "Mutated locally";
+    const firstProject = projects[0];
+    if (!firstProject) {
+      throw new Error("Expected at least one project.");
+    }
+    firstProject.name = "Mutated locally";
 
     await expect(repositories.projects.listAll()).resolves.toEqual([
       {
