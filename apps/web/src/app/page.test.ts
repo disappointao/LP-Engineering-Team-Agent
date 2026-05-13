@@ -342,6 +342,143 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Builder");
   });
 
+  it("uses the active task project as the models project context and submits it in forms", async () => {
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Task Project",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Create a project-bound landing page",
+          type: "lp_generation",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: { secretEnvName: "OPENAI_API_KEY" },
+            enabled: true,
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Create a project-bound landing page",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: []
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page);
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("Task Project");
+    expect(inputs.some((input) => input.props?.name === "providerId")).toBe(true);
+    expect(
+      inputs.some(
+        (input) =>
+          input.props?.name === "projectId" &&
+          input.props?.type === "hidden" &&
+          input.props?.value === "project_1"
+      )
+    ).toBe(true);
+  });
+
+  it("requires a route provider and disables fallback submission placeholders", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: { secretEnvName: "OPENAI_API_KEY" },
+            enabled: false,
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const routeProviderSelects = collectElements(page, "select").filter(
+      (select) => select.props?.name === "providerId"
+    );
+    const fallbackOptions = collectElements(page, "option").filter(
+      (option) => option.props?.value === ""
+    );
+    const saveRouteButtons = collectElements(page, "button").filter(
+      (button) => collectText(button.props?.children).join("") === "Save route"
+    );
+
+    expect(routeProviderSelects).toHaveLength(4);
+    expect(routeProviderSelects.every((select) => select.props?.required === true)).toBe(true);
+    expect(fallbackOptions).toHaveLength(4);
+    expect(fallbackOptions.every((option) => option.props?.disabled === true)).toBe(true);
+    expect(saveRouteButtons).toHaveLength(4);
+    expect(saveRouteButtons.every((button) => button.props?.disabled === true)).toBe(true);
+  });
+
   it("does not render skill creation controls or the workbench composer without an active project", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({ view: "skills" })

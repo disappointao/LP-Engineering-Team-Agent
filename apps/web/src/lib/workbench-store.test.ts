@@ -438,6 +438,41 @@ describe("web workbench store", () => {
     });
   });
 
+  it("maps model provider in-use errors to stable codes", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+    const provider = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    if (!provider.ok) {
+      throw new Error(`Expected provider creation to succeed, got ${provider.error}.`);
+    }
+    const route = await store.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.value.id,
+      model: "gpt-5.4"
+    });
+    if (!route.ok) {
+      throw new Error(`Expected route upsert to succeed, got ${route.error}.`);
+    }
+
+    const result = await store.setModelProviderEnabled({
+      projectId: project.id,
+      providerId: provider.value.id,
+      enabled: false
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "model_provider_in_use"
+    });
+  });
+
   it("validates project and prompt form values", () => {
     expect(validateProjectInput({ name: " " })).toEqual({
       ok: false,

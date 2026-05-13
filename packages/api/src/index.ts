@@ -627,17 +627,27 @@ export class DemoWorkbenchService {
     input: SetModelProviderEnabledInput
   ): Promise<ModelProviderRecord> {
     await this.getProjectOrThrow(input.projectId);
-    const provider = await this.repositories.modelProviders.getById(input.providerId);
-    if (!provider || !isProjectModelProviderForProject(provider, input.projectId)) {
-      throw new Error("model_provider_not_found");
-    }
-    const updated: ModelProviderRecord = {
-      ...provider,
-      enabled: input.enabled,
-      updatedAt: this.timestamp()
-    };
-    await this.repositories.modelProviders.save(updated);
-    return copyModelProviderRecord(updated);
+    return withRepositoryIdLock(this.repositories, async () => {
+      const provider = await this.repositories.modelProviders.getById(input.providerId);
+      if (!provider || !isProjectModelProviderForProject(provider, input.projectId)) {
+        throw new Error("model_provider_not_found");
+      }
+      if (!input.enabled) {
+        const routes = await this.repositories.modelRoutingPolicies.listForProject(
+          input.projectId
+        );
+        if (routes.some((route) => route.providerId === provider.id)) {
+          throw new Error("model_provider_in_use");
+        }
+      }
+      const updated: ModelProviderRecord = {
+        ...provider,
+        enabled: input.enabled,
+        updatedAt: this.timestamp()
+      };
+      await this.repositories.modelProviders.save(updated);
+      return copyModelProviderRecord(updated);
+    });
   }
 
   async upsertProjectModelRoute(

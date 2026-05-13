@@ -477,6 +477,34 @@ describe("demo workbench service", () => {
   });
 
   it("rejects disabled model providers during route resolution", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "gpt-5.4"
+    });
+    await repositories.modelProviders.save({
+      ...provider,
+      enabled: false,
+      updatedAt: "2026-05-12T08:10:00.000Z"
+    });
+
+    await expect(service.resolveModelRoutingPolicyForProject(project.id)).rejects.toThrow(
+      "model_provider_disabled"
+    );
+  });
+
+  it("rejects disabling a model provider while project routes still use it", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });
     const provider = await service.createModelProvider({
@@ -492,15 +520,20 @@ describe("demo workbench service", () => {
       providerId: provider.id,
       model: "gpt-5.4"
     });
-    await service.setModelProviderEnabled({
-      projectId: project.id,
-      providerId: provider.id,
-      enabled: false
-    });
 
-    await expect(service.resolveModelRoutingPolicyForProject(project.id)).rejects.toThrow(
-      "model_provider_disabled"
-    );
+    await expect(
+      service.setModelProviderEnabled({
+        projectId: project.id,
+        providerId: provider.id,
+        enabled: false
+      })
+    ).rejects.toThrow("model_provider_in_use");
+    await expect(service.resolveModelRoutingPolicyForProject(project.id)).resolves.toMatchObject({
+      builder: {
+        provider: provider.id,
+        model: "gpt-5.4"
+      }
+    });
   });
 
   it("allows only one concurrent create for the same model provider id", async () => {

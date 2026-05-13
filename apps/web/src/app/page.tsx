@@ -374,6 +374,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <>
                     <form action={createModelProviderAction} className="modelEditor">
                       <h2>{copy.modelsView.providerCreateTitle}</h2>
+                      <input name="projectId" type="hidden" value={activeProject.id} />
 
                       <label htmlFor="providerId">{copy.modelsView.providerIdLabel}</label>
                       <input
@@ -432,6 +433,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               </span>
                             </div>
                             <form action={setModelProviderEnabledAction}>
+                              <input name="projectId" type="hidden" value={activeProject.id} />
                               <input name="providerId" type="hidden" value={provider.id} />
                               <input
                                 name="enabled"
@@ -458,6 +460,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                           (modelRoute) => modelRoute.role === role
                         );
                         const resolvedRoute = pageState.models.resolvedPolicy[role];
+                        const enabledProviders = pageState.models.providers.filter(
+                          (provider) => provider.enabled
+                        );
                         return (
                           <form
                             action={upsertProjectModelRouteAction}
@@ -465,23 +470,30 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             key={role}
                           >
                             <strong>{copy.modelsView.roleLabels[role]}</strong>
+                            <input name="projectId" type="hidden" value={activeProject.id} />
                             <input name="role" type="hidden" value={role} />
-                            <select name="providerId" defaultValue={route?.providerId ?? ""}>
-                              <option value="">{copy.modelsView.fallbackLabel}</option>
-                              {pageState.models.providers
-                                .filter((provider) => provider.enabled)
-                                .map((provider) => (
-                                  <option value={provider.id} key={provider.id}>
-                                    {provider.name}
-                                  </option>
-                                ))}
+                            <select
+                              name="providerId"
+                              defaultValue={route?.providerId ?? ""}
+                              required
+                            >
+                              <option value="" disabled>
+                                {copy.modelsView.fallbackLabel}
+                              </option>
+                              {enabledProviders.map((provider) => (
+                                <option value={provider.id} key={provider.id}>
+                                  {provider.name}
+                                </option>
+                              ))}
                             </select>
                             <input
                               aria-label={`${copy.modelsView.roleLabels[role]} ${copy.modelsView.modelLabel}`}
                               name="model"
                               defaultValue={route?.model ?? resolvedRoute.model}
                             />
-                            <button type="submit">{copy.modelsView.saveRoute}</button>
+                            <button type="submit" disabled={enabledProviders.length === 0}>
+                              {copy.modelsView.saveRoute}
+                            </button>
                           </form>
                         );
                       })}
@@ -678,6 +690,7 @@ function toModelFlowError(value: string | undefined): ModelFlowErrorCode | undef
     value === "model_provider_already_exists" ||
     value === "model_provider_not_found" ||
     value === "model_provider_disabled" ||
+    value === "model_provider_in_use" ||
     value === "model_role_unsupported" ||
     value === "model_id_required" ||
     value === "model_route_not_found" ||

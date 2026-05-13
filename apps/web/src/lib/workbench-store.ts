@@ -56,6 +56,7 @@ export type ModelFlowErrorCode =
   | "model_provider_already_exists"
   | "model_provider_not_found"
   | "model_provider_disabled"
+  | "model_provider_in_use"
   | "model_role_unsupported"
   | "model_id_required"
   | "model_route_not_found"
@@ -571,6 +572,7 @@ function toModelFlowError(error: unknown): ModelFlowErrorCode {
     message === "model_provider_already_exists" ||
     message === "model_provider_not_found" ||
     message === "model_provider_disabled" ||
+    message === "model_provider_in_use" ||
     message === "model_role_unsupported" ||
     message === "model_id_required" ||
     message === "model_route_not_found" ||

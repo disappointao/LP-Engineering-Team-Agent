@@ -261,11 +261,12 @@ export async function setSkillBindingEnabledAction(formData: FormData): Promise<
 
 export async function createModelProviderAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  if (!currentProjectId) {
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
     redirectToModelsWithError("project_not_found");
   }
   const result = await getWebWorkbenchStore().createModelProvider({
-    projectId: currentProjectId,
+    projectId,
     providerId: String(formData.get("providerId") ?? ""),
     name: String(formData.get("name") ?? ""),
     provider: String(formData.get("provider") ?? ""),
@@ -275,35 +276,39 @@ export async function createModelProviderAction(formData: FormData): Promise<voi
   if (!result.ok) {
     redirectToModelsWithError(result.error);
   }
+  await setCurrentProjectId(projectId);
   revalidatePath("/");
   redirect("/?view=models");
 }
 
 export async function setModelProviderEnabledAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  if (!currentProjectId) {
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
     redirectToModelsWithError("project_not_found");
   }
   const result = await getWebWorkbenchStore().setModelProviderEnabled({
-    projectId: currentProjectId,
+    projectId,
     providerId: String(formData.get("providerId") ?? ""),
     enabled: String(formData.get("enabled") ?? "false") === "true"
   });
   if (!result.ok) {
     redirectToModelsWithError(result.error);
   }
+  await setCurrentProjectId(projectId);
   revalidatePath("/");
   redirect("/?view=models");
 }
 
 export async function upsertProjectModelRouteAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  if (!currentProjectId) {
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
     redirectToModelsWithError("project_not_found");
   }
   const role = parseAgentRole(formData.get("role"));
   const result = await getWebWorkbenchStore().upsertProjectModelRoute({
-    projectId: currentProjectId,
+    projectId,
     role,
     providerId: String(formData.get("providerId") ?? ""),
     model: String(formData.get("model") ?? "")
@@ -311,6 +316,7 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
   if (!result.ok) {
     redirectToModelsWithError(result.error);
   }
+  await setCurrentProjectId(projectId);
   revalidatePath("/");
   redirect("/?view=models");
 }

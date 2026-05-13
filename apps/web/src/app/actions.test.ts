@@ -483,6 +483,38 @@ describe("submitPromptAction", () => {
     });
   });
 
+  it("creates a model provider from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.createModelProvider.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+
+    await expectRedirect(
+      createModelProviderAction(
+        buildSkillForm({
+          projectId: "project_1",
+          providerId: "provider_openai",
+          name: "OpenAI",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          secretEnvName: "OPENAI_API_KEY"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.createModelProvider).toHaveBeenCalledWith({
+      projectId: "project_1",
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
   it("sets a model provider enabled flag and redirects to the models view", async () => {
     mocks.currentProjectId = "project_1";
     mocks.setModelProviderEnabled.mockResolvedValue({
@@ -505,6 +537,32 @@ describe("submitPromptAction", () => {
       providerId: "provider_openai",
       enabled: true
     });
+  });
+
+  it("sets a model provider enabled flag from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.setModelProviderEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "provider_openai" }
+    });
+
+    await expectRedirect(
+      setModelProviderEnabledAction(
+        buildSkillForm({
+          projectId: "project_1",
+          providerId: "provider_openai",
+          enabled: "false"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.setModelProviderEnabled).toHaveBeenCalledWith({
+      projectId: "project_1",
+      providerId: "provider_openai",
+      enabled: false
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
 
   it("upserts a model route and redirects to the models view", async () => {
@@ -531,6 +589,34 @@ describe("submitPromptAction", () => {
       providerId: "provider_openai",
       model: "gpt-5.4"
     });
+  });
+
+  it("upserts a model route from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.upsertProjectModelRoute.mockResolvedValue({
+      ok: true,
+      value: { id: "model_route_1" }
+    });
+
+    await expectRedirect(
+      upsertProjectModelRouteAction(
+        buildSkillForm({
+          projectId: "project_1",
+          role: "builder",
+          providerId: "provider_openai",
+          model: "gpt-5.4"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
+      projectId: "project_1",
+      role: "builder",
+      providerId: "provider_openai",
+      model: "gpt-5.4"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
 
   it("redirects invalid model roles before calling the store", async () => {
