@@ -60,6 +60,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Implementation plan for repository-backed local Web workbench state.
    - Read this after the persistent-state spec when implementing or auditing local JSON-backed workbench state and repository-based Web task rendering.
 
+15. `specs/2026-05-13-project-skills-management-runtime-spec.md`
+   - Stage 2 Skills Management MVP spec.
+   - Read this after the persistent-state plan when adding project-level skill creation, validation, publishing, project binding, and runtime context loading.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
