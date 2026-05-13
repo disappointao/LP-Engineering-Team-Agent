@@ -72,6 +72,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Model Routing Configuration MVP spec.
    - Read this after the project skills plan when adding project-scoped model providers, planner/builder/reviewer/deployer route configuration, runtime route resolution, and Models view behavior.
 
+18. `plans/2026-05-13-project-model-routing-config.md`
+   - Implementation plan for the Stage 2 Model Routing Configuration MVP.
+   - Read this after the model routing spec when implementing repository-backed project model providers, role route configuration, runtime route resolution, and the Web Models view.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
