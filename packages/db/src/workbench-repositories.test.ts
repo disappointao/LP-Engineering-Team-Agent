@@ -259,6 +259,7 @@ describe("in-memory workbench repositories", () => {
     if (!savedBinding) {
       throw new Error("Expected saved skill binding.");
     }
+    type BrandSettings = { tone: string };
     const savedBindingBrandSettings = savedBinding.settings?.brand;
     if (
       !savedBindingBrandSettings ||
@@ -267,7 +268,7 @@ describe("in-memory workbench repositories", () => {
     ) {
       throw new Error("Expected saved skill binding brand settings.");
     }
-    savedBindingBrandSettings.tone = "mutated";
+    (savedBindingBrandSettings as BrandSettings).tone = "mutated";
 
     await expect(repositories.skills.listAll()).resolves.toEqual([skill]);
     await expect(repositories.skillVersions.listForSkill(skill.id)).resolves.toEqual([version]);
