@@ -52,6 +52,14 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Implementation plan for the conversation-first Web entry.
    - Read this after the conversation-first spec when implementing or auditing the task model, deterministic routing, implicit LP project creation, general chat task rendering, large empty-state composer, and sidebar task/project behavior.
 
+13. `specs/2026-05-13-web-workbench-persistent-state-spec.md`
+   - Web workbench persistence amendment.
+   - Read this after the conversation-first plan when moving Web projects, task threads, messages, and LP snapshot bindings out of process-local Web maps.
+
+14. `plans/2026-05-13-web-workbench-persistent-state.md`
+   - Implementation plan for repository-backed local Web workbench state.
+   - Read this after the persistent-state spec when implementing or auditing local JSON-backed workbench state and repository-based Web task rendering.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
