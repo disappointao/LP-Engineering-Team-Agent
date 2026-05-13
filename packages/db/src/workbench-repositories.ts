@@ -1,6 +1,7 @@
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
+import type { MCPToolDefinition } from "@lp-agent/mcp-gateway";
 import type { AgentRole } from "@lp-agent/model-gateway";
 import type { SkillManifest, SkillScope, SkillType } from "@lp-agent/skills";
 
@@ -124,6 +125,29 @@ export interface ModelRoutingPolicyRecord {
   updatedAt: string;
 }
 
+export interface MCPConnectorRecord {
+  id: string;
+  scope: SkillScope;
+  targetKey: string;
+  name: string;
+  description?: string;
+  tools: MCPToolDefinition[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MCPToolApprovalRecord {
+  id: string;
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  state: "pending" | "approved";
+  approvedByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectRepository {
   save(project: ProjectRecord): Promise<void>;
   getById(projectId: string): Promise<ProjectRecord | undefined>;
@@ -209,6 +233,24 @@ export interface ModelRoutingPolicyRepository {
   listAll(): Promise<ModelRoutingPolicyRecord[]>;
 }
 
+export interface MCPConnectorRepository {
+  save(connector: MCPConnectorRecord): Promise<void>;
+  getById(connectorId: string): Promise<MCPConnectorRecord | undefined>;
+  listForProject(projectId: string): Promise<MCPConnectorRecord[]>;
+  listAll(): Promise<MCPConnectorRecord[]>;
+}
+
+export interface MCPToolApprovalRepository {
+  save(approval: MCPToolApprovalRecord): Promise<void>;
+  getByProjectConnectorAndTool(
+    projectId: string,
+    connectorId: string,
+    toolName: string
+  ): Promise<MCPToolApprovalRecord | undefined>;
+  listForProject(projectId: string): Promise<MCPToolApprovalRecord[]>;
+  listAll(): Promise<MCPToolApprovalRecord[]>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   briefs: BriefRepository;
@@ -222,6 +264,8 @@ export interface WorkbenchRepositories {
   skillBindings: SkillBindingRepository;
   modelProviders: ModelProviderRepository;
   modelRoutingPolicies: ModelRoutingPolicyRepository;
+  mcpConnectors: MCPConnectorRepository;
+  mcpToolApprovals: MCPToolApprovalRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -241,6 +285,8 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly skillBindings = new InMemorySkillBindingRepository();
   readonly modelProviders = new InMemoryModelProviderRepository();
   readonly modelRoutingPolicies = new InMemoryModelRoutingPolicyRepository();
+  readonly mcpConnectors = new InMemoryMCPConnectorRepository();
+  readonly mcpToolApprovals = new InMemoryMCPToolApprovalRepository();
 }
 
 class InMemorySkillRepository implements SkillRepository {
@@ -372,6 +418,61 @@ class InMemoryModelRoutingPolicyRepository implements ModelRoutingPolicyReposito
 
   async listAll(): Promise<ModelRoutingPolicyRecord[]> {
     return [...this.policies.values()].map(copyModelRoutingPolicy);
+  }
+}
+
+class InMemoryMCPConnectorRepository implements MCPConnectorRepository {
+  private readonly connectors = new Map<string, MCPConnectorRecord>();
+
+  async save(connector: MCPConnectorRecord): Promise<void> {
+    this.connectors.set(connector.id, copyMCPConnector(connector));
+  }
+
+  async getById(connectorId: string): Promise<MCPConnectorRecord | undefined> {
+    const connector = this.connectors.get(connectorId);
+    return connector ? copyMCPConnector(connector) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<MCPConnectorRecord[]> {
+    return [...this.connectors.values()]
+      .filter((connector) => connector.scope === "project" && connector.targetKey === projectId)
+      .map(copyMCPConnector);
+  }
+
+  async listAll(): Promise<MCPConnectorRecord[]> {
+    return [...this.connectors.values()].map(copyMCPConnector);
+  }
+}
+
+class InMemoryMCPToolApprovalRepository implements MCPToolApprovalRepository {
+  private readonly approvals = new Map<string, MCPToolApprovalRecord>();
+
+  async save(approval: MCPToolApprovalRecord): Promise<void> {
+    this.approvals.set(approval.id, copyMCPToolApproval(approval));
+  }
+
+  async getByProjectConnectorAndTool(
+    projectId: string,
+    connectorId: string,
+    toolName: string
+  ): Promise<MCPToolApprovalRecord | undefined> {
+    const approval = [...this.approvals.values()].find(
+      (candidate) =>
+        candidate.projectId === projectId &&
+        candidate.connectorId === connectorId &&
+        candidate.toolName === toolName
+    );
+    return approval ? copyMCPToolApproval(approval) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<MCPToolApprovalRecord[]> {
+    return [...this.approvals.values()]
+      .filter((approval) => approval.projectId === projectId)
+      .map(copyMCPToolApproval);
+  }
+
+  async listAll(): Promise<MCPToolApprovalRecord[]> {
+    return [...this.approvals.values()].map(copyMCPToolApproval);
   }
 }
 
@@ -546,6 +647,20 @@ function copyModelRoutingPolicy(policy: ModelRoutingPolicyRecord): ModelRoutingP
     copy.settings = structuredClone(policy.settings);
   }
   return copy;
+}
+
+function copyMCPConnector(connector: MCPConnectorRecord): MCPConnectorRecord {
+  return {
+    ...connector,
+    tools: connector.tools.map((tool) => ({
+      ...tool,
+      roles: [...tool.roles]
+    }))
+  };
+}
+
+function copyMCPToolApproval(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
+  return { ...approval };
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {

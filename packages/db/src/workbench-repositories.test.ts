@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { sampleBrief } from "@lp-agent/lp-schema";
 import {
   createInMemoryWorkbenchRepositories,
+  type MCPConnectorRecord,
+  type MCPToolApprovalRecord,
   type PageVersionRecord,
   type ProjectRecord,
   type SkillBindingRecord,
@@ -376,6 +378,110 @@ describe("in-memory workbench repositories", () => {
     ]);
     await expect(repositories.modelRoutingPolicies.listForProject("project_1")).resolves.toEqual([
       expect.objectContaining({ id: "model_route_1", role: "planner" })
+    ]);
+  });
+
+  it("stores mcp connectors and approvals with defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const connector: MCPConnectorRecord = {
+      id: "connector_assets",
+      scope: "project" as const,
+      targetKey: "project_1",
+      name: "Internal Assets",
+      description: "Search approved assets.",
+      enabled: true,
+      tools: [
+        {
+          name: "searchAssets",
+          description: "Search assets.",
+          permission: "assets:read",
+          roles: ["planner", "builder"],
+          requiresApproval: false
+        }
+      ],
+      createdAt,
+      updatedAt: createdAt
+    };
+    const approval: MCPToolApprovalRecord = {
+      id: "mcp_approval_1",
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "createPullRequest",
+      state: "approved" as const,
+      approvedByUserId: "local-owner",
+      createdAt,
+      updatedAt: createdAt
+    };
+
+    await repositories.mcpConnectors.save(connector);
+    await repositories.mcpToolApprovals.save(approval);
+
+    const savedConnector = await repositories.mcpConnectors.getById("connector_assets");
+    const savedApproval =
+      await repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+        "project_1",
+        "connector_assets",
+        "createPullRequest"
+      );
+
+    expect(savedConnector).toEqual(connector);
+    expect(savedApproval).toEqual(approval);
+
+    if (!savedConnector || !savedApproval) {
+      throw new Error("Expected saved MCP records.");
+    }
+    savedConnector.tools[0]!.permission = "mutated:permission";
+    savedApproval.state = "pending";
+
+    await expect(repositories.mcpConnectors.getById("connector_assets")).resolves.toEqual(
+      connector
+    );
+    await expect(
+      repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+        "project_1",
+        "connector_assets",
+        "createPullRequest"
+      )
+    ).resolves.toEqual(approval);
+  });
+
+  it("lists mcp connectors and approvals for a project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.mcpConnectors.save({
+      id: "connector_project_1",
+      scope: "project",
+      targetKey: "project_1",
+      name: "Project 1 Assets",
+      enabled: true,
+      tools: [],
+      createdAt,
+      updatedAt: createdAt
+    });
+    await repositories.mcpConnectors.save({
+      id: "connector_project_2",
+      scope: "project",
+      targetKey: "project_2",
+      name: "Project 2 Assets",
+      enabled: true,
+      tools: [],
+      createdAt,
+      updatedAt: createdAt
+    });
+    await repositories.mcpToolApprovals.save({
+      id: "mcp_approval_1",
+      projectId: "project_1",
+      connectorId: "connector_project_1",
+      toolName: "searchAssets",
+      state: "approved",
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await expect(repositories.mcpConnectors.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "connector_project_1" })
+    ]);
+    await expect(repositories.mcpToolApprovals.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "mcp_approval_1" })
     ]);
   });
 });
