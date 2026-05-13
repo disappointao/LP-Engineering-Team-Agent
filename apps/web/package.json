@@ -11,6 +11,7 @@
   "dependencies": {
     "@lp-agent/api": "workspace:*",
     "@lp-agent/artifacts": "workspace:*",
+    "@lp-agent/db": "workspace:*",
     "@lp-agent/git-deployment": "workspace:*",
     "@lp-agent/lp-schema": "workspace:*",
     "next": "^15.0.0",

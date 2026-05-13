@@ -1,8 +1,18 @@
 import {
-  createDemoWorkbenchService,
+  DemoWorkbenchService,
   type ProjectRecord,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
+import {
+  createInMemoryWorkbenchRepositories,
+  createJsonFileWorkbenchRepositories,
+  type WorkbenchMessageRecord,
+  type WorkbenchMessageRole,
+  type WorkbenchRepositories,
+  type WorkbenchTaskRecord,
+  type WorkbenchTaskStatus,
+  type WorkbenchTaskType
+} from "@lp-agent/db";
 
 export type ProjectFlowErrorCode =
   | "project_name_required"
@@ -18,26 +28,11 @@ export interface CreateProjectFormInput {
   name: string;
 }
 
-export type TaskType = "general_chat" | "lp_generation" | "project_setup";
-export type TaskStatus = "complete";
-export type ChatMessageRole = "user" | "assistant";
-
-export interface TaskRecord {
-  id: string;
-  title: string;
-  type: TaskType;
-  status: TaskStatus;
-  projectId?: string;
-  createdAt: string;
-}
-
-export interface ChatMessageRecord {
-  id: string;
-  taskId: string;
-  role: ChatMessageRole;
-  content: string;
-  createdAt: string;
-}
+export type TaskType = WorkbenchTaskType;
+export type TaskStatus = WorkbenchTaskStatus;
+export type ChatMessageRole = WorkbenchMessageRole;
+export type TaskRecord = WorkbenchTaskRecord;
+export type ChatMessageRecord = WorkbenchMessageRecord;
 
 export type SubmitTaskResult =
   | {
@@ -66,8 +61,8 @@ export type WorkbenchPageState =
 
 export interface WebWorkbenchStore {
   createProject(input: CreateProjectFormInput): Promise<ProjectRecord>;
-  listProjects(): ProjectRecord[];
-  listTasks(): TaskRecord[];
+  listProjects(): Promise<ProjectRecord[]>;
+  listTasks(): Promise<TaskRecord[]>;
   getPageState(input?: {
     projectId?: string | null;
     taskId?: string | null;
@@ -77,6 +72,10 @@ export interface WebWorkbenchStore {
     prompt: string;
     implicitProjectName: string;
   }): Promise<SubmitTaskResult>;
+}
+
+export interface WebWorkbenchStoreOptions {
+  repositories?: WorkbenchRepositories;
 }
 
 export function validateProjectInput(input: CreateProjectFormInput): ValidationResult<CreateProjectFormInput> {
@@ -152,70 +151,18 @@ export function deriveImplicitProjectName(prompt: string, fallback: string): str
       : "Untitled LP Project";
 }
 
-export function createWebWorkbenchStore(): WebWorkbenchStore {
-  const service = createDemoWorkbenchService();
-  const projects = new Map<string, ProjectRecord>();
-  const projectOrder: string[] = [];
-  const tasks = new Map<string, TaskRecord>();
-  const taskOrder: string[] = [];
-  const messages = new Map<string, ChatMessageRecord[]>();
-  const snapshotsByTask = new Map<string, WorkbenchSnapshot>();
-  let nextTaskNumber = 1;
-  let nextMessageNumber = 1;
+export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
+  const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+  const service = new DemoWorkbenchService({ repositories });
 
-  const listProjects = () =>
-    projectOrder
-      .map((projectId) => projects.get(projectId))
-      .filter((project): project is ProjectRecord => Boolean(project))
-      .map((project) => ({ ...project }));
+  const listProjects = async () =>
+    (await repositories.projects.listAll()).map((project) => ({ ...project }));
 
-  const listTasks = () =>
-    taskOrder
-      .map((taskId) => tasks.get(taskId))
-      .filter((task): task is TaskRecord => Boolean(task))
-      .map((task) => ({ ...task }));
+  const listTasks = async () =>
+    (await repositories.tasks.listAll()).map((task) => ({ ...task }));
 
-  const listMessages = (taskId: string) =>
-    (messages.get(taskId) ?? []).map((message) => ({ ...message }));
-
-  const saveProject = (project: ProjectRecord) => {
-    projects.set(project.id, project);
-    projectOrder.push(project.id);
-  };
-
-  const saveTask = (input: {
-    title: string;
-    type: TaskType;
-    projectId?: string;
-  }): TaskRecord => {
-    const task: TaskRecord = {
-      id: `task_${nextTaskNumber++}`,
-      title: input.title,
-      type: input.type,
-      status: "complete",
-      projectId: input.projectId,
-      createdAt: new Date().toISOString()
-    };
-    tasks.set(task.id, task);
-    taskOrder.push(task.id);
-    return task;
-  };
-
-  const saveMessage = (input: {
-    taskId: string;
-    role: ChatMessageRole;
-    content: string;
-  }) => {
-    const message: ChatMessageRecord = {
-      id: `message_${nextMessageNumber++}`,
-      taskId: input.taskId,
-      role: input.role,
-      content: input.content,
-      createdAt: new Date().toISOString()
-    };
-    messages.set(input.taskId, [...(messages.get(input.taskId) ?? []), message]);
-    return message;
-  };
+  const listMessages = async (taskId: string) =>
+    (await repositories.messages.listForTask(taskId)).map((message) => ({ ...message }));
 
   return {
     async createProject(input) {
@@ -225,7 +172,6 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
       }
 
       const project = await service.createProject(validation.value);
-      saveProject(project);
       return { ...project };
     },
 
@@ -233,15 +179,18 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
     listTasks,
 
     async getPageState(input) {
-      const currentProjects = listProjects();
-      const currentTasks = listTasks();
+      const currentProjects = await listProjects();
+      const currentTasks = await listTasks();
       const taskId = input?.taskId ?? null;
-      const task = taskId ? tasks.get(taskId) : undefined;
+      const task = taskId ? await repositories.tasks.getById(taskId) : undefined;
       const requestedProjectId = input?.projectId ?? null;
+      const taskProject = task?.projectId
+        ? await repositories.projects.getById(task.projectId)
+        : undefined;
 
       if (
         !task ||
-        (task.projectId && !projects.has(task.projectId)) ||
+        (task.projectId && !taskProject) ||
         (task.projectId && requestedProjectId && requestedProjectId !== task.projectId)
       ) {
         return {
@@ -251,14 +200,21 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
         };
       }
 
-      const snapshot = snapshotsByTask.get(task.id);
+      const snapshotRef = await repositories.taskSnapshots.getByTaskId(task.id);
+      const snapshot = snapshotRef
+        ? await service.getSnapshotForRecords({
+            projectId: snapshotRef.projectId,
+            briefId: snapshotRef.briefId,
+            pageVersionId: snapshotRef.pageVersionId
+          })
+        : undefined;
       return {
         kind: "task_ready",
         projects: currentProjects,
         tasks: currentTasks,
         activeTaskId: task.id,
         task: { ...task },
-        messages: listMessages(task.id),
+        messages: await listMessages(task.id),
         snapshot
       };
     },
@@ -271,7 +227,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
 
       const taskType = classifyTaskPrompt(prompt.value);
       const requestedProjectId = input.projectId ?? undefined;
-      if (requestedProjectId && !projects.has(requestedProjectId)) {
+      if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
         return { ok: false, error: "project_not_found" };
       }
 
@@ -283,7 +239,6 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
           const project = await service.createProject({
             name: deriveImplicitProjectName(prompt.value, input.implicitProjectName)
           });
-          saveProject(project);
           projectId = project.id;
         }
 
@@ -300,7 +255,7 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
             projectId,
             pageVersionId: pageVersion.id
           });
-          const project = projects.get(projectId);
+          const project = await repositories.projects.getById(projectId);
           if (!project) {
             return { ok: false, error: "project_not_found" };
           }
@@ -311,27 +266,24 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
           };
         }
 
-        const task = saveTask({
+        const task = await saveTaskThread({
+          repositories,
           title: deriveTaskTitle(prompt.value),
           type: taskType,
-          projectId
-        });
-        saveMessage({
-          taskId: task.id,
-          role: "user",
-          content: prompt.value
-        });
-        saveMessage({
-          taskId: task.id,
-          role: "assistant",
-          content:
+          projectId,
+          userMessage: prompt.value,
+          assistantMessage:
             taskType === "lp_generation"
               ? "LP artifacts are ready for review."
-              : "I created a task thread and can continue from here."
+              : "I created a task thread and can continue from here.",
+          snapshot: taskSnapshot
+            ? {
+                projectId: taskSnapshot.project.id,
+                briefId: taskSnapshot.brief?.id,
+                pageVersionId: taskSnapshot.currentPageVersion?.id
+              }
+            : undefined
         });
-        if (taskSnapshot) {
-          snapshotsByTask.set(task.id, taskSnapshot);
-        }
 
         return {
           ok: true,
@@ -346,11 +298,109 @@ export function createWebWorkbenchStore(): WebWorkbenchStore {
   };
 }
 
+const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
+
+async function saveTaskThread(input: {
+  repositories: WorkbenchRepositories;
+  title: string;
+  type: TaskType;
+  projectId?: string;
+  userMessage: string;
+  assistantMessage: string;
+  snapshot?: {
+    projectId: string;
+    briefId?: string;
+    pageVersionId?: string;
+  };
+}): Promise<TaskRecord> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const now = new Date().toISOString();
+    const existingTasks = await input.repositories.tasks.listAll();
+    const existingMessages = await input.repositories.messages.listAll();
+    const task: TaskRecord = {
+      id: nextSequentialId("task", existingTasks.map((record) => record.id)),
+      title: input.title,
+      type: input.type,
+      status: "complete",
+      projectId: input.projectId,
+      createdAt: now
+    };
+    const userMessage: ChatMessageRecord = {
+      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      taskId: task.id,
+      role: "user",
+      content: input.userMessage,
+      createdAt: now
+    };
+    const assistantMessage: ChatMessageRecord = {
+      id: nextSequentialId(
+        "message",
+        [...existingMessages.map((record) => record.id), userMessage.id]
+      ),
+      taskId: task.id,
+      role: "assistant",
+      content: input.assistantMessage,
+      createdAt: now
+    };
+
+    await input.repositories.tasks.save(task);
+    await input.repositories.messages.save(userMessage);
+    await input.repositories.messages.save(assistantMessage);
+    if (input.snapshot) {
+      await input.repositories.taskSnapshots.save({
+        taskId: task.id,
+        projectId: input.snapshot.projectId,
+        briefId: input.snapshot.briefId,
+        pageVersionId: input.snapshot.pageVersionId,
+        createdAt: now
+      });
+    }
+
+    return { ...task };
+  });
+}
+
+async function withRepositoryTaskLock<T>(
+  repositories: WorkbenchRepositories,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = repositoryTaskLocks.get(repositories) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(operation);
+  const lock = run.then(
+    () => undefined,
+    () => undefined
+  );
+  repositoryTaskLocks.set(repositories, lock);
+  lock.finally(() => {
+    if (repositoryTaskLocks.get(repositories) === lock) {
+      repositoryTaskLocks.delete(repositories);
+    }
+  });
+  return run;
+}
+
+function nextSequentialId(prefix: string, existingIds: string[]): string {
+  const nextNumber =
+    existingIds.reduce((largest, id) => {
+      const match = new RegExp(`^${prefix}_(\\d+)$`).exec(id);
+      return match ? Math.max(largest, Number(match[1])) : largest;
+    }, 0) + 1;
+  return `${prefix}_${nextNumber}`;
+}
+
 const globalStore = globalThis as typeof globalThis & {
   __lpAgentWebWorkbenchStore?: WebWorkbenchStore;
 };
 
+function defaultWorkbenchStateFilePath(): string {
+  return process.env.LP_AGENT_WORKBENCH_STATE_FILE ?? ".lp-agent/workbench-state.json";
+}
+
 export function getWebWorkbenchStore(): WebWorkbenchStore {
-  globalStore.__lpAgentWebWorkbenchStore ??= createWebWorkbenchStore();
+  globalStore.__lpAgentWebWorkbenchStore ??= createWebWorkbenchStore({
+    repositories: createJsonFileWorkbenchRepositories({
+      filePath: defaultWorkbenchStateFilePath()
+    })
+  });
   return globalStore.__lpAgentWebWorkbenchStore;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import {
   classifyTaskPrompt,
   createWebWorkbenchStore,
@@ -22,7 +23,9 @@ describe("web workbench store", () => {
       id: "project_1",
       name: "Spring LP"
     });
-    expect(store.listProjects().map((project) => project.id)).toEqual([
+    await expect(
+      store.listProjects().then((projects) => projects.map((project) => project.id))
+    ).resolves.toEqual([
       "project_1",
       "project_2"
     ]);
@@ -136,6 +139,83 @@ describe("web workbench store", () => {
     }
     expect(firstTaskState.snapshot?.brief?.prompt).toBe("Create a first landing page in HTML.");
     expect(secondTaskState.snapshot?.brief?.prompt).toBe("Create a second landing page in HTML.");
+  });
+
+  it("reopens projects, tasks, messages, and LP snapshots from shared repositories", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const firstStore = createWebWorkbenchStore({ repositories });
+    const project = await firstStore.createProject({
+      name: "Spring LP"
+    });
+
+    await firstStore.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a spring ecommerce landing page.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    const reopenedStore = createWebWorkbenchStore({ repositories });
+    await expect(reopenedStore.listProjects()).resolves.toEqual([
+      expect.objectContaining({
+        id: project.id,
+        name: "Spring LP"
+      })
+    ]);
+    await expect(reopenedStore.listTasks()).resolves.toEqual([
+      expect.objectContaining({
+        id: "task_1",
+        projectId: project.id
+      })
+    ]);
+
+    const pageState = await reopenedStore.getPageState({
+      projectId: project.id,
+      taskId: "task_1"
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.messages.map((message) => message.id)).toEqual(["message_1", "message_2"]);
+    expect(pageState.snapshot?.project.id).toBe(project.id);
+    expect(pageState.snapshot?.brief?.prompt).toBe("Create a spring ecommerce landing page.");
+    expect(pageState.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
+  });
+
+  it("allocates task and message IDs from existing repository records", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+
+    await repositories.tasks.save({
+      id: "task_4",
+      title: "Existing task",
+      type: "general_chat",
+      status: "complete",
+      createdAt: "2026-05-13T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_9",
+      taskId: "task_4",
+      role: "assistant",
+      content: "Existing message",
+      createdAt: "2026-05-13T00:00:00.000Z"
+    });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Help me write a campaign plan.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_5",
+      taskType: "general_chat",
+      projectId: undefined
+    });
+
+    const messages = await repositories.messages.listForTask("task_5");
+    expect(messages.map((message) => message.id)).toEqual(["message_10", "message_11"]);
   });
 
   it("returns empty state when a project task is requested through a different project", async () => {

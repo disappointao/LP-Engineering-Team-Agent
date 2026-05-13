@@ -42,6 +42,9 @@ importers:
       '@lp-agent/artifacts':
         specifier: workspace:*
         version: link:../../packages/artifacts
+      '@lp-agent/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@lp-agent/git-deployment':
         specifier: workspace:*
         version: link:../../packages/git-deployment
