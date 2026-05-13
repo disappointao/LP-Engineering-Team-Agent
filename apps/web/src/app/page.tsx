@@ -56,6 +56,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       boundSkill.version.reviewState === "published" &&
       boundSkill.version.manifest.reviewState === "published"
   ).length;
+  const boundSkillVersionIds = new Set(
+    pageState.skills.boundSkills.map((boundSkill) => boundSkill.version.id)
+  );
   const activeSkillLabel = copy.skillsView.activeCount(activeSkillCount);
   const completedSnapshot =
     pageState.kind === "task_ready" &&
@@ -274,7 +277,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   <button type="submit">{copy.skillsView.publish}</button>
                                 </form>
                               ) : null}
-                              {version.reviewState === "published" ? (
+                              {version.reviewState === "published" && !boundSkillVersionIds.has(version.id) ? (
                                 <form action={bindSkillVersionAction}>
                                   <input name="projectId" type="hidden" value={activeProject.id} />
                                   <input name="skillVersionId" type="hidden" value={version.id} />

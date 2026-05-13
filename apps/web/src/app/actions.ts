@@ -22,6 +22,21 @@ function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
 }
 
 const maxSkillContentBytes = 200000;
+const binarySignatures = [
+  [0x50, 0x4b, 0x03, 0x04],
+  [0x50, 0x4b, 0x05, 0x06],
+  [0x50, 0x4b, 0x07, 0x08],
+  [0x1f, 0x8b],
+  [0x7f, 0x45, 0x4c, 0x46],
+  [0x4d, 0x5a],
+  [0xca, 0xfe, 0xba, 0xbe],
+  [0xfe, 0xed, 0xfa, 0xce],
+  [0xfe, 0xed, 0xfa, 0xcf],
+  [0xcf, 0xfa, 0xed, 0xfe],
+  [0xce, 0xfa, 0xed, 0xfe],
+  [0x52, 0x61, 0x72, 0x21],
+  [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]
+];
 
 function parseSkillContentType(rawValue: FormDataEntryValue | null): "text/markdown" | "text/plain" {
   const value = String(rawValue ?? "text/markdown");
@@ -66,6 +81,31 @@ function inferUploadedSkillContentType(file: File): "text/markdown" | "text/plai
   redirectToSkillsWithError("unsupported_content_type");
 }
 
+function hasSignature(bytes: Uint8Array, signature: number[]): boolean {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function isProbablyBinary(bytes: Uint8Array): boolean {
+  const sample = bytes.slice(0, Math.min(bytes.length, 4096));
+  if (binarySignatures.some((signature) => hasSignature(sample, signature))) {
+    return true;
+  }
+  return sample.some((byte) => byte === 0);
+}
+
+function decodeSkillText(bytes: Uint8Array): string {
+  try {
+    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const firstLine = content.split(/\r?\n/, 1)[0] ?? "";
+    if (/^#!.*\b(?:sh|bash|zsh|python|python3|node|deno|ruby|perl|php)\b/.test(firstLine)) {
+      redirectToSkillsWithError("unsupported_content_type");
+    }
+    return content;
+  } catch {
+    redirectToSkillsWithError("unsupported_content_type");
+  }
+}
+
 async function readSkillContent(formData: FormData): Promise<{
   content: string;
   contentType: "text/markdown" | "text/plain";
@@ -76,8 +116,12 @@ async function readSkillContent(formData: FormData): Promise<{
       redirectToSkillsWithError("skill_content_too_large");
     }
     const contentType = inferUploadedSkillContentType(uploadedFile);
+    const bytes = new Uint8Array(await uploadedFile.arrayBuffer());
+    if (isProbablyBinary(bytes)) {
+      redirectToSkillsWithError("unsupported_content_type");
+    }
     return {
-      content: await uploadedFile.text(),
+      content: decodeSkillText(bytes),
       contentType
     };
   }

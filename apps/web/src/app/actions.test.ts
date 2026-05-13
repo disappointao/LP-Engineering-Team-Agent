@@ -319,6 +319,40 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("rejects archive files renamed as markdown before calling the store", async () => {
+    const formData = buildSkillForm({
+      manifestJson: brandSkillManifestJson()
+    });
+    formData.set("contentFile", new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "skill.md", {
+      type: "text/markdown"
+    }));
+
+    await expectRedirect(
+      createSkillDraftAction(formData),
+      "/?view=skills&skillError=unsupported_content_type"
+    );
+
+    expect(mocks.createSkillDraft).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects executable skill uploads before calling the store", async () => {
+    const formData = buildSkillForm({
+      manifestJson: brandSkillManifestJson()
+    });
+    formData.set("contentFile", new File(["#!/bin/sh\necho no"], "skill.txt", {
+      type: "text/plain"
+    }));
+
+    await expectRedirect(
+      createSkillDraftAction(formData),
+      "/?view=skills&skillError=unsupported_content_type"
+    );
+
+    expect(mocks.createSkillDraft).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("rejects oversized uploaded skill files before calling the store", async () => {
     const formData = buildSkillForm({
       manifestJson: brandSkillManifestJson()

@@ -507,6 +507,38 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("Publish");
   });
 
+  it("does not render bind for a published skill version already bound to the project", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [projectSkillState("published")],
+        availableVersions: [
+          {
+            ...projectSkillState("published").version,
+            id: "skill_version_1"
+          }
+        ]
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("Disable");
+    expect(text).not.toContain("Bind");
+  });
+
   it("keeps sidebar project creation available when projects exist", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {
