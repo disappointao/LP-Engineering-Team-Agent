@@ -2,10 +2,13 @@ import React from "react";
 import { headers } from "next/headers";
 import {
   bindSkillVersionAction,
+  createMCPConnectorAction,
   createProjectAction,
   createModelProviderAction,
   createSkillDraftAction,
   publishSkillVersionAction,
+  setMCPConnectorEnabledAction,
+  setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
   submitPromptAction,
@@ -21,7 +24,9 @@ import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import {
   getWebWorkbenchStore,
+  type MCPFlowErrorCode,
   type ModelFlowErrorCode,
+  type ProjectMCPState,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode,
   type WebProjectModelState
@@ -33,6 +38,7 @@ interface HomePageProps {
     error?: string;
     skillError?: string;
     modelError?: string;
+    mcpError?: string;
     view?: string;
   }>;
 }
@@ -44,9 +50,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   );
   const params = await searchParams;
   const activeView =
-    params?.view === "skills" ? "skills" : params?.view === "models" ? "models" : "workbench";
+    params?.view === "skills"
+      ? "skills"
+      : params?.view === "mcp"
+        ? "mcp"
+        : params?.view === "models"
+          ? "models"
+          : "workbench";
   const errorCode = toProjectFlowError(params?.error);
   const skillError = toSkillFlowError(params?.skillError);
+  const mcpError = toMCPFlowError(params?.mcpError);
   const modelError = toModelFlowError(params?.modelError);
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
@@ -55,6 +68,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     taskId: currentTaskId
   });
   const modelState = getPageModelState(pageState);
+  const mcpState = getPageMCPState(pageState);
   const activeTask = pageState.kind === "task_ready" ? pageState.task : undefined;
   const activeProject =
     pageState.kind === "task_ready" && pageState.snapshot
@@ -63,6 +77,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         pageState.projects.find((project) => project.id === activeTask?.projectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
+  const mcpErrorMessage = mcpError ? copy.mcpView.errors[mcpError] : undefined;
   const modelErrorMessage = modelError
     ? copy.modelsView.errors[modelError]
     : modelState.resolutionError
@@ -145,7 +160,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <a className={activeView === "skills" ? "navItem navItemActive" : "navItem"} href="/?view=skills">
             {copy.nav.skills}
           </a>
-          <div className="navItem">{copy.nav.mcp}</div>
+          <a className={activeView === "mcp" ? "navItem navItemActive" : "navItem"} href="/?view=mcp">
+            {copy.nav.mcp}
+          </a>
           <a className={activeView === "models" ? "navItem navItemActive" : "navItem"} href="/?view=models">
             {copy.nav.models}
           </a>
@@ -212,9 +229,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         aria-label={
           activeView === "skills"
             ? copy.nav.skills
-            : activeView === "models"
-              ? copy.nav.models
-              : copy.nav.workbench
+            : activeView === "mcp"
+              ? copy.nav.mcp
+              : activeView === "models"
+                ? copy.nav.models
+                : copy.nav.workbench
         }
       >
         <header className="topBar">
@@ -359,6 +378,143 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       ) : (
                         <p>{copy.skillsView.emptyBound}</p>
                       )}
+                    </section>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+
+            {activeView === "mcp" ? (
+              <section className="mcpView" aria-labelledby="mcp-title">
+                <header className="mcpHeader">
+                  <div>
+                    <h1 id="mcp-title">{copy.mcpView.title}</h1>
+                    <p>{copy.mcpView.subtitle}</p>
+                  </div>
+                </header>
+
+                {mcpErrorMessage ? (
+                  <div className="formError" role="alert">{mcpErrorMessage}</div>
+                ) : null}
+
+                <div className="mcpProjectContext">
+                  <span>{copy.mcpView.activeProjectLabel}</span>
+                  <strong>{activeProject?.name ?? copy.mcpView.noProject}</strong>
+                </div>
+
+                {activeProject ? (
+                  <>
+                    <form action={createMCPConnectorAction} className="mcpEditor">
+                      <h2>{copy.mcpView.createTitle}</h2>
+                      <input name="projectId" type="hidden" value={activeProject.id} />
+                      <label htmlFor="definitionJson">{copy.mcpView.definitionLabel}</label>
+                      <textarea
+                        id="definitionJson"
+                        name="definitionJson"
+                        placeholder={copy.mcpView.definitionPlaceholder}
+                      />
+                      <button type="submit">{copy.mcpView.createConnector}</button>
+                    </form>
+
+                    <section className="mcpList" aria-labelledby="mcp-connectors-title">
+                      <h2 id="mcp-connectors-title">{copy.mcpView.connectorsTitle}</h2>
+                      {mcpState.connectors.length > 0 ? (
+                        mcpState.connectors.map((connector) => (
+                          <div className="mcpConnectorRow" key={connector.id}>
+                            <div>
+                              <strong>{connector.name}</strong>
+                              <span>
+                                {connector.enabled
+                                  ? copy.mcpView.enabled
+                                  : copy.mcpView.disabled}
+                              </span>
+                            </div>
+                            <form action={setMCPConnectorEnabledAction}>
+                              <input name="projectId" type="hidden" value={activeProject.id} />
+                              <input name="connectorId" type="hidden" value={connector.id} />
+                              <input
+                                name="enabled"
+                                type="hidden"
+                                value={connector.enabled ? "false" : "true"}
+                              />
+                              <button type="submit">
+                                {connector.enabled
+                                  ? copy.mcpView.disable
+                                  : copy.mcpView.enable}
+                              </button>
+                            </form>
+                            <div className="mcpToolGrid" aria-label={copy.mcpView.toolsTitle}>
+                              {connector.tools.map((tool) => {
+                                const approval = mcpState.approvals.find(
+                                  (record) =>
+                                    record.connectorId === connector.id &&
+                                    record.toolName === tool.name &&
+                                    record.state === "approved"
+                                );
+                                return (
+                                  <div className="mcpToolCard" key={tool.name}>
+                                    <strong>{tool.name}</strong>
+                                    <span>{`${copy.mcpView.permissionLabel}: ${tool.permission}`}</span>
+                                    <small>
+                                      {`${copy.mcpView.rolesLabel}: ${tool.roles
+                                        .map((role) => copy.mcpView.roleLabels[role])
+                                        .join(", ")}`}
+                                    </small>
+                                    <small>
+                                      {tool.requiresApproval
+                                        ? copy.mcpView.approvalRequired
+                                        : copy.mcpView.approvalNotRequired}
+                                    </small>
+                                    {tool.requiresApproval ? (
+                                      <form action={setMCPToolApprovalAction}>
+                                        <input
+                                          name="projectId"
+                                          type="hidden"
+                                          value={activeProject.id}
+                                        />
+                                        <input
+                                          name="connectorId"
+                                          type="hidden"
+                                          value={connector.id}
+                                        />
+                                        <input name="toolName" type="hidden" value={tool.name} />
+                                        <input
+                                          name="approved"
+                                          type="hidden"
+                                          value={approval ? "false" : "true"}
+                                        />
+                                        <button type="submit">
+                                          {approval ? copy.mcpView.revoke : copy.mcpView.approve}
+                                        </button>
+                                      </form>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>{copy.mcpView.emptyConnectors}</p>
+                      )}
+                    </section>
+
+                    <section className="mcpList" aria-labelledby="mcp-visible-tools-title">
+                      <h2 id="mcp-visible-tools-title">{copy.mcpView.visibleToolsTitle}</h2>
+                      {roleOrder.map((role) => (
+                        <div className="mcpVisibleRole" key={role}>
+                          <strong>{copy.mcpView.roleLabels[role]}</strong>
+                          {(mcpState.visibleToolsByRole[role] ?? []).length > 0 ? (
+                            <span>
+                              {mcpState.visibleToolsByRole[role]
+                                .map((tool) => `${tool.connectorId}.${tool.name}`)
+                                .join(", ")}
+                            </span>
+                          ) : (
+                            <span>{copy.mcpView.emptyVisibleTools}</span>
+                          )}
+                        </div>
+                      ))}
                     </section>
                   </>
                 ) : null}
@@ -684,6 +840,19 @@ function getPageModelState(pageState: { models?: WebProjectModelState }): WebPro
   };
 }
 
+function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState {
+  return pageState.mcp ?? {
+    connectors: [],
+    approvals: [],
+    visibleToolsByRole: {
+      planner: [],
+      builder: [],
+      reviewer: [],
+      deployer: []
+    }
+  };
+}
+
 function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undefined {
   if (
     value === "invalid_manifest_json" ||
@@ -701,6 +870,23 @@ function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undef
     value === "skill_binding_not_found" ||
     value === "publish_not_allowed" ||
     value === "skill_operation_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toMCPFlowError(value: string | undefined): MCPFlowErrorCode | undefined {
+  if (
+    value === "project_not_found" ||
+    value === "mcp_connector_json_invalid" ||
+    value === "mcp_connector_validation_failed" ||
+    value === "mcp_connector_scope_unsupported" ||
+    value === "mcp_connector_already_exists" ||
+    value === "mcp_connector_not_found" ||
+    value === "mcp_tool_not_found" ||
+    value === "mcp_tool_approval_not_required" ||
+    value === "mcp_operation_failed"
   ) {
     return value;
   }

@@ -435,6 +435,7 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mcpView,
 .skillsView,
 .modelsView {
   min-width: 0;
@@ -442,6 +443,7 @@ button {
   gap: 18px;
 }
 
+.mcpHeader,
 .skillsHeader,
 .modelsHeader {
   min-width: 0;
@@ -453,6 +455,7 @@ button {
   padding-bottom: 18px;
 }
 
+.mcpHeader h1,
 .skillsHeader h1,
 .modelsHeader h1 {
   margin: 0;
@@ -462,6 +465,7 @@ button {
   letter-spacing: 0;
 }
 
+.mcpHeader p,
 .skillsHeader p,
 .modelsHeader p {
   max-width: 620px;
@@ -494,6 +498,7 @@ button {
   padding: 0 8px;
 }
 
+.mcpProjectContext,
 .skillsProjectContext,
 .modelsProjectContext {
   min-width: 0;
@@ -505,8 +510,10 @@ button {
   padding: 12px;
 }
 
+.mcpProjectContext span,
 .skillsProjectContext span,
 .modelsProjectContext span,
+.mcpEditor label,
 .skillEditor label,
 .modelEditor label {
   color: var(--muted);
@@ -514,12 +521,15 @@ button {
   font-weight: 820;
 }
 
+.mcpProjectContext strong,
 .skillsProjectContext strong,
 .modelsProjectContext strong {
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
 
+.mcpEditor,
+.mcpList,
 .skillEditor,
 .skillsList,
 .modelEditor,
@@ -533,6 +543,8 @@ button {
   padding: 16px;
 }
 
+.mcpEditor h2,
+.mcpList h2,
 .skillEditor h2,
 .skillsList h2,
 .modelEditor h2,
@@ -543,6 +555,7 @@ button {
   letter-spacing: 0;
 }
 
+.mcpEditor textarea,
 .skillEditor textarea,
 .skillEditor select,
 .skillEditor input[type="file"],
@@ -566,6 +579,7 @@ button {
   padding: 0 10px;
 }
 
+.mcpEditor textarea,
 .skillEditor textarea {
   min-height: 132px;
   resize: vertical;
@@ -586,6 +600,11 @@ button {
   font-size: 0.84rem;
 }
 
+.mcpEditor textarea {
+  min-height: 220px;
+}
+
+.mcpEditor textarea:focus,
 .skillEditor textarea:focus,
 .skillEditor select:focus,
 .skillEditor input[type="file"]:focus,
@@ -597,6 +616,9 @@ button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.mcpEditor button,
+.mcpConnectorRow button,
+.mcpToolCard button,
 .skillEditor button,
 .skillActions button,
 .modelEditor button,
@@ -612,6 +634,7 @@ button {
   font-weight: 800;
 }
 
+.mcpEditor button,
 .skillEditor button,
 .modelEditor button {
   justify-self: start;
@@ -625,6 +648,7 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mcpList > p,
 .skillsList > p,
 .modelsList > p {
   margin: 0;
@@ -633,6 +657,8 @@ button {
   line-height: 1.5;
 }
 
+.mcpConnectorRow,
+.mcpVisibleRole,
 .skillRow,
 .modelRow,
 .modelRouteForm {
@@ -651,6 +677,9 @@ button {
   grid-template-columns: minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1fr) auto;
 }
 
+.mcpConnectorRow strong,
+.mcpVisibleRole strong,
+.mcpToolCard strong,
 .skillRow strong,
 .modelRow strong,
 .modelRouteForm strong {
@@ -660,6 +689,10 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mcpConnectorRow span,
+.mcpVisibleRole span,
+.mcpToolCard span,
+.mcpToolCard small,
 .skillRow span,
 .modelRow span {
   display: block;
@@ -668,6 +701,27 @@ button {
   font-size: 0.78rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.mcpToolGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.mcpToolCard {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.mcpToolCard form {
+  margin-top: 2px;
 }
 
 .modelRow form {
@@ -1203,8 +1257,11 @@ button {
   .processHeader,
   .deliveryHeader,
   .toolEventTop,
+  .mcpHeader,
   .skillsHeader,
   .modelsHeader,
+  .mcpConnectorRow,
+  .mcpVisibleRole,
   .skillRow,
   .modelRow,
   .modelRouteForm {
@@ -1213,6 +1270,8 @@ button {
   }
 
   .skillRow,
+  .mcpConnectorRow,
+  .mcpVisibleRole,
   .modelRow,
   .modelRouteForm {
     display: flex;

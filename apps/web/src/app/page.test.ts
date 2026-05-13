@@ -21,6 +21,16 @@ const pageMocks = vi.hoisted(() => ({
         reviewer: { provider: "mock-openai", model: "review-model" },
         deployer: { provider: "mock-local", model: "tool-model" }
       }
+    },
+    mcp: {
+      connectors: [],
+      approvals: [],
+      visibleToolsByRole: {
+        planner: [],
+        builder: [],
+        reviewer: [],
+        deployer: []
+      }
     }
   } as unknown
 }));
@@ -49,6 +59,18 @@ vi.mock("../lib/workbench-store", () => ({
 }));
 
 import HomePage from "./page";
+
+async function renderHomePage({
+  searchParams,
+  acceptLanguage
+}: {
+  searchParams: Promise<{ [key: string]: string | undefined }>;
+  acceptLanguage: string;
+}): Promise<string> {
+  pageMocks.acceptLanguage = acceptLanguage;
+  const page = await HomePage({ searchParams });
+  return collectText(page).join(" ");
+}
 
 function collectText(node: unknown): string[] {
   if (node === null || node === undefined || typeof node === "boolean") {
@@ -131,6 +153,45 @@ function projectSkillState(reviewState: "draft" | "validated" | "published", ena
   };
 }
 
+function setActiveEmptyProjectState() {
+  pageMocks.currentProjectId = "project_1";
+  pageMocks.pageState = {
+    kind: "empty",
+    projects: [
+      {
+        id: "project_1",
+        name: "Spring Campaign",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      }
+    ],
+    tasks: [],
+    skills: {
+      boundSkills: [],
+      availableVersions: []
+    },
+    models: {
+      providers: [],
+      routes: [],
+      resolvedPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: { provider: "mock-anthropic", model: "code-model" },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
+    },
+    mcp: {
+      connectors: [],
+      approvals: [],
+      visibleToolsByRole: {
+        planner: [],
+        builder: [],
+        reviewer: [],
+        deployer: []
+      }
+    }
+  };
+}
+
 beforeEach(() => {
   pageMocks.acceptLanguage = "en";
   pageMocks.currentProjectId = undefined;
@@ -151,6 +212,16 @@ beforeEach(() => {
         builder: { provider: "mock-anthropic", model: "code-model" },
         reviewer: { provider: "mock-openai", model: "review-model" },
         deployer: { provider: "mock-local", model: "tool-model" }
+      }
+    },
+    mcp: {
+      connectors: [],
+      approvals: [],
+      visibleToolsByRole: {
+        planner: [],
+        builder: [],
+        reviewer: [],
+        deployer: []
       }
     }
   };
@@ -267,6 +338,69 @@ describe("HomePage project flow errors", () => {
     expect(inputs.some((input) => input.props?.name === "providerId")).toBe(true);
     expect(selects.some((select) => select.props?.name === "provider")).toBe(true);
     expect(text).toContain("mock-anthropic/code-model");
+  });
+
+  it("renders the MCP view with localized project context", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Project MCP");
+    expect(html).toContain("Connector JSON");
+    expect(html).toContain("Visible tools");
+  });
+
+  it("renders the MCP view in Chinese", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "zh-CN"
+    });
+
+    expect(html).toContain("项目 MCP");
+    expect(html).toContain("连接器 JSON");
+    expect(html).toContain("可见工具");
+  });
+
+  it("marks the MCP nav link active from the mcp route", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "mcp" })
+    });
+    const links = collectElements(page, "a");
+
+    expect(
+      links.some(
+        (link) =>
+          link.props?.href === "/?view=mcp" &&
+          link.props?.className === "navItem navItemActive" &&
+          collectText(link.props?.children).join("") === "MCP"
+      )
+    ).toBe(true);
+  });
+
+  it("renders localized MCP flow errors", async () => {
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp", mcpError: "mcp_connector_json_invalid" }),
+      acceptLanguage: "zh-CN"
+    });
+
+    expect(html).toContain("请输入有效的连接器 JSON。");
+  });
+
+  it("keeps the workbench page from rendering MCP forms", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({})
+    });
+    const text = collectText(page);
+    const textareas = collectElements(page, "textarea");
+
+    expect(text).toContain("What can I help you build?");
+    expect(text).not.toContain("Project MCP");
+    expect(textareas.some((textarea) => textarea.props?.name === "definitionJson")).toBe(false);
   });
 
   it("does not render model configuration forms without an active project", async () => {

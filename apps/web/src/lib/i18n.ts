@@ -1,4 +1,5 @@
 import type {
+  MCPFlowErrorCode,
   ModelFlowErrorCode,
   ProjectFlowErrorCode,
   SkillFlowErrorCode
@@ -93,6 +94,33 @@ export interface WorkbenchCopy {
     emptyBound: string;
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
+  };
+  mcpView: {
+    title: string;
+    subtitle: string;
+    activeProjectLabel: string;
+    noProject: string;
+    createTitle: string;
+    definitionLabel: string;
+    definitionPlaceholder: string;
+    createConnector: string;
+    connectorsTitle: string;
+    toolsTitle: string;
+    visibleToolsTitle: string;
+    enabled: string;
+    disabled: string;
+    enable: string;
+    disable: string;
+    approve: string;
+    revoke: string;
+    approvalRequired: string;
+    approvalNotRequired: string;
+    permissionLabel: string;
+    rolesLabel: string;
+    emptyConnectors: string;
+    emptyVisibleTools: string;
+    roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
+    errors: Record<MCPFlowErrorCode, string>;
   };
   modelsView: {
     title: string;
@@ -356,6 +384,65 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_binding_not_found: "The selected skill binding is no longer available.",
         publish_not_allowed: "This skill version cannot be published yet.",
         skill_operation_failed: "The skill operation failed. Try again."
+      }
+    },
+    mcpView: {
+      title: "Project MCP",
+      subtitle: "Register project connectors and expose only approved, permission-scoped tools to the runtime.",
+      activeProjectLabel: "Active project",
+      noProject: "No active project",
+      createTitle: "Create connector",
+      definitionLabel: "Connector JSON",
+      definitionPlaceholder: JSON.stringify(
+        {
+          id: "connector_assets",
+          name: "Internal Assets",
+          description: "Read approved asset metadata.",
+          tools: [
+            {
+              name: "searchAssets",
+              description: "Search approved brand assets.",
+              permission: "assets:read",
+              roles: ["planner", "builder", "reviewer"],
+              requiresApproval: false
+            }
+          ]
+        },
+        null,
+        2
+      ),
+      createConnector: "Create connector",
+      connectorsTitle: "Connectors",
+      toolsTitle: "Tools",
+      visibleToolsTitle: "Visible tools",
+      enabled: "Enabled",
+      disabled: "Disabled",
+      enable: "Enable",
+      disable: "Disable",
+      approve: "Approve",
+      revoke: "Revoke",
+      approvalRequired: "Approval required",
+      approvalNotRequired: "No approval required",
+      permissionLabel: "Permission",
+      rolesLabel: "Roles",
+      emptyConnectors: "No project MCP connectors yet.",
+      emptyVisibleTools: "No visible tools for this role.",
+      roleLabels: {
+        planner: "Planner",
+        builder: "Builder",
+        reviewer: "Reviewer",
+        deployer: "Deployer"
+      },
+      errors: {
+        project_not_found: "The selected project is no longer available.",
+        mcp_connector_json_invalid: "Enter valid connector JSON.",
+        mcp_connector_validation_failed: "Connector JSON must include id, name, and valid tools.",
+        mcp_connector_scope_unsupported: "Only project-scoped connectors are supported in this version.",
+        mcp_connector_already_exists: "A connector with this id already exists.",
+        mcp_connector_not_found: "The connector was not found for this project.",
+        mcp_tool_not_found: "The selected MCP tool was not found.",
+        mcp_tool_approval_not_required: "This tool does not require approval.",
+        mcp_operation_failed: "The MCP operation failed."
       }
     },
     modelsView: {
@@ -622,6 +709,65 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_binding_not_found: "当前技能绑定已经不可用。",
         publish_not_allowed: "该技能版本暂不能发布。",
         skill_operation_failed: "技能操作失败，请重试。"
+      }
+    },
+    mcpView: {
+      title: "项目 MCP",
+      subtitle: "注册项目连接器，并仅向运行时暴露已批准且权限受限的工具。",
+      activeProjectLabel: "当前项目",
+      noProject: "暂无当前项目",
+      createTitle: "创建连接器",
+      definitionLabel: "连接器 JSON",
+      definitionPlaceholder: JSON.stringify(
+        {
+          id: "connector_assets",
+          name: "内部素材",
+          description: "读取已批准的素材元数据。",
+          tools: [
+            {
+              name: "searchAssets",
+              description: "搜索已批准的品牌素材。",
+              permission: "assets:read",
+              roles: ["planner", "builder", "reviewer"],
+              requiresApproval: false
+            }
+          ]
+        },
+        null,
+        2
+      ),
+      createConnector: "创建连接器",
+      connectorsTitle: "连接器",
+      toolsTitle: "工具",
+      visibleToolsTitle: "可见工具",
+      enabled: "已启用",
+      disabled: "已停用",
+      enable: "启用",
+      disable: "停用",
+      approve: "批准",
+      revoke: "撤销",
+      approvalRequired: "需要批准",
+      approvalNotRequired: "无需批准",
+      permissionLabel: "权限",
+      rolesLabel: "角色",
+      emptyConnectors: "暂无项目 MCP 连接器。",
+      emptyVisibleTools: "该角色暂无可见工具。",
+      roleLabels: {
+        planner: "规划员",
+        builder: "构建员",
+        reviewer: "审核员",
+        deployer: "部署员"
+      },
+      errors: {
+        project_not_found: "当前项目已经不可用。",
+        mcp_connector_json_invalid: "请输入有效的连接器 JSON。",
+        mcp_connector_validation_failed: "连接器 JSON 必须包含 id、name 和有效工具。",
+        mcp_connector_scope_unsupported: "当前版本仅支持项目范围连接器。",
+        mcp_connector_already_exists: "该 id 的连接器已经存在。",
+        mcp_connector_not_found: "当前项目中未找到该连接器。",
+        mcp_tool_not_found: "未找到所选 MCP 工具。",
+        mcp_tool_approval_not_required: "该工具不需要批准。",
+        mcp_operation_failed: "MCP 操作失败。"
       }
     },
     modelsView: {
