@@ -97,4 +97,99 @@ describe("in-memory workbench repositories", () => {
     await expect(repositories.pageVersions.getById("missing")).resolves.toBeUndefined();
     await expect(repositories.deployments.getByPageVersionId("missing")).resolves.toBeUndefined();
   });
+
+  it("lists projects in creation order and returns defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Spring sale",
+      createdAt
+    });
+    await repositories.projects.save({
+      id: "project_2",
+      name: "Summer sale",
+      createdAt: "2026-05-12T00:01:00.000Z"
+    });
+
+    const projects = await repositories.projects.listAll();
+    projects[0].name = "Mutated locally";
+
+    await expect(repositories.projects.listAll()).resolves.toEqual([
+      {
+        id: "project_1",
+        name: "Spring sale",
+        createdAt
+      },
+      {
+        id: "project_2",
+        name: "Summer sale",
+        createdAt: "2026-05-12T00:01:00.000Z"
+      }
+    ]);
+  });
+
+  it("persists tasks, messages, and task snapshot references", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Create a landing page",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Create a landing page",
+      createdAt
+    });
+    await repositories.messages.save({
+      id: "message_2",
+      taskId: "task_1",
+      role: "assistant",
+      content: "LP artifacts are ready for review.",
+      createdAt: "2026-05-12T00:01:00.000Z"
+    });
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt
+    });
+
+    await expect(repositories.tasks.getById("task_1")).resolves.toMatchObject({
+      id: "task_1",
+      type: "lp_generation",
+      projectId: "project_1"
+    });
+    await expect(repositories.tasks.listAll()).resolves.toEqual([
+      expect.objectContaining({
+        id: "task_1",
+        title: "Create a landing page"
+      })
+    ]);
+    await expect(repositories.messages.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "message_1",
+        role: "user"
+      }),
+      expect.objectContaining({
+        id: "message_2",
+        role: "assistant"
+      })
+    ]);
+    await expect(repositories.messages.listAll()).resolves.toHaveLength(2);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toEqual({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt
+    });
+  });
 });
