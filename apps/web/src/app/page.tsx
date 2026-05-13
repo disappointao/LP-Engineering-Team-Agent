@@ -175,7 +175,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </aside>
 
-      <section className="chatWorkspace" aria-label={copy.nav.workbench}>
+      <section
+        className="chatWorkspace"
+        aria-label={activeView === "skills" ? copy.nav.skills : copy.nav.workbench}
+      >
         <header className="topBar">
           <div className="topBarTitle">
             <strong>{copy.chat.topbarModel}</strong>
@@ -211,94 +214,99 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <strong>{activeProject?.name ?? copy.skillsView.noProject}</strong>
                 </div>
 
-                <form action={createSkillDraftAction} className="skillEditor">
-                  <h2>{copy.skillsView.createTitle}</h2>
-                  <label htmlFor="manifestJson">{copy.skillsView.manifestLabel}</label>
-                  <textarea
-                    id="manifestJson"
-                    name="manifestJson"
-                    placeholder={copy.skillsView.manifestPlaceholder}
-                  />
-                  <label htmlFor="content">{copy.skillsView.contentLabel}</label>
-                  <textarea
-                    id="content"
-                    name="content"
-                    placeholder={copy.skillsView.contentPlaceholder}
-                  />
-                  <label htmlFor="contentType">{copy.skillsView.contentTypeLabel}</label>
-                  <select id="contentType" name="contentType" defaultValue="text/markdown">
-                    <option value="text/markdown">{copy.skillsView.markdown}</option>
-                    <option value="text/plain">{copy.skillsView.plainText}</option>
-                  </select>
-                  <button type="submit">{copy.skillsView.createDraft}</button>
-                </form>
+                {activeProject ? (
+                  <>
+                    <form action={createSkillDraftAction} className="skillEditor">
+                      <h2>{copy.skillsView.createTitle}</h2>
+                      <label htmlFor="manifestJson">{copy.skillsView.manifestLabel}</label>
+                      <textarea
+                        id="manifestJson"
+                        name="manifestJson"
+                        placeholder={copy.skillsView.manifestPlaceholder}
+                      />
+                      <label htmlFor="content">{copy.skillsView.contentLabel}</label>
+                      <textarea
+                        id="content"
+                        name="content"
+                        placeholder={copy.skillsView.contentPlaceholder}
+                      />
+                      <label htmlFor="contentType">{copy.skillsView.contentTypeLabel}</label>
+                      <select id="contentType" name="contentType" defaultValue="text/markdown">
+                        <option value="text/markdown">{copy.skillsView.markdown}</option>
+                        <option value="text/plain">{copy.skillsView.plainText}</option>
+                      </select>
+                      <button type="submit">{copy.skillsView.createDraft}</button>
+                    </form>
 
-                <section className="skillsList" aria-labelledby="skill-versions-title">
-                  <h2 id="skill-versions-title">{copy.skillsView.versionsTitle}</h2>
-                  {pageState.skills.availableVersions.length > 0 ? (
-                    pageState.skills.availableVersions.map((version) => (
-                      <div className="skillRow" key={version.id}>
-                        <div>
-                          <strong>{version.manifest.name}</strong>
-                          <span>
-                            {version.version} · {copy.skillsView.statusLabels[version.reviewState]}
-                          </span>
-                        </div>
-                        <div className="skillActions">
-                          <form action={validateSkillVersionAction}>
-                            <input name="skillVersionId" type="hidden" value={version.id} />
-                            <button type="submit">{copy.skillsView.validate}</button>
-                          </form>
-                          <form action={publishSkillVersionAction}>
-                            <input name="skillVersionId" type="hidden" value={version.id} />
-                            <button type="submit">{copy.skillsView.publish}</button>
-                          </form>
-                          <form action={bindSkillVersionAction}>
-                            <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
-                            <input name="skillVersionId" type="hidden" value={version.id} />
-                            <button type="submit">{copy.skillsView.bind}</button>
-                          </form>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p>{copy.skillsView.emptyVersions}</p>
-                  )}
-                </section>
+                    <section className="skillsList" aria-labelledby="skill-versions-title">
+                      <h2 id="skill-versions-title">{copy.skillsView.versionsTitle}</h2>
+                      {pageState.skills.availableVersions.length > 0 ? (
+                        pageState.skills.availableVersions.map((version) => (
+                          <div className="skillRow" key={version.id}>
+                            <div>
+                              <strong>{version.manifest.name}</strong>
+                              <span>
+                                {version.version} ·{" "}
+                                {copy.skillsView.statusLabels[version.reviewState]}
+                              </span>
+                            </div>
+                            <div className="skillActions">
+                              <form action={validateSkillVersionAction}>
+                                <input name="skillVersionId" type="hidden" value={version.id} />
+                                <button type="submit">{copy.skillsView.validate}</button>
+                              </form>
+                              <form action={publishSkillVersionAction}>
+                                <input name="skillVersionId" type="hidden" value={version.id} />
+                                <button type="submit">{copy.skillsView.publish}</button>
+                              </form>
+                              <form action={bindSkillVersionAction}>
+                                <input name="projectId" type="hidden" value={activeProject.id} />
+                                <input name="skillVersionId" type="hidden" value={version.id} />
+                                <button type="submit">{copy.skillsView.bind}</button>
+                              </form>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>{copy.skillsView.emptyVersions}</p>
+                      )}
+                    </section>
 
-                <section className="skillsList" aria-labelledby="bound-skills-title">
-                  <h2 id="bound-skills-title">{copy.skillsView.boundTitle}</h2>
-                  {pageState.skills.boundSkills.length > 0 ? (
-                    pageState.skills.boundSkills.map((boundSkill) => (
-                      <div className="skillRow" key={boundSkill.binding.id}>
-                        <div>
-                          <strong>{boundSkill.skill.name}</strong>
-                          <span>
-                            {boundSkill.version.version} ·{" "}
-                            {copy.skillsView.statusLabels[boundSkill.version.reviewState]}
-                          </span>
-                        </div>
-                        <div className="skillActions">
-                          <form action={setSkillBindingEnabledAction}>
-                            <input name="bindingId" type="hidden" value={boundSkill.binding.id} />
-                            <input
-                              name="enabled"
-                              type="hidden"
-                              value={boundSkill.binding.enabled ? "false" : "true"}
-                            />
-                            <button type="submit">
-                              {boundSkill.binding.enabled
-                                ? copy.skillsView.disable
-                                : copy.skillsView.enable}
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p>{copy.skillsView.emptyBound}</p>
-                  )}
-                </section>
+                    <section className="skillsList" aria-labelledby="bound-skills-title">
+                      <h2 id="bound-skills-title">{copy.skillsView.boundTitle}</h2>
+                      {pageState.skills.boundSkills.length > 0 ? (
+                        pageState.skills.boundSkills.map((boundSkill) => (
+                          <div className="skillRow" key={boundSkill.binding.id}>
+                            <div>
+                              <strong>{boundSkill.skill.name}</strong>
+                              <span>
+                                {boundSkill.version.version} ·{" "}
+                                {copy.skillsView.statusLabels[boundSkill.version.reviewState]}
+                              </span>
+                            </div>
+                            <div className="skillActions">
+                              <form action={setSkillBindingEnabledAction}>
+                                <input name="bindingId" type="hidden" value={boundSkill.binding.id} />
+                                <input
+                                  name="enabled"
+                                  type="hidden"
+                                  value={boundSkill.binding.enabled ? "false" : "true"}
+                                />
+                                <button type="submit">
+                                  {boundSkill.binding.enabled
+                                    ? copy.skillsView.disable
+                                    : copy.skillsView.enable}
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>{copy.skillsView.emptyBound}</p>
+                      )}
+                    </section>
+                  </>
+                ) : null}
               </section>
             ) : null}
 
@@ -401,30 +409,32 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
 
-        <form action={submitPromptAction} className="composerDock">
-          <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
-          <input name="implicitProjectName" type="hidden" value={copy.entry.implicitProjectName} />
-          <div className="composer">
-            <button
-              type="button"
-              aria-label={composer.addAttachmentLabel}
-            >
-              +
-            </button>
-            <input
-              aria-label={copy.projectFlow.promptLabel}
-              name="prompt"
-              placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
-            />
-            <span>{composer.runtimeChip}</span>
-            <button type="button" className="interruptButton">
-              {composer.interruptLabel}
-            </button>
-            <button type="submit" className="sendButton">
-              {composer.sendLabel}
-            </button>
-          </div>
-        </form>
+        {activeView === "workbench" ? (
+          <form action={submitPromptAction} className="composerDock">
+            <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
+            <input name="implicitProjectName" type="hidden" value={copy.entry.implicitProjectName} />
+            <div className="composer">
+              <button
+                type="button"
+                aria-label={composer.addAttachmentLabel}
+              >
+                +
+              </button>
+              <input
+                aria-label={copy.projectFlow.promptLabel}
+                name="prompt"
+                placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
+              />
+              <span>{composer.runtimeChip}</span>
+              <button type="button" className="interruptButton">
+                {composer.interruptLabel}
+              </button>
+              <button type="submit" className="sendButton">
+                {composer.sendLabel}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </section>
     </main>
   );

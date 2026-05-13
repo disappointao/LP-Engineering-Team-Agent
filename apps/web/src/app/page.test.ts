@@ -132,17 +132,50 @@ describe("HomePage project flow errors", () => {
   });
 
   it("renders the skills management view from the skills route", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      }
+    };
+
     const page = await HomePage({
       searchParams: Promise.resolve({ view: "skills" })
     });
     const text = collectText(page);
     const textareas = collectElements(page, "textarea");
+    const sections = collectElements(page, "section");
 
     expect(text).toContain("Project skills");
     expect(text).toContain("Manifest JSON");
     expect(text).toContain("Skill content");
     expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
     expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
+    expect(sections.some((section) => section.props?.className === "chatWorkspace" && section.props?.["aria-label"] === "Skills")).toBe(true);
+  });
+
+  it("does not render skill creation controls or the workbench composer without an active project", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+    const textareas = collectElements(page, "textarea");
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("No active project");
+    expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(false);
+    expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(false);
+    expect(inputs.some((input) => input.props?.name === "prompt")).toBe(false);
   });
 
   it("shows active bound project skills in the skills view", async () => {
