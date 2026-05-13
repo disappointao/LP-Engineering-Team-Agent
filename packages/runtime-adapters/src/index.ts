@@ -6,6 +6,7 @@ import {
   type AgentRole,
   type ModelGateway,
   type ModelRequestContext,
+  type ModelRoutingPolicy,
   type ModelResponse
 } from "@lp-agent/model-gateway";
 
@@ -51,6 +52,7 @@ export interface RuntimeRunContext {
   mcpTools: RuntimeMCPToolContext[];
   approval: RuntimeApprovalContext;
   artifactWorkspace: RuntimeArtifactWorkspace;
+  modelRoutingPolicy?: ModelRoutingPolicy;
 }
 
 export interface RuntimeRunRequest {
@@ -152,7 +154,8 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         role: request.role,
         projectId: request.projectId,
         prompt: toModelPrompt(request),
-        context: toModelRequestContext(context)
+        context: toModelRequestContext(context),
+        ...(context.modelRoutingPolicy ? { routingPolicy: context.modelRoutingPolicy } : {})
       });
       events.push(toModelCompletedEvent(request, modelResponse));
 
@@ -316,6 +319,18 @@ function cloneRuntimeContext(context: RuntimeRunContext): RuntimeRunContext {
     artifactWorkspace: {
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
-    }
+    },
+    ...(context.modelRoutingPolicy
+      ? { modelRoutingPolicy: cloneModelRoutingPolicy(context.modelRoutingPolicy) }
+      : {})
+  };
+}
+
+function cloneModelRoutingPolicy(policy: ModelRoutingPolicy): ModelRoutingPolicy {
+  return {
+    planner: { ...policy.planner },
+    builder: { ...policy.builder },
+    reviewer: { ...policy.reviewer },
+    deployer: { ...policy.deployer }
   };
 }

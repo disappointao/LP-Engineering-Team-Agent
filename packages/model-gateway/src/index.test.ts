@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryModelGateway,
+  agentRoles,
   createDefaultModelPolicy,
   type AgentRole,
   type ModelGateway,
@@ -9,6 +10,11 @@ import {
 } from "./index";
 
 describe("model gateway", () => {
+  it("exports a frozen agent role list", () => {
+    expect(agentRoles).toEqual(["planner", "builder", "reviewer", "deployer"]);
+    expect(Object.isFrozen(agentRoles)).toBe(true);
+  });
+
   it("routes agent roles through configured providers", async () => {
     const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
     const cases: Array<{ role: AgentRole; provider: string; model: string }> = [
@@ -180,6 +186,52 @@ describe("model gateway", () => {
 
     expect(result.provider).toBe("mock-openai");
     expect(result.model).toBe("planning-model");
+  });
+
+  it("uses request-scoped routing policy when provided", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+
+    const result = await gateway.complete({
+      role: "builder",
+      prompt: "Generate HTML",
+      projectId: "project_1",
+      routingPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: { provider: "project-openai", model: "gpt-5.4" },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
+    });
+
+    expect(result).toMatchObject({
+      provider: "project-openai",
+      model: "gpt-5.4"
+    });
+    expect(gateway.getAuditLog()[0]).toMatchObject({
+      provider: "project-openai",
+      model: "gpt-5.4"
+    });
+  });
+
+  it("copies request-scoped routing policy before storing audit context", async () => {
+    const policy = createDefaultModelPolicy();
+    policy.builder.provider = "project-openai";
+    policy.builder.model = "gpt-5.4";
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+
+    await gateway.complete({
+      role: "builder",
+      prompt: "Generate HTML",
+      projectId: "project_1",
+      routingPolicy: policy
+    });
+    policy.builder.provider = "mutated-provider";
+    policy.builder.model = "mutated-model";
+
+    expect(gateway.getAuditLog()[0]).toMatchObject({
+      provider: "project-openai",
+      model: "gpt-5.4"
+    });
   });
 
   it("fails closed with a clear error when a route is missing", async () => {

@@ -51,6 +51,7 @@ export interface ModelRequest {
   prompt: string;
   projectId: string;
   context?: ModelRequestContext;
+  routingPolicy?: ModelRoutingPolicy;
 }
 
 export interface ModelResponse {
@@ -74,7 +75,12 @@ export interface ModelGateway {
   complete(request: ModelRequest): Promise<ModelResponse>;
 }
 
-const agentRoles: AgentRole[] = ["planner", "builder", "reviewer", "deployer"];
+export const agentRoles = Object.freeze([
+  "planner",
+  "builder",
+  "reviewer",
+  "deployer"
+] as const) satisfies readonly AgentRole[];
 
 export const createDefaultModelPolicy = (): ModelRoutingPolicy => ({
   planner: { provider: "mock-openai", model: "planning-model" },
@@ -99,7 +105,8 @@ export class InMemoryModelGateway implements ModelGateway {
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
-    const route = this.policy[request.role];
+    const policy = request.routingPolicy ? clonePolicy(request.routingPolicy) : this.policy;
+    const route = policy[request.role];
     if (!route) {
       throw new ModelRouteNotConfiguredError(request.role);
     }

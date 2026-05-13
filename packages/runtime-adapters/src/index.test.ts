@@ -251,6 +251,44 @@ describe("local agent runtime adapter", () => {
     });
   });
 
+  it("passes runtime model routing policy into model calls", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await runtime.run({
+      runId: "run_builder_1",
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        brief: sampleBrief,
+        prompt: "Build"
+      },
+      context: {
+        skills: [],
+        mcpTools: [],
+        approval: { state: "not_required" },
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        },
+        modelRoutingPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "project-openai", model: "gpt-5.4" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    });
+
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "model.completed",
+        provider: "project-openai",
+        model: "gpt-5.4"
+      })
+    );
+  });
+
   it("creates a defensive default runtime context for deterministic local runs", () => {
     const context = createDefaultRuntimeContext();
     context.artifactWorkspace.writableFiles.push("mutated.html");
