@@ -17,7 +17,10 @@ const mocks = vi.hoisted(() => ({
   setProjectSkillBindingEnabled: vi.fn(),
   createModelProvider: vi.fn(),
   setModelProviderEnabled: vi.fn(),
-  upsertProjectModelRoute: vi.fn()
+  upsertProjectModelRoute: vi.fn(),
+  createMCPConnector: vi.fn(),
+  setMCPConnectorEnabled: vi.fn(),
+  setMCPToolApproval: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({
@@ -45,16 +48,22 @@ vi.mock("../lib/workbench-store", () => ({
     setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
     createModelProvider: mocks.createModelProvider,
     setModelProviderEnabled: mocks.setModelProviderEnabled,
-    upsertProjectModelRoute: mocks.upsertProjectModelRoute
+    upsertProjectModelRoute: mocks.upsertProjectModelRoute,
+    createMCPConnector: mocks.createMCPConnector,
+    setMCPConnectorEnabled: mocks.setMCPConnectorEnabled,
+    setMCPToolApproval: mocks.setMCPToolApproval
   }))
 }));
 
 import {
   bindSkillVersionAction,
+  createMCPConnectorAction,
   createModelProviderAction,
   createProjectAction,
   createSkillDraftAction,
   publishSkillVersionAction,
+  setMCPConnectorEnabledAction,
+  setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
   submitPromptAction,
@@ -155,6 +164,21 @@ describe("submitPromptAction", () => {
     mocks.upsertProjectModelRoute.mockResolvedValue({
       ok: true,
       value: { id: "model_route_1" }
+    });
+    mocks.createMCPConnector.mockReset();
+    mocks.createMCPConnector.mockResolvedValue({
+      ok: true,
+      value: { id: "connector_assets" }
+    });
+    mocks.setMCPConnectorEnabled.mockReset();
+    mocks.setMCPConnectorEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "connector_assets" }
+    });
+    mocks.setMCPToolApproval.mockReset();
+    mocks.setMCPToolApproval.mockResolvedValue({
+      ok: true,
+      value: { id: "mcp_approval_1" }
     });
   });
 
@@ -657,5 +681,95 @@ describe("submitPromptAction", () => {
       enabled
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects mcp connector creation errors to the mcp view", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.createMCPConnector.mockResolvedValue({
+      ok: false,
+      error: "project_not_found"
+    });
+    const formData = new FormData();
+    formData.set("projectId", "missing_project");
+    formData.set("definitionJson", "{");
+
+    await expectRedirect(
+      createMCPConnectorAction(formData),
+      "/?view=mcp&mcpError=project_not_found"
+    );
+
+    expect(mocks.createMCPConnector).toHaveBeenCalledWith({
+      projectId: "missing_project",
+      definitionJson: "{"
+    });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("creates an mcp connector and redirects to the mcp view", async () => {
+    mocks.currentProjectId = "project_1";
+    const formData = new FormData();
+    formData.set("definitionJson", JSON.stringify({
+      id: "connector_assets",
+      name: "Assets",
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    }));
+
+    await expectRedirect(createMCPConnectorAction(formData), "/?view=mcp");
+
+    expect(mocks.createMCPConnector).toHaveBeenCalledWith({
+      projectId: "project_1",
+      definitionJson: String(formData.get("definitionJson"))
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("sets an mcp connector enabled flag and redirects to the mcp view", async () => {
+    mocks.currentProjectId = "project_1";
+
+    await expectRedirect(
+      setMCPConnectorEnabledAction(
+        buildSkillForm({
+          connectorId: "connector_assets",
+          enabled: "false"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPConnectorEnabled).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      enabled: false
+    });
+  });
+
+  it("sets an mcp tool approval and redirects to the mcp view", async () => {
+    mocks.currentProjectId = "project_1";
+
+    await expectRedirect(
+      setMCPToolApprovalAction(
+        buildSkillForm({
+          connectorId: "connector_assets",
+          toolName: "searchAssets",
+          approved: "true"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPToolApproval).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      approved: true
+    });
   });
 });

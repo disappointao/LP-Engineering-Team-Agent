@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   getWebWorkbenchStore,
+  type MCPFlowErrorCode,
   type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode
@@ -24,6 +25,10 @@ function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
 
 function redirectToModelsWithError(error: ModelFlowErrorCode): never {
   redirect(`/?view=models&modelError=${encodeURIComponent(error)}`);
+}
+
+function redirectToMCPWithError(error: MCPFlowErrorCode): never {
+  redirect(`/?view=mcp&mcpError=${encodeURIComponent(error)}`);
 }
 
 function parseAgentRole(
@@ -319,4 +324,61 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
   await setCurrentProjectId(projectId);
   revalidatePath("/");
   redirect("/?view=models");
+}
+
+export async function createMCPConnectorAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
+    redirectToMCPWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().createMCPConnector({
+    projectId,
+    definitionJson: String(formData.get("definitionJson") ?? "")
+  });
+  if (!result.ok) {
+    redirectToMCPWithError(result.error);
+  }
+  await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=mcp");
+}
+
+export async function setMCPConnectorEnabledAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
+    redirectToMCPWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().setMCPConnectorEnabled({
+    projectId,
+    connectorId: String(formData.get("connectorId") ?? ""),
+    enabled: String(formData.get("enabled") ?? "false") === "true"
+  });
+  if (!result.ok) {
+    redirectToMCPWithError(result.error);
+  }
+  await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=mcp");
+}
+
+export async function setMCPToolApprovalAction(formData: FormData): Promise<void> {
+  const currentProjectId = await getCurrentProjectId();
+  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  if (!projectId) {
+    redirectToMCPWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().setMCPToolApproval({
+    projectId,
+    connectorId: String(formData.get("connectorId") ?? ""),
+    toolName: String(formData.get("toolName") ?? ""),
+    approved: String(formData.get("approved") ?? "false") === "true"
+  });
+  if (!result.ok) {
+    redirectToMCPWithError(result.error);
+  }
+  await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=mcp");
 }

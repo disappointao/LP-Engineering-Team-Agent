@@ -1,9 +1,12 @@
 import {
   DemoWorkbenchService,
   type AgentRole,
+  type MCPConnectorRecord,
+  type MCPToolApprovalRecord,
   type ModelProviderRecord,
   type ModelProviderType,
   type ModelRoutingPolicyRecord,
+  type ProjectMCPState,
   type ProjectModelState,
   type ProjectRecord,
   type ProjectSkillState,
@@ -24,6 +27,12 @@ import {
   type WorkbenchTaskType
 } from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+
+export type {
+  MCPConnectorRecord,
+  MCPToolApprovalRecord,
+  ProjectMCPState
+} from "@lp-agent/api";
 
 export type ProjectFlowErrorCode =
   | "project_name_required"
@@ -64,6 +73,17 @@ export type ModelFlowErrorCode =
   | "model_secret_reference_invalid"
   | "model_routing_operation_failed";
 
+export type MCPFlowErrorCode =
+  | "project_not_found"
+  | "mcp_connector_json_invalid"
+  | "mcp_connector_validation_failed"
+  | "mcp_connector_scope_unsupported"
+  | "mcp_connector_already_exists"
+  | "mcp_connector_not_found"
+  | "mcp_tool_not_found"
+  | "mcp_tool_approval_not_required"
+  | "mcp_operation_failed";
+
 export interface WebProjectModelState extends ProjectModelState {
   resolutionError?: ModelFlowErrorCode;
 }
@@ -83,6 +103,10 @@ export type SkillActionResult<T> =
 export type ModelActionResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ModelFlowErrorCode };
+
+export type MCPActionResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: MCPFlowErrorCode };
 
 export interface CreateSkillDraftFormInput {
   manifestJson: string;
@@ -111,6 +135,18 @@ export interface UpsertProjectModelRouteFormInput {
   model: string;
 }
 
+export interface CreateMCPConnectorFormInput {
+  projectId: string;
+  definitionJson: string;
+}
+
+export interface SetMCPToolApprovalFormInput {
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  approved: boolean;
+}
+
 export type TaskType = WorkbenchTaskType;
 export type TaskStatus = WorkbenchTaskStatus;
 export type ChatMessageRole = WorkbenchMessageRole;
@@ -133,6 +169,7 @@ export type WorkbenchPageState =
       tasks: TaskRecord[];
       skills: ProjectSkillState;
       models: WebProjectModelState;
+      mcp: ProjectMCPState;
     }
   | {
       kind: "task_ready";
@@ -140,6 +177,7 @@ export type WorkbenchPageState =
       tasks: TaskRecord[];
       skills: ProjectSkillState;
       models: WebProjectModelState;
+      mcp: ProjectMCPState;
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
@@ -181,6 +219,17 @@ export interface WebWorkbenchStore {
   upsertProjectModelRoute(
     input: UpsertProjectModelRouteFormInput
   ): Promise<ModelActionResult<ModelRoutingPolicyRecord>>;
+  createMCPConnector(
+    input: CreateMCPConnectorFormInput
+  ): Promise<MCPActionResult<MCPConnectorRecord>>;
+  setMCPConnectorEnabled(input: {
+    projectId: string;
+    connectorId: string;
+    enabled: boolean;
+  }): Promise<MCPActionResult<MCPConnectorRecord>>;
+  setMCPToolApproval(
+    input: SetMCPToolApprovalFormInput
+  ): Promise<MCPActionResult<MCPToolApprovalRecord>>;
 }
 
 export interface WebWorkbenchStoreOptions {
@@ -284,6 +333,21 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     resolvedPolicy: createDefaultModelPolicy()
   });
 
+  const emptyMCPState = (): ProjectMCPState => ({
+    connectors: [],
+    approvals: [],
+    visibleToolsByRole: createEmptyVisibleToolsByRole()
+  });
+
+  function createEmptyVisibleToolsByRole(): ProjectMCPState["visibleToolsByRole"] {
+    return {
+      planner: [],
+      builder: [],
+      reviewer: [],
+      deployer: []
+    };
+  }
+
   const loadSkillState = async (projectId?: string | null) => {
     if (!projectId) {
       return emptySkillState();
@@ -318,6 +382,21 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           resolvedPolicy: createDefaultModelPolicy(),
           resolutionError
         };
+      }
+      throw error;
+    }
+  };
+
+  const loadMCPState = async (projectId?: string | null): Promise<ProjectMCPState> => {
+    if (!projectId) {
+      return emptyMCPState();
+    }
+    try {
+      return await service.listProjectMCPState(projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "project_not_found" || message === "Project not found.") {
+        return emptyMCPState();
       }
       throw error;
     }
@@ -360,7 +439,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           projects: currentProjects,
           tasks: currentTasks,
           skills: await loadSkillState(requestedProject?.id),
-          models: await loadModelState(requestedProject?.id)
+          models: await loadModelState(requestedProject?.id),
+          mcp: await loadMCPState(requestedProject?.id)
         };
       }
 
@@ -379,6 +459,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         tasks: currentTasks,
         skills: await loadSkillState(activeProjectId),
         models: await loadModelState(activeProjectId),
+        mcp: await loadMCPState(activeProjectId),
         activeTaskId: task.id,
         task: { ...task },
         messages: await listMessages(task.id),
@@ -539,6 +620,33 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       } catch (error) {
         return { ok: false, error: toModelFlowError(error) };
       }
+    },
+
+    async createMCPConnector(input) {
+      try {
+        const value = await service.createProjectMCPConnector(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toMCPFlowError(error) };
+      }
+    },
+
+    async setMCPConnectorEnabled(input) {
+      try {
+        const value = await service.setProjectMCPConnectorEnabled(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toMCPFlowError(error) };
+      }
+    },
+
+    async setMCPToolApproval(input) {
+      try {
+        const value = await service.setProjectMCPToolApproval(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toMCPFlowError(error) };
+      }
     }
   };
 }
@@ -598,6 +706,26 @@ function toModelFlowError(error: unknown): ModelFlowErrorCode {
     return "project_not_found";
   }
   return "model_routing_operation_failed";
+}
+
+function toMCPFlowError(error: unknown): MCPFlowErrorCode {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message === "project_not_found" ||
+    message === "mcp_connector_json_invalid" ||
+    message === "mcp_connector_validation_failed" ||
+    message === "mcp_connector_scope_unsupported" ||
+    message === "mcp_connector_already_exists" ||
+    message === "mcp_connector_not_found" ||
+    message === "mcp_tool_not_found" ||
+    message === "mcp_tool_approval_not_required"
+  ) {
+    return message;
+  }
+  if (message === "Project not found.") {
+    return "project_not_found";
+  }
+  return "mcp_operation_failed";
 }
 
 function isRecoverableModelResolutionError(

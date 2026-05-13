@@ -9,6 +9,17 @@ import {
   validatePromptInput
 } from "./workbench-store";
 
+const emptyMCPState = {
+  connectors: [],
+  approvals: [],
+  visibleToolsByRole: {
+    planner: [],
+    builder: [],
+    reviewer: [],
+    deployer: []
+  }
+};
+
 function brandSkillManifestJson(): string {
   return JSON.stringify({
     id: "skill_brand",
@@ -63,7 +74,8 @@ describe("web workbench store", () => {
         providers: [],
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
-      }
+      },
+      mcp: emptyMCPState
     });
   });
 
@@ -94,7 +106,8 @@ describe("web workbench store", () => {
         providers: [],
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
-      }
+      },
+      mcp: emptyMCPState
     });
   });
 
@@ -296,7 +309,8 @@ describe("web workbench store", () => {
         providers: [],
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
-      }
+      },
+      mcp: emptyMCPState
     });
   });
 
@@ -543,6 +557,146 @@ describe("web workbench store", () => {
       ok: false,
       error: "model_provider_in_use"
     });
+  });
+
+  it("loads project mcp state and creates project connectors", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "MCP Web" });
+
+    const result = await store.createMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        id: "connector_assets",
+        enabled: true
+      }
+    });
+
+    const pageState = await store.getPageState({ projectId: project.id });
+    expect(pageState.mcp.connectors).toEqual([
+      expect.objectContaining({ id: "connector_assets" })
+    ]);
+  });
+
+  it("returns stable mcp errors from the Web store", async () => {
+    const store = createWebWorkbenchStore({
+      repositories: createInMemoryWorkbenchRepositories()
+    });
+
+    await expect(
+      store.createMCPConnector({
+        projectId: "missing_project",
+        definitionJson: "{"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "project_not_found"
+    });
+  });
+
+  it("approves mcp tools through the Web store and hides them when disabled", async () => {
+    const store = createWebWorkbenchStore({
+      repositories: createInMemoryWorkbenchRepositories()
+    });
+    const project = await store.createProject({ name: "MCP Approval" });
+    const draft = await store.createSkillDraft({
+      manifestJson: JSON.stringify({
+        id: "skill_deploy",
+        name: "Deploy",
+        version: "1.0.0",
+        type: "workflow",
+        scope: "project",
+        description: "Deploy with git.",
+        permissions: ["git:write"],
+        requiredSecrets: [],
+        entrypoints: ["deploy.md"],
+        reviewState: "published"
+      }),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+    const connector = await store.createMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_git",
+        name: "Git",
+        tools: [
+          {
+            name: "createPullRequest",
+            permission: "git:write",
+            roles: ["deployer"],
+            requiresApproval: true
+          }
+        ]
+      })
+    });
+    if (!connector.ok) {
+      throw new Error(`Expected connector creation to succeed, got ${connector.error}.`);
+    }
+
+    const approval = await store.setMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.value.id,
+      toolName: "createPullRequest",
+      approved: true
+    });
+    if (!approval.ok) {
+      throw new Error(`Expected approval to succeed, got ${approval.error}.`);
+    }
+    const approvedState = await store.getPageState({ projectId: project.id });
+    expect(approvedState.mcp.visibleToolsByRole.deployer).toEqual([
+      {
+        connectorId: "connector_git",
+        name: "createPullRequest",
+        permission: "git:write",
+        requiresApproval: true
+      }
+    ]);
+
+    const disabled = await store.setMCPConnectorEnabled({
+      projectId: project.id,
+      connectorId: connector.value.id,
+      enabled: false
+    });
+    if (!disabled.ok) {
+      throw new Error(`Expected disable to succeed, got ${disabled.error}.`);
+    }
+    const disabledState = await store.getPageState({ projectId: project.id });
+    expect(disabledState.mcp.visibleToolsByRole.deployer).toEqual([]);
   });
 
   it("validates project and prompt form values", () => {
