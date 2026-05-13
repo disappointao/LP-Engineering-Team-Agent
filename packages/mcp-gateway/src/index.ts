@@ -84,8 +84,11 @@ export const computeVisibleTools = (
     }));
 
 export function normalizeMCPConnectorDefinition(
-  input: MCPConnectorDefinitionInput
+  input: unknown
 ): MCPConnectorDefinition {
+  if (!isRecord(input)) {
+    throw new Error("mcp_connector_validation_failed");
+  }
   const id = normalizeRequiredString(input.id);
   const name = normalizeRequiredString(input.name);
   const description =

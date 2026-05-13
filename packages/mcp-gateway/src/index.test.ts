@@ -103,6 +103,14 @@ describe("MCP gateway policy", () => {
   });
 
   it("rejects invalid connector definitions", () => {
+    expect(() => normalizeMCPConnectorDefinition(null)).toThrow(
+      "mcp_connector_validation_failed"
+    );
+
+    expect(() => normalizeMCPConnectorDefinition([])).toThrow(
+      "mcp_connector_validation_failed"
+    );
+
     expect(() =>
       normalizeMCPConnectorDefinition({
         id: "",
@@ -138,7 +146,7 @@ describe("MCP gateway policy", () => {
             requiresApproval: false
           },
           {
-            name: "searchAssets",
+            name: " searchAssets ",
             permission: "assets:write",
             roles: ["builder"],
             requiresApproval: true
