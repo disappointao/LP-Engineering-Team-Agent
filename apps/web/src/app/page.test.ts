@@ -7,7 +7,11 @@ const pageMocks = vi.hoisted(() => ({
   pageState: {
     kind: "empty",
     projects: [],
-    tasks: []
+    tasks: [],
+    skills: {
+      boundSkills: [],
+      availableVersions: []
+    }
   } as unknown
 }));
 
@@ -81,7 +85,11 @@ beforeEach(() => {
   pageMocks.pageState = {
     kind: "empty",
     projects: [],
-    tasks: []
+    tasks: [],
+    skills: {
+      boundSkills: [],
+      availableVersions: []
+    }
   };
 });
 
@@ -123,6 +131,155 @@ describe("HomePage project flow errors", () => {
     expect(collectText(page)).not.toContain("Deployments");
   });
 
+  it("renders the skills management view from the skills route", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+    const textareas = collectElements(page, "textarea");
+
+    expect(text).toContain("Project skills");
+    expect(text).toContain("Manifest JSON");
+    expect(text).toContain("Skill content");
+    expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
+    expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
+  });
+
+  it("shows active bound project skills in the skills view", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [
+          {
+            skill: {
+              id: "skill_brand",
+              name: "Acme Brand Landing Page Sections",
+              type: "template",
+              scope: "project",
+              createdAt: "2026-05-12T08:00:00.000Z"
+            },
+            version: {
+              id: "skill_version_1",
+              skillId: "skill_brand",
+              version: "0.1.0",
+              manifest: {
+                id: "skill_brand",
+                name: "Acme Brand Landing Page Sections",
+                version: "0.1.0",
+                type: "template",
+                scope: "project",
+                description: "Adds brand tone and ecommerce LP constraints.",
+                permissions: ["brief:read"],
+                requiredSecrets: [],
+                entrypoints: ["templates/acme-lp.md"],
+                reviewState: "published"
+              },
+              content: "# Brand LP",
+              contentType: "text/markdown",
+              reviewState: "published",
+              createdAt: "2026-05-12T08:00:00.000Z"
+            },
+            binding: {
+              id: "skill_binding_1",
+              skillVersionId: "skill_version_1",
+              scope: "project",
+              targetKey: "project_1",
+              projectId: "project_1",
+              enabled: true,
+              createdAt: "2026-05-12T08:01:00.000Z",
+              updatedAt: "2026-05-12T08:01:00.000Z"
+            }
+          }
+        ],
+        availableVersions: []
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Acme Brand Landing Page Sections");
+    expect(text).toContain("Published");
+    expect(text).toContain("1 active skill");
+  });
+
+  it("shows the active bound skill count in the workbench shell", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [
+          {
+            skill: {
+              id: "skill_brand",
+              name: "Acme Brand Landing Page Sections",
+              type: "template",
+              scope: "project",
+              createdAt: "2026-05-12T08:00:00.000Z"
+            },
+            version: {
+              id: "skill_version_1",
+              skillId: "skill_brand",
+              version: "0.1.0",
+              manifest: {
+                id: "skill_brand",
+                name: "Acme Brand Landing Page Sections",
+                version: "0.1.0",
+                type: "template",
+                scope: "project",
+                description: "Adds brand tone and ecommerce LP constraints.",
+                permissions: ["brief:read"],
+                requiredSecrets: [],
+                entrypoints: ["templates/acme-lp.md"],
+                reviewState: "published"
+              },
+              content: "# Brand LP",
+              contentType: "text/markdown",
+              reviewState: "published",
+              createdAt: "2026-05-12T08:00:00.000Z"
+            },
+            binding: {
+              id: "skill_binding_1",
+              skillVersionId: "skill_version_1",
+              scope: "project",
+              targetKey: "project_1",
+              projectId: "project_1",
+              enabled: true,
+              createdAt: "2026-05-12T08:01:00.000Z",
+              updatedAt: "2026-05-12T08:01:00.000Z"
+            }
+          }
+        ],
+        availableVersions: []
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({})
+    });
+
+    expect(collectText(page)).toContain("1 active skill");
+  });
+
   it("keeps sidebar project creation available when projects exist", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {
@@ -134,7 +291,11 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:00.000Z"
         }
       ],
-      tasks: []
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      }
     };
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
@@ -160,6 +321,10 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:00.000Z"
         }
       ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
       activeTaskId: "task_1",
       task: {
         id: "task_1",
@@ -218,6 +383,10 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:02:00.000Z"
         }
       ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
       activeTaskId: "task_2",
       task: {
         id: "task_2",
@@ -308,6 +477,10 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:03:00.000Z"
         }
       ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
       activeTaskId: "task_3",
       task: {
         id: "task_3",
@@ -364,6 +537,10 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:00.000Z"
         }
       ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
       activeTaskId: "task_1",
       task: {
         id: "task_1",

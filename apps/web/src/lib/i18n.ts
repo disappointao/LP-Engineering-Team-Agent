@@ -1,4 +1,4 @@
-import type { ProjectFlowErrorCode } from "./workbench-store";
+import type { ProjectFlowErrorCode, SkillFlowErrorCode } from "./workbench-store";
 
 export type Locale = "en" | "zh-CN";
 
@@ -61,6 +61,33 @@ export interface WorkbenchCopy {
     emptyDescription: string;
     promptLabel: string;
     errors: Record<ProjectFlowErrorCode, string>;
+  };
+  skillsView: {
+    title: string;
+    subtitle: string;
+    activeProjectLabel: string;
+    noProject: string;
+    activeCount: (count: number) => string;
+    createTitle: string;
+    manifestLabel: string;
+    manifestPlaceholder: string;
+    contentLabel: string;
+    contentPlaceholder: string;
+    contentTypeLabel: string;
+    markdown: string;
+    plainText: string;
+    createDraft: string;
+    versionsTitle: string;
+    boundTitle: string;
+    validate: string;
+    publish: string;
+    bind: string;
+    enable: string;
+    disable: string;
+    emptyVersions: string;
+    emptyBound: string;
+    statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
+    errors: Record<SkillFlowErrorCode, string>;
   };
   status: {
     review: string;
@@ -234,6 +261,69 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         generation_failed: "The LP generation flow failed. Try again with a shorter request."
       }
     },
+    skillsView: {
+      title: "Project skills",
+      subtitle: "Create, validate, publish, and bind data-only skills for the active project.",
+      activeProjectLabel: "Active project",
+      noProject: "No active project",
+      activeCount: (count) => `${count} active ${count === 1 ? "skill" : "skills"}`,
+      createTitle: "Create skill draft",
+      manifestLabel: "Manifest JSON",
+      manifestPlaceholder: JSON.stringify(
+        {
+          id: "skill_brand",
+          name: "Acme Brand Landing Page Sections",
+          version: "0.1.0",
+          type: "template",
+          scope: "project",
+          description: "Adds brand tone and ecommerce LP constraints.",
+          permissions: ["brief:read", "artifact:write"],
+          requiredSecrets: [],
+          entrypoints: ["templates/acme-lp.md"],
+          reviewState: "draft"
+        },
+        null,
+        2
+      ),
+      contentLabel: "Skill content",
+      contentPlaceholder: "# Brand LP\n\nUse concise section copy and keep the output framework-free.",
+      contentTypeLabel: "Content type",
+      markdown: "Markdown",
+      plainText: "Plain text",
+      createDraft: "Create draft",
+      versionsTitle: "Skill versions",
+      boundTitle: "Bound project skills",
+      validate: "Validate",
+      publish: "Publish",
+      bind: "Bind",
+      enable: "Enable",
+      disable: "Disable",
+      emptyVersions: "No skill versions yet.",
+      emptyBound: "No project skills bound yet.",
+      statusLabels: {
+        draft: "Draft",
+        validated: "Validated",
+        published: "Published",
+        deprecated: "Deprecated",
+        archived: "Archived"
+      },
+      errors: {
+        invalid_manifest_json: "Enter valid manifest JSON.",
+        manifest_validation_failed: "The skill manifest failed validation.",
+        unsupported_skill_scope: "Only project-scoped skills are supported.",
+        duplicate_skill_version: "That skill version already exists.",
+        unsupported_content_type: "Choose a supported content type.",
+        skill_content_required: "Enter skill content.",
+        skill_content_too_large: "Skill content is too large.",
+        project_not_found: "The selected project is no longer available.",
+        skill_version_not_found: "The selected skill version is no longer available.",
+        skill_version_not_validated: "Validate the skill version before publishing.",
+        skill_version_not_published: "Publish the skill version before binding it.",
+        skill_binding_not_found: "The selected skill binding is no longer available.",
+        publish_not_allowed: "This skill version cannot be published yet.",
+        skill_operation_failed: "The skill operation failed. Try again."
+      }
+    },
     status: {
       review: "Review",
       pending: "pending",
@@ -380,6 +470,69 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         prompt_required: "请输入 LP 需求。",
         project_not_found: "当前项目已经不可用。",
         generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
+      }
+    },
+    skillsView: {
+      title: "项目技能",
+      subtitle: "为当前项目创建、校验、发布并绑定仅包含数据的技能。",
+      activeProjectLabel: "当前项目",
+      noProject: "暂无当前项目",
+      activeCount: (count) => `${count} 个启用技能`,
+      createTitle: "创建技能草稿",
+      manifestLabel: "Manifest JSON",
+      manifestPlaceholder: JSON.stringify(
+        {
+          id: "skill_brand",
+          name: "Acme 品牌落地页区块",
+          version: "0.1.0",
+          type: "template",
+          scope: "project",
+          description: "补充品牌语气和电商 LP 约束。",
+          permissions: ["brief:read", "artifact:write"],
+          requiredSecrets: [],
+          entrypoints: ["templates/acme-lp.md"],
+          reviewState: "draft"
+        },
+        null,
+        2
+      ),
+      contentLabel: "技能内容",
+      contentPlaceholder: "# 品牌 LP\n\n使用简洁区块文案，并保持输出不依赖框架。",
+      contentTypeLabel: "内容类型",
+      markdown: "Markdown",
+      plainText: "纯文本",
+      createDraft: "创建草稿",
+      versionsTitle: "技能版本",
+      boundTitle: "已绑定项目技能",
+      validate: "校验",
+      publish: "发布",
+      bind: "绑定",
+      enable: "启用",
+      disable: "停用",
+      emptyVersions: "暂无技能版本。",
+      emptyBound: "暂无已绑定项目技能。",
+      statusLabels: {
+        draft: "草稿",
+        validated: "已校验",
+        published: "已发布",
+        deprecated: "已废弃",
+        archived: "已归档"
+      },
+      errors: {
+        invalid_manifest_json: "请输入有效的 manifest JSON。",
+        manifest_validation_failed: "技能 manifest 校验失败。",
+        unsupported_skill_scope: "当前仅支持项目范围技能。",
+        duplicate_skill_version: "该技能版本已经存在。",
+        unsupported_content_type: "请选择支持的内容类型。",
+        skill_content_required: "请输入技能内容。",
+        skill_content_too_large: "技能内容过大。",
+        project_not_found: "当前项目已经不可用。",
+        skill_version_not_found: "当前技能版本已经不可用。",
+        skill_version_not_validated: "请先校验技能版本再发布。",
+        skill_version_not_published: "请先发布技能版本再绑定。",
+        skill_binding_not_found: "当前技能绑定已经不可用。",
+        publish_not_allowed: "该技能版本暂不能发布。",
+        skill_operation_failed: "技能操作失败，请重试。"
       }
     },
     status: {

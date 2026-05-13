@@ -38,6 +38,8 @@ body {
 button,
 a,
 input,
+select,
+textarea,
 iframe {
   font: inherit;
 }
@@ -143,6 +145,7 @@ button {
   padding: 0 10px;
   color: #464a50;
   font-size: 0.9rem;
+  text-decoration: none;
 }
 
 .navItemActive {
@@ -430,6 +433,192 @@ button {
   font-weight: 760;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.skillsView {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.skillsHeader {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.skillsHeader h1 {
+  margin: 0;
+  color: #25292e;
+  font-size: 1.55rem;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.skillsHeader p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.skillsHeader span,
+.skillRuntimeChip {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 9px;
+  font-size: 0.76rem;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.skillRuntimeChip {
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.skillsProjectContext {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.skillsProjectContext span,
+.skillEditor label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 820;
+}
+
+.skillsProjectContext strong {
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.skillEditor,
+.skillsList {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.skillEditor h2,
+.skillsList h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.skillEditor textarea,
+.skillEditor select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  outline: 0;
+}
+
+.skillEditor textarea {
+  min-height: 132px;
+  resize: vertical;
+  padding: 11px;
+  font-family: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.skillEditor select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.skillEditor textarea:focus,
+.skillEditor select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.skillEditor button,
+.skillActions button {
+  min-height: 34px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0 12px;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.skillEditor button {
+  justify-self: start;
+}
+
+.skillsList > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.skillRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 12px;
+}
+
+.skillRow strong {
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.skillRow span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.skillActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.skillActions form {
+  display: contents;
 }
 
 .setupPanel .localNote {
@@ -948,9 +1137,19 @@ button {
 
   .processHeader,
   .deliveryHeader,
-  .toolEventTop {
+  .toolEventTop,
+  .skillsHeader,
+  .skillRow {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .skillRow {
+    display: flex;
+  }
+
+  .skillActions {
+    justify-content: flex-start;
   }
 
   .composer button,

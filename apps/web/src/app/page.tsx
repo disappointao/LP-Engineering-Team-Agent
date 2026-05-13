@@ -1,6 +1,14 @@
 import React from "react";
 import { headers } from "next/headers";
-import { createProjectAction, submitPromptAction } from "./actions";
+import {
+  bindSkillVersionAction,
+  createProjectAction,
+  createSkillDraftAction,
+  publishSkillVersionAction,
+  setSkillBindingEnabledAction,
+  submitPromptAction,
+  validateSkillVersionAction
+} from "./actions";
 import { LPPreview } from "../components/lp-preview";
 import {
   createChatWorkbenchThread,
@@ -8,11 +16,15 @@ import {
 } from "../lib/chat-workbench";
 import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
-import { getWebWorkbenchStore, type ProjectFlowErrorCode } from "../lib/workbench-store";
+import {
+  getWebWorkbenchStore,
+  type ProjectFlowErrorCode,
+  type SkillFlowErrorCode
+} from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 
 interface HomePageProps {
-  searchParams?: Promise<{ error?: string }>;
+  searchParams?: Promise<{ error?: string; skillError?: string; view?: string }>;
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -21,7 +33,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     resolveLocaleFromAcceptLanguage(requestHeaders.get("accept-language"))
   );
   const params = await searchParams;
+  const activeView = params?.view === "skills" ? "skills" : "workbench";
   const errorCode = toProjectFlowError(params?.error);
+  const skillError = toSkillFlowError(params?.skillError);
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
@@ -34,6 +48,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? pageState.snapshot.project
       : pageState.projects.find((project) => project.id === currentProjectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
+  const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
+  const activeSkillCount = pageState.skills.boundSkills.filter(
+    (boundSkill) => boundSkill.binding.enabled
+  ).length;
+  const activeSkillLabel = copy.skillsView.activeCount(activeSkillCount);
   const completedSnapshot =
     pageState.kind === "task_ready" &&
     activeTask?.type === "lp_generation" &&
@@ -90,8 +109,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
 
         <nav className="navList" aria-label={copy.nav.label}>
-          <div className="navItem navItemActive">{copy.nav.workbench}</div>
-          <div className="navItem">{copy.nav.skills}</div>
+          <a className={activeView === "workbench" ? "navItem navItemActive" : "navItem"} href="/">
+            {copy.nav.workbench}
+          </a>
+          <a className={activeView === "skills" ? "navItem navItemActive" : "navItem"} href="/?view=skills">
+            {copy.nav.skills}
+          </a>
           <div className="navItem">{copy.nav.mcp}</div>
           <div className="navItem">{copy.nav.models}</div>
         </nav>
@@ -157,6 +180,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="topBarTitle">
             <strong>{copy.chat.topbarModel}</strong>
             <span>{activeProject?.name ?? activeTask?.title ?? copy.sidebar.newTask}</span>
+            {activeSkillCount > 0 ? (
+              <span className="skillRuntimeChip">{activeSkillLabel}</span>
+            ) : null}
           </div>
           <div className="topBarActions">
             <button type="button">{copy.chat.topbarShare}</button>
@@ -166,7 +192,117 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
         <div className="conversationViewport">
           <div className="conversationStack">
-            {pageState.kind === "empty" ? (
+            {activeView === "skills" ? (
+              <section className="skillsView" aria-labelledby="skills-title">
+                <header className="skillsHeader">
+                  <div>
+                    <h1 id="skills-title">{copy.skillsView.title}</h1>
+                    <p>{copy.skillsView.subtitle}</p>
+                  </div>
+                  <span>{activeSkillLabel}</span>
+                </header>
+
+                {skillErrorMessage ? (
+                  <div className="formError" role="alert">{skillErrorMessage}</div>
+                ) : null}
+
+                <div className="skillsProjectContext">
+                  <span>{copy.skillsView.activeProjectLabel}</span>
+                  <strong>{activeProject?.name ?? copy.skillsView.noProject}</strong>
+                </div>
+
+                <form action={createSkillDraftAction} className="skillEditor">
+                  <h2>{copy.skillsView.createTitle}</h2>
+                  <label htmlFor="manifestJson">{copy.skillsView.manifestLabel}</label>
+                  <textarea
+                    id="manifestJson"
+                    name="manifestJson"
+                    placeholder={copy.skillsView.manifestPlaceholder}
+                  />
+                  <label htmlFor="content">{copy.skillsView.contentLabel}</label>
+                  <textarea
+                    id="content"
+                    name="content"
+                    placeholder={copy.skillsView.contentPlaceholder}
+                  />
+                  <label htmlFor="contentType">{copy.skillsView.contentTypeLabel}</label>
+                  <select id="contentType" name="contentType" defaultValue="text/markdown">
+                    <option value="text/markdown">{copy.skillsView.markdown}</option>
+                    <option value="text/plain">{copy.skillsView.plainText}</option>
+                  </select>
+                  <button type="submit">{copy.skillsView.createDraft}</button>
+                </form>
+
+                <section className="skillsList" aria-labelledby="skill-versions-title">
+                  <h2 id="skill-versions-title">{copy.skillsView.versionsTitle}</h2>
+                  {pageState.skills.availableVersions.length > 0 ? (
+                    pageState.skills.availableVersions.map((version) => (
+                      <div className="skillRow" key={version.id}>
+                        <div>
+                          <strong>{version.manifest.name}</strong>
+                          <span>
+                            {version.version} · {copy.skillsView.statusLabels[version.reviewState]}
+                          </span>
+                        </div>
+                        <div className="skillActions">
+                          <form action={validateSkillVersionAction}>
+                            <input name="skillVersionId" type="hidden" value={version.id} />
+                            <button type="submit">{copy.skillsView.validate}</button>
+                          </form>
+                          <form action={publishSkillVersionAction}>
+                            <input name="skillVersionId" type="hidden" value={version.id} />
+                            <button type="submit">{copy.skillsView.publish}</button>
+                          </form>
+                          <form action={bindSkillVersionAction}>
+                            <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
+                            <input name="skillVersionId" type="hidden" value={version.id} />
+                            <button type="submit">{copy.skillsView.bind}</button>
+                          </form>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p>{copy.skillsView.emptyVersions}</p>
+                  )}
+                </section>
+
+                <section className="skillsList" aria-labelledby="bound-skills-title">
+                  <h2 id="bound-skills-title">{copy.skillsView.boundTitle}</h2>
+                  {pageState.skills.boundSkills.length > 0 ? (
+                    pageState.skills.boundSkills.map((boundSkill) => (
+                      <div className="skillRow" key={boundSkill.binding.id}>
+                        <div>
+                          <strong>{boundSkill.skill.name}</strong>
+                          <span>
+                            {boundSkill.version.version} ·{" "}
+                            {copy.skillsView.statusLabels[boundSkill.version.reviewState]}
+                          </span>
+                        </div>
+                        <div className="skillActions">
+                          <form action={setSkillBindingEnabledAction}>
+                            <input name="bindingId" type="hidden" value={boundSkill.binding.id} />
+                            <input
+                              name="enabled"
+                              type="hidden"
+                              value={boundSkill.binding.enabled ? "false" : "true"}
+                            />
+                            <button type="submit">
+                              {boundSkill.binding.enabled
+                                ? copy.skillsView.disable
+                                : copy.skillsView.enable}
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p>{copy.skillsView.emptyBound}</p>
+                  )}
+                </section>
+              </section>
+            ) : null}
+
+            {activeView === "workbench" && pageState.kind === "empty" ? (
               <section className="entryPanel" aria-labelledby="entry-title">
                 <h1 id="entry-title">{copy.entry.title}</h1>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
@@ -181,7 +317,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </section>
             ) : null}
 
-            {chat ? (
+            {activeView === "workbench" && chat ? (
               <>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
                 <div className="userTurn" aria-label={copy.chat.userLabel}>
@@ -300,6 +436,28 @@ function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | u
     value === "prompt_required" ||
     value === "project_not_found" ||
     value === "generation_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undefined {
+  if (
+    value === "invalid_manifest_json" ||
+    value === "manifest_validation_failed" ||
+    value === "unsupported_skill_scope" ||
+    value === "duplicate_skill_version" ||
+    value === "unsupported_content_type" ||
+    value === "skill_content_required" ||
+    value === "skill_content_too_large" ||
+    value === "project_not_found" ||
+    value === "skill_version_not_found" ||
+    value === "skill_version_not_validated" ||
+    value === "skill_version_not_published" ||
+    value === "skill_binding_not_found" ||
+    value === "publish_not_allowed" ||
+    value === "skill_operation_failed"
   ) {
     return value;
   }
