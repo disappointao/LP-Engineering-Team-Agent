@@ -25,6 +25,25 @@ afterEach(async () => {
 });
 
 describe("json-file workbench repositories", () => {
+  it("returns the same repository bundle for repeated calls with the same file path", async () => {
+    const filePath = await tempStateFile();
+
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+
+    expect(second).toBe(first);
+  });
+
+  it("returns the same repository bundle for equivalent file path forms", async () => {
+    const filePath = await tempStateFile();
+    const equivalentFilePath = `${filePath.slice(0, -"workbench-state.json".length)}./workbench-state.json`;
+
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const second = createJsonFileWorkbenchRepositories({ filePath: equivalentFilePath });
+
+    expect(second).toBe(first);
+  });
+
   it("reopens projects, tasks, messages, and task snapshots from disk", async () => {
     const filePath = await tempStateFile();
     const first = createJsonFileWorkbenchRepositories({ filePath });

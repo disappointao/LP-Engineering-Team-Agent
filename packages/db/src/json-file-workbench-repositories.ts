@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type {
   BriefRecord,
@@ -34,11 +34,20 @@ interface JsonFileWorkbenchState {
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
+const repositoriesByFilePath = new Map<string, WorkbenchRepositories>();
 
 export function createJsonFileWorkbenchRepositories(
   options: JsonFileWorkbenchRepositoriesOptions
 ): WorkbenchRepositories {
-  return new JsonFileWorkbenchRepositories(options.filePath);
+  const filePath = resolve(options.filePath);
+  const existingRepositories = repositoriesByFilePath.get(filePath);
+  if (existingRepositories) {
+    return existingRepositories;
+  }
+
+  const repositories = new JsonFileWorkbenchRepositories(filePath);
+  repositoriesByFilePath.set(filePath, repositories);
+  return repositories;
 }
 
 class JsonFileWorkbenchRepositories implements WorkbenchRepositories {

@@ -1,6 +1,9 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
-import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
+import { createInMemoryWorkbenchRepositories, createJsonFileWorkbenchRepositories } from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
 import type {
@@ -320,6 +323,35 @@ describe("demo workbench service", () => {
 
     expect(new Set(projects.map((project) => project.id))).toHaveProperty("size", 2);
     expect(savedProjects.map((project) => project.id).sort()).toEqual(["project_1", "project_2"]);
+  });
+
+  it("keeps concurrent project creation ids unique for repeated JSON repository factory calls", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lp-agent-api-"));
+    const filePath = join(root, "workbench-state.json");
+
+    try {
+      const serviceA = new DemoWorkbenchService({
+        repositories: createJsonFileWorkbenchRepositories({ filePath }),
+        now: fixedClock()
+      });
+      const serviceB = new DemoWorkbenchService({
+        repositories: createJsonFileWorkbenchRepositories({ filePath }),
+        now: fixedClock()
+      });
+
+      const projects = await Promise.all([
+        serviceA.createProject({ name: "First project" }),
+        serviceB.createProject({ name: "Second project" })
+      ]);
+      const savedProjects = await createJsonFileWorkbenchRepositories({
+        filePath
+      }).projects.listAll();
+
+      expect(new Set(projects.map((project) => project.id))).toHaveProperty("size", 2);
+      expect(savedProjects.map((project) => project.id).sort()).toEqual(["project_1", "project_2"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("uses branch-safe generated IDs for deployment", async () => {
