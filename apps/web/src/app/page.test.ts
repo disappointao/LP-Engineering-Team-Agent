@@ -178,6 +178,62 @@ describe("HomePage project flow errors", () => {
     expect(inputs.some((input) => input.props?.name === "prompt")).toBe(false);
   });
 
+  it("uses the active task project as the skills project context without a project cookie", async () => {
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Task Project",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Create a project-bound landing page",
+          type: "lp_generation",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Create a project-bound landing page",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a project-bound landing page",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ]
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+    const textareas = collectElements(page, "textarea");
+
+    expect(text).toContain("Task Project");
+    expect(text).not.toContain("No active project");
+    expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
+    expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
+  });
+
   it("shows active bound project skills in the skills view", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {

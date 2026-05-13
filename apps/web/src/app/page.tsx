@@ -46,7 +46,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const activeProject =
     pageState.kind === "task_ready" && pageState.snapshot
       ? pageState.snapshot.project
-      : pageState.projects.find((project) => project.id === currentProjectId);
+      : pageState.projects.find((project) => project.id === currentProjectId) ??
+        pageState.projects.find((project) => project.id === activeTask?.projectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
   const activeSkillCount = pageState.skills.boundSkills.filter(
