@@ -1,6 +1,11 @@
 import {
   DemoWorkbenchService,
   type ProjectRecord,
+  type ProjectSkillState,
+  type SkillBindingRecord,
+  type SkillContentType,
+  type SkillDraftResult,
+  type SkillVersionRecord,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
 import {
@@ -20,12 +25,43 @@ export type ProjectFlowErrorCode =
   | "project_not_found"
   | "generation_failed";
 
+export type SkillFlowErrorCode =
+  | "invalid_manifest_json"
+  | "manifest_validation_failed"
+  | "unsupported_skill_scope"
+  | "duplicate_skill_version"
+  | "unsupported_content_type"
+  | "skill_content_required"
+  | "skill_content_too_large"
+  | "project_not_found"
+  | "skill_version_not_found"
+  | "skill_version_not_validated"
+  | "skill_version_not_published"
+  | "skill_binding_not_found"
+  | "publish_not_allowed"
+  | "skill_operation_failed";
+
 type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProjectFlowErrorCode };
 
 export interface CreateProjectFormInput {
   name: string;
+}
+
+export type SkillActionResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: SkillFlowErrorCode };
+
+export interface CreateSkillDraftFormInput {
+  manifestJson: string;
+  content: string;
+  contentType: SkillContentType;
+}
+
+export interface BindSkillVersionFormInput {
+  projectId: string;
+  skillVersionId: string;
 }
 
 export type TaskType = WorkbenchTaskType;
@@ -48,11 +84,13 @@ export type WorkbenchPageState =
       kind: "empty";
       projects: ProjectRecord[];
       tasks: TaskRecord[];
+      skills: ProjectSkillState;
     }
   | {
       kind: "task_ready";
       projects: ProjectRecord[];
       tasks: TaskRecord[];
+      skills: ProjectSkillState;
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
@@ -72,6 +110,16 @@ export interface WebWorkbenchStore {
     prompt: string;
     implicitProjectName: string;
   }): Promise<SubmitTaskResult>;
+  createSkillDraft(input: CreateSkillDraftFormInput): Promise<SkillActionResult<SkillDraftResult>>;
+  validateSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
+  publishSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
+  bindSkillVersionToProject(
+    input: BindSkillVersionFormInput
+  ): Promise<SkillActionResult<SkillBindingRecord>>;
+  setProjectSkillBindingEnabled(input: {
+    bindingId: string;
+    enabled: boolean;
+  }): Promise<SkillActionResult<SkillBindingRecord>>;
 }
 
 export interface WebWorkbenchStoreOptions {
@@ -164,6 +212,26 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
   const listMessages = async (taskId: string) =>
     (await repositories.messages.listForTask(taskId)).map((message) => ({ ...message }));
 
+  const emptySkillState = (): ProjectSkillState => ({
+    boundSkills: [],
+    availableVersions: []
+  });
+
+  const loadSkillState = async (projectId?: string | null) => {
+    if (!projectId) {
+      return emptySkillState();
+    }
+    try {
+      return await service.listProjectSkillState(projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "project_not_found" || message === "Project not found.") {
+        return emptySkillState();
+      }
+      throw error;
+    }
+  };
+
   return {
     async createProject(input) {
       const validation = validateProjectInput(input);
@@ -193,13 +261,18 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         (task.projectId && !taskProject) ||
         (task.projectId && requestedProjectId && requestedProjectId !== task.projectId)
       ) {
+        const requestedProject = requestedProjectId
+          ? await repositories.projects.getById(requestedProjectId)
+          : undefined;
         return {
           kind: "empty",
           projects: currentProjects,
-          tasks: currentTasks
+          tasks: currentTasks,
+          skills: await loadSkillState(requestedProject?.id)
         };
       }
 
+      const activeProjectId = taskProject?.id ?? requestedProjectId;
       const snapshotRef = await repositories.taskSnapshots.getByTaskId(task.id);
       const snapshot = snapshotRef
         ? await service.getSnapshotForRecords({
@@ -212,6 +285,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         kind: "task_ready",
         projects: currentProjects,
         tasks: currentTasks,
+        skills: await loadSkillState(activeProjectId),
         activeTaskId: task.id,
         task: { ...task },
         messages: await listMessages(task.id),
@@ -294,8 +368,84 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       } catch {
         return { ok: false, error: "generation_failed" };
       }
+    },
+
+    async createSkillDraft(input) {
+      try {
+        const value = await service.createSkillDraft(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillFlowError(error) };
+      }
+    },
+
+    async validateSkillVersion(skillVersionId) {
+      try {
+        const value = await service.validateSkillVersion({ skillVersionId });
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillFlowError(error) };
+      }
+    },
+
+    async publishSkillVersion(skillVersionId) {
+      try {
+        const value = await service.publishSkillVersion({ skillVersionId });
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillFlowError(error) };
+      }
+    },
+
+    async bindSkillVersionToProject(input) {
+      try {
+        const value = await service.bindSkillVersionToProject(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillFlowError(error) };
+      }
+    },
+
+    async setProjectSkillBindingEnabled(input) {
+      try {
+        const value = await service.setProjectSkillBindingEnabled(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillFlowError(error) };
+      }
     }
   };
+}
+
+function toSkillFlowError(error: unknown): SkillFlowErrorCode {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message === "invalid_manifest_json" ||
+    message === "manifest_validation_failed" ||
+    message === "unsupported_skill_scope" ||
+    message === "duplicate_skill_version" ||
+    message === "unsupported_content_type" ||
+    message === "skill_content_required" ||
+    message === "skill_content_too_large" ||
+    message === "project_not_found" ||
+    message === "skill_version_not_found" ||
+    message === "skill_version_not_validated" ||
+    message === "skill_version_not_published" ||
+    message === "skill_binding_not_found" ||
+    message === "publish_not_allowed"
+  ) {
+    return message;
+  }
+  if (message === "Project not found.") {
+    return "project_not_found";
+  }
+  if (message === "skill_version_not_publishable") {
+    return "publish_not_allowed";
+  }
+  if (message.includes("ZodError") || message.includes("Invalid")) {
+    return "manifest_validation_failed";
+  }
+  return "skill_operation_failed";
 }
 
 const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();

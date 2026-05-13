@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getWebWorkbenchStore, type ProjectFlowErrorCode } from "../lib/workbench-store";
+import {
+  getWebWorkbenchStore,
+  type ProjectFlowErrorCode,
+  type SkillFlowErrorCode
+} from "../lib/workbench-store";
 import {
   getCurrentProjectId,
   setCurrentProjectId,
@@ -11,6 +15,10 @@ import {
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
+}
+
+function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
+  redirect(`/?view=skills&skillError=${encodeURIComponent(error)}`);
 }
 
 export async function createProjectAction(formData: FormData): Promise<void> {
@@ -55,4 +63,68 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
   }
   revalidatePath("/");
   redirect("/");
+}
+
+export async function createSkillDraftAction(formData: FormData): Promise<void> {
+  const result = await getWebWorkbenchStore().createSkillDraft({
+    manifestJson: String(formData.get("manifestJson") ?? ""),
+    content: String(formData.get("content") ?? ""),
+    contentType:
+      String(formData.get("contentType") ?? "text/markdown") === "text/plain"
+        ? "text/plain"
+        : "text/markdown"
+  });
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function validateSkillVersionAction(formData: FormData): Promise<void> {
+  const result = await getWebWorkbenchStore().validateSkillVersion(
+    String(formData.get("skillVersionId") ?? "")
+  );
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function publishSkillVersionAction(formData: FormData): Promise<void> {
+  const result = await getWebWorkbenchStore().publishSkillVersion(
+    String(formData.get("skillVersionId") ?? "")
+  );
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function bindSkillVersionAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "");
+  const result = await getWebWorkbenchStore().bindSkillVersionToProject({
+    projectId,
+    skillVersionId: String(formData.get("skillVersionId") ?? "")
+  });
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+  await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function setSkillBindingEnabledAction(formData: FormData): Promise<void> {
+  const result = await getWebWorkbenchStore().setProjectSkillBindingEnabled({
+    bindingId: String(formData.get("bindingId") ?? ""),
+    enabled: String(formData.get("enabled") ?? "false") === "true"
+  });
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+  revalidatePath("/");
+  redirect("/?view=skills");
 }

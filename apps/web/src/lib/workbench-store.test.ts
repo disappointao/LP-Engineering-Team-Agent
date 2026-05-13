@@ -8,6 +8,21 @@ import {
   validatePromptInput
 } from "./workbench-store";
 
+function brandSkillManifestJson(): string {
+  return JSON.stringify({
+    id: "skill_brand",
+    name: "Brand LP",
+    version: "1.0.0",
+    type: "template",
+    scope: "project",
+    description: "Brand LP sections.",
+    permissions: ["brief:read", "artifact:write", "assets:read"],
+    requiredSecrets: [],
+    entrypoints: ["skills/brand.md"],
+    reviewState: "published"
+  });
+}
+
 describe("web workbench store", () => {
   it("creates projects and exposes them in creation order", async () => {
     const store = createWebWorkbenchStore();
@@ -38,7 +53,11 @@ describe("web workbench store", () => {
     await expect(store.getPageState(undefined)).resolves.toEqual({
       kind: "empty",
       projects: [],
-      tasks: []
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      }
     });
   });
 
@@ -60,7 +79,11 @@ describe("web workbench store", () => {
           name: "Spring LP"
         })
       ],
-      tasks: []
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      }
     });
   });
 
@@ -253,7 +276,11 @@ describe("web workbench store", () => {
           id: "task_1",
           projectId: firstProject.id
         })
-      ]
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      }
     });
   });
 
@@ -282,6 +309,60 @@ describe("web workbench store", () => {
         implicitProjectName: "Untitled LP Project"
       })
     ).resolves.toEqual({ ok: false, error: "project_not_found" });
+  });
+
+  it("creates, validates, publishes, and binds skills through the web store", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+
+    const draft = await store.createSkillDraft({
+      manifestJson: brandSkillManifestJson(),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(validated.value.reviewState).toBe("validated");
+    expect(binding.value.enabled).toBe(true);
+    expect(state.skills.boundSkills).toEqual([
+      expect.objectContaining({
+        skill: expect.objectContaining({ id: "skill_brand" }),
+        version: expect.objectContaining({ reviewState: "published" })
+      })
+    ]);
+  });
+
+  it("maps skill store validation errors to stable codes", async () => {
+    const store = createWebWorkbenchStore();
+
+    const result = await store.createSkillDraft({
+      manifestJson: "{",
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "invalid_manifest_json"
+    });
   });
 
   it("validates project and prompt form values", () => {

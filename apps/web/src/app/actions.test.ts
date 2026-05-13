@@ -9,7 +9,12 @@ const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
   setCurrentProjectId: vi.fn(),
   setCurrentTaskId: vi.fn(),
-  submitTaskPrompt: vi.fn()
+  submitTaskPrompt: vi.fn(),
+  createSkillDraft: vi.fn(),
+  validateSkillVersion: vi.fn(),
+  publishSkillVersion: vi.fn(),
+  bindSkillVersionToProject: vi.fn(),
+  setProjectSkillBindingEnabled: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({
@@ -29,11 +34,39 @@ vi.mock("../lib/workbench-session", () => ({
 vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
     createProject: mocks.createProject,
-    submitTaskPrompt: mocks.submitTaskPrompt
+    submitTaskPrompt: mocks.submitTaskPrompt,
+    createSkillDraft: mocks.createSkillDraft,
+    validateSkillVersion: mocks.validateSkillVersion,
+    publishSkillVersion: mocks.publishSkillVersion,
+    bindSkillVersionToProject: mocks.bindSkillVersionToProject,
+    setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled
   }))
 }));
 
-import { createProjectAction, submitPromptAction } from "./actions";
+import {
+  bindSkillVersionAction,
+  createProjectAction,
+  createSkillDraftAction,
+  publishSkillVersionAction,
+  setSkillBindingEnabledAction,
+  submitPromptAction,
+  validateSkillVersionAction
+} from "./actions";
+
+function brandSkillManifestJson(): string {
+  return JSON.stringify({
+    id: "skill_brand",
+    name: "Brand LP",
+    version: "1.0.0",
+    type: "template",
+    scope: "project",
+    description: "Brand LP sections.",
+    permissions: ["brief:read", "artifact:write", "assets:read"],
+    requiredSecrets: [],
+    entrypoints: ["skills/brand.md"],
+    reviewState: "published"
+  });
+}
 
 function buildProjectForm(input: { projectName?: string } = {}): FormData {
   const formData = new FormData();
@@ -52,6 +85,14 @@ function buildPromptForm(input: {
   }
   formData.set("prompt", input.prompt ?? "Build a spring landing page.");
   formData.set("implicitProjectName", input.implicitProjectName ?? "Untitled LP Project");
+  return formData;
+}
+
+function buildSkillForm(input: Record<string, string> = {}): FormData {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(input)) {
+    formData.set(key, value);
+  }
   return formData;
 }
 
@@ -76,6 +117,11 @@ describe("submitPromptAction", () => {
       taskType: "lp_generation",
       projectId: "project_2"
     });
+    mocks.createSkillDraft.mockReset();
+    mocks.validateSkillVersion.mockReset();
+    mocks.publishSkillVersion.mockReset();
+    mocks.bindSkillVersionToProject.mockReset();
+    mocks.setProjectSkillBindingEnabled.mockReset();
   });
 
   it("creates projects from the project name only", async () => {
@@ -165,5 +211,43 @@ describe("submitPromptAction", () => {
 
     expect(mocks.setCurrentTaskId).toHaveBeenCalledWith("task_2");
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("creates a skill draft and redirects to the skills view", async () => {
+    mocks.createSkillDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        version: { id: "skill_version_1" }
+      }
+    });
+
+    await expectRedirect(
+      createSkillDraftAction(
+        buildSkillForm({
+          manifestJson: brandSkillManifestJson(),
+          content: "# Brand LP",
+          contentType: "text/markdown"
+        })
+      ),
+      "/?view=skills"
+    );
+
+    expect(mocks.createSkillDraft).toHaveBeenCalledWith({
+      manifestJson: brandSkillManifestJson(),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+  });
+
+  it("redirects skill errors with a stable query code", async () => {
+    mocks.createSkillDraft.mockResolvedValue({
+      ok: false,
+      error: "invalid_manifest_json"
+    });
+
+    await expectRedirect(
+      createSkillDraftAction(buildSkillForm({ manifestJson: "{", content: "# Brand LP" })),
+      "/?view=skills&skillError=invalid_manifest_json"
+    );
   });
 });
