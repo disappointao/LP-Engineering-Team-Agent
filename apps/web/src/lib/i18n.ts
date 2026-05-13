@@ -116,7 +116,9 @@ export interface WorkbenchCopy {
     approvalRequired: string;
     approvalNotRequired: string;
     permissionLabel: string;
+    permissionSummary: (permission: string) => string;
     rolesLabel: string;
+    rolesSummary: (roles: string[]) => string;
     emptyConnectors: string;
     emptyVisibleTools: string;
     roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
@@ -424,7 +426,9 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       approvalRequired: "Approval required",
       approvalNotRequired: "No approval required",
       permissionLabel: "Permission",
+      permissionSummary: (permission) => `Permission: ${permission}`,
       rolesLabel: "Roles",
+      rolesSummary: (roles) => `Roles: ${roles.join(", ")}`,
       emptyConnectors: "No project MCP connectors yet.",
       emptyVisibleTools: "No visible tools for this role.",
       roleLabels: {
@@ -749,7 +753,9 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       approvalRequired: "需要批准",
       approvalNotRequired: "无需批准",
       permissionLabel: "权限",
+      permissionSummary: (permission) => `权限：${permission}`,
       rolesLabel: "角色",
+      rolesSummary: (roles) => `角色：${roles.join("、")}`,
       emptyConnectors: "暂无项目 MCP 连接器。",
       emptyVisibleTools: "该角色暂无可见工具。",
       roleLabels: {

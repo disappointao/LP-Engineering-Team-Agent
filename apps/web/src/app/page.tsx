@@ -454,11 +454,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 return (
                                   <div className="mcpToolCard" key={tool.name}>
                                     <strong>{tool.name}</strong>
-                                    <span>{`${copy.mcpView.permissionLabel}: ${tool.permission}`}</span>
+                                    <span>{copy.mcpView.permissionSummary(tool.permission)}</span>
                                     <small>
-                                      {`${copy.mcpView.rolesLabel}: ${tool.roles
-                                        .map((role) => copy.mcpView.roleLabels[role])
-                                        .join(", ")}`}
+                                      {copy.mcpView.rolesSummary(
+                                        tool.roles.map((role) => copy.mcpView.roleLabels[role])
+                                      )}
                                     </small>
                                     <small>
                                       {tool.requiresApproval

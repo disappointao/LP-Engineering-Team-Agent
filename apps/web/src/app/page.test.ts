@@ -366,6 +366,76 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("可见工具");
   });
 
+  it("renders Chinese MCP tool summaries with localized punctuation", async () => {
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      mcp: {
+        connectors: [
+          {
+            id: "connector_assets",
+            scope: "project",
+            targetKey: "project_1",
+            projectId: "project_1",
+            name: "内部素材",
+            description: "读取已批准的素材元数据。",
+            tools: [
+              {
+                name: "searchAssets",
+                description: "搜索已批准的品牌素材。",
+                permission: "assets:read",
+                roles: ["planner", "builder"],
+                requiresApproval: false
+              }
+            ],
+            enabled: true,
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    };
+    pageMocks.currentProjectId = "project_1";
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "zh-CN"
+    });
+
+    expect(html).toContain("权限：assets:read");
+    expect(html).toContain("角色：规划员、构建员");
+    expect(html).not.toContain("权限: assets:read");
+    expect(html).not.toContain("角色：规划员, 构建员");
+  });
+
   it("marks the MCP nav link active from the mcp route", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({ view: "mcp" })
