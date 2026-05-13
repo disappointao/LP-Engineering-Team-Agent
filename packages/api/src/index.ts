@@ -5,6 +5,10 @@ import {
   type PageVersionRecord,
   type ProjectRecord,
   type ReviewStatus,
+  type SkillBindingRecord,
+  type SkillContentType,
+  type SkillRecord,
+  type SkillVersionRecord,
   type WorkbenchRepositories
 } from "@lp-agent/db";
 import {
@@ -20,7 +24,12 @@ import {
   type AgentRuntimeAdapter,
   type RuntimeRunContext
 } from "@lp-agent/runtime-adapters";
-import { canUseSkill, sampleTemplateSkill, type SkillManifest } from "@lp-agent/skills";
+import {
+  SkillManifestSchema,
+  canPublishSkill,
+  canUseSkill,
+  type SkillManifest
+} from "@lp-agent/skills";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -29,7 +38,11 @@ export type {
   BriefRecord,
   PageVersionRecord,
   ProjectRecord,
-  ReviewStatus
+  ReviewStatus,
+  SkillBindingRecord,
+  SkillContentType,
+  SkillRecord,
+  SkillVersionRecord
 } from "@lp-agent/db";
 
 export interface WorkbenchSnapshot {
@@ -68,6 +81,42 @@ export interface ApproveAndCreateDeploymentInput {
   projectId: string;
   pageVersionId: string;
   reviewerUserId: string;
+}
+
+export interface CreateSkillDraftInput {
+  manifestJson: string;
+  content: string;
+  contentType: SkillContentType;
+}
+
+export interface SkillDraftResult {
+  skill: SkillRecord;
+  version: SkillVersionRecord;
+}
+
+export interface SkillVersionInput {
+  skillVersionId: string;
+}
+
+export interface BindSkillVersionToProjectInput {
+  projectId: string;
+  skillVersionId: string;
+}
+
+export interface SetProjectSkillBindingEnabledInput {
+  bindingId: string;
+  enabled: boolean;
+}
+
+export interface ProjectBoundSkillState {
+  skill: SkillRecord;
+  version: SkillVersionRecord;
+  binding: SkillBindingRecord;
+}
+
+export interface ProjectSkillState {
+  boundSkills: ProjectBoundSkillState[];
+  availableVersions: SkillVersionRecord[];
 }
 
 export interface DemoWorkbenchServiceOptions {
@@ -140,7 +189,7 @@ export class DemoWorkbenchService {
           brief: copyBrief(brief.brief),
           prompt: brief.prompt
         },
-        context: createWorkbenchRuntimeContext("builder")
+        context: await this.createRuntimeContext(input.projectId, "builder")
       });
 
       if (result.state === "failed") {
@@ -192,7 +241,7 @@ export class DemoWorkbenchService {
         brief: copyBrief(brief.brief),
         prompt: "Review for launch blockers."
       },
-      context: createWorkbenchRuntimeContext("reviewer")
+      context: await this.createRuntimeContext(input.projectId, "reviewer")
     });
 
     if (result.state === "failed") {
@@ -291,8 +340,216 @@ export class DemoWorkbenchService {
     };
   }
 
+  async createSkillDraft(input: CreateSkillDraftInput): Promise<SkillDraftResult> {
+    const manifest = parseProjectSkillManifest(input.manifestJson);
+    const content = normalizeSkillContent(input.content);
+    const existingVersion = await this.repositories.skillVersions.getBySkillIdAndVersion(
+      manifest.id,
+      manifest.version
+    );
+    if (existingVersion) {
+      throw new Error("duplicate_skill_version");
+    }
+
+    return withRepositoryIdLock(this.repositories, async () => {
+      const duplicate = await this.repositories.skillVersions.getBySkillIdAndVersion(
+        manifest.id,
+        manifest.version
+      );
+      if (duplicate) {
+        throw new Error("duplicate_skill_version");
+      }
+
+      const existingVersions = await this.repositories.skillVersions.listAll();
+      const existingSkill = await this.repositories.skills.getById(manifest.id);
+      const skill: SkillRecord = {
+        id: manifest.id,
+        name: manifest.name,
+        type: manifest.type,
+        scope: manifest.scope,
+        createdAt: existingSkill?.createdAt ?? this.timestamp()
+      };
+      const version: SkillVersionRecord = {
+        id: nextSequentialId("skill_version", existingVersions.map((record) => record.id)),
+        skillId: manifest.id,
+        version: manifest.version,
+        manifest: {
+          ...manifest,
+          reviewState: "draft"
+        },
+        content,
+        contentType: input.contentType,
+        reviewState: "draft",
+        createdAt: this.timestamp()
+      };
+
+      await this.repositories.skills.save(skill);
+      await this.repositories.skillVersions.save(version);
+
+      return {
+        skill: copySkillRecord(skill),
+        version: copySkillVersionRecord(version)
+      };
+    });
+  }
+
+  async validateSkillVersion(input: SkillVersionInput): Promise<SkillVersionRecord> {
+    const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    const updated = updateSkillVersionReviewState(version, "validated");
+    await this.repositories.skillVersions.save(updated);
+    return copySkillVersionRecord(updated);
+  }
+
+  async publishSkillVersion(input: SkillVersionInput): Promise<SkillVersionRecord> {
+    const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    if (version.reviewState !== "validated" && version.reviewState !== "published") {
+      throw new Error("skill_version_not_validated");
+    }
+    const decision = canPublishSkill("owner", version.manifest);
+    if (!decision.allowed) {
+      throw new Error("skill_version_not_publishable");
+    }
+
+    const updated = updateSkillVersionReviewState(version, "published");
+    await this.repositories.skillVersions.save(updated);
+    return copySkillVersionRecord(updated);
+  }
+
+  async bindSkillVersionToProject(
+    input: BindSkillVersionToProjectInput
+  ): Promise<SkillBindingRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    if (version.reviewState !== "published" || version.manifest.reviewState !== "published") {
+      throw new Error("skill_version_not_published");
+    }
+
+    const existingBindings = await this.repositories.skillBindings.listForProject(input.projectId);
+    const existing = existingBindings.find(
+      (binding) => binding.skillVersionId === input.skillVersionId
+    );
+    if (existing) {
+      return copySkillBindingRecord(existing);
+    }
+
+    return withRepositoryIdLock(this.repositories, async () => {
+      const duplicateBindings = await this.repositories.skillBindings.listForProject(input.projectId);
+      const duplicate = duplicateBindings.find(
+        (binding) => binding.skillVersionId === input.skillVersionId
+      );
+      if (duplicate) {
+        return copySkillBindingRecord(duplicate);
+      }
+
+      const allBindings = await this.repositories.skillBindings.listAll();
+      const binding: SkillBindingRecord = {
+        id: nextSequentialId("skill_binding", allBindings.map((record) => record.id)),
+        skillVersionId: input.skillVersionId,
+        scope: "project",
+        targetKey: input.projectId,
+        projectId: input.projectId,
+        enabled: true,
+        createdAt: this.timestamp(),
+        updatedAt: this.timestamp()
+      };
+      await this.repositories.skillBindings.save(binding);
+      return copySkillBindingRecord(binding);
+    });
+  }
+
+  async setProjectSkillBindingEnabled(
+    input: SetProjectSkillBindingEnabledInput
+  ): Promise<SkillBindingRecord> {
+    const binding = await this.repositories.skillBindings.getById(input.bindingId);
+    if (!binding) {
+      throw new Error("skill_binding_not_found");
+    }
+
+    const updated: SkillBindingRecord = {
+      ...binding,
+      enabled: input.enabled,
+      updatedAt: this.timestamp()
+    };
+    await this.repositories.skillBindings.save(updated);
+    return copySkillBindingRecord(updated);
+  }
+
+  async listProjectSkillState(projectId: string): Promise<ProjectSkillState> {
+    await this.getProjectOrThrow(projectId);
+    const bindings = await this.repositories.skillBindings.listForProject(projectId);
+    const boundSkills = (
+      await Promise.all(
+        bindings.map(async (binding) => {
+          const version = await this.repositories.skillVersions.getById(binding.skillVersionId);
+          const skill = version ? await this.repositories.skills.getById(version.skillId) : undefined;
+          if (!skill || !version) {
+            return undefined;
+          }
+          return copyProjectBoundSkillState({ skill, version, binding });
+        })
+      )
+    ).filter(isDefined);
+    const availableVersions = (await this.repositories.skillVersions.listAll())
+      .filter((version) => version.manifest.scope === "project")
+      .map(copySkillVersionRecord);
+
+    return {
+      boundSkills,
+      availableVersions
+    };
+  }
+
+  async listRuntimeSkillsForProject(projectId: string): Promise<SkillVersionRecord[]> {
+    await this.getProjectOrThrow(projectId);
+    const bindings = await this.repositories.skillBindings.listForProject(projectId);
+    const seenSkillIds = new Set<string>();
+    const versions: SkillVersionRecord[] = [];
+
+    for (const binding of bindings) {
+      if (!binding.enabled) {
+        continue;
+      }
+      const version = await this.repositories.skillVersions.getById(binding.skillVersionId);
+      if (
+        !version ||
+        version.reviewState !== "published" ||
+        version.manifest.reviewState !== "published" ||
+        seenSkillIds.has(version.manifest.id)
+      ) {
+        continue;
+      }
+
+      const grantedPermissions = [...version.manifest.permissions];
+      if (
+        canUseSkill({
+          manifest: version.manifest,
+          boundSkillIds: [version.manifest.id],
+          grantedPermissions
+        })
+      ) {
+        seenSkillIds.add(version.manifest.id);
+        versions.push(copySkillVersionRecord(version));
+      }
+    }
+
+    return versions;
+  }
+
   private timestamp(): string {
     return this.now().toISOString();
+  }
+
+  private async createRuntimeContext(
+    projectId: string,
+    role: "planner" | "builder" | "reviewer" | "deployer",
+    approvalState: ApprovalState = "not_required"
+  ): Promise<RuntimeRunContext> {
+    const skillVersions = await this.listRuntimeSkillsForProject(projectId);
+    return createWorkbenchRuntimeContext({
+      role,
+      approvalState,
+      skillVersions
+    });
   }
 
   private async getProjectOrThrow(projectId: string): Promise<ProjectRecord> {
@@ -322,6 +579,14 @@ export class DemoWorkbenchService {
     return pageVersion;
   }
 
+  private async getSkillVersionOrThrow(skillVersionId: string): Promise<SkillVersionRecord> {
+    const version = await this.repositories.skillVersions.getById(skillVersionId);
+    if (!version) {
+      throw new Error("skill_version_not_found");
+    }
+    return version;
+  }
+
   private async findLatestPageVersionForBrief(
     projectId: string,
     briefId: string
@@ -341,24 +606,30 @@ function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
   return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(createDefaultModelPolicy()));
 }
 
-function createWorkbenchRuntimeContext(
-  role: "planner" | "builder" | "reviewer" | "deployer",
-  approvalState: ApprovalState = "not_required"
-): RuntimeRunContext {
-  const skill = createDefaultWorkbenchSkill();
-  const grantedPermissions = [...skill.permissions];
-  const skills = canUseSkill({
-    manifest: skill,
-    boundSkillIds: [skill.id],
-    grantedPermissions
-  })
-    ? [toRuntimeSkill(skill)]
-    : [];
+function createWorkbenchRuntimeContext(input: {
+  role: "planner" | "builder" | "reviewer" | "deployer";
+  approvalState?: ApprovalState;
+  skillVersions: SkillVersionRecord[];
+}): RuntimeRunContext {
+  const approvalState = input.approvalState ?? "not_required";
+  const grantedPermissions = [
+    ...new Set(input.skillVersions.flatMap((version) => version.manifest.permissions))
+  ];
+  const boundSkillIds = input.skillVersions.map((version) => version.manifest.id);
+  const skills = input.skillVersions
+    .filter((version) =>
+      canUseSkill({
+        manifest: version.manifest,
+        boundSkillIds,
+        grantedPermissions
+      })
+    )
+    .map(toRuntimeSkill);
   const mcpTools = computeVisibleTools({
-    connectors: [sampleConnector],
-    projectConnectorIds: [sampleConnector.id],
+    connectors: grantedPermissions.length > 0 ? [sampleConnector] : [],
+    projectConnectorIds: grantedPermissions.length > 0 ? [sampleConnector.id] : [],
     skillPermissions: grantedPermissions,
-    agentRole: role,
+    agentRole: input.role,
     approvalState
   }).map((tool) => ({
     connectorId: sampleConnector.id,
@@ -380,28 +651,105 @@ function createWorkbenchRuntimeContext(
   };
 }
 
-function createDefaultWorkbenchSkill(): SkillManifest {
+function toRuntimeSkill(version: SkillVersionRecord): RuntimeRunContext["skills"][number] {
+  const manifest = version.manifest;
   return {
-    ...sampleTemplateSkill,
-    permissions: [...sampleTemplateSkill.permissions, "assets:read"]
+    id: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    scope: manifest.scope,
+    permissions: [...manifest.permissions],
+    entrypoints: [...manifest.entrypoints],
+    content: version.content,
+    contentType: version.contentType
   };
 }
 
-function toRuntimeSkill(skill: SkillManifest): RuntimeRunContext["skills"][number] {
+function parseProjectSkillManifest(manifestJson: string): SkillManifest {
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(manifestJson);
+  } catch {
+    throw new Error("invalid_manifest_json");
+  }
+
+  let manifest: SkillManifest;
+  try {
+    manifest = SkillManifestSchema.parse(parsedJson);
+  } catch {
+    throw new Error("manifest_validation_failed");
+  }
+
+  if (manifest.scope !== "project") {
+    throw new Error("unsupported_skill_scope");
+  }
+
+  return copySkillManifest(manifest);
+}
+
+function normalizeSkillContent(content: string): string {
+  const normalized = content.trim();
+  if (normalized.length === 0) {
+    throw new Error("skill_content_required");
+  }
+  if (new TextEncoder().encode(normalized).byteLength > 200000) {
+    throw new Error("skill_content_too_large");
+  }
+  return normalized;
+}
+
+function updateSkillVersionReviewState(
+  version: SkillVersionRecord,
+  reviewState: SkillManifest["reviewState"]
+): SkillVersionRecord {
   return {
-    id: skill.id,
-    name: skill.name,
-    version: skill.version,
-    scope: skill.scope,
-    permissions: [...skill.permissions],
-    entrypoints: [...skill.entrypoints],
-    content: "",
-    contentType: "text/markdown"
+    ...copySkillVersionRecord(version),
+    reviewState,
+    manifest: {
+      ...copySkillManifest(version.manifest),
+      reviewState
+    }
   };
 }
 
 function copyProject(project: ProjectRecord): ProjectRecord {
   return { ...project };
+}
+
+function copySkillRecord(skill: SkillRecord): SkillRecord {
+  return { ...skill };
+}
+
+function copySkillVersionRecord(version: SkillVersionRecord): SkillVersionRecord {
+  return {
+    ...version,
+    manifest: copySkillManifest(version.manifest)
+  };
+}
+
+function copySkillBindingRecord(binding: SkillBindingRecord): SkillBindingRecord {
+  const copy: SkillBindingRecord = { ...binding };
+  if (binding.settings) {
+    copy.settings = structuredClone(binding.settings);
+  }
+  return copy;
+}
+
+function copyProjectBoundSkillState(state: ProjectBoundSkillState): ProjectBoundSkillState {
+  return {
+    skill: copySkillRecord(state.skill),
+    version: copySkillVersionRecord(state.version),
+    binding: copySkillBindingRecord(state.binding)
+  };
+}
+
+function copySkillManifest(manifest: SkillManifest): SkillManifest {
+  return {
+    ...manifest,
+    permissions: [...manifest.permissions],
+    requiredSecrets: [...manifest.requiredSecrets],
+    entrypoints: [...manifest.entrypoints]
+  };
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {
@@ -437,6 +785,10 @@ function hasCompleteArtifacts(artifacts: StaticArtifacts): boolean {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function nextSequentialId(prefix: string, existingIds: string[]): string {

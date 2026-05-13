@@ -11,6 +11,7 @@ import type {
   RuntimeRunRequest,
   RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
+import type { SkillManifest } from "@lp-agent/skills";
 import {
   DemoWorkbenchService,
   createDemoWorkbenchService,
@@ -378,7 +379,95 @@ describe("demo workbench service", () => {
     });
   });
 
-  it("passes default skill, MCP, approval, and artifact workspace context into runtime runs", async () => {
+  it("creates, validates, publishes, and binds a project skill", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    const validated = await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    const binding = await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+    const state = await service.listProjectSkillState(project.id);
+
+    expect(draft.version.reviewState).toBe("draft");
+    expect(draft.version.manifest.reviewState).toBe("draft");
+    expect(validated.reviewState).toBe("validated");
+    expect(validated.manifest.reviewState).toBe("validated");
+    expect(published.reviewState).toBe("published");
+    expect(published.manifest.reviewState).toBe("published");
+    expect(binding).toMatchObject({
+      skillVersionId: published.id,
+      projectId: project.id,
+      enabled: true
+    });
+    expect(state.boundSkills).toEqual([
+      expect.objectContaining({
+        skill: expect.objectContaining({ id: "skill_brand" }),
+        version: expect.objectContaining({ reviewState: "published" }),
+        binding: expect.objectContaining({ enabled: true })
+      })
+    ]);
+  });
+
+  it("rejects duplicate skill versions and non-project manifests", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+
+    await expect(
+      service.createSkillDraft({
+        manifestJson: JSON.stringify(brandSkillManifest()),
+        content: "# Brand LP again",
+        contentType: "text/markdown"
+      })
+    ).rejects.toThrow("duplicate_skill_version");
+
+    await expect(
+      service.createSkillDraft({
+        manifestJson: JSON.stringify(brandSkillManifest({ scope: "workspace" })),
+        content: "# Workspace skill",
+        contentType: "text/markdown"
+      })
+    ).rejects.toThrow("unsupported_skill_scope");
+
+    await expect(
+      service.createSkillDraft({
+        manifestJson: JSON.stringify(brandSkillManifest({ version: "not-semver" })),
+        content: "# Invalid skill",
+        contentType: "text/markdown"
+      })
+    ).rejects.toThrow("manifest_validation_failed");
+  });
+
+  it("requires published skills before project binding", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+
+    await expect(
+      service.bindSkillVersionToProject({
+        projectId: project.id,
+        skillVersionId: draft.version.id
+      })
+    ).rejects.toThrow("skill_version_not_published");
+  });
+
+  it("passes project-bound published skills into runtime runs", async () => {
     const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
     const reviewerRuntime = new RecordingRuntime({ state: "completed", findings: [] });
     const service = new DemoWorkbenchService({
@@ -388,6 +477,17 @@ describe("demo workbench service", () => {
     });
 
     const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
     await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
@@ -398,7 +498,7 @@ describe("demo workbench service", () => {
           id: "skill_brand",
           scope: "project",
           permissions: ["brief:read", "artifact:write", "assets:read"],
-          content: "",
+          content: "# Brand LP",
           contentType: "text/markdown"
         }
       ],
@@ -421,6 +521,21 @@ describe("demo workbench service", () => {
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);
+  });
+
+  it("does not inject a hidden default skill when no project skills are bound", async () => {
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      builderRuntime,
+      now: fixedClock()
+    });
+
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+
+    expect(builderRuntime.requests[0]?.context?.skills).toEqual([]);
+    expect(builderRuntime.requests[0]?.context?.mcpTools).toEqual([]);
   });
 
   it("fails page generation when the builder runtime fails", async () => {
@@ -695,4 +810,20 @@ function completeArtifacts(): StaticArtifacts {
 
 function fixedClock(): () => Date {
   return () => new Date("2026-05-11T00:00:00.000Z");
+}
+
+function brandSkillManifest(overrides: Partial<SkillManifest> = {}): SkillManifest {
+  return {
+    id: "skill_brand",
+    name: "Brand LP",
+    version: "1.0.0",
+    type: "template",
+    scope: "project",
+    description: "Brand LP sections.",
+    permissions: ["brief:read", "artifact:write", "assets:read"],
+    requiredSecrets: [],
+    entrypoints: ["skills/brand.md"],
+    reviewState: "published",
+    ...overrides
+  };
 }
