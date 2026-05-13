@@ -64,6 +64,10 @@ export type ModelFlowErrorCode =
   | "model_secret_reference_invalid"
   | "model_routing_operation_failed";
 
+export interface WebProjectModelState extends ProjectModelState {
+  resolutionError?: ModelFlowErrorCode;
+}
+
 type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProjectFlowErrorCode };
@@ -128,14 +132,14 @@ export type WorkbenchPageState =
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
-      models: ProjectModelState;
+      models: WebProjectModelState;
     }
   | {
       kind: "task_ready";
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
-      models: ProjectModelState;
+      models: WebProjectModelState;
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
@@ -274,7 +278,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     availableVersions: []
   });
 
-  const emptyModelState = (): ProjectModelState => ({
+  const emptyModelState = (): WebProjectModelState => ({
     providers: [],
     routes: [],
     resolvedPolicy: createDefaultModelPolicy()
@@ -295,7 +299,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     }
   };
 
-  const loadModelState = async (projectId?: string | null): Promise<ProjectModelState> => {
+  const loadModelState = async (projectId?: string | null): Promise<WebProjectModelState> => {
     if (!projectId) {
       return emptyModelState();
     }
@@ -305,6 +309,15 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const message = error instanceof Error ? error.message : "";
       if (message === "project_not_found" || message === "Project not found.") {
         return emptyModelState();
+      }
+      const resolutionError = toModelFlowError(error);
+      if (isRecoverableModelResolutionError(resolutionError)) {
+        return {
+          providers: await repositories.modelProviders.listForProject(projectId),
+          routes: await repositories.modelRoutingPolicies.listForProject(projectId),
+          resolvedPolicy: createDefaultModelPolicy(),
+          resolutionError
+        };
       }
       throw error;
     }
@@ -585,6 +598,21 @@ function toModelFlowError(error: unknown): ModelFlowErrorCode {
     return "project_not_found";
   }
   return "model_routing_operation_failed";
+}
+
+function isRecoverableModelResolutionError(
+  error: ModelFlowErrorCode
+): error is
+  | "model_route_provider_invalid"
+  | "model_provider_disabled"
+  | "model_id_required"
+  | "model_role_unsupported" {
+  return (
+    error === "model_route_provider_invalid" ||
+    error === "model_provider_disabled" ||
+    error === "model_id_required" ||
+    error === "model_role_unsupported"
+  );
 }
 
 const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();

@@ -342,6 +342,90 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Builder");
   });
 
+  it("shows the builder model route signal in the workbench top bar", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "provider_openai", model: "gpt-5.4" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Builder model: provider_openai/gpt-5.4");
+  });
+
+  it("shows recoverable model resolution errors in the models view without the composer", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [
+          {
+            id: "model_route_1",
+            scope: "project",
+            targetKey: "project_1",
+            role: "builder",
+            providerId: "provider_missing",
+            model: "gpt-5.4",
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        },
+        resolutionError: "model_route_provider_invalid"
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page);
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("The route points to an unavailable provider.");
+    expect(inputs.some((input) => input.props?.name === "prompt")).toBe(false);
+  });
+
   it("uses the active task project as the models project context and submits it in forms", async () => {
     pageMocks.pageState = {
       kind: "task_ready",

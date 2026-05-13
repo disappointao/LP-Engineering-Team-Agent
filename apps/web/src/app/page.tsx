@@ -23,7 +23,8 @@ import {
   getWebWorkbenchStore,
   type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
-  type SkillFlowErrorCode
+  type SkillFlowErrorCode,
+  type WebProjectModelState
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 
@@ -53,6 +54,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     projectId: currentProjectId,
     taskId: currentTaskId
   });
+  const modelState = getPageModelState(pageState);
   const activeTask = pageState.kind === "task_ready" ? pageState.task : undefined;
   const activeProject =
     pageState.kind === "task_ready" && pageState.snapshot
@@ -61,8 +63,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         pageState.projects.find((project) => project.id === activeTask?.projectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
-  const modelErrorMessage = modelError ? copy.modelsView.errors[modelError] : undefined;
+  const modelErrorMessage = modelError
+    ? copy.modelsView.errors[modelError]
+    : modelState.resolutionError
+      ? copy.modelsView.errors[modelState.resolutionError]
+      : undefined;
   const roleOrder = ["planner", "builder", "reviewer", "deployer"] as const;
+  const builderModelRoute = modelState.resolvedPolicy.builder;
+  const builderModelLabel = copy.chat.builderModelRoute(
+    `${builderModelRoute.provider}/${builderModelRoute.model}`
+  );
   const activeSkillCount = pageState.skills.boundSkills.filter(
     (boundSkill) =>
       boundSkill.binding.enabled &&
@@ -213,6 +223,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <span>{activeProject?.name ?? activeTask?.title ?? copy.sidebar.newTask}</span>
             {activeSkillCount > 0 ? (
               <span className="skillRuntimeChip">{activeSkillLabel}</span>
+            ) : null}
+            {activeView === "workbench" ? (
+              <span className="modelRuntimeChip">{builderModelLabel}</span>
             ) : null}
           </div>
           <div className="topBarActions">
@@ -420,8 +433,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                     <section className="modelsList" aria-labelledby="model-providers-title">
                       <h2 id="model-providers-title">{copy.modelsView.providersTitle}</h2>
-                      {pageState.models.providers.length > 0 ? (
-                        pageState.models.providers.map((provider) => (
+                      {modelState.providers.length > 0 ? (
+                        modelState.providers.map((provider) => (
                           <div className="modelRow" key={provider.id}>
                             <div>
                               <strong>{provider.name}</strong>
@@ -456,11 +469,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <section className="modelsList" aria-labelledby="model-routes-title">
                       <h2 id="model-routes-title">{copy.modelsView.routesTitle}</h2>
                       {roleOrder.map((role) => {
-                        const route = pageState.models.routes.find(
+                        const route = modelState.routes.find(
                           (modelRoute) => modelRoute.role === role
                         );
-                        const resolvedRoute = pageState.models.resolvedPolicy[role];
-                        const enabledProviders = pageState.models.providers.filter(
+                        const resolvedRoute = modelState.resolvedPolicy[role];
+                        const enabledProviders = modelState.providers.filter(
                           (provider) => provider.enabled
                         );
                         return (
@@ -502,7 +515,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <section className="modelsList" aria-labelledby="resolved-routes-title">
                       <h2 id="resolved-routes-title">{copy.modelsView.resolvedTitle}</h2>
                       {roleOrder.map((role) => {
-                        const resolvedRoute = pageState.models.resolvedPolicy[role];
+                        const resolvedRoute = modelState.resolvedPolicy[role];
                         return (
                           <div className="modelRow" key={role}>
                             <strong>{copy.modelsView.roleLabels[role]}</strong>
@@ -656,6 +669,19 @@ function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | u
     return value;
   }
   return undefined;
+}
+
+function getPageModelState(pageState: { models?: WebProjectModelState }): WebProjectModelState {
+  return pageState.models ?? {
+    providers: [],
+    routes: [],
+    resolvedPolicy: {
+      planner: { provider: "mock-openai", model: "planning-model" },
+      builder: { provider: "mock-anthropic", model: "code-model" },
+      reviewer: { provider: "mock-openai", model: "review-model" },
+      deployer: { provider: "mock-local", model: "tool-model" }
+    }
+  };
 }
 
 function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undefined {

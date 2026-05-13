@@ -420,6 +420,78 @@ describe("web workbench store", () => {
     });
   });
 
+  it("recovers page model state when a persisted route points to a disabled provider", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "Project" });
+    const provider = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    if (!provider.ok) {
+      throw new Error(`Expected provider creation to succeed, got ${provider.error}.`);
+    }
+    const route = await store.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.value.id,
+      model: "gpt-5.4"
+    });
+    if (!route.ok) {
+      throw new Error(`Expected route upsert to succeed, got ${route.error}.`);
+    }
+    await repositories.modelProviders.save({
+      ...provider.value,
+      enabled: false,
+      updatedAt: "2026-05-12T08:10:00.000Z"
+    });
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.models.resolutionError).toBe("model_provider_disabled");
+    expect(state.models.providers).toEqual([
+      expect.objectContaining({ id: "provider_openai", enabled: false })
+    ]);
+    expect(state.models.routes).toEqual([
+      expect.objectContaining({ providerId: "provider_openai", role: "builder" })
+    ]);
+    expect(state.models.resolvedPolicy.builder).toEqual({
+      provider: "mock-anthropic",
+      model: "code-model"
+    });
+  });
+
+  it("recovers page model state when a persisted route points to a missing provider", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "Project" });
+    await repositories.modelRoutingPolicies.save({
+      id: "model_route_1",
+      scope: "project",
+      targetKey: project.id,
+      role: "builder",
+      providerId: "provider_missing",
+      model: "gpt-5.4",
+      createdAt: "2026-05-12T08:00:00.000Z",
+      updatedAt: "2026-05-12T08:00:00.000Z"
+    });
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.models.resolutionError).toBe("model_route_provider_invalid");
+    expect(state.models.providers).toEqual([]);
+    expect(state.models.routes).toEqual([
+      expect.objectContaining({ providerId: "provider_missing", role: "builder" })
+    ]);
+    expect(state.models.resolvedPolicy.builder).toEqual({
+      provider: "mock-anthropic",
+      model: "code-model"
+    });
+  });
+
   it("maps model store validation errors to stable codes", async () => {
     const store = createWebWorkbenchStore();
     const project = await store.createProject({ name: "Project" });

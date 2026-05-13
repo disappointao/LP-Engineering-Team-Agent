@@ -157,6 +157,7 @@ export interface WorkbenchCopy {
   };
   chat: {
     topbarModel: string;
+    builderModelRoute: (route: string) => string;
     topbarShare: string;
     topbarTrial: string;
     assistantName: string;
@@ -446,6 +447,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     chat: {
       topbarModel: "LP Agent Lite",
+      builderModelRoute: (route) => `Builder model: ${route}`,
       topbarShare: "Share",
       topbarTrial: "Start trial",
       assistantName: "LP Agent",
@@ -711,6 +713,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     chat: {
       topbarModel: "LP Agent Lite",
+      builderModelRoute: (route) => `构建模型：${route}`,
       topbarShare: "分享",
       topbarTrial: "开始免费试用",
       assistantName: "LP Agent",

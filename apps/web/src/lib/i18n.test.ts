@@ -22,6 +22,9 @@ describe("web i18n", () => {
     expect(zh.entry.title).toBe("我能为你做什么？");
     expect(zh.entry.implicitProjectName).toBe("未命名 LP 项目");
     expect(zh.chat.composerPlaceholder).toBe("发送消息给 LP Agent");
+    expect(zh.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
+      "构建模型：provider_openai/gpt-5.4"
+    );
     expect(zh.projectFlow.createProject).toBe("创建项目");
     expect(zh.projectFlow.localPersistenceNote).toBe(
       "Web MVP 状态会保存在这台电脑的 .lp-agent/ 本地状态目录中。"
@@ -33,6 +36,9 @@ describe("web i18n", () => {
     expect(en.entry.title).toBe("What can I help you build?");
     expect(en.entry.implicitProjectName).toBe("Untitled LP Project");
     expect(en.chat.composerPlaceholder).toBe("Message LP Agent");
+    expect(en.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
+      "Builder model: provider_openai/gpt-5.4"
+    );
     expect(en.projectFlow.createProject).toBe("Create project");
     expect(en.projectFlow.localPersistenceNote).toBe(
       "Local Web MVP state is saved on this machine under .lp-agent/."
