@@ -119,4 +119,46 @@ describe("json-file workbench repositories", () => {
       taskSnapshots: []
     });
   });
+
+  it("preserves overlapping writes from multiple instances for the same file", async () => {
+    const filePath = await tempStateFile();
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+
+    await Promise.all([
+      first.projects.save({
+        id: "project_1",
+        name: "Spring sale",
+        createdAt
+      }),
+      second.tasks.save({
+        id: "task_1",
+        title: "Create LP",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt
+      })
+    ]);
+
+    const reopened = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(reopened.projects.listAll()).resolves.toEqual([
+      {
+        id: "project_1",
+        name: "Spring sale",
+        createdAt
+      }
+    ]);
+    await expect(reopened.tasks.listAll()).resolves.toEqual([
+      {
+        id: "task_1",
+        title: "Create LP",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt
+      }
+    ]);
+  });
 });

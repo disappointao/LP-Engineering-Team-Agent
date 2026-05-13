@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
@@ -31,6 +32,8 @@ interface JsonFileWorkbenchState {
   messages: WorkbenchMessageRecord[];
   taskSnapshots: WorkbenchTaskSnapshotRecord[];
 }
+
+const writeQueuesByFilePath = new Map<string, Promise<void>>();
 
 export function createJsonFileWorkbenchRepositories(
   options: JsonFileWorkbenchRepositoriesOptions
@@ -229,9 +232,25 @@ async function updateState(
   filePath: string,
   update: (state: JsonFileWorkbenchState) => void
 ): Promise<void> {
-  const state = await readState(filePath);
-  update(state);
-  await writeState(filePath, state);
+  await enqueueWrite(filePath, async () => {
+    const state = await readState(filePath);
+    update(state);
+    await writeState(filePath, state);
+  });
+}
+
+async function enqueueWrite(filePath: string, write: () => Promise<void>): Promise<void> {
+  const previousWrite = writeQueuesByFilePath.get(filePath) ?? Promise.resolve();
+  const nextWrite = previousWrite.catch(() => undefined).then(write);
+  writeQueuesByFilePath.set(filePath, nextWrite);
+
+  try {
+    await nextWrite;
+  } finally {
+    if (writeQueuesByFilePath.get(filePath) === nextWrite) {
+      writeQueuesByFilePath.delete(filePath);
+    }
+  }
 }
 
 async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
@@ -256,9 +275,10 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
 }
 
 async function writeState(filePath: string, state: JsonFileWorkbenchState): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tempPath = join(dirname(filePath), `.${process.pid}.${Date.now()}.workbench-state.tmp`);
-  await writeFile(`${tempPath}`, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const directory = dirname(filePath);
+  await mkdir(directory, { recursive: true });
+  const tempPath = join(directory, `.${process.pid}.${randomUUID()}.workbench-state.tmp`);
+  await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await rename(tempPath, filePath);
 }
 
