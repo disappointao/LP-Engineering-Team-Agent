@@ -731,6 +731,61 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
+  it("creates an mcp connector from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("definitionJson", JSON.stringify({
+      id: "connector_assets",
+      name: "Assets",
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    }));
+
+    await expectRedirect(createMCPConnectorAction(formData), "/?view=mcp");
+
+    expect(mocks.createMCPConnector).toHaveBeenCalledWith({
+      projectId: "project_1",
+      definitionJson: String(formData.get("definitionJson"))
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("creates an mcp connector for the form project when the cookie differs", async () => {
+    mocks.currentProjectId = "project_2";
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("definitionJson", JSON.stringify({
+      id: "connector_assets",
+      name: "Assets",
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    }));
+
+    await expectRedirect(createMCPConnectorAction(formData), "/?view=mcp");
+
+    expect(mocks.createMCPConnector).toHaveBeenCalledWith({
+      projectId: "project_1",
+      definitionJson: String(formData.get("definitionJson"))
+    });
+    expect(mocks.createMCPConnector).not.toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project_2" })
+    );
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
   it("sets an mcp connector enabled flag and redirects to the mcp view", async () => {
     mocks.currentProjectId = "project_1";
 
@@ -749,6 +804,53 @@ describe("submitPromptAction", () => {
       connectorId: "connector_assets",
       enabled: false
     });
+  });
+
+  it("sets an mcp connector enabled flag from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+
+    await expectRedirect(
+      setMCPConnectorEnabledAction(
+        buildSkillForm({
+          projectId: "project_1",
+          connectorId: "connector_assets",
+          enabled: "true"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPConnectorEnabled).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      enabled: true
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("sets an mcp connector enabled flag for the form project when the cookie differs", async () => {
+    mocks.currentProjectId = "project_2";
+
+    await expectRedirect(
+      setMCPConnectorEnabledAction(
+        buildSkillForm({
+          projectId: "project_1",
+          connectorId: "connector_assets",
+          enabled: "false"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPConnectorEnabled).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      enabled: false
+    });
+    expect(mocks.setMCPConnectorEnabled).not.toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project_2" })
+    );
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
 
   it("sets an mcp tool approval and redirects to the mcp view", async () => {
@@ -771,5 +873,56 @@ describe("submitPromptAction", () => {
       toolName: "searchAssets",
       approved: true
     });
+  });
+
+  it("sets an mcp tool approval from a hidden project id when no project cookie exists", async () => {
+    mocks.currentProjectId = undefined;
+
+    await expectRedirect(
+      setMCPToolApprovalAction(
+        buildSkillForm({
+          projectId: "project_1",
+          connectorId: "connector_assets",
+          toolName: "searchAssets",
+          approved: "true"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPToolApproval).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      approved: true
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("sets an mcp tool approval for the form project when the cookie differs", async () => {
+    mocks.currentProjectId = "project_2";
+
+    await expectRedirect(
+      setMCPToolApprovalAction(
+        buildSkillForm({
+          projectId: "project_1",
+          connectorId: "connector_assets",
+          toolName: "searchAssets",
+          approved: "true"
+        })
+      ),
+      "/?view=mcp"
+    );
+
+    expect(mocks.setMCPToolApproval).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      approved: true
+    });
+    expect(mocks.setMCPToolApproval).not.toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project_2" })
+    );
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
 });

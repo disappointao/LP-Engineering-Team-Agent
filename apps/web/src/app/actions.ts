@@ -328,7 +328,7 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
 
 export async function createMCPConnectorAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  const projectId = String(formData.get("projectId") ?? "") || currentProjectId || "";
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
@@ -346,7 +346,7 @@ export async function createMCPConnectorAction(formData: FormData): Promise<void
 
 export async function setMCPConnectorEnabledAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  const projectId = String(formData.get("projectId") ?? "") || currentProjectId || "";
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
@@ -365,7 +365,7 @@ export async function setMCPConnectorEnabledAction(formData: FormData): Promise<
 
 export async function setMCPToolApprovalAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
+  const projectId = String(formData.get("projectId") ?? "") || currentProjectId || "";
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
