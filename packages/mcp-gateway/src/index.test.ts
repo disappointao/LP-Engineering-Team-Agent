@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeVisibleTools, sampleConnector } from "./index";
+import {
+  computeVisibleTools,
+  normalizeMCPConnectorDefinition,
+  sampleConnector,
+  type MCPConnectorDefinition
+} from "./index";
 
 describe("MCP gateway policy", () => {
   it("exposes only tools allowed for the agent role and project", () => {
@@ -59,5 +64,135 @@ describe("MCP gateway policy", () => {
 
     expect(sourceConnector.tools[0]!.roles).toEqual(["planner", "builder", "reviewer"]);
     expect(sourceConnector.tools[0]!.permission).toBe("assets:read");
+  });
+
+  it("normalizes connector definitions with defensive tool copies", () => {
+    const connector: MCPConnectorDefinition = normalizeMCPConnectorDefinition({
+      id: "connector_assets",
+      name: "Internal Assets",
+      description: "Search approved asset metadata.",
+      tools: [
+        {
+          name: "searchAssets",
+          description: "Search assets.",
+          permission: "assets:read",
+          roles: ["planner", "builder"],
+          requiresApproval: false
+        }
+      ]
+    });
+
+    expect(connector).toEqual({
+      id: "connector_assets",
+      name: "Internal Assets",
+      description: "Search approved asset metadata.",
+      tools: [
+        {
+          name: "searchAssets",
+          description: "Search assets.",
+          permission: "assets:read",
+          roles: ["planner", "builder"],
+          requiresApproval: false
+        }
+      ]
+    });
+
+    connector.tools[0]!.roles.push("reviewer");
+    expect(
+      normalizeMCPConnectorDefinition({
+        id: "connector_assets",
+        name: "Internal Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["planner", "builder"],
+            requiresApproval: false
+          }
+        ]
+      }).tools[0]!.roles
+    ).toEqual(["planner", "builder"]);
+  });
+
+  it("rejects invalid connector definitions", () => {
+    expect(() =>
+      normalizeMCPConnectorDefinition({
+        id: "",
+        name: "Broken",
+        tools: []
+      })
+    ).toThrow("mcp_connector_validation_failed");
+
+    expect(() =>
+      normalizeMCPConnectorDefinition({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder", "unknown"],
+            requiresApproval: false
+          }
+        ]
+      })
+    ).toThrow("mcp_connector_validation_failed");
+
+    expect(() =>
+      normalizeMCPConnectorDefinition({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          },
+          {
+            name: "searchAssets",
+            permission: "assets:write",
+            roles: ["builder"],
+            requiresApproval: true
+          }
+        ]
+      })
+    ).toThrow("mcp_connector_validation_failed");
+  });
+
+  it("uses tool-specific approval states for approval-required tools", () => {
+    const tools = computeVisibleTools({
+      connectors: [sampleConnector],
+      projectConnectorIds: ["connector_assets"],
+      skillPermissions: ["git:write"],
+      agentRole: "deployer",
+      approvalStates: [
+        {
+          connectorId: "connector_assets",
+          toolName: "createPullRequest",
+          state: "approved"
+        }
+      ]
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual(["createPullRequest"]);
+  });
+
+  it("keeps approval-required tools hidden when approval is pending", () => {
+    const tools = computeVisibleTools({
+      connectors: [sampleConnector],
+      projectConnectorIds: ["connector_assets"],
+      skillPermissions: ["git:write"],
+      agentRole: "deployer",
+      approvalStates: [
+        {
+          connectorId: "connector_assets",
+          toolName: "createPullRequest",
+          state: "pending"
+        }
+      ]
+    });
+
+    expect(tools).toEqual([]);
   });
 });
