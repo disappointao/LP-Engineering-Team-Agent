@@ -140,6 +140,54 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("allocates the next project id from existing repository records", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.projects.save({
+      id: "project_7",
+      name: "Existing project",
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Next project" });
+
+    expect(project).toMatchObject({
+      id: "project_8",
+      name: "Next project"
+    });
+  });
+
+  it("loads a snapshot from explicit brief and page version ids", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "First LP"
+    });
+    const firstVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second LP"
+    });
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    const snapshot = await service.getSnapshotForRecords({
+      projectId: project.id,
+      briefId: firstBrief.id,
+      pageVersionId: firstVersion.id
+    });
+
+    expect(snapshot.brief?.prompt).toBe("First LP");
+    expect(snapshot.currentPageVersion?.id).toBe(firstVersion.id);
+  });
+
   it("uses branch-safe generated IDs for deployment", async () => {
     const deploymentAdapter = new RecordingDeploymentAdapter();
     const service = new DemoWorkbenchService({

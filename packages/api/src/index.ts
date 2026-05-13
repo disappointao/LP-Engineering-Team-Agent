@@ -50,6 +50,12 @@ export interface GeneratePageVersionInput {
   briefId: string;
 }
 
+export interface GetSnapshotForRecordsInput {
+  projectId: string;
+  briefId?: string;
+  pageVersionId?: string;
+}
+
 export interface ReviewPageVersionInput {
   projectId: string;
   pageVersionId: string;
@@ -70,9 +76,6 @@ export interface DemoWorkbenchServiceOptions {
 }
 
 export class DemoWorkbenchService {
-  private projectSequence = 0;
-  private briefSequence = 0;
-  private pageVersionSequence = 0;
   private readonly repositories: WorkbenchRepositories;
   private readonly builderRuntime: AgentRuntimeAdapter;
   private readonly reviewerRuntime: AgentRuntimeAdapter;
@@ -88,9 +91,9 @@ export class DemoWorkbenchService {
   }
 
   async createProject(input: CreateProjectInput): Promise<ProjectRecord> {
-    this.projectSequence += 1;
+    const existingProjects = await this.repositories.projects.listAll();
     const project: ProjectRecord = {
-      id: `project_${this.projectSequence}`,
+      id: nextSequentialId("project", existingProjects.map((record) => record.id)),
       name: input.name,
       createdAt: this.timestamp()
     };
@@ -101,9 +104,9 @@ export class DemoWorkbenchService {
   async createBriefFromPrompt(input: CreateBriefFromPromptInput): Promise<BriefRecord> {
     await this.getProjectOrThrow(input.projectId);
 
-    this.briefSequence += 1;
+    const existingBriefs = await this.repositories.briefs.listAll();
     const brief: BriefRecord = {
-      id: `brief_${this.briefSequence}`,
+      id: nextSequentialId("brief", existingBriefs.map((record) => record.id)),
       projectId: input.projectId,
       prompt: input.prompt,
       brief: copyBrief(sampleBrief),
@@ -116,7 +119,9 @@ export class DemoWorkbenchService {
   async generatePageVersion(input: GeneratePageVersionInput): Promise<PageVersionRecord> {
     await this.getProjectOrThrow(input.projectId);
     const brief = await this.getBriefForProjectOrThrow(input.projectId, input.briefId);
-    const runId = `run_builder_${this.pageVersionSequence + 1}`;
+    const existingPageVersions = await this.repositories.pageVersions.listAll();
+    const pageVersionId = nextSequentialId("version", existingPageVersions.map((record) => record.id));
+    const runId = `run_builder_${pageVersionId.replace(/^version_/, "")}`;
 
     const result = await this.builderRuntime.run({
       runId,
@@ -142,9 +147,8 @@ export class DemoWorkbenchService {
       throw new Error("Builder run returned incomplete artifacts.");
     }
 
-    this.pageVersionSequence += 1;
     const pageVersion: PageVersionRecord = {
-      id: `version_${this.pageVersionSequence}`,
+      id: pageVersionId,
       projectId: input.projectId,
       briefId: brief.id,
       artifacts: copyArtifacts(result.artifacts),
@@ -225,6 +229,28 @@ export class DemoWorkbenchService {
       ? await this.repositories.briefs.getById(currentPageVersion.briefId)
       : await this.repositories.briefs.findLatestForProject(projectId);
     const deployment = await this.repositories.deployments.findLatestForProject(projectId);
+
+    return {
+      project: copyProject(project),
+      brief: brief ? copyBriefRecord(brief) : undefined,
+      currentPageVersion: currentPageVersion ? copyPageVersion(currentPageVersion) : undefined,
+      deployment: deployment ? copyDeployment(deployment) : undefined
+    };
+  }
+
+  async getSnapshotForRecords(input: GetSnapshotForRecordsInput): Promise<WorkbenchSnapshot> {
+    const project = await this.getProjectOrThrow(input.projectId);
+    const currentPageVersion = input.pageVersionId
+      ? await this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId)
+      : await this.repositories.pageVersions.findLatestForProject(input.projectId);
+    const brief = input.briefId
+      ? await this.getBriefForProjectOrThrow(input.projectId, input.briefId)
+      : currentPageVersion
+        ? await this.repositories.briefs.getById(currentPageVersion.briefId)
+        : await this.repositories.briefs.findLatestForProject(input.projectId);
+    const deployment = currentPageVersion
+      ? await this.repositories.deployments.getByPageVersionId(currentPageVersion.id)
+      : await this.repositories.deployments.findLatestForProject(input.projectId);
 
     return {
       project: copyProject(project),
@@ -368,6 +394,15 @@ function hasCompleteArtifacts(artifacts: StaticArtifacts): boolean {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function nextSequentialId(prefix: string, existingIds: string[]): string {
+  const nextNumber =
+    existingIds.reduce((largest, id) => {
+      const match = new RegExp(`^${prefix}_(\\d+)$`).exec(id);
+      return match ? Math.max(largest, Number(match[1])) : largest;
+    }, 0) + 1;
+  return `${prefix}_${nextNumber}`;
 }
 
 function copyFinding(finding: ReviewFinding): ReviewFinding {
