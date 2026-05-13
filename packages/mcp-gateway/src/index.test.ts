@@ -67,16 +67,17 @@ describe("MCP gateway policy", () => {
   });
 
   it("normalizes connector definitions with defensive tool copies", () => {
+    const inputRoles = ["planner", "builder"];
     const connector: MCPConnectorDefinition = normalizeMCPConnectorDefinition({
-      id: "connector_assets",
-      name: "Internal Assets",
-      description: "Search approved asset metadata.",
+      id: " connector_assets ",
+      name: " Internal Assets ",
+      description: " Search approved asset metadata. ",
       tools: [
         {
-          name: "searchAssets",
-          description: "Search assets.",
-          permission: "assets:read",
-          roles: ["planner", "builder"],
+          name: " searchAssets ",
+          description: " Search assets. ",
+          permission: " assets:read ",
+          roles: inputRoles,
           requiresApproval: false
         }
       ]
@@ -98,20 +99,7 @@ describe("MCP gateway policy", () => {
     });
 
     connector.tools[0]!.roles.push("reviewer");
-    expect(
-      normalizeMCPConnectorDefinition({
-        id: "connector_assets",
-        name: "Internal Assets",
-        tools: [
-          {
-            name: "searchAssets",
-            permission: "assets:read",
-            roles: ["planner", "builder"],
-            requiresApproval: false
-          }
-        ]
-      }).tools[0]!.roles
-    ).toEqual(["planner", "builder"]);
+    expect(inputRoles).toEqual(["planner", "builder"]);
   });
 
   it("rejects invalid connector definitions", () => {
