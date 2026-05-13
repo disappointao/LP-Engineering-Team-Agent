@@ -237,6 +237,11 @@ describe("in-memory workbench repositories", () => {
       targetKey: "project_1",
       projectId: "project_1",
       enabled: true,
+      settings: {
+        brand: {
+          tone: "concise"
+        }
+      },
       createdAt,
       updatedAt: createdAt
     };
@@ -250,6 +255,19 @@ describe("in-memory workbench repositories", () => {
       throw new Error("Expected saved skill version.");
     }
     savedVersion.manifest.permissions.push("mutated:permission");
+    const savedBinding = await repositories.skillBindings.getById(binding.id);
+    if (!savedBinding) {
+      throw new Error("Expected saved skill binding.");
+    }
+    const savedBindingBrandSettings = savedBinding.settings?.brand;
+    if (
+      !savedBindingBrandSettings ||
+      typeof savedBindingBrandSettings !== "object" ||
+      Array.isArray(savedBindingBrandSettings)
+    ) {
+      throw new Error("Expected saved skill binding brand settings.");
+    }
+    savedBindingBrandSettings.tone = "mutated";
 
     await expect(repositories.skills.listAll()).resolves.toEqual([skill]);
     await expect(repositories.skillVersions.listForSkill(skill.id)).resolves.toEqual([version]);
@@ -259,6 +277,7 @@ describe("in-memory workbench repositories", () => {
     await expect(repositories.skillBindings.listForProject("project_1")).resolves.toEqual([
       binding
     ]);
+    await expect(repositories.skillBindings.getById(binding.id)).resolves.toEqual(binding);
     await expect(repositories.skillVersions.getById(version.id)).resolves.toEqual(version);
   });
 });
