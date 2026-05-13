@@ -22,6 +22,9 @@ import {
 } from "@lp-agent/runtime-adapters";
 import { canUseSkill, sampleTemplateSkill, type SkillManifest } from "@lp-agent/skills";
 
+const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
+const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
+
 export type {
   BriefRecord,
   PageVersionRecord,
@@ -91,73 +94,85 @@ export class DemoWorkbenchService {
   }
 
   async createProject(input: CreateProjectInput): Promise<ProjectRecord> {
-    const existingProjects = await this.repositories.projects.listAll();
-    const project: ProjectRecord = {
-      id: nextSequentialId("project", existingProjects.map((record) => record.id)),
-      name: input.name,
-      createdAt: this.timestamp()
-    };
-    await this.repositories.projects.save(project);
-    return copyProject(project);
+    return withRepositoryIdLock(this.repositories, async () => {
+      const existingProjects = await this.repositories.projects.listAll();
+      const project: ProjectRecord = {
+        id: nextSequentialId("project", existingProjects.map((record) => record.id)),
+        name: input.name,
+        createdAt: this.timestamp()
+      };
+      await this.repositories.projects.save(project);
+      return copyProject(project);
+    });
   }
 
   async createBriefFromPrompt(input: CreateBriefFromPromptInput): Promise<BriefRecord> {
     await this.getProjectOrThrow(input.projectId);
 
-    const existingBriefs = await this.repositories.briefs.listAll();
-    const brief: BriefRecord = {
-      id: nextSequentialId("brief", existingBriefs.map((record) => record.id)),
-      projectId: input.projectId,
-      prompt: input.prompt,
-      brief: copyBrief(sampleBrief),
-      createdAt: this.timestamp()
-    };
-    await this.repositories.briefs.save(brief);
-    return copyBriefRecord(brief);
+    return withRepositoryIdLock(this.repositories, async () => {
+      const existingBriefs = await this.repositories.briefs.listAll();
+      const brief: BriefRecord = {
+        id: nextSequentialId("brief", existingBriefs.map((record) => record.id)),
+        projectId: input.projectId,
+        prompt: input.prompt,
+        brief: copyBrief(sampleBrief),
+        createdAt: this.timestamp()
+      };
+      await this.repositories.briefs.save(brief);
+      return copyBriefRecord(brief);
+    });
   }
 
   async generatePageVersion(input: GeneratePageVersionInput): Promise<PageVersionRecord> {
     await this.getProjectOrThrow(input.projectId);
     const brief = await this.getBriefForProjectOrThrow(input.projectId, input.briefId);
-    const existingPageVersions = await this.repositories.pageVersions.listAll();
-    const pageVersionId = nextSequentialId("version", existingPageVersions.map((record) => record.id));
-    const runId = `run_builder_${pageVersionId.replace(/^version_/, "")}`;
-
-    const result = await this.builderRuntime.run({
-      runId,
-      projectId: input.projectId,
-      role: "builder",
-      input: {
-        brief: copyBrief(brief.brief),
-        prompt: brief.prompt
-      },
-      context: createWorkbenchRuntimeContext("builder")
+    const pageVersionId = await reserveRepositoryId(this.repositories, "version", async () => {
+      const existingPageVersions = await this.repositories.pageVersions.listAll();
+      return existingPageVersions.map((record) => record.id);
     });
 
-    if (result.state === "failed") {
-      throw new Error("Builder run failed.");
-    }
-    if (result.state !== "completed") {
-      throw new Error("Builder run did not complete.");
-    }
-    if (!result.artifacts) {
-      throw new Error("Builder run did not return artifacts.");
-    }
-    if (!hasCompleteArtifacts(result.artifacts)) {
-      throw new Error("Builder run returned incomplete artifacts.");
-    }
+    try {
+      const result = await this.builderRuntime.run({
+        runId: `run_builder_${pageVersionId.replace(/^version_/, "")}`,
+        projectId: input.projectId,
+        role: "builder",
+        input: {
+          brief: copyBrief(brief.brief),
+          prompt: brief.prompt
+        },
+        context: createWorkbenchRuntimeContext("builder")
+      });
 
-    const pageVersion: PageVersionRecord = {
-      id: pageVersionId,
-      projectId: input.projectId,
-      briefId: brief.id,
-      artifacts: copyArtifacts(result.artifacts),
-      reviewStatus: "pending",
-      findings: [],
-      createdAt: this.timestamp()
-    };
-    await this.repositories.pageVersions.save(pageVersion);
-    return copyPageVersion(pageVersion);
+      if (result.state === "failed") {
+        throw new Error("Builder run failed.");
+      }
+      if (result.state !== "completed") {
+        throw new Error("Builder run did not complete.");
+      }
+      if (!result.artifacts) {
+        throw new Error("Builder run did not return artifacts.");
+      }
+      if (!hasCompleteArtifacts(result.artifacts)) {
+        throw new Error("Builder run returned incomplete artifacts.");
+      }
+      const artifacts = result.artifacts;
+
+      return await withRepositoryIdLock(this.repositories, async () => {
+        const pageVersion: PageVersionRecord = {
+          id: pageVersionId,
+          projectId: input.projectId,
+          briefId: brief.id,
+          artifacts: copyArtifacts(artifacts),
+          reviewStatus: "pending",
+          findings: [],
+          createdAt: this.timestamp()
+        };
+        await this.repositories.pageVersions.save(pageVersion);
+        return copyPageVersion(pageVersion);
+      });
+    } finally {
+      releaseRepositoryId(this.repositories, pageVersionId);
+    }
   }
 
   async reviewPageVersion(input: ReviewPageVersionInput): Promise<PageVersionRecord> {
@@ -240,17 +255,33 @@ export class DemoWorkbenchService {
 
   async getSnapshotForRecords(input: GetSnapshotForRecordsInput): Promise<WorkbenchSnapshot> {
     const project = await this.getProjectOrThrow(input.projectId);
-    const currentPageVersion = input.pageVersionId
-      ? await this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId)
-      : await this.repositories.pageVersions.findLatestForProject(input.projectId);
-    const brief = input.briefId
+    let brief = input.briefId
       ? await this.getBriefForProjectOrThrow(input.projectId, input.briefId)
-      : currentPageVersion
+      : undefined;
+    let currentPageVersion = input.pageVersionId
+      ? await this.getPageVersionForProjectOrThrow(input.projectId, input.pageVersionId)
+      : undefined;
+
+    if (brief && currentPageVersion && currentPageVersion.briefId !== brief.id) {
+      throw new Error("Page version does not belong to brief.");
+    }
+
+    if (brief && !currentPageVersion) {
+      currentPageVersion = await this.findLatestPageVersionForBrief(input.projectId, brief.id);
+    }
+    if (!brief && currentPageVersion) {
+      brief = await this.getBriefForProjectOrThrow(input.projectId, currentPageVersion.briefId);
+    }
+    if (!brief && !currentPageVersion) {
+      currentPageVersion = await this.repositories.pageVersions.findLatestForProject(input.projectId);
+      brief = currentPageVersion
         ? await this.repositories.briefs.getById(currentPageVersion.briefId)
         : await this.repositories.briefs.findLatestForProject(input.projectId);
+    }
+
     const deployment = currentPageVersion
       ? await this.repositories.deployments.getByPageVersionId(currentPageVersion.id)
-      : await this.repositories.deployments.findLatestForProject(input.projectId);
+      : undefined;
 
     return {
       project: copyProject(project),
@@ -289,6 +320,16 @@ export class DemoWorkbenchService {
       throw new Error("Page version not found for project.");
     }
     return pageVersion;
+  }
+
+  private async findLatestPageVersionForBrief(
+    projectId: string,
+    briefId: string
+  ): Promise<PageVersionRecord | undefined> {
+    const pageVersions = await this.repositories.pageVersions.listAll();
+    return pageVersions
+      .filter((record) => record.projectId === projectId && record.briefId === briefId)
+      .at(-1);
   }
 }
 
@@ -403,6 +444,54 @@ function nextSequentialId(prefix: string, existingIds: string[]): string {
       return match ? Math.max(largest, Number(match[1])) : largest;
     }, 0) + 1;
   return `${prefix}_${nextNumber}`;
+}
+
+async function withRepositoryIdLock<T>(
+  repositories: WorkbenchRepositories,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = repositoryIdLocks.get(repositories) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(operation);
+  const lock = run.then(
+    () => undefined,
+    () => undefined
+  );
+  repositoryIdLocks.set(repositories, lock);
+  lock.finally(() => {
+    if (repositoryIdLocks.get(repositories) === lock) {
+      repositoryIdLocks.delete(repositories);
+    }
+  });
+  return run;
+}
+
+async function reserveRepositoryId(
+  repositories: WorkbenchRepositories,
+  prefix: string,
+  listExistingIds: () => Promise<string[]>
+): Promise<string> {
+  return withRepositoryIdLock(repositories, async () => {
+    const existingIds = await listExistingIds();
+    let reservations = repositoryIdReservations.get(repositories);
+    if (!reservations) {
+      reservations = new Set<string>();
+      repositoryIdReservations.set(repositories, reservations);
+    }
+    const id = nextSequentialId(prefix, [...existingIds, ...reservations]);
+    reservations.add(id);
+    return id;
+  });
+}
+
+function releaseRepositoryId(repositories: WorkbenchRepositories, id: string): void {
+  const reservations = repositoryIdReservations.get(repositories);
+  if (!reservations) {
+    return;
+  }
+  reservations.delete(id);
+  if (reservations.size === 0) {
+    repositoryIdReservations.delete(repositories);
+  }
 }
 
 function copyFinding(finding: ReviewFinding): ReviewFinding {

@@ -188,6 +188,140 @@ describe("demo workbench service", () => {
     expect(snapshot.currentPageVersion?.id).toBe(firstVersion.id);
   });
 
+  it("loads the latest page version for an explicit brief without using the project latest", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "First LP"
+    });
+    const firstVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second LP"
+    });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    const snapshot = await service.getSnapshotForRecords({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+
+    expect(snapshot.brief?.id).toBe(firstBrief.id);
+    expect(snapshot.currentPageVersion?.id).toBe(firstVersion.id);
+    expect(snapshot.currentPageVersion?.id).not.toBe(secondVersion.id);
+  });
+
+  it("does not return a project deployment for an explicit brief without a page version", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "First LP"
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second LP"
+    });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: secondVersion.id
+    });
+    await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: secondVersion.id,
+      reviewerUserId: "reviewer_1"
+    });
+
+    const snapshot = await service.getSnapshotForRecords({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+
+    expect(snapshot.brief?.id).toBe(firstBrief.id);
+    expect(snapshot.currentPageVersion).toBeUndefined();
+    expect(snapshot.deployment).toBeUndefined();
+  });
+
+  it("rejects explicit brief and page version ids that do not match", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "First LP"
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second LP"
+    });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    await expect(
+      service.getSnapshotForRecords({
+        projectId: project.id,
+        briefId: firstBrief.id,
+        pageVersionId: secondVersion.id
+      })
+    ).rejects.toThrow("Page version does not belong to brief.");
+  });
+
+  it("loads a page version snapshot with its own brief when no brief id is provided", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "First LP"
+    });
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second LP"
+    });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    const snapshot = await service.getSnapshotForRecords({
+      projectId: project.id,
+      pageVersionId: secondVersion.id
+    });
+
+    expect(snapshot.brief?.id).toBe(secondBrief.id);
+    expect(snapshot.brief?.prompt).toBe("Second LP");
+    expect(snapshot.currentPageVersion?.id).toBe(secondVersion.id);
+  });
+
+  it("keeps concurrent project creation ids unique for the same repositories", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+
+    const projects = await Promise.all([
+      service.createProject({ name: "First project" }),
+      service.createProject({ name: "Second project" })
+    ]);
+    const savedProjects = await repositories.projects.listAll();
+
+    expect(new Set(projects.map((project) => project.id))).toHaveProperty("size", 2);
+    expect(savedProjects.map((project) => project.id).sort()).toEqual(["project_1", "project_2"]);
+  });
+
   it("uses branch-safe generated IDs for deployment", async () => {
     const deploymentAdapter = new RecordingDeploymentAdapter();
     const service = new DemoWorkbenchService({
@@ -249,6 +383,7 @@ describe("demo workbench service", () => {
         writableFiles: ["index.html", "styles.css", "script.js"]
       }
     });
+    expect(builderRuntime.requests[0]?.runId).toBe("run_builder_1");
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);
