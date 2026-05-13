@@ -179,7 +179,9 @@ describe("local agent runtime adapter", () => {
           version: "0.1.0",
           scope: "project",
           permissions: ["brief:read", "artifact:write"],
-          entrypoints: ["templates/brand.md"]
+          entrypoints: ["templates/brand.md"],
+          content: "# Brand LP\nUse concise ecommerce sections.",
+          contentType: "text/markdown"
         }
       ],
       mcpTools: [
@@ -224,7 +226,9 @@ describe("local agent runtime adapter", () => {
           version: "0.1.0",
           scope: "project",
           permissions: ["brief:read", "artifact:write"],
-          entrypoints: ["templates/brand.md"]
+          entrypoints: ["templates/brand.md"],
+          content: "# Brand LP\nUse concise ecommerce sections.",
+          contentType: "text/markdown"
         }
       ],
       mcpTools: [

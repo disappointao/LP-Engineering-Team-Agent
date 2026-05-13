@@ -17,6 +17,8 @@ export interface ModelSkillContext {
   scope: string;
   permissions: string[];
   entrypoints: string[];
+  content: string;
+  contentType: "text/markdown" | "text/plain";
 }
 
 export interface ModelMCPToolContext {

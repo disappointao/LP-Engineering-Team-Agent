@@ -45,7 +45,9 @@ describe("model gateway", () => {
             version: "0.1.0",
             scope: "project",
             permissions: ["brief:read", "artifact:write"],
-            entrypoints: ["templates/brand.md"]
+            entrypoints: ["templates/brand.md"],
+            content: "# Brand LP",
+            contentType: "text/markdown"
           }
         ],
         mcpTools: [
@@ -78,7 +80,9 @@ describe("model gateway", () => {
         skills: [
           {
             id: "skill_brand",
-            permissions: ["brief:read", "artifact:write"]
+            permissions: ["brief:read", "artifact:write"],
+            content: "# Brand LP",
+            contentType: "text/markdown"
           }
         ],
         mcpTools: [
@@ -126,7 +130,9 @@ describe("model gateway", () => {
             version: "0.1.0",
             scope: "project",
             permissions: ["brief:read"],
-            entrypoints: ["templates/brand.md"]
+            entrypoints: ["templates/brand.md"],
+            content: "# Brand LP",
+            contentType: "text/markdown"
           }
         ],
         mcpTools: [
