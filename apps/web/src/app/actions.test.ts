@@ -119,9 +119,19 @@ describe("submitPromptAction", () => {
     });
     mocks.createSkillDraft.mockReset();
     mocks.validateSkillVersion.mockReset();
+    mocks.validateSkillVersion.mockResolvedValue({ ok: true, value: { id: "skill_version_1" } });
     mocks.publishSkillVersion.mockReset();
+    mocks.publishSkillVersion.mockResolvedValue({ ok: true, value: { id: "skill_version_1" } });
     mocks.bindSkillVersionToProject.mockReset();
+    mocks.bindSkillVersionToProject.mockResolvedValue({
+      ok: true,
+      value: { id: "skill_binding_1" }
+    });
     mocks.setProjectSkillBindingEnabled.mockReset();
+    mocks.setProjectSkillBindingEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "skill_binding_1" }
+    });
   });
 
   it("creates projects from the project name only", async () => {
@@ -249,5 +259,101 @@ describe("submitPromptAction", () => {
       createSkillDraftAction(buildSkillForm({ manifestJson: "{", content: "# Brand LP" })),
       "/?view=skills&skillError=invalid_manifest_json"
     );
+  });
+
+  it("redirects invalid skill content types before calling the store", async () => {
+    await expectRedirect(
+      createSkillDraftAction(
+        buildSkillForm({
+          manifestJson: brandSkillManifestJson(),
+          content: "# Brand LP",
+          contentType: "application/json"
+        })
+      ),
+      "/?view=skills&skillError=unsupported_content_type"
+    );
+
+    expect(mocks.createSkillDraft).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("validates a skill version and redirects to the skills view", async () => {
+    await expectRedirect(
+      validateSkillVersionAction(buildSkillForm({ skillVersionId: "skill_version_1" })),
+      "/?view=skills"
+    );
+
+    expect(mocks.validateSkillVersion).toHaveBeenCalledWith("skill_version_1");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("publishes a skill version and redirects to the skills view", async () => {
+    await expectRedirect(
+      publishSkillVersionAction(buildSkillForm({ skillVersionId: "skill_version_1" })),
+      "/?view=skills"
+    );
+
+    expect(mocks.publishSkillVersion).toHaveBeenCalledWith("skill_version_1");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("binds a skill version to a project and stores the current project", async () => {
+    await expectRedirect(
+      bindSkillVersionAction(
+        buildSkillForm({
+          projectId: "project_1",
+          skillVersionId: "skill_version_1"
+        })
+      ),
+      "/?view=skills"
+    );
+
+    expect(mocks.bindSkillVersionToProject).toHaveBeenCalledWith({
+      projectId: "project_1",
+      skillVersionId: "skill_version_1"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects bind skill errors without changing project state", async () => {
+    mocks.bindSkillVersionToProject.mockResolvedValue({
+      ok: false,
+      error: "skill_version_not_published"
+    });
+
+    await expectRedirect(
+      bindSkillVersionAction(
+        buildSkillForm({
+          projectId: "project_1",
+          skillVersionId: "skill_version_1"
+        })
+      ),
+      "/?view=skills&skillError=skill_version_not_published"
+    );
+
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["true", true],
+    ["false", false]
+  ])("sets a skill binding enabled=%s and redirects to the skills view", async (rawValue, enabled) => {
+    await expectRedirect(
+      setSkillBindingEnabledAction(
+        buildSkillForm({
+          bindingId: "skill_binding_1",
+          enabled: rawValue
+        })
+      ),
+      "/?view=skills"
+    );
+
+    expect(mocks.setProjectSkillBindingEnabled).toHaveBeenCalledWith({
+      bindingId: "skill_binding_1",
+      enabled
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 });

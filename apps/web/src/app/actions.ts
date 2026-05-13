@@ -21,6 +21,14 @@ function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
   redirect(`/?view=skills&skillError=${encodeURIComponent(error)}`);
 }
 
+function parseSkillContentType(rawValue: FormDataEntryValue | null): "text/markdown" | "text/plain" {
+  const value = String(rawValue ?? "text/markdown");
+  if (value === "text/markdown" || value === "text/plain") {
+    return value;
+  }
+  redirectToSkillsWithError("unsupported_content_type");
+}
+
 export async function createProjectAction(formData: FormData): Promise<void> {
   const store = getWebWorkbenchStore();
   const name = String(formData.get("projectName") ?? "");
@@ -69,10 +77,7 @@ export async function createSkillDraftAction(formData: FormData): Promise<void> 
   const result = await getWebWorkbenchStore().createSkillDraft({
     manifestJson: String(formData.get("manifestJson") ?? ""),
     content: String(formData.get("content") ?? ""),
-    contentType:
-      String(formData.get("contentType") ?? "text/markdown") === "text/plain"
-        ? "text/plain"
-        : "text/markdown"
+    contentType: parseSkillContentType(formData.get("contentType"))
   });
   if (!result.ok) {
     redirectToSkillsWithError(result.error);
