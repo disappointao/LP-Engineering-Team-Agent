@@ -30,6 +30,7 @@ export type SkillFlowErrorCode =
   | "manifest_validation_failed"
   | "unsupported_skill_scope"
   | "duplicate_skill_version"
+  | "skill_binding_already_exists"
   | "unsupported_content_type"
   | "skill_content_required"
   | "skill_content_too_large"
@@ -117,6 +118,7 @@ export interface WebWorkbenchStore {
     input: BindSkillVersionFormInput
   ): Promise<SkillActionResult<SkillBindingRecord>>;
   setProjectSkillBindingEnabled(input: {
+    projectId: string;
     bindingId: string;
     enabled: boolean;
   }): Promise<SkillActionResult<SkillBindingRecord>>;
@@ -424,6 +426,7 @@ function toSkillFlowError(error: unknown): SkillFlowErrorCode {
     message === "manifest_validation_failed" ||
     message === "unsupported_skill_scope" ||
     message === "duplicate_skill_version" ||
+    message === "skill_binding_already_exists" ||
     message === "unsupported_content_type" ||
     message === "skill_content_required" ||
     message === "skill_content_too_large" ||

@@ -530,7 +530,8 @@ button {
 }
 
 .skillEditor textarea,
-.skillEditor select {
+.skillEditor select,
+.skillEditor input[type="file"] {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -553,8 +554,15 @@ button {
   padding: 0 10px;
 }
 
+.skillEditor input[type="file"] {
+  min-height: 42px;
+  padding: 9px 10px;
+  font-size: 0.84rem;
+}
+
 .skillEditor textarea:focus,
-.skillEditor select:focus {
+.skillEditor select:focus,
+.skillEditor input[type="file"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }

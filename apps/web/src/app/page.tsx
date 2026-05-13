@@ -51,7 +51,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
   const activeSkillCount = pageState.skills.boundSkills.filter(
-    (boundSkill) => boundSkill.binding.enabled
+    (boundSkill) =>
+      boundSkill.binding.enabled &&
+      boundSkill.version.reviewState === "published" &&
+      boundSkill.version.manifest.reviewState === "published"
   ).length;
   const activeSkillLabel = copy.skillsView.activeCount(activeSkillCount);
   const completedSnapshot =
@@ -231,6 +234,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         name="content"
                         placeholder={copy.skillsView.contentPlaceholder}
                       />
+                      <label htmlFor="contentFile">{copy.skillsView.contentFileLabel}</label>
+                      <input
+                        id="contentFile"
+                        name="contentFile"
+                        type="file"
+                        accept=".md,.markdown,.txt,text/markdown,text/plain"
+                      />
                       <label htmlFor="contentType">{copy.skillsView.contentTypeLabel}</label>
                       <select id="contentType" name="contentType" defaultValue="text/markdown">
                         <option value="text/markdown">{copy.skillsView.markdown}</option>
@@ -252,19 +262,25 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               </span>
                             </div>
                             <div className="skillActions">
-                              <form action={validateSkillVersionAction}>
-                                <input name="skillVersionId" type="hidden" value={version.id} />
-                                <button type="submit">{copy.skillsView.validate}</button>
-                              </form>
-                              <form action={publishSkillVersionAction}>
-                                <input name="skillVersionId" type="hidden" value={version.id} />
-                                <button type="submit">{copy.skillsView.publish}</button>
-                              </form>
-                              <form action={bindSkillVersionAction}>
-                                <input name="projectId" type="hidden" value={activeProject.id} />
-                                <input name="skillVersionId" type="hidden" value={version.id} />
-                                <button type="submit">{copy.skillsView.bind}</button>
-                              </form>
+                              {version.reviewState === "draft" ? (
+                                <form action={validateSkillVersionAction}>
+                                  <input name="skillVersionId" type="hidden" value={version.id} />
+                                  <button type="submit">{copy.skillsView.validate}</button>
+                                </form>
+                              ) : null}
+                              {version.reviewState === "validated" ? (
+                                <form action={publishSkillVersionAction}>
+                                  <input name="skillVersionId" type="hidden" value={version.id} />
+                                  <button type="submit">{copy.skillsView.publish}</button>
+                                </form>
+                              ) : null}
+                              {version.reviewState === "published" ? (
+                                <form action={bindSkillVersionAction}>
+                                  <input name="projectId" type="hidden" value={activeProject.id} />
+                                  <input name="skillVersionId" type="hidden" value={version.id} />
+                                  <button type="submit">{copy.skillsView.bind}</button>
+                                </form>
+                              ) : null}
                             </div>
                           </div>
                         ))
@@ -287,6 +303,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             </div>
                             <div className="skillActions">
                               <form action={setSkillBindingEnabledAction}>
+                                <input name="projectId" type="hidden" value={activeProject.id} />
                                 <input name="bindingId" type="hidden" value={boundSkill.binding.id} />
                                 <input
                                   name="enabled"
@@ -459,6 +476,7 @@ function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undef
     value === "manifest_validation_failed" ||
     value === "unsupported_skill_scope" ||
     value === "duplicate_skill_version" ||
+    value === "skill_binding_already_exists" ||
     value === "unsupported_content_type" ||
     value === "skill_content_required" ||
     value === "skill_content_too_large" ||

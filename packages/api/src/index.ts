@@ -104,6 +104,7 @@ export interface BindSkillVersionToProjectInput {
 }
 
 export interface SetProjectSkillBindingEnabledInput {
+  projectId: string;
   bindingId: string;
   enabled: boolean;
 }
@@ -343,6 +344,7 @@ export class DemoWorkbenchService {
   async createSkillDraft(input: CreateSkillDraftInput): Promise<SkillDraftResult> {
     const manifest = parseProjectSkillManifest(input.manifestJson);
     const content = normalizeSkillContent(input.content);
+    const contentType = normalizeSkillContentType(input.contentType);
     const existingVersion = await this.repositories.skillVersions.getBySkillIdAndVersion(
       manifest.id,
       manifest.version
@@ -378,7 +380,7 @@ export class DemoWorkbenchService {
           reviewState: "draft"
         },
         content,
-        contentType: input.contentType,
+        contentType,
         reviewState: "draft",
         createdAt: this.timestamp()
       };
@@ -395,6 +397,12 @@ export class DemoWorkbenchService {
 
   async validateSkillVersion(input: SkillVersionInput): Promise<SkillVersionRecord> {
     const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    if (version.reviewState === "validated" || version.reviewState === "published") {
+      return copySkillVersionRecord(version);
+    }
+    if (version.reviewState !== "draft") {
+      throw new Error("skill_operation_failed");
+    }
     const updated = updateSkillVersionReviewState(version, "validated");
     await this.repositories.skillVersions.save(updated);
     return copySkillVersionRecord(updated);
@@ -431,7 +439,7 @@ export class DemoWorkbenchService {
         binding.skillVersionId === input.skillVersionId
     );
     if (existing) {
-      return copySkillBindingRecord(existing);
+      throw new Error("skill_binding_already_exists");
     }
 
     return withRepositoryIdLock(this.repositories, async () => {
@@ -442,7 +450,7 @@ export class DemoWorkbenchService {
           binding.skillVersionId === input.skillVersionId
       );
       if (duplicate) {
-        return copySkillBindingRecord(duplicate);
+        throw new Error("skill_binding_already_exists");
       }
 
       const allBindings = await this.repositories.skillBindings.listAll();
@@ -464,8 +472,9 @@ export class DemoWorkbenchService {
   async setProjectSkillBindingEnabled(
     input: SetProjectSkillBindingEnabledInput
   ): Promise<SkillBindingRecord> {
+    await this.getProjectOrThrow(input.projectId);
     const binding = await this.repositories.skillBindings.getById(input.bindingId);
-    if (!binding || !isProjectSkillBinding(binding)) {
+    if (!binding || !isProjectSkillBindingForProject(binding, input.projectId)) {
       throw new Error("skill_binding_not_found");
     }
 
@@ -702,6 +711,13 @@ function normalizeSkillContent(content: string): string {
     throw new Error("skill_content_too_large");
   }
   return normalized;
+}
+
+function normalizeSkillContentType(contentType: unknown): SkillContentType {
+  if (contentType === "text/markdown" || contentType === "text/plain") {
+    return contentType;
+  }
+  throw new Error("unsupported_content_type");
 }
 
 function updateSkillVersionReviewState(

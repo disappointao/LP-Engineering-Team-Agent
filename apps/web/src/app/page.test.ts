@@ -78,6 +78,49 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
   return [];
 }
 
+function projectSkillState(reviewState: "draft" | "validated" | "published", enabled = true) {
+  return {
+    skill: {
+      id: "skill_brand",
+      name: "Acme Brand Landing Page Sections",
+      type: "template",
+      scope: "project",
+      createdAt: "2026-05-12T08:00:00.000Z"
+    },
+    version: {
+      id: "skill_version_1",
+      skillId: "skill_brand",
+      version: "0.1.0",
+      manifest: {
+        id: "skill_brand",
+        name: "Acme Brand Landing Page Sections",
+        version: "0.1.0",
+        type: "template",
+        scope: "project",
+        description: "Adds brand tone and ecommerce LP constraints.",
+        permissions: ["brief:read"],
+        requiredSecrets: [],
+        entrypoints: ["templates/acme-lp.md"],
+        reviewState
+      },
+      content: "# Brand LP",
+      contentType: "text/markdown",
+      reviewState,
+      createdAt: "2026-05-12T08:00:00.000Z"
+    },
+    binding: {
+      id: "skill_binding_1",
+      skillVersionId: "skill_version_1",
+      scope: "project",
+      targetKey: "project_1",
+      projectId: "project_1",
+      enabled,
+      createdAt: "2026-05-12T08:01:00.000Z",
+      updatedAt: "2026-05-12T08:01:00.000Z"
+    }
+  };
+}
+
 beforeEach(() => {
   pageMocks.acceptLanguage = "en";
   pageMocks.currentProjectId = undefined;
@@ -227,11 +270,13 @@ describe("HomePage project flow errors", () => {
     });
     const text = collectText(page);
     const textareas = collectElements(page, "textarea");
+    const inputs = collectElements(page, "input");
 
     expect(text).toContain("Task Project");
     expect(text).not.toContain("No active project");
     expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
     expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
+    expect(inputs.some((input) => input.props?.name === "contentFile")).toBe(true);
   });
 
   it("shows active bound project skills in the skills view", async () => {
@@ -367,6 +412,99 @@ describe("HomePage project flow errors", () => {
     });
 
     expect(collectText(page)).toContain("1 active skill");
+  });
+
+  it("does not count enabled unpublished bound skills as active", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [projectSkillState("validated")],
+        availableVersions: []
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("0 active skills");
+    expect(text).not.toContain("1 active skill");
+  });
+
+  it("only renders publish actions for validated skill versions", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: [
+          {
+            ...projectSkillState("validated").version,
+            id: "skill_version_validated"
+          }
+        ]
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("Publish");
+    expect(text).not.toContain("Validate");
+    expect(text).not.toContain("Bind");
+  });
+
+  it("only renders bind actions for published skill versions", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: [
+          {
+            ...projectSkillState("published").version,
+            id: "skill_version_published"
+          }
+        ]
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("Bind");
+    expect(text).not.toContain("Validate");
+    expect(text).not.toContain("Publish");
   });
 
   it("keeps sidebar project creation available when projects exist", async () => {

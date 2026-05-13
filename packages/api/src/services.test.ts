@@ -417,6 +417,82 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("keeps published skill versions published when validation is retried", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+
+    const retried = await service.validateSkillVersion({ skillVersionId: published.id });
+
+    expect(retried.reviewState).toBe("published");
+    expect(retried.manifest.reviewState).toBe("published");
+  });
+
+  it("rejects unsupported skill content types at the service boundary", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+
+    await expect(
+      service.createSkillDraft({
+        manifestJson: JSON.stringify(brandSkillManifest()),
+        content: "# Brand LP",
+        contentType: "application/json" as "text/markdown"
+      })
+    ).rejects.toThrow("unsupported_content_type");
+  });
+
+  it("rejects duplicate project skill bindings", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.bindSkillVersionToProject({
+        projectId: project.id,
+        skillVersionId: published.id
+      })
+    ).rejects.toThrow("skill_binding_already_exists");
+  });
+
+  it("requires the owning project when toggling a skill binding", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const owningProject = await service.createProject({ name: "Owning Project" });
+    const otherProject = await service.createProject({ name: "Other Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    const binding = await service.bindSkillVersionToProject({
+      projectId: owningProject.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.setProjectSkillBindingEnabled({
+        projectId: otherProject.id,
+        bindingId: binding.id,
+        enabled: false
+      })
+    ).rejects.toThrow("skill_binding_not_found");
+  });
+
   it("rejects duplicate skill versions and non-project manifests", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     await service.createSkillDraft({
@@ -568,7 +644,11 @@ describe("demo workbench service", () => {
       projectId: project.id,
       skillVersionId: published.id
     });
-    await service.setProjectSkillBindingEnabled({ bindingId: binding.id, enabled: false });
+    await service.setProjectSkillBindingEnabled({
+      projectId: project.id,
+      bindingId: binding.id,
+      enabled: false
+    });
 
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
@@ -612,7 +692,11 @@ describe("demo workbench service", () => {
     expect(builderRuntime.requests[0]?.context?.mcpTools).toEqual([]);
     expect(state.boundSkills).toEqual([]);
     await expect(
-      service.setProjectSkillBindingEnabled({ bindingId: "skill_binding_1", enabled: false })
+      service.setProjectSkillBindingEnabled({
+        projectId: project.id,
+        bindingId: "skill_binding_1",
+        enabled: false
+      })
     ).rejects.toThrow("skill_binding_not_found");
   });
 

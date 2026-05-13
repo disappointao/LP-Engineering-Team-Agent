@@ -249,6 +249,31 @@ describe("submitPromptAction", () => {
     });
   });
 
+  it("creates a skill draft from an uploaded markdown file", async () => {
+    mocks.createSkillDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        version: { id: "skill_version_1" }
+      }
+    });
+    const formData = buildSkillForm({
+      manifestJson: brandSkillManifestJson(),
+      content: "",
+      contentType: "text/plain"
+    });
+    formData.set("contentFile", new File(["# Uploaded Brand LP"], "brand.md", {
+      type: "text/markdown"
+    }));
+
+    await expectRedirect(createSkillDraftAction(formData), "/?view=skills");
+
+    expect(mocks.createSkillDraft).toHaveBeenCalledWith({
+      manifestJson: brandSkillManifestJson(),
+      content: "# Uploaded Brand LP",
+      contentType: "text/markdown"
+    });
+  });
+
   it("redirects skill errors with a stable query code", async () => {
     mocks.createSkillDraft.mockResolvedValue({
       ok: false,
@@ -271,6 +296,40 @@ describe("submitPromptAction", () => {
         })
       ),
       "/?view=skills&skillError=unsupported_content_type"
+    );
+
+    expect(mocks.createSkillDraft).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported uploaded skill files before calling the store", async () => {
+    const formData = buildSkillForm({
+      manifestJson: brandSkillManifestJson()
+    });
+    formData.set("contentFile", new File(["console.log('no');"], "skill.js", {
+      type: "text/javascript"
+    }));
+
+    await expectRedirect(
+      createSkillDraftAction(formData),
+      "/?view=skills&skillError=unsupported_content_type"
+    );
+
+    expect(mocks.createSkillDraft).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized uploaded skill files before calling the store", async () => {
+    const formData = buildSkillForm({
+      manifestJson: brandSkillManifestJson()
+    });
+    formData.set("contentFile", new File(["a".repeat(200001)], "skill.md", {
+      type: "text/markdown"
+    }));
+
+    await expectRedirect(
+      createSkillDraftAction(formData),
+      "/?view=skills&skillError=skill_content_too_large"
     );
 
     expect(mocks.createSkillDraft).not.toHaveBeenCalled();
@@ -351,6 +410,7 @@ describe("submitPromptAction", () => {
     );
 
     expect(mocks.setProjectSkillBindingEnabled).toHaveBeenCalledWith({
+      projectId: "project_2",
       bindingId: "skill_binding_1",
       enabled
     });

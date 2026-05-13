@@ -73,6 +73,7 @@ export interface WorkbenchCopy {
     manifestPlaceholder: string;
     contentLabel: string;
     contentPlaceholder: string;
+    contentFileLabel: string;
     contentTypeLabel: string;
     markdown: string;
     plainText: string;
@@ -287,6 +288,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       ),
       contentLabel: "Skill content",
       contentPlaceholder: "# Brand LP\n\nUse concise section copy and keep the output framework-free.",
+      contentFileLabel: "Upload .md or .txt",
       contentTypeLabel: "Content type",
       markdown: "Markdown",
       plainText: "Plain text",
@@ -312,6 +314,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         manifest_validation_failed: "The skill manifest failed validation.",
         unsupported_skill_scope: "Only project-scoped skills are supported.",
         duplicate_skill_version: "That skill version already exists.",
+        skill_binding_already_exists: "That skill version is already bound to this project.",
         unsupported_content_type: "Choose a supported content type.",
         skill_content_required: "Enter skill content.",
         skill_content_too_large: "Skill content is too large.",
@@ -498,6 +501,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       ),
       contentLabel: "技能内容",
       contentPlaceholder: "# 品牌 LP\n\n使用简洁区块文案，并保持输出不依赖框架。",
+      contentFileLabel: "上传 .md 或 .txt",
       contentTypeLabel: "内容类型",
       markdown: "Markdown",
       plainText: "纯文本",
@@ -523,6 +527,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         manifest_validation_failed: "技能 manifest 校验失败。",
         unsupported_skill_scope: "当前仅支持项目范围技能。",
         duplicate_skill_version: "该技能版本已经存在。",
+        skill_binding_already_exists: "该技能版本已经绑定到当前项目。",
         unsupported_content_type: "请选择支持的内容类型。",
         skill_content_required: "请输入技能内容。",
         skill_content_too_large: "技能内容过大。",
