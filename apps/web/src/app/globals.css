@@ -435,13 +435,15 @@ button {
   overflow-wrap: anywhere;
 }
 
-.skillsView {
+.skillsView,
+.modelsView {
   min-width: 0;
   display: grid;
   gap: 18px;
 }
 
-.skillsHeader {
+.skillsHeader,
+.modelsHeader {
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -451,7 +453,8 @@ button {
   padding-bottom: 18px;
 }
 
-.skillsHeader h1 {
+.skillsHeader h1,
+.modelsHeader h1 {
   margin: 0;
   color: #25292e;
   font-size: 1.55rem;
@@ -459,7 +462,8 @@ button {
   letter-spacing: 0;
 }
 
-.skillsHeader p {
+.skillsHeader p,
+.modelsHeader p {
   max-width: 620px;
   margin: 8px 0 0;
   color: var(--muted);
@@ -488,7 +492,8 @@ button {
   padding: 0 8px;
 }
 
-.skillsProjectContext {
+.skillsProjectContext,
+.modelsProjectContext {
   min-width: 0;
   display: grid;
   gap: 4px;
@@ -499,19 +504,24 @@ button {
 }
 
 .skillsProjectContext span,
-.skillEditor label {
+.modelsProjectContext span,
+.skillEditor label,
+.modelEditor label {
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 820;
 }
 
-.skillsProjectContext strong {
+.skillsProjectContext strong,
+.modelsProjectContext strong {
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
 
 .skillEditor,
-.skillsList {
+.skillsList,
+.modelEditor,
+.modelsList {
   min-width: 0;
   display: grid;
   gap: 12px;
@@ -522,7 +532,9 @@ button {
 }
 
 .skillEditor h2,
-.skillsList h2 {
+.skillsList h2,
+.modelEditor h2,
+.modelsList h2 {
   margin: 0;
   font-size: 0.98rem;
   line-height: 1.25;
@@ -531,13 +543,25 @@ button {
 
 .skillEditor textarea,
 .skillEditor select,
-.skillEditor input[type="file"] {
+.skillEditor input[type="file"],
+.modelEditor input,
+.modelEditor select,
+.modelRouteForm input,
+.modelRouteForm select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-raised);
   color: var(--text);
   outline: 0;
+}
+
+.modelEditor input,
+.modelEditor select,
+.modelRouteForm input,
+.modelRouteForm select {
+  min-height: 38px;
+  padding: 0 10px;
 }
 
 .skillEditor textarea {
@@ -562,13 +586,20 @@ button {
 
 .skillEditor textarea:focus,
 .skillEditor select:focus,
-.skillEditor input[type="file"]:focus {
+.skillEditor input[type="file"]:focus,
+.modelEditor input:focus,
+.modelEditor select:focus,
+.modelRouteForm input:focus,
+.modelRouteForm select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .skillEditor button,
-.skillActions button {
+.skillActions button,
+.modelEditor button,
+.modelRow button,
+.modelRouteForm button {
   min-height: 34px;
   border: 1px solid var(--accent);
   border-radius: 8px;
@@ -579,18 +610,30 @@ button {
   font-weight: 800;
 }
 
-.skillEditor button {
+.skillEditor button,
+.modelEditor button {
   justify-self: start;
 }
 
-.skillsList > p {
+.modelEditor small {
+  margin-top: -8px;
+  color: var(--subtle);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.skillsList > p,
+.modelsList > p {
   margin: 0;
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
-.skillRow {
+.skillRow,
+.modelRow,
+.modelRouteForm {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -602,20 +645,32 @@ button {
   padding: 12px;
 }
 
-.skillRow strong {
+.modelRouteForm {
+  grid-template-columns: minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1fr) auto;
+}
+
+.skillRow strong,
+.modelRow strong,
+.modelRouteForm strong {
   display: block;
   font-size: 0.9rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.skillRow span {
+.skillRow span,
+.modelRow span {
   display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.modelRow form {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .skillActions {
@@ -1147,17 +1202,27 @@ button {
   .deliveryHeader,
   .toolEventTop,
   .skillsHeader,
-  .skillRow {
+  .modelsHeader,
+  .skillRow,
+  .modelRow,
+  .modelRouteForm {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .skillRow {
+  .skillRow,
+  .modelRow,
+  .modelRouteForm {
     display: flex;
   }
 
   .skillActions {
     justify-content: flex-start;
+  }
+
+  .modelRow form,
+  .modelRouteForm button {
+    width: 100%;
   }
 
   .composer button,

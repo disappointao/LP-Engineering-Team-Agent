@@ -11,6 +11,16 @@ const pageMocks = vi.hoisted(() => ({
     skills: {
       boundSkills: [],
       availableVersions: []
+    },
+    models: {
+      providers: [],
+      routes: [],
+      resolvedPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: { provider: "mock-anthropic", model: "code-model" },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
     }
   } as unknown
 }));
@@ -132,6 +142,16 @@ beforeEach(() => {
     skills: {
       boundSkills: [],
       availableVersions: []
+    },
+    models: {
+      providers: [],
+      routes: [],
+      resolvedPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: { provider: "mock-anthropic", model: "code-model" },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
     }
   };
 });
@@ -205,6 +225,121 @@ describe("HomePage project flow errors", () => {
     expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
     expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
     expect(sections.some((section) => section.props?.className === "chatWorkspace" && section.props?.["aria-label"] === "Skills")).toBe(true);
+  });
+
+  it("renders the models management view from the models route", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page);
+    const inputs = collectElements(page, "input");
+    const selects = collectElements(page, "select");
+
+    expect(text).toContain("Project models");
+    expect(text).toContain("Spring Campaign");
+    expect(inputs.some((input) => input.props?.name === "providerId")).toBe(true);
+    expect(selects.some((select) => select.props?.name === "provider")).toBe(true);
+    expect(text).toContain("mock-anthropic/code-model");
+  });
+
+  it("does not render model configuration forms without an active project", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page);
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("No active project");
+    expect(inputs.some((input) => input.props?.name === "providerId")).toBe(false);
+    expect(text).not.toContain("What can I help you build?");
+  });
+
+  it("renders saved model providers and route forms", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: { secretEnvName: "OPENAI_API_KEY" },
+            enabled: true,
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "model_route_1",
+            scope: "project",
+            targetKey: "project_1",
+            role: "builder",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "provider_openai", model: "gpt-5.4" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("OpenAI");
+    expect(text).toContain("provider_openai/gpt-5.4");
+    expect(text).toContain("Builder");
   });
 
   it("does not render skill creation controls or the workbench composer without an active project", async () => {

@@ -3,10 +3,13 @@ import { headers } from "next/headers";
 import {
   bindSkillVersionAction,
   createProjectAction,
+  createModelProviderAction,
   createSkillDraftAction,
   publishSkillVersionAction,
+  setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
   submitPromptAction,
+  upsertProjectModelRouteAction,
   validateSkillVersionAction
 } from "./actions";
 import { LPPreview } from "../components/lp-preview";
@@ -18,13 +21,19 @@ import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import {
   getWebWorkbenchStore,
+  type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 
 interface HomePageProps {
-  searchParams?: Promise<{ error?: string; skillError?: string; view?: string }>;
+  searchParams?: Promise<{
+    error?: string;
+    skillError?: string;
+    modelError?: string;
+    view?: string;
+  }>;
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -33,9 +42,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     resolveLocaleFromAcceptLanguage(requestHeaders.get("accept-language"))
   );
   const params = await searchParams;
-  const activeView = params?.view === "skills" ? "skills" : "workbench";
+  const activeView =
+    params?.view === "skills" ? "skills" : params?.view === "models" ? "models" : "workbench";
   const errorCode = toProjectFlowError(params?.error);
   const skillError = toSkillFlowError(params?.skillError);
+  const modelError = toModelFlowError(params?.modelError);
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
@@ -50,6 +61,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         pageState.projects.find((project) => project.id === activeTask?.projectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
+  const modelErrorMessage = modelError ? copy.modelsView.errors[modelError] : undefined;
+  const roleOrder = ["planner", "builder", "reviewer", "deployer"] as const;
   const activeSkillCount = pageState.skills.boundSkills.filter(
     (boundSkill) =>
       boundSkill.binding.enabled &&
@@ -123,7 +136,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             {copy.nav.skills}
           </a>
           <div className="navItem">{copy.nav.mcp}</div>
-          <div className="navItem">{copy.nav.models}</div>
+          <a className={activeView === "models" ? "navItem navItemActive" : "navItem"} href="/?view=models">
+            {copy.nav.models}
+          </a>
         </nav>
 
         <div className="sidebarSection">
@@ -184,7 +199,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
       <section
         className="chatWorkspace"
-        aria-label={activeView === "skills" ? copy.nav.skills : copy.nav.workbench}
+        aria-label={
+          activeView === "skills"
+            ? copy.nav.skills
+            : activeView === "models"
+              ? copy.nav.models
+              : copy.nav.workbench
+        }
       >
         <header className="topBar">
           <div className="topBarTitle">
@@ -325,6 +346,158 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       ) : (
                         <p>{copy.skillsView.emptyBound}</p>
                       )}
+                    </section>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+
+            {activeView === "models" ? (
+              <section className="modelsView" aria-labelledby="models-title">
+                <header className="modelsHeader">
+                  <div>
+                    <h1 id="models-title">{copy.modelsView.title}</h1>
+                    <p>{copy.modelsView.subtitle}</p>
+                  </div>
+                </header>
+
+                {modelErrorMessage ? (
+                  <div className="formError" role="alert">{modelErrorMessage}</div>
+                ) : null}
+
+                <div className="modelsProjectContext">
+                  <span>{copy.modelsView.activeProjectLabel}</span>
+                  <strong>{activeProject?.name ?? copy.modelsView.noProject}</strong>
+                </div>
+
+                {activeProject ? (
+                  <>
+                    <form action={createModelProviderAction} className="modelEditor">
+                      <h2>{copy.modelsView.providerCreateTitle}</h2>
+
+                      <label htmlFor="providerId">{copy.modelsView.providerIdLabel}</label>
+                      <input
+                        id="providerId"
+                        name="providerId"
+                        aria-describedby="provider-id-example"
+                      />
+                      <small id="provider-id-example">provider_openai</small>
+
+                      <label htmlFor="providerName">{copy.modelsView.providerNameLabel}</label>
+                      <input
+                        id="providerName"
+                        name="name"
+                        aria-describedby="provider-name-example"
+                      />
+                      <small id="provider-name-example">OpenAI</small>
+
+                      <label htmlFor="provider">{copy.modelsView.providerTypeLabel}</label>
+                      <select id="provider" name="provider" defaultValue="mock">
+                        {(["mock", "openai", "anthropic", "internal", "custom"] as const).map(
+                          (type) => (
+                            <option value={type} key={type}>
+                              {copy.modelsView.providerTypes[type]}
+                            </option>
+                          )
+                        )}
+                      </select>
+
+                      <label htmlFor="baseUrl">{copy.modelsView.baseUrlLabel}</label>
+                      <input id="baseUrl" name="baseUrl" aria-describedby="base-url-example" />
+                      <small id="base-url-example">https://api.openai.com/v1</small>
+
+                      <label htmlFor="secretEnvName">{copy.modelsView.secretEnvNameLabel}</label>
+                      <input
+                        id="secretEnvName"
+                        name="secretEnvName"
+                        aria-describedby="secret-env-example"
+                      />
+                      <small id="secret-env-example">OPENAI_API_KEY</small>
+
+                      <button type="submit">{copy.modelsView.createProvider}</button>
+                    </form>
+
+                    <section className="modelsList" aria-labelledby="model-providers-title">
+                      <h2 id="model-providers-title">{copy.modelsView.providersTitle}</h2>
+                      {pageState.models.providers.length > 0 ? (
+                        pageState.models.providers.map((provider) => (
+                          <div className="modelRow" key={provider.id}>
+                            <div>
+                              <strong>{provider.name}</strong>
+                              <span>
+                                {copy.modelsView.providerTypes[provider.provider]} ·{" "}
+                                {provider.enabled
+                                  ? copy.modelsView.enabled
+                                  : copy.modelsView.disabled}
+                              </span>
+                            </div>
+                            <form action={setModelProviderEnabledAction}>
+                              <input name="providerId" type="hidden" value={provider.id} />
+                              <input
+                                name="enabled"
+                                type="hidden"
+                                value={provider.enabled ? "false" : "true"}
+                              />
+                              <button type="submit">
+                                {provider.enabled
+                                  ? copy.modelsView.disable
+                                  : copy.modelsView.enable}
+                              </button>
+                            </form>
+                          </div>
+                        ))
+                      ) : (
+                        <p>{copy.modelsView.fallbackLabel}</p>
+                      )}
+                    </section>
+
+                    <section className="modelsList" aria-labelledby="model-routes-title">
+                      <h2 id="model-routes-title">{copy.modelsView.routesTitle}</h2>
+                      {roleOrder.map((role) => {
+                        const route = pageState.models.routes.find(
+                          (modelRoute) => modelRoute.role === role
+                        );
+                        const resolvedRoute = pageState.models.resolvedPolicy[role];
+                        return (
+                          <form
+                            action={upsertProjectModelRouteAction}
+                            className="modelRouteForm"
+                            key={role}
+                          >
+                            <strong>{copy.modelsView.roleLabels[role]}</strong>
+                            <input name="role" type="hidden" value={role} />
+                            <select name="providerId" defaultValue={route?.providerId ?? ""}>
+                              <option value="">{copy.modelsView.fallbackLabel}</option>
+                              {pageState.models.providers
+                                .filter((provider) => provider.enabled)
+                                .map((provider) => (
+                                  <option value={provider.id} key={provider.id}>
+                                    {provider.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <input
+                              aria-label={`${copy.modelsView.roleLabels[role]} ${copy.modelsView.modelLabel}`}
+                              name="model"
+                              defaultValue={route?.model ?? resolvedRoute.model}
+                            />
+                            <button type="submit">{copy.modelsView.saveRoute}</button>
+                          </form>
+                        );
+                      })}
+                    </section>
+
+                    <section className="modelsList" aria-labelledby="resolved-routes-title">
+                      <h2 id="resolved-routes-title">{copy.modelsView.resolvedTitle}</h2>
+                      {roleOrder.map((role) => {
+                        const resolvedRoute = pageState.models.resolvedPolicy[role];
+                        return (
+                          <div className="modelRow" key={role}>
+                            <strong>{copy.modelsView.roleLabels[role]}</strong>
+                            <span>{`${resolvedRoute.provider}/${resolvedRoute.model}`}</span>
+                          </div>
+                        );
+                      })}
                     </section>
                   </>
                 ) : null}
@@ -490,6 +663,27 @@ function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undef
     value === "skill_binding_not_found" ||
     value === "publish_not_allowed" ||
     value === "skill_operation_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toModelFlowError(value: string | undefined): ModelFlowErrorCode | undefined {
+  if (
+    value === "project_not_found" ||
+    value === "model_provider_name_required" ||
+    value === "model_provider_key_required" ||
+    value === "model_provider_type_unsupported" ||
+    value === "model_provider_already_exists" ||
+    value === "model_provider_not_found" ||
+    value === "model_provider_disabled" ||
+    value === "model_role_unsupported" ||
+    value === "model_id_required" ||
+    value === "model_route_not_found" ||
+    value === "model_route_provider_invalid" ||
+    value === "model_secret_reference_invalid" ||
+    value === "model_routing_operation_failed"
   ) {
     return value;
   }

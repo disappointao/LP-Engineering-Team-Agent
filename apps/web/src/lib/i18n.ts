@@ -1,4 +1,8 @@
-import type { ProjectFlowErrorCode, SkillFlowErrorCode } from "./workbench-store";
+import type {
+  ModelFlowErrorCode,
+  ProjectFlowErrorCode,
+  SkillFlowErrorCode
+} from "./workbench-store";
 
 export type Locale = "en" | "zh-CN";
 
@@ -89,6 +93,32 @@ export interface WorkbenchCopy {
     emptyBound: string;
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
+  };
+  modelsView: {
+    title: string;
+    subtitle: string;
+    activeProjectLabel: string;
+    noProject: string;
+    providerCreateTitle: string;
+    providerIdLabel: string;
+    providerNameLabel: string;
+    providerTypeLabel: string;
+    baseUrlLabel: string;
+    secretEnvNameLabel: string;
+    createProvider: string;
+    providersTitle: string;
+    routesTitle: string;
+    resolvedTitle: string;
+    enabled: string;
+    disabled: string;
+    enable: string;
+    disable: string;
+    modelLabel: string;
+    saveRoute: string;
+    fallbackLabel: string;
+    roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
+    providerTypes: Record<"mock" | "openai" | "anthropic" | "internal" | "custom", string>;
+    errors: Record<ModelFlowErrorCode, string>;
   };
   status: {
     review: string;
@@ -327,6 +357,57 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_operation_failed: "The skill operation failed. Try again."
       }
     },
+    modelsView: {
+      title: "Project models",
+      subtitle: "Configure project-scoped model providers and role routes without storing raw secrets.",
+      activeProjectLabel: "Active project",
+      noProject: "No active project",
+      providerCreateTitle: "Create model provider",
+      providerIdLabel: "Provider key",
+      providerNameLabel: "Display name",
+      providerTypeLabel: "Provider type",
+      baseUrlLabel: "Base URL",
+      secretEnvNameLabel: "Secret env var",
+      createProvider: "Create provider",
+      providersTitle: "Providers",
+      routesTitle: "Role routes",
+      resolvedTitle: "Resolved routes",
+      enabled: "Enabled",
+      disabled: "Disabled",
+      enable: "Enable",
+      disable: "Disable",
+      modelLabel: "Model ID",
+      saveRoute: "Save route",
+      fallbackLabel: "Fallback",
+      roleLabels: {
+        planner: "Planner",
+        builder: "Builder",
+        reviewer: "Reviewer",
+        deployer: "Deployer"
+      },
+      providerTypes: {
+        mock: "Mock",
+        openai: "OpenAI",
+        anthropic: "Anthropic",
+        internal: "Internal",
+        custom: "Custom"
+      },
+      errors: {
+        project_not_found: "The selected project is no longer available.",
+        model_provider_name_required: "Enter a provider display name.",
+        model_provider_key_required: "Enter a provider key using letters, numbers, hyphens, or underscores.",
+        model_provider_type_unsupported: "Choose a supported provider type.",
+        model_provider_already_exists: "That provider key already exists.",
+        model_provider_not_found: "The selected provider is no longer available.",
+        model_provider_disabled: "Enable the provider before routing a role to it.",
+        model_role_unsupported: "Choose a supported role.",
+        model_id_required: "Enter a model id.",
+        model_route_not_found: "The selected model route is no longer available.",
+        model_route_provider_invalid: "The route points to an unavailable provider.",
+        model_secret_reference_invalid: "Use an environment variable name, not a secret value.",
+        model_routing_operation_failed: "The model routing operation failed. Try again."
+      }
+    },
     status: {
       review: "Review",
       pending: "pending",
@@ -538,6 +619,57 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_binding_not_found: "当前技能绑定已经不可用。",
         publish_not_allowed: "该技能版本暂不能发布。",
         skill_operation_failed: "技能操作失败，请重试。"
+      }
+    },
+    modelsView: {
+      title: "项目模型",
+      subtitle: "配置项目范围的模型供应商和角色路由，不保存原始密钥。",
+      activeProjectLabel: "当前项目",
+      noProject: "暂无当前项目",
+      providerCreateTitle: "创建模型供应商",
+      providerIdLabel: "供应商键",
+      providerNameLabel: "显示名称",
+      providerTypeLabel: "供应商类型",
+      baseUrlLabel: "Base URL",
+      secretEnvNameLabel: "密钥环境变量",
+      createProvider: "创建供应商",
+      providersTitle: "供应商",
+      routesTitle: "角色路由",
+      resolvedTitle: "已解析路由",
+      enabled: "已启用",
+      disabled: "已停用",
+      enable: "启用",
+      disable: "停用",
+      modelLabel: "模型 ID",
+      saveRoute: "保存路由",
+      fallbackLabel: "回退",
+      roleLabels: {
+        planner: "规划员",
+        builder: "构建员",
+        reviewer: "审核员",
+        deployer: "部署员"
+      },
+      providerTypes: {
+        mock: "Mock",
+        openai: "OpenAI",
+        anthropic: "Anthropic",
+        internal: "内部",
+        custom: "自定义"
+      },
+      errors: {
+        project_not_found: "当前项目已经不可用。",
+        model_provider_name_required: "请输入供应商显示名称。",
+        model_provider_key_required: "请输入由字母、数字、连字符或下划线组成的供应商键。",
+        model_provider_type_unsupported: "请选择支持的供应商类型。",
+        model_provider_already_exists: "该供应商键已经存在。",
+        model_provider_not_found: "当前供应商已经不可用。",
+        model_provider_disabled: "请先启用供应商，再将角色路由到它。",
+        model_role_unsupported: "请选择支持的角色。",
+        model_id_required: "请输入模型 ID。",
+        model_route_not_found: "当前模型路由已经不可用。",
+        model_route_provider_invalid: "该路由指向不可用的供应商。",
+        model_secret_reference_invalid: "请使用环境变量名，不要填写密钥值。",
+        model_routing_operation_failed: "模型路由操作失败，请重试。"
       }
     },
     status: {
