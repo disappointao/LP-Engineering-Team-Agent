@@ -2,6 +2,8 @@ import type { StaticArtifacts } from "@lp-agent/artifacts";
 import {
   createInMemoryWorkbenchRepositories,
   type BriefRecord,
+  type MCPConnectorRecord,
+  type MCPToolApprovalRecord,
   type ModelProviderRecord,
   type ModelProviderType,
   type ModelRoutingPolicyRecord,
@@ -20,7 +22,12 @@ import {
   type GitDeploymentAdapter
 } from "@lp-agent/git-deployment";
 import { sampleBrief, type LPBrief, type ReviewFinding } from "@lp-agent/lp-schema";
-import { computeVisibleTools, sampleConnector, type ApprovalState } from "@lp-agent/mcp-gateway";
+import {
+  computeVisibleTools,
+  normalizeMCPConnectorDefinition,
+  type ApprovalState,
+  type MCPToolApprovalState
+} from "@lp-agent/mcp-gateway";
 import {
   InMemoryModelGateway,
   agentRoles,
@@ -45,6 +52,8 @@ const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>
 
 export type {
   BriefRecord,
+  MCPConnectorRecord,
+  MCPToolApprovalRecord,
   ModelProviderRecord,
   ModelProviderType,
   ModelRoutingPolicyRecord,
@@ -131,6 +140,36 @@ export interface ProjectBoundSkillState {
 export interface ProjectSkillState {
   boundSkills: ProjectBoundSkillState[];
   availableVersions: SkillVersionRecord[];
+}
+
+export interface CreateProjectMCPConnectorInput {
+  projectId: string;
+  definitionJson: string;
+}
+
+export interface SetProjectMCPConnectorEnabledInput {
+  projectId: string;
+  connectorId: string;
+  enabled: boolean;
+}
+
+export interface SetProjectMCPToolApprovalInput {
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  approved: boolean;
+  approvedByUserId?: string;
+}
+
+export interface ListVisibleMCPToolsInput {
+  projectId: string;
+  role: AgentRole;
+}
+
+export interface ProjectMCPState {
+  connectors: MCPConnectorRecord[];
+  approvals: MCPToolApprovalRecord[];
+  visibleToolsByRole: Record<AgentRole, RuntimeRunContext["mcpTools"]>;
 }
 
 export interface CreateModelProviderInput {
@@ -591,6 +630,131 @@ export class DemoWorkbenchService {
     return versions;
   }
 
+  async createProjectMCPConnector(
+    input: CreateProjectMCPConnectorInput
+  ): Promise<MCPConnectorRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const definition = parseMCPConnectorJson(input.definitionJson);
+
+    return withRepositoryIdLock(this.repositories, async () => {
+      if (await this.repositories.mcpConnectors.getById(definition.id)) {
+        throw new Error("mcp_connector_already_exists");
+      }
+      const timestamp = this.timestamp();
+      const connector: MCPConnectorRecord = {
+        id: definition.id,
+        scope: "project",
+        targetKey: input.projectId,
+        name: definition.name,
+        description: definition.description,
+        tools: definition.tools,
+        enabled: true,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      await this.repositories.mcpConnectors.save(connector);
+      return copyMCPConnectorRecord(connector);
+    });
+  }
+
+  async setProjectMCPConnectorEnabled(
+    input: SetProjectMCPConnectorEnabledInput
+  ): Promise<MCPConnectorRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const connector = await this.repositories.mcpConnectors.getById(input.connectorId);
+    if (!connector || !isProjectMCPConnectorForProject(connector, input.projectId)) {
+      throw new Error("mcp_connector_not_found");
+    }
+    const updated: MCPConnectorRecord = {
+      ...connector,
+      enabled: input.enabled,
+      updatedAt: this.timestamp()
+    };
+    await this.repositories.mcpConnectors.save(updated);
+    return copyMCPConnectorRecord(updated);
+  }
+
+  async setProjectMCPToolApproval(
+    input: SetProjectMCPToolApprovalInput
+  ): Promise<MCPToolApprovalRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const connector = await this.repositories.mcpConnectors.getById(input.connectorId);
+    if (!connector || !isProjectMCPConnectorForProject(connector, input.projectId)) {
+      throw new Error("mcp_connector_not_found");
+    }
+    const tool = connector.tools.find((candidate) => candidate.name === input.toolName);
+    if (!tool) {
+      throw new Error("mcp_tool_not_found");
+    }
+    if (!tool.requiresApproval) {
+      throw new Error("mcp_tool_approval_not_required");
+    }
+
+    const existing = await this.repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+      input.projectId,
+      connector.id,
+      tool.name
+    );
+    const timestamp = this.timestamp();
+    const approval: MCPToolApprovalRecord = {
+      id:
+        existing?.id ??
+        nextSequentialId(
+          "mcp_approval",
+          (await this.repositories.mcpToolApprovals.listAll()).map((record) => record.id)
+        ),
+      projectId: input.projectId,
+      connectorId: connector.id,
+      toolName: tool.name,
+      state: input.approved ? "approved" : "pending",
+      approvedByUserId: input.approved ? input.approvedByUserId ?? "local-owner" : undefined,
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp
+    };
+    await this.repositories.mcpToolApprovals.save(approval);
+    return copyMCPToolApprovalRecord(approval);
+  }
+
+  async listProjectMCPState(projectId: string): Promise<ProjectMCPState> {
+    await this.getProjectOrThrow(projectId);
+    const visibleEntries = await Promise.all(
+      agentRoles.map(
+        async (role) =>
+          [
+            role,
+            await this.listVisibleMCPToolsForProject({
+              projectId,
+              role
+            })
+          ] as const
+      )
+    );
+    return {
+      connectors: (await this.repositories.mcpConnectors.listForProject(projectId)).map(
+        copyMCPConnectorRecord
+      ),
+      approvals: (await this.repositories.mcpToolApprovals.listForProject(projectId)).map(
+        copyMCPToolApprovalRecord
+      ),
+      visibleToolsByRole: Object.fromEntries(
+        visibleEntries
+      ) as ProjectMCPState["visibleToolsByRole"]
+    };
+  }
+
+  async listVisibleMCPToolsForProject(
+    input: ListVisibleMCPToolsInput
+  ): Promise<RuntimeRunContext["mcpTools"]> {
+    await this.getProjectOrThrow(input.projectId);
+    const role = normalizeAgentRole(input.role);
+    const skillVersions = await this.listRuntimeSkillsForProject(input.projectId);
+    return this.resolveVisibleMCPTools({
+      projectId: input.projectId,
+      role,
+      skillVersions
+    });
+  }
+
   async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {
     await this.getProjectOrThrow(input.projectId);
     const providerId = normalizeIdentifier(input.providerId, "model_provider_key_required");
@@ -746,6 +910,40 @@ export class DemoWorkbenchService {
     return resolved;
   }
 
+  private async resolveVisibleMCPTools(input: {
+    projectId: string;
+    role: AgentRole;
+    skillVersions: SkillVersionRecord[];
+  }): Promise<RuntimeRunContext["mcpTools"]> {
+    const grantedPermissions = [
+      ...new Set(input.skillVersions.flatMap((version) => version.manifest.permissions))
+    ];
+    const connectors = (await this.repositories.mcpConnectors.listForProject(input.projectId))
+      .filter((connector) => connector.enabled)
+      .map(copyMCPConnectorRecord);
+    const approvals = await this.repositories.mcpToolApprovals.listForProject(input.projectId);
+    const approvalStates: MCPToolApprovalState[] = approvals.map((approval) => ({
+      connectorId: approval.connectorId,
+      toolName: approval.toolName,
+      state: approval.state
+    }));
+
+    return connectors.flatMap((connector) =>
+      computeVisibleTools({
+        connectors: [connector],
+        projectConnectorIds: [connector.id],
+        skillPermissions: grantedPermissions,
+        agentRole: input.role,
+        approvalStates
+      }).map((tool) => ({
+        connectorId: connector.id,
+        name: tool.name,
+        permission: tool.permission,
+        requiresApproval: tool.requiresApproval
+      }))
+    );
+  }
+
   private timestamp(): string {
     return this.now().toISOString();
   }
@@ -755,14 +953,16 @@ export class DemoWorkbenchService {
     role: "planner" | "builder" | "reviewer" | "deployer",
     approvalState: ApprovalState = "not_required"
   ): Promise<RuntimeRunContext> {
-    const [skillVersions, modelRoutingPolicy] = await Promise.all([
-      this.listRuntimeSkillsForProject(projectId),
+    const skillVersions = await this.listRuntimeSkillsForProject(projectId);
+    const [mcpTools, modelRoutingPolicy] = await Promise.all([
+      this.resolveVisibleMCPTools({ projectId, role, skillVersions }),
       this.resolveModelRoutingPolicyForProject(projectId)
     ]);
     return createWorkbenchRuntimeContext({
       role,
       approvalState,
       skillVersions,
+      mcpTools,
       modelRoutingPolicy
     });
   }
@@ -822,9 +1022,10 @@ function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
 }
 
 function createWorkbenchRuntimeContext(input: {
-  role: "planner" | "builder" | "reviewer" | "deployer";
+  role: AgentRole;
   approvalState?: ApprovalState;
   skillVersions: SkillVersionRecord[];
+  mcpTools: RuntimeRunContext["mcpTools"];
   modelRoutingPolicy: ModelRoutingPolicy;
 }): RuntimeRunContext {
   const approvalState = input.approvalState ?? "not_required";
@@ -841,22 +1042,10 @@ function createWorkbenchRuntimeContext(input: {
       })
     )
     .map(toRuntimeSkill);
-  const mcpTools = computeVisibleTools({
-    connectors: grantedPermissions.length > 0 ? [sampleConnector] : [],
-    projectConnectorIds: grantedPermissions.length > 0 ? [sampleConnector.id] : [],
-    skillPermissions: grantedPermissions,
-    agentRole: input.role,
-    approvalState
-  }).map((tool) => ({
-    connectorId: sampleConnector.id,
-    name: tool.name,
-    permission: tool.permission,
-    requiresApproval: tool.requiresApproval
-  }));
 
   return {
     skills,
-    mcpTools,
+    mcpTools: input.mcpTools.map((tool) => ({ ...tool })),
     approval: {
       state: approvalState
     },
@@ -902,6 +1091,20 @@ function parseProjectSkillManifest(manifestJson: string): SkillManifest {
   }
 
   return copySkillManifest(manifest);
+}
+
+function parseMCPConnectorJson(definitionJson: string) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(definitionJson);
+  } catch {
+    throw new Error("mcp_connector_json_invalid");
+  }
+  try {
+    return normalizeMCPConnectorDefinition(parsed);
+  } catch {
+    throw new Error("mcp_connector_validation_failed");
+  }
 }
 
 function normalizeSkillContent(content: string): string {
@@ -1037,6 +1240,20 @@ function copyModelRoutingPolicyRecord(
   return copy;
 }
 
+function copyMCPConnectorRecord(connector: MCPConnectorRecord): MCPConnectorRecord {
+  return {
+    ...connector,
+    tools: connector.tools.map((tool) => ({
+      ...tool,
+      roles: [...tool.roles]
+    }))
+  };
+}
+
+function copyMCPToolApprovalRecord(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
+  return { ...approval };
+}
+
 function copyProjectBoundSkillState(state: ProjectBoundSkillState): ProjectBoundSkillState {
   return {
     skill: copySkillRecord(state.skill),
@@ -1074,6 +1291,13 @@ function isProjectModelProviderForProject(
   projectId: string
 ): boolean {
   return provider.scope === "project" && provider.targetKey === projectId;
+}
+
+function isProjectMCPConnectorForProject(
+  connector: MCPConnectorRecord,
+  projectId: string
+): boolean {
+  return connector.scope === "project" && connector.targetKey === projectId;
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {

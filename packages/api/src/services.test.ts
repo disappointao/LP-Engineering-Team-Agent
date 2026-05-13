@@ -836,6 +836,21 @@ describe("demo workbench service", () => {
       projectId: project.id,
       skillVersionId: published.id
     });
+    await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder", "reviewer"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     const version = await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
     await service.reviewPageVersion({ projectId: project.id, pageVersionId: version.id });
@@ -869,6 +884,243 @@ describe("demo workbench service", () => {
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);
+  });
+
+  it("creates project mcp connectors and computes visible tools from skills and approvals", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "MCP Project" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify({
+        id: "skill_assets",
+        name: "Asset Search",
+        version: "0.1.0",
+        type: "workflow",
+        scope: "project",
+        description: "Allows asset search.",
+        permissions: ["assets:read", "git:write"],
+        requiredSecrets: [],
+        entrypoints: ["workflow.md"],
+        reviewState: "draft"
+      }),
+      content: "Use approved assets.",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+
+    const connector = await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Internal Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          },
+          {
+            name: "createPullRequest",
+            permission: "git:write",
+            roles: ["deployer"],
+            requiresApproval: true
+          }
+        ]
+      })
+    });
+
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: connector.id,
+        name: "searchAssets",
+        permission: "assets:read",
+        requiresApproval: false
+      }
+    ]);
+
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "deployer"
+      })
+    ).resolves.toEqual([]);
+
+    await service.setProjectMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "createPullRequest",
+      approved: true,
+      approvedByUserId: "local-owner"
+    });
+
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "deployer"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: connector.id,
+        name: "createPullRequest",
+        permission: "git:write",
+        requiresApproval: true
+      }
+    ]);
+  });
+
+  it("passes repository-backed mcp tools into runtime context", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: runtime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Runtime MCP" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify({
+        id: "skill_assets",
+        name: "Asset Search",
+        version: "0.1.0",
+        type: "workflow",
+        scope: "project",
+        description: "Allows asset search.",
+        permissions: ["assets:read"],
+        requiredSecrets: [],
+        entrypoints: ["workflow.md"],
+        reviewState: "draft"
+      }),
+      content: "Use asset search.",
+      contentType: "text/plain"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+    await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a static LP."
+    });
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    expect(runtime.requests[0]?.context?.mcpTools).toEqual([
+      {
+        connectorId: "connector_assets",
+        name: "searchAssets",
+        permission: "assets:read",
+        requiresApproval: false
+      }
+    ]);
+  });
+
+  it("validates project mcp connector lifecycle edge cases", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "MCP Edges" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+
+    await expect(
+      service.createProjectMCPConnector({
+        projectId: project.id,
+        definitionJson: "{"
+      })
+    ).rejects.toThrow("mcp_connector_json_invalid");
+
+    const connector = await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
+
+    await expect(
+      service.createProjectMCPConnector({
+        projectId: project.id,
+        definitionJson: JSON.stringify({
+          id: "connector_assets",
+          name: "Duplicate",
+          tools: [
+            {
+              name: "searchAssets",
+              permission: "assets:read",
+              roles: ["builder"],
+              requiresApproval: false
+            }
+          ]
+        })
+      })
+    ).rejects.toThrow("mcp_connector_already_exists");
+
+    await expect(
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "searchAssets",
+        approved: true
+      })
+    ).rejects.toThrow("mcp_tool_approval_not_required");
+
+    await service.setProjectMCPConnectorEnabled({
+      projectId: project.id,
+      connectorId: connector.id,
+      enabled: false
+    });
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([]);
   });
 
   it("does not inject a hidden default skill when no project skills are bound", async () => {
