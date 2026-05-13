@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -222,6 +222,63 @@ describe("json-file workbench repositories", () => {
         settings: { temperature: 0.2 }
       })
     );
+  });
+
+  it("persists mcp connectors and approvals across repository instances", async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempDirectory);
+    const filePath = join(tempDirectory, "mcp-workbench-state.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+
+    await first.mcpConnectors.save({
+      id: "connector_assets",
+      scope: "project",
+      targetKey: "project_1",
+      name: "Internal Assets",
+      enabled: true,
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ],
+      createdAt,
+      updatedAt: createdAt
+    });
+    await first.mcpToolApprovals.save({
+      id: "mcp_approval_1",
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      state: "approved",
+      approvedByUserId: "local-owner",
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    const copyFilePath = join(tempDirectory, "mcp-workbench-state-copy.json");
+    const second = createJsonFileWorkbenchRepositories({
+      filePath: copyFilePath
+    });
+    const raw = await readFile(filePath, "utf8");
+    await writeFile(copyFilePath, raw, "utf8");
+
+    await expect(second.mcpConnectors.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "connector_assets" })
+    ]);
+    await expect(second.mcpToolApprovals.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "mcp_approval_1", state: "approved" })
+    ]);
+
+    const connectors = await second.mcpConnectors.listForProject("project_1");
+    connectors[0]!.tools[0]!.roles.push("reviewer");
+    await expect(second.mcpConnectors.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({
+        tools: [expect.objectContaining({ roles: ["builder"] })]
+      })
+    ]);
   });
 
   it("creates parent directories and writes readable JSON", async () => {
