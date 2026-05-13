@@ -95,7 +95,9 @@ describe("json-file workbench repositories", () => {
   });
 
   it("creates parent directories and writes readable JSON", async () => {
-    const filePath = await tempStateFile();
+    const root = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(root);
+    const filePath = join(root, "missing", "nested", "workbench-state.json");
     const repositories = createJsonFileWorkbenchRepositories({ filePath });
 
     await repositories.projects.save({
