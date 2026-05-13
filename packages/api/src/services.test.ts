@@ -417,6 +417,233 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("creates project model providers and resolves default routes", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    const policy = await service.resolveModelRoutingPolicyForProject(project.id);
+
+    expect(provider).toMatchObject({
+      id: "provider_openai",
+      scope: "project",
+      targetKey: project.id,
+      name: "OpenAI",
+      provider: "openai",
+      config: {
+        baseUrl: "https://api.openai.com/v1",
+        secretEnvName: "OPENAI_API_KEY"
+      },
+      enabled: true
+    });
+    expect(policy.builder).toEqual({ provider: "mock-anthropic", model: "code-model" });
+  });
+
+  it("upserts project model routes and uses them during runtime calls", async () => {
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      builderRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "gpt-5.4"
+    });
+
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+
+    expect(builderRuntime.requests[0]?.context?.modelRoutingPolicy?.builder).toEqual({
+      provider: "provider_openai",
+      model: "gpt-5.4"
+    });
+  });
+
+  it("rejects disabled model providers during route resolution", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "gpt-5.4"
+    });
+    await service.setModelProviderEnabled({
+      projectId: project.id,
+      providerId: provider.id,
+      enabled: false
+    });
+
+    await expect(service.resolveModelRoutingPolicyForProject(project.id)).rejects.toThrow(
+      "model_provider_disabled"
+    );
+  });
+
+  it("allows only one concurrent create for the same model provider id", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const results = await Promise.allSettled([
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "provider_openai",
+        name: "OpenAI",
+        provider: "openai",
+        secretEnvName: "OPENAI_API_KEY"
+      }),
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "provider_openai",
+        name: "OpenAI duplicate",
+        provider: "openai",
+        secretEnvName: "OPENAI_API_KEY"
+      })
+    ]);
+    const state = await service.listProjectModelState(project.id);
+
+    expect(results).toHaveLength(2);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toEqual([
+      expect.objectContaining({
+        reason: expect.objectContaining({ message: "model_provider_already_exists" })
+      })
+    ]);
+    expect(state.providers).toHaveLength(1);
+    expect(state.providers[0]).toMatchObject({
+      id: "provider_openai",
+      targetKey: project.id
+    });
+  });
+
+  it("keeps concurrent upserts for different model roles from overwriting routes", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+
+    const results = await Promise.allSettled([
+      service.upsertProjectModelRoute({
+        projectId: project.id,
+        role: "planner",
+        providerId: provider.id,
+        model: "gpt-5-planner"
+      }),
+      service.upsertProjectModelRoute({
+        projectId: project.id,
+        role: "builder",
+        providerId: provider.id,
+        model: "gpt-5-builder"
+      })
+    ]);
+    const state = await service.listProjectModelState(project.id);
+
+    expect(results).toEqual([
+      expect.objectContaining({ status: "fulfilled" }),
+      expect.objectContaining({ status: "fulfilled" })
+    ]);
+    expect(state.routes).toHaveLength(2);
+    expect(new Set(state.routes.map((route) => route.id)).size).toBe(2);
+    expect(state.resolvedPolicy.planner).toEqual({
+      provider: provider.id,
+      model: "gpt-5-planner"
+    });
+    expect(state.resolvedPolicy.builder).toEqual({
+      provider: provider.id,
+      model: "gpt-5-builder"
+    });
+  });
+
+  it("updates the same model route id when upserting an existing role", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+
+    const firstRoute = await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "gpt-5.4"
+    });
+    const secondRoute = await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "gpt-5.5"
+    });
+    const state = await service.listProjectModelState(project.id);
+
+    expect(secondRoute).toMatchObject({
+      id: firstRoute.id,
+      createdAt: firstRoute.createdAt,
+      model: "gpt-5.5"
+    });
+    expect(state.routes).toHaveLength(1);
+    expect(state.resolvedPolicy.builder).toEqual({
+      provider: provider.id,
+      model: "gpt-5.5"
+    });
+  });
+
+  it("rejects invalid model provider input", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    await expect(
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "provider_bad",
+        name: "Bad",
+        provider: "javascript" as "openai",
+        secretEnvName: "OPENAI_API_KEY"
+      })
+    ).rejects.toThrow("model_provider_type_unsupported");
+
+    await expect(
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "provider_secret",
+        name: "Secret",
+        provider: "openai",
+        secretEnvName: "sk-real-secret-value"
+      })
+    ).rejects.toThrow("model_secret_reference_invalid");
+  });
+
   it("keeps published skill versions published when validation is retried", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const draft = await service.createSkillDraft({

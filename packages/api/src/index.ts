@@ -2,6 +2,9 @@ import type { StaticArtifacts } from "@lp-agent/artifacts";
 import {
   createInMemoryWorkbenchRepositories,
   type BriefRecord,
+  type ModelProviderRecord,
+  type ModelProviderType,
+  type ModelRoutingPolicyRecord,
   type PageVersionRecord,
   type ProjectRecord,
   type ReviewStatus,
@@ -18,7 +21,13 @@ import {
 } from "@lp-agent/git-deployment";
 import { sampleBrief, type LPBrief, type ReviewFinding } from "@lp-agent/lp-schema";
 import { computeVisibleTools, sampleConnector, type ApprovalState } from "@lp-agent/mcp-gateway";
-import { InMemoryModelGateway, createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import {
+  InMemoryModelGateway,
+  agentRoles,
+  createDefaultModelPolicy,
+  type AgentRole,
+  type ModelRoutingPolicy
+} from "@lp-agent/model-gateway";
 import {
   LocalAgentRuntimeAdapter,
   type AgentRuntimeAdapter,
@@ -36,6 +45,9 @@ const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>
 
 export type {
   BriefRecord,
+  ModelProviderRecord,
+  ModelProviderType,
+  ModelRoutingPolicyRecord,
   PageVersionRecord,
   ProjectRecord,
   ReviewStatus,
@@ -44,6 +56,7 @@ export type {
   SkillRecord,
   SkillVersionRecord
 } from "@lp-agent/db";
+export type { AgentRole } from "@lp-agent/model-gateway";
 
 export interface WorkbenchSnapshot {
   project: ProjectRecord;
@@ -118,6 +131,34 @@ export interface ProjectBoundSkillState {
 export interface ProjectSkillState {
   boundSkills: ProjectBoundSkillState[];
   availableVersions: SkillVersionRecord[];
+}
+
+export interface CreateModelProviderInput {
+  projectId: string;
+  providerId: string;
+  name: string;
+  provider: ModelProviderType;
+  baseUrl?: string;
+  secretEnvName?: string;
+}
+
+export interface SetModelProviderEnabledInput {
+  projectId: string;
+  providerId: string;
+  enabled: boolean;
+}
+
+export interface UpsertProjectModelRouteInput {
+  projectId: string;
+  role: AgentRole;
+  providerId: string;
+  model: string;
+}
+
+export interface ProjectModelState {
+  providers: ModelProviderRecord[];
+  routes: ModelRoutingPolicyRecord[];
+  resolvedPolicy: ModelRoutingPolicy;
 }
 
 export interface DemoWorkbenchServiceOptions {
@@ -550,6 +591,151 @@ export class DemoWorkbenchService {
     return versions;
   }
 
+  async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const providerId = normalizeIdentifier(input.providerId, "model_provider_key_required");
+    const name = normalizeNonEmpty(input.name, "model_provider_name_required");
+    const provider = normalizeModelProviderType(input.provider);
+    const config = normalizeModelProviderConfig({
+      baseUrl: input.baseUrl,
+      secretEnvName: input.secretEnvName
+    });
+
+    return withRepositoryIdLock(this.repositories, async () => {
+      if (await this.repositories.modelProviders.getById(providerId)) {
+        throw new Error("model_provider_already_exists");
+      }
+
+      const timestamp = this.timestamp();
+      const record: ModelProviderRecord = {
+        id: providerId,
+        scope: "project",
+        targetKey: input.projectId,
+        name,
+        provider,
+        config,
+        enabled: true,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      await this.repositories.modelProviders.save(record);
+      return copyModelProviderRecord(record);
+    });
+  }
+
+  async setModelProviderEnabled(
+    input: SetModelProviderEnabledInput
+  ): Promise<ModelProviderRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const provider = await this.repositories.modelProviders.getById(input.providerId);
+    if (!provider || !isProjectModelProviderForProject(provider, input.projectId)) {
+      throw new Error("model_provider_not_found");
+    }
+    const updated: ModelProviderRecord = {
+      ...provider,
+      enabled: input.enabled,
+      updatedAt: this.timestamp()
+    };
+    await this.repositories.modelProviders.save(updated);
+    return copyModelProviderRecord(updated);
+  }
+
+  async upsertProjectModelRoute(
+    input: UpsertProjectModelRouteInput
+  ): Promise<ModelRoutingPolicyRecord> {
+    await this.getProjectOrThrow(input.projectId);
+    const role = normalizeAgentRole(input.role);
+    const model = normalizeNonEmpty(input.model, "model_id_required");
+    const provider = await this.repositories.modelProviders.getById(input.providerId);
+    if (!provider || !isProjectModelProviderForProject(provider, input.projectId)) {
+      throw new Error("model_provider_not_found");
+    }
+    if (!provider.enabled) {
+      throw new Error("model_provider_disabled");
+    }
+
+    return withRepositoryIdLock(this.repositories, async () => {
+      const currentProvider = await this.repositories.modelProviders.getById(input.providerId);
+      if (!currentProvider || !isProjectModelProviderForProject(currentProvider, input.projectId)) {
+        throw new Error("model_provider_not_found");
+      }
+      if (!currentProvider.enabled) {
+        throw new Error("model_provider_disabled");
+      }
+
+      const existing = await this.repositories.modelRoutingPolicies.getByProjectAndRole(
+        input.projectId,
+        role
+      );
+      const allRoutes = await this.repositories.modelRoutingPolicies.listAll();
+      const timestamp = this.timestamp();
+      const route: ModelRoutingPolicyRecord = {
+        id:
+          existing?.id ??
+          nextSequentialId(
+            "model_route",
+            allRoutes.map((record) => record.id)
+          ),
+        scope: "project",
+        targetKey: input.projectId,
+        role,
+        providerId: currentProvider.id,
+        model,
+        fallback: existing?.fallback ? structuredClone(existing.fallback) : undefined,
+        settings: existing?.settings ? structuredClone(existing.settings) : undefined,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp
+      };
+      await this.repositories.modelRoutingPolicies.save(route);
+      return copyModelRoutingPolicyRecord(route);
+    });
+  }
+
+  async listProjectModelState(projectId: string): Promise<ProjectModelState> {
+    await this.getProjectOrThrow(projectId);
+    return {
+      providers: (await this.repositories.modelProviders.listForProject(projectId)).map(
+        copyModelProviderRecord
+      ),
+      routes: (await this.repositories.modelRoutingPolicies.listForProject(projectId)).map(
+        copyModelRoutingPolicyRecord
+      ),
+      resolvedPolicy: await this.resolveModelRoutingPolicyForProject(projectId)
+    };
+  }
+
+  async resolveModelRoutingPolicyForProject(projectId: string): Promise<ModelRoutingPolicy> {
+    await this.getProjectOrThrow(projectId);
+    const defaultPolicy = createDefaultModelPolicy();
+    const projectRoutes = await this.repositories.modelRoutingPolicies.listForProject(projectId);
+    const resolved: ModelRoutingPolicy = {
+      planner: { ...defaultPolicy.planner },
+      builder: { ...defaultPolicy.builder },
+      reviewer: { ...defaultPolicy.reviewer },
+      deployer: { ...defaultPolicy.deployer }
+    };
+
+    for (const route of projectRoutes) {
+      const role = normalizeAgentRole(route.role);
+      const provider = await this.repositories.modelProviders.getById(route.providerId);
+      if (!provider || !isProjectModelProviderForProject(provider, projectId)) {
+        throw new Error("model_route_provider_invalid");
+      }
+      if (!provider.enabled) {
+        throw new Error("model_provider_disabled");
+      }
+      if (route.model.trim().length === 0) {
+        throw new Error("model_id_required");
+      }
+      resolved[role] = {
+        provider: provider.id,
+        model: route.model
+      };
+    }
+
+    return resolved;
+  }
+
   private timestamp(): string {
     return this.now().toISOString();
   }
@@ -559,11 +745,15 @@ export class DemoWorkbenchService {
     role: "planner" | "builder" | "reviewer" | "deployer",
     approvalState: ApprovalState = "not_required"
   ): Promise<RuntimeRunContext> {
-    const skillVersions = await this.listRuntimeSkillsForProject(projectId);
+    const [skillVersions, modelRoutingPolicy] = await Promise.all([
+      this.listRuntimeSkillsForProject(projectId),
+      this.resolveModelRoutingPolicyForProject(projectId)
+    ]);
     return createWorkbenchRuntimeContext({
       role,
       approvalState,
-      skillVersions
+      skillVersions,
+      modelRoutingPolicy
     });
   }
 
@@ -625,6 +815,7 @@ function createWorkbenchRuntimeContext(input: {
   role: "planner" | "builder" | "reviewer" | "deployer";
   approvalState?: ApprovalState;
   skillVersions: SkillVersionRecord[];
+  modelRoutingPolicy: ModelRoutingPolicy;
 }): RuntimeRunContext {
   const approvalState = input.approvalState ?? "not_required";
   const grantedPermissions = [
@@ -662,7 +853,8 @@ function createWorkbenchRuntimeContext(input: {
     artifactWorkspace: {
       mode: "memory",
       writableFiles: ["index.html", "styles.css", "script.js"]
-    }
+    },
+    modelRoutingPolicy: input.modelRoutingPolicy
   };
 }
 
@@ -720,6 +912,64 @@ function normalizeSkillContentType(contentType: unknown): SkillContentType {
   throw new Error("unsupported_content_type");
 }
 
+function normalizeIdentifier(value: string, errorCode: string): string {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new Error(errorCode);
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(normalized)) {
+    throw new Error(errorCode);
+  }
+  return normalized;
+}
+
+function normalizeNonEmpty(value: string, errorCode: string): string {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new Error(errorCode);
+  }
+  return normalized;
+}
+
+function normalizeModelProviderType(provider: unknown): ModelProviderType {
+  if (
+    provider === "mock" ||
+    provider === "openai" ||
+    provider === "anthropic" ||
+    provider === "internal" ||
+    provider === "custom"
+  ) {
+    return provider;
+  }
+  throw new Error("model_provider_type_unsupported");
+}
+
+function normalizeModelProviderConfig(input: {
+  baseUrl?: string;
+  secretEnvName?: string;
+}): ModelProviderRecord["config"] {
+  const config: ModelProviderRecord["config"] = {};
+  const baseUrl = input.baseUrl?.trim();
+  const secretEnvName = input.secretEnvName?.trim();
+  if (baseUrl) {
+    config.baseUrl = baseUrl;
+  }
+  if (secretEnvName) {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(secretEnvName)) {
+      throw new Error("model_secret_reference_invalid");
+    }
+    config.secretEnvName = secretEnvName;
+  }
+  return config;
+}
+
+function normalizeAgentRole(role: unknown): AgentRole {
+  if (agentRoles.includes(role as AgentRole)) {
+    return role as AgentRole;
+  }
+  throw new Error("model_role_unsupported");
+}
+
 function updateSkillVersionReviewState(
   version: SkillVersionRecord,
   reviewState: SkillManifest["reviewState"]
@@ -757,6 +1007,26 @@ function copySkillBindingRecord(binding: SkillBindingRecord): SkillBindingRecord
   return copy;
 }
 
+function copyModelProviderRecord(provider: ModelProviderRecord): ModelProviderRecord {
+  return {
+    ...provider,
+    config: { ...provider.config }
+  };
+}
+
+function copyModelRoutingPolicyRecord(
+  policy: ModelRoutingPolicyRecord
+): ModelRoutingPolicyRecord {
+  const copy: ModelRoutingPolicyRecord = { ...policy };
+  if (policy.fallback) {
+    copy.fallback = structuredClone(policy.fallback);
+  }
+  if (policy.settings) {
+    copy.settings = structuredClone(policy.settings);
+  }
+  return copy;
+}
+
 function copyProjectBoundSkillState(state: ProjectBoundSkillState): ProjectBoundSkillState {
   return {
     skill: copySkillRecord(state.skill),
@@ -787,6 +1057,13 @@ function isProjectSkillBindingForProject(
   projectId: string
 ): boolean {
   return isProjectSkillBinding(binding) && binding.projectId === projectId;
+}
+
+function isProjectModelProviderForProject(
+  provider: ModelProviderRecord,
+  projectId: string
+): boolean {
+  return provider.scope === "project" && provider.targetKey === projectId;
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {
