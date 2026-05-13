@@ -64,6 +64,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Skills Management MVP spec.
    - Read this after the persistent-state plan when adding project-level skill creation, validation, publishing, project binding, and runtime context loading.
 
+16. `plans/2026-05-13-project-skills-management-runtime.md`
+   - Implementation plan for the Stage 2 Skills Management MVP.
+   - Read this after the project skills spec when implementing repository-backed skill lifecycle, project binding, runtime context loading, and the Web Skills view.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
