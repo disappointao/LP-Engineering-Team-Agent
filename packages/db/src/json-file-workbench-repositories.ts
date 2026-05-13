@@ -10,6 +10,12 @@ import type {
   PageVersionRepository,
   ProjectRecord,
   ProjectRepository,
+  SkillBindingRecord,
+  SkillBindingRepository,
+  SkillRecord,
+  SkillRepository,
+  SkillVersionRecord,
+  SkillVersionRepository,
   WorkbenchMessageRecord,
   WorkbenchMessageRepository,
   WorkbenchRepositories,
@@ -31,6 +37,9 @@ interface JsonFileWorkbenchState {
   tasks: WorkbenchTaskRecord[];
   messages: WorkbenchMessageRecord[];
   taskSnapshots: WorkbenchTaskSnapshotRecord[];
+  skills: SkillRecord[];
+  skillVersions: SkillVersionRecord[];
+  skillBindings: SkillBindingRecord[];
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
@@ -58,6 +67,9 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly tasks: WorkbenchTaskRepository;
   readonly messages: WorkbenchMessageRepository;
   readonly taskSnapshots: WorkbenchTaskSnapshotRepository;
+  readonly skills: SkillRepository;
+  readonly skillVersions: SkillVersionRepository;
+  readonly skillBindings: SkillBindingRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -67,6 +79,99 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.tasks = new JsonFileWorkbenchTaskRepository(filePath);
     this.messages = new JsonFileWorkbenchMessageRepository(filePath);
     this.taskSnapshots = new JsonFileWorkbenchTaskSnapshotRepository(filePath);
+    this.skills = new JsonFileSkillRepository(filePath);
+    this.skillVersions = new JsonFileSkillVersionRepository(filePath);
+    this.skillBindings = new JsonFileSkillBindingRepository(filePath);
+  }
+}
+
+class JsonFileSkillRepository implements SkillRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(skill: SkillRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.skills = upsertBy(state.skills, copy(skill), (record) => record.id === skill.id);
+    });
+  }
+
+  async getById(skillId: string): Promise<SkillRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.skills.find((skill) => skill.id === skillId));
+  }
+
+  async listAll(): Promise<SkillRecord[]> {
+    const state = await readState(this.filePath);
+    return state.skills.map(copy);
+  }
+}
+
+class JsonFileSkillVersionRepository implements SkillVersionRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(version: SkillVersionRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.skillVersions = upsertBy(
+        state.skillVersions,
+        copy(version),
+        (record) => record.id === version.id
+      );
+    });
+  }
+
+  async getById(versionId: string): Promise<SkillVersionRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.skillVersions.find((version) => version.id === versionId));
+  }
+
+  async getBySkillIdAndVersion(
+    skillId: string,
+    version: string
+  ): Promise<SkillVersionRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(
+      state.skillVersions.find(
+        (record) => record.skillId === skillId && record.version === version
+      )
+    );
+  }
+
+  async listForSkill(skillId: string): Promise<SkillVersionRecord[]> {
+    const state = await readState(this.filePath);
+    return state.skillVersions.filter((version) => version.skillId === skillId).map(copy);
+  }
+
+  async listAll(): Promise<SkillVersionRecord[]> {
+    const state = await readState(this.filePath);
+    return state.skillVersions.map(copy);
+  }
+}
+
+class JsonFileSkillBindingRepository implements SkillBindingRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(binding: SkillBindingRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.skillBindings = upsertBy(
+        state.skillBindings,
+        copy(binding),
+        (record) => record.id === binding.id
+      );
+    });
+  }
+
+  async getById(bindingId: string): Promise<SkillBindingRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.skillBindings.find((binding) => binding.id === bindingId));
+  }
+
+  async listForProject(projectId: string): Promise<SkillBindingRecord[]> {
+    const state = await readState(this.filePath);
+    return state.skillBindings.filter((binding) => binding.projectId === projectId).map(copy);
+  }
+
+  async listAll(): Promise<SkillBindingRecord[]> {
+    const state = await readState(this.filePath);
+    return state.skillBindings.map(copy);
   }
 }
 
@@ -273,7 +378,10 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       deployments: parsed.deployments ?? [],
       tasks: parsed.tasks ?? [],
       messages: parsed.messages ?? [],
-      taskSnapshots: parsed.taskSnapshots ?? []
+      taskSnapshots: parsed.taskSnapshots ?? [],
+      skills: parsed.skills ?? [],
+      skillVersions: parsed.skillVersions ?? [],
+      skillBindings: parsed.skillBindings ?? []
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -299,7 +407,10 @@ function emptyState(): JsonFileWorkbenchState {
     deployments: [],
     tasks: [],
     messages: [],
-    taskSnapshots: []
+    taskSnapshots: [],
+    skills: [],
+    skillVersions: [],
+    skillBindings: []
   };
 }
 

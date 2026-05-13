@@ -113,6 +113,62 @@ describe("json-file workbench repositories", () => {
     });
   });
 
+  it("reopens skills, versions, and bindings from disk", async () => {
+    const filePath = await tempStateFile();
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+
+    await first.skills.save({
+      id: "skill_brand",
+      name: "Brand LP",
+      type: "template",
+      scope: "project",
+      createdAt
+    });
+    await first.skillVersions.save({
+      id: "skill_version_1",
+      skillId: "skill_brand",
+      version: "1.0.0",
+      manifest: {
+        id: "skill_brand",
+        name: "Brand LP",
+        version: "1.0.0",
+        type: "template",
+        scope: "project",
+        description: "Brand LP sections.",
+        permissions: ["brief:read", "artifact:write"],
+        requiredSecrets: [],
+        entrypoints: ["skills/brand.md"],
+        reviewState: "published"
+      },
+      content: "# Brand LP",
+      contentType: "text/markdown",
+      reviewState: "published",
+      createdAt
+    });
+    await first.skillBindings.save({
+      id: "skill_binding_1",
+      skillVersionId: "skill_version_1",
+      scope: "project",
+      targetKey: "project_1",
+      projectId: "project_1",
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(second.skills.listAll()).resolves.toEqual([
+      expect.objectContaining({ id: "skill_brand", name: "Brand LP" })
+    ]);
+    await expect(second.skillVersions.listForSkill("skill_brand")).resolves.toEqual([
+      expect.objectContaining({ id: "skill_version_1", content: "# Brand LP" })
+    ]);
+    await expect(second.skillBindings.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "skill_binding_1", enabled: true })
+    ]);
+  });
+
   it("creates parent directories and writes readable JSON", async () => {
     const root = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(root);
@@ -135,7 +191,10 @@ describe("json-file workbench repositories", () => {
       ],
       tasks: [],
       messages: [],
-      taskSnapshots: []
+      taskSnapshots: [],
+      skills: [],
+      skillVersions: [],
+      skillBindings: []
     });
   });
 
