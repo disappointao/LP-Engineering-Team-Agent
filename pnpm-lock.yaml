@@ -129,6 +129,9 @@ importers:
       '@lp-agent/lp-schema':
         specifier: workspace:*
         version: link:../lp-schema
+      '@lp-agent/skills':
+        specifier: workspace:*
+        version: link:../skills
     devDependencies:
       prisma:
         specifier: ^6.0.0

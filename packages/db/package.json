@@ -14,7 +14,8 @@
   "dependencies": {
     "@lp-agent/artifacts": "workspace:*",
     "@lp-agent/git-deployment": "workspace:*",
-    "@lp-agent/lp-schema": "workspace:*"
+    "@lp-agent/lp-schema": "workspace:*",
+    "@lp-agent/skills": "workspace:*"
   },
   "devDependencies": {
     "prisma": "^6.0.0",

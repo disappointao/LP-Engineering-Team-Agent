@@ -3,7 +3,10 @@ import { sampleBrief } from "@lp-agent/lp-schema";
 import {
   createInMemoryWorkbenchRepositories,
   type PageVersionRecord,
-  type ProjectRecord
+  type ProjectRecord,
+  type SkillBindingRecord,
+  type SkillRecord,
+  type SkillVersionRecord
 } from "./index";
 
 const createdAt = "2026-05-12T00:00:00.000Z";
@@ -195,5 +198,67 @@ describe("in-memory workbench repositories", () => {
       pageVersionId: "version_1",
       createdAt
     });
+  });
+
+  it("persists skills, versions, and bindings with defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const skill: SkillRecord = {
+      id: "skill_brand",
+      name: "Brand LP",
+      type: "template",
+      scope: "project",
+      createdAt
+    };
+    const version: SkillVersionRecord = {
+      id: "skill_version_1",
+      skillId: skill.id,
+      version: "1.0.0",
+      manifest: {
+        id: skill.id,
+        name: skill.name,
+        version: "1.0.0",
+        type: "template",
+        scope: "project",
+        description: "Brand LP sections.",
+        permissions: ["brief:read", "artifact:write"],
+        requiredSecrets: [],
+        entrypoints: ["skills/brand.md"],
+        reviewState: "published"
+      },
+      content: "# Brand LP\nUse concise ecommerce sections.",
+      contentType: "text/markdown",
+      reviewState: "published",
+      createdAt
+    };
+    const binding: SkillBindingRecord = {
+      id: "skill_binding_1",
+      skillVersionId: version.id,
+      scope: "project",
+      targetKey: "project_1",
+      projectId: "project_1",
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    };
+
+    await repositories.skills.save(skill);
+    await repositories.skillVersions.save(version);
+    await repositories.skillBindings.save(binding);
+
+    const savedVersion = await repositories.skillVersions.getById(version.id);
+    if (!savedVersion) {
+      throw new Error("Expected saved skill version.");
+    }
+    savedVersion.manifest.permissions.push("mutated:permission");
+
+    await expect(repositories.skills.listAll()).resolves.toEqual([skill]);
+    await expect(repositories.skillVersions.listForSkill(skill.id)).resolves.toEqual([version]);
+    await expect(
+      repositories.skillVersions.getBySkillIdAndVersion(skill.id, "1.0.0")
+    ).resolves.toEqual(version);
+    await expect(repositories.skillBindings.listForProject("project_1")).resolves.toEqual([
+      binding
+    ]);
+    await expect(repositories.skillVersions.getById(version.id)).resolves.toEqual(version);
   });
 });

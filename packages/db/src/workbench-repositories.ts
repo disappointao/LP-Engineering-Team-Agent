@@ -1,6 +1,7 @@
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
+import type { SkillManifest, SkillScope, SkillType } from "@lp-agent/skills";
 
 export interface ProjectRecord {
   id: string;
@@ -57,6 +58,41 @@ export interface WorkbenchTaskSnapshotRecord {
   createdAt: string;
 }
 
+export type SkillContentType = "text/markdown" | "text/plain";
+
+export interface SkillRecord {
+  id: string;
+  name: string;
+  type: SkillType;
+  scope: SkillScope;
+  createdAt: string;
+}
+
+export interface SkillVersionRecord {
+  id: string;
+  skillId: string;
+  version: string;
+  manifest: SkillManifest;
+  content: string;
+  contentType: SkillContentType;
+  reviewState: SkillManifest["reviewState"];
+  createdAt: string;
+}
+
+export interface SkillBindingRecord {
+  id: string;
+  skillVersionId: string;
+  scope: SkillScope;
+  targetKey: string;
+  organizationId?: string;
+  workspaceId?: string;
+  projectId?: string;
+  enabled: boolean;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectRepository {
   save(project: ProjectRecord): Promise<void>;
   getById(projectId: string): Promise<ProjectRecord | undefined>;
@@ -100,6 +136,30 @@ export interface WorkbenchTaskSnapshotRepository {
   getByTaskId(taskId: string): Promise<WorkbenchTaskSnapshotRecord | undefined>;
 }
 
+export interface SkillRepository {
+  save(skill: SkillRecord): Promise<void>;
+  getById(skillId: string): Promise<SkillRecord | undefined>;
+  listAll(): Promise<SkillRecord[]>;
+}
+
+export interface SkillVersionRepository {
+  save(version: SkillVersionRecord): Promise<void>;
+  getById(versionId: string): Promise<SkillVersionRecord | undefined>;
+  getBySkillIdAndVersion(
+    skillId: string,
+    version: string
+  ): Promise<SkillVersionRecord | undefined>;
+  listForSkill(skillId: string): Promise<SkillVersionRecord[]>;
+  listAll(): Promise<SkillVersionRecord[]>;
+}
+
+export interface SkillBindingRepository {
+  save(binding: SkillBindingRecord): Promise<void>;
+  getById(bindingId: string): Promise<SkillBindingRecord | undefined>;
+  listForProject(projectId: string): Promise<SkillBindingRecord[]>;
+  listAll(): Promise<SkillBindingRecord[]>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   briefs: BriefRepository;
@@ -108,6 +168,9 @@ export interface WorkbenchRepositories {
   tasks: WorkbenchTaskRepository;
   messages: WorkbenchMessageRepository;
   taskSnapshots: WorkbenchTaskSnapshotRepository;
+  skills: SkillRepository;
+  skillVersions: SkillVersionRepository;
+  skillBindings: SkillBindingRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -122,6 +185,82 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly tasks = new InMemoryWorkbenchTaskRepository();
   readonly messages = new InMemoryWorkbenchMessageRepository();
   readonly taskSnapshots = new InMemoryWorkbenchTaskSnapshotRepository();
+  readonly skills = new InMemorySkillRepository();
+  readonly skillVersions = new InMemorySkillVersionRepository();
+  readonly skillBindings = new InMemorySkillBindingRepository();
+}
+
+class InMemorySkillRepository implements SkillRepository {
+  private readonly skills = new Map<string, SkillRecord>();
+
+  async save(skill: SkillRecord): Promise<void> {
+    this.skills.set(skill.id, copySkill(skill));
+  }
+
+  async getById(skillId: string): Promise<SkillRecord | undefined> {
+    const skill = this.skills.get(skillId);
+    return skill ? copySkill(skill) : undefined;
+  }
+
+  async listAll(): Promise<SkillRecord[]> {
+    return [...this.skills.values()].map(copySkill);
+  }
+}
+
+class InMemorySkillVersionRepository implements SkillVersionRepository {
+  private readonly versions = new Map<string, SkillVersionRecord>();
+
+  async save(version: SkillVersionRecord): Promise<void> {
+    this.versions.set(version.id, copySkillVersion(version));
+  }
+
+  async getById(versionId: string): Promise<SkillVersionRecord | undefined> {
+    const version = this.versions.get(versionId);
+    return version ? copySkillVersion(version) : undefined;
+  }
+
+  async getBySkillIdAndVersion(
+    skillId: string,
+    version: string
+  ): Promise<SkillVersionRecord | undefined> {
+    const record = [...this.versions.values()].find(
+      (candidate) => candidate.skillId === skillId && candidate.version === version
+    );
+    return record ? copySkillVersion(record) : undefined;
+  }
+
+  async listForSkill(skillId: string): Promise<SkillVersionRecord[]> {
+    return [...this.versions.values()]
+      .filter((version) => version.skillId === skillId)
+      .map(copySkillVersion);
+  }
+
+  async listAll(): Promise<SkillVersionRecord[]> {
+    return [...this.versions.values()].map(copySkillVersion);
+  }
+}
+
+class InMemorySkillBindingRepository implements SkillBindingRepository {
+  private readonly bindings = new Map<string, SkillBindingRecord>();
+
+  async save(binding: SkillBindingRecord): Promise<void> {
+    this.bindings.set(binding.id, copySkillBinding(binding));
+  }
+
+  async getById(bindingId: string): Promise<SkillBindingRecord | undefined> {
+    const binding = this.bindings.get(bindingId);
+    return binding ? copySkillBinding(binding) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<SkillBindingRecord[]> {
+    return [...this.bindings.values()]
+      .filter((binding) => binding.projectId === projectId)
+      .map(copySkillBinding);
+  }
+
+  async listAll(): Promise<SkillBindingRecord[]> {
+    return [...this.bindings.values()].map(copySkillBinding);
+  }
 }
 
 class InMemoryProjectRepository implements ProjectRepository {
@@ -259,6 +398,24 @@ class InMemoryWorkbenchTaskSnapshotRepository implements WorkbenchTaskSnapshotRe
 
 function copyProject(project: ProjectRecord): ProjectRecord {
   return { ...project };
+}
+
+function copySkill(skill: SkillRecord): SkillRecord {
+  return { ...skill };
+}
+
+function copySkillVersion(version: SkillVersionRecord): SkillVersionRecord {
+  return {
+    ...version,
+    manifest: structuredClone(version.manifest)
+  };
+}
+
+function copySkillBinding(binding: SkillBindingRecord): SkillBindingRecord {
+  return {
+    ...binding,
+    settings: binding.settings ? structuredClone(binding.settings) : undefined
+  };
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {
