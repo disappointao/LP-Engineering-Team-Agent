@@ -450,6 +450,18 @@ describe("demo workbench service", () => {
     ).rejects.toThrow("manifest_validation_failed");
   });
 
+  it("maps malformed skill manifest JSON to invalid_manifest_json", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+
+    await expect(
+      service.createSkillDraft({
+        manifestJson: "{",
+        content: "# Invalid JSON",
+        contentType: "text/markdown"
+      })
+    ).rejects.toThrow("invalid_manifest_json");
+  });
+
   it("requires published skills before project binding", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });
@@ -536,6 +548,116 @@ describe("demo workbench service", () => {
 
     expect(builderRuntime.requests[0]?.context?.skills).toEqual([]);
     expect(builderRuntime.requests[0]?.context?.mcpTools).toEqual([]);
+  });
+
+  it("does not pass disabled project skill bindings into runtime runs", async () => {
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      builderRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    const binding = await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+    await service.setProjectSkillBindingEnabled({ bindingId: binding.id, enabled: false });
+
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+
+    expect(builderRuntime.requests[0]?.context?.skills).toEqual([]);
+    expect(builderRuntime.requests[0]?.context?.mcpTools).toEqual([]);
+  });
+
+  it("ignores malformed non-project bindings with project ids in runtime runs and project state", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await repositories.skillBindings.save({
+      id: "skill_binding_1",
+      skillVersionId: published.id,
+      scope: "workspace",
+      targetKey: project.id,
+      projectId: project.id,
+      enabled: true,
+      createdAt: "2026-05-11T00:00:00.000Z",
+      updatedAt: "2026-05-11T00:00:00.000Z"
+    });
+
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+    const state = await service.listProjectSkillState(project.id);
+
+    expect(builderRuntime.requests[0]?.context?.skills).toEqual([]);
+    expect(builderRuntime.requests[0]?.context?.mcpTools).toEqual([]);
+    expect(state.boundSkills).toEqual([]);
+    await expect(
+      service.setProjectSkillBindingEnabled({ bindingId: "skill_binding_1", enabled: false })
+    ).rejects.toThrow("skill_binding_not_found");
+  });
+
+  it("dedupes multiple published versions of the same manifest id in runtime runs", async () => {
+    const builderRuntime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });
+    const service = new DemoWorkbenchService({
+      builderRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const firstDraft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP v1",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: firstDraft.version.id });
+    const firstPublished = await service.publishSkillVersion({
+      skillVersionId: firstDraft.version.id
+    });
+    const secondDraft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest({ version: "1.1.0" })),
+      content: "# Brand LP v2",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: secondDraft.version.id });
+    const secondPublished = await service.publishSkillVersion({
+      skillVersionId: secondDraft.version.id
+    });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: firstPublished.id
+    });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: secondPublished.id
+    });
+
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
+
+    expect(builderRuntime.requests[0]?.context?.skills).toHaveLength(1);
+    expect(builderRuntime.requests[0]?.context?.skills[0]).toMatchObject({
+      id: "skill_brand",
+      content: "# Brand LP v1"
+    });
   });
 
   it("fails page generation when the builder runtime fails", async () => {

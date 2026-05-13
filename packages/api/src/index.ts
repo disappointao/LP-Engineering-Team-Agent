@@ -426,7 +426,9 @@ export class DemoWorkbenchService {
 
     const existingBindings = await this.repositories.skillBindings.listForProject(input.projectId);
     const existing = existingBindings.find(
-      (binding) => binding.skillVersionId === input.skillVersionId
+      (binding) =>
+        isProjectSkillBindingForProject(binding, input.projectId) &&
+        binding.skillVersionId === input.skillVersionId
     );
     if (existing) {
       return copySkillBindingRecord(existing);
@@ -435,7 +437,9 @@ export class DemoWorkbenchService {
     return withRepositoryIdLock(this.repositories, async () => {
       const duplicateBindings = await this.repositories.skillBindings.listForProject(input.projectId);
       const duplicate = duplicateBindings.find(
-        (binding) => binding.skillVersionId === input.skillVersionId
+        (binding) =>
+          isProjectSkillBindingForProject(binding, input.projectId) &&
+          binding.skillVersionId === input.skillVersionId
       );
       if (duplicate) {
         return copySkillBindingRecord(duplicate);
@@ -461,7 +465,7 @@ export class DemoWorkbenchService {
     input: SetProjectSkillBindingEnabledInput
   ): Promise<SkillBindingRecord> {
     const binding = await this.repositories.skillBindings.getById(input.bindingId);
-    if (!binding) {
+    if (!binding || !isProjectSkillBinding(binding)) {
       throw new Error("skill_binding_not_found");
     }
 
@@ -476,7 +480,9 @@ export class DemoWorkbenchService {
 
   async listProjectSkillState(projectId: string): Promise<ProjectSkillState> {
     await this.getProjectOrThrow(projectId);
-    const bindings = await this.repositories.skillBindings.listForProject(projectId);
+    const bindings = (await this.repositories.skillBindings.listForProject(projectId)).filter(
+      (binding) => isProjectSkillBindingForProject(binding, projectId)
+    );
     const boundSkills = (
       await Promise.all(
         bindings.map(async (binding) => {
@@ -506,7 +512,7 @@ export class DemoWorkbenchService {
     const versions: SkillVersionRecord[] = [];
 
     for (const binding of bindings) {
-      if (!binding.enabled) {
+      if (!isProjectSkillBindingForProject(binding, projectId) || !binding.enabled) {
         continue;
       }
       const version = await this.repositories.skillVersions.getById(binding.skillVersionId);
@@ -750,6 +756,21 @@ function copySkillManifest(manifest: SkillManifest): SkillManifest {
     requiredSecrets: [...manifest.requiredSecrets],
     entrypoints: [...manifest.entrypoints]
   };
+}
+
+function isProjectSkillBinding(binding: SkillBindingRecord): boolean {
+  return (
+    binding.scope === "project" &&
+    Boolean(binding.projectId) &&
+    binding.targetKey === binding.projectId
+  );
+}
+
+function isProjectSkillBindingForProject(
+  binding: SkillBindingRecord,
+  projectId: string
+): boolean {
+  return isProjectSkillBinding(binding) && binding.projectId === projectId;
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {
