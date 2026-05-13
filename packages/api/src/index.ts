@@ -1100,11 +1100,7 @@ function parseMCPConnectorJson(definitionJson: string) {
   } catch {
     throw new Error("mcp_connector_json_invalid");
   }
-  try {
-    return normalizeMCPConnectorDefinition(parsed);
-  } catch {
-    throw new Error("mcp_connector_validation_failed");
-  }
+  return normalizeMCPConnectorDefinition(parsed);
 }
 
 function normalizeSkillContent(content: string): string {

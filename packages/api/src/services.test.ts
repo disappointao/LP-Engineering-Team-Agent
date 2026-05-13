@@ -1066,6 +1066,24 @@ describe("demo workbench service", () => {
         definitionJson: "{"
       })
     ).rejects.toThrow("mcp_connector_json_invalid");
+    await expect(
+      service.createProjectMCPConnector({
+        projectId: project.id,
+        definitionJson: JSON.stringify({
+          id: "connector_bad",
+          name: "Bad",
+          tools: []
+        })
+      })
+    ).rejects.toThrow("mcp_connector_validation_failed");
+    await expect(
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: "connector_missing",
+        toolName: "searchAssets",
+        approved: true
+      })
+    ).rejects.toThrow("mcp_connector_not_found");
 
     const connector = await service.createProjectMCPConnector({
       projectId: project.id,
@@ -1078,6 +1096,12 @@ describe("demo workbench service", () => {
             permission: "assets:read",
             roles: ["builder"],
             requiresApproval: false
+          },
+          {
+            name: "curateAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: true
           }
         ]
       })
@@ -1109,6 +1133,72 @@ describe("demo workbench service", () => {
         approved: true
       })
     ).rejects.toThrow("mcp_tool_approval_not_required");
+    await expect(
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "missingTool",
+        approved: true
+      })
+    ).rejects.toThrow("mcp_tool_not_found");
+
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: connector.id,
+        name: "searchAssets",
+        permission: "assets:read",
+        requiresApproval: false
+      }
+    ]);
+    await service.setProjectMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "curateAssets",
+      approved: true
+    });
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: connector.id,
+        name: "searchAssets",
+        permission: "assets:read",
+        requiresApproval: false
+      },
+      {
+        connectorId: connector.id,
+        name: "curateAssets",
+        permission: "assets:read",
+        requiresApproval: true
+      }
+    ]);
+    await service.setProjectMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "curateAssets",
+      approved: false
+    });
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: connector.id,
+        name: "searchAssets",
+        permission: "assets:read",
+        requiresApproval: false
+      }
+    ]);
 
     await service.setProjectMCPConnectorEnabled({
       projectId: project.id,
