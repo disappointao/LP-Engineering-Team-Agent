@@ -6,6 +6,10 @@ import type {
   BriefRecord,
   BriefRepository,
   DeploymentRepository,
+  ModelProviderRecord,
+  ModelProviderRepository,
+  ModelRoutingPolicyRecord,
+  ModelRoutingPolicyRepository,
   PageVersionRecord,
   PageVersionRepository,
   ProjectRecord,
@@ -40,6 +44,8 @@ interface JsonFileWorkbenchState {
   skills: SkillRecord[];
   skillVersions: SkillVersionRecord[];
   skillBindings: SkillBindingRecord[];
+  modelProviders: ModelProviderRecord[];
+  modelRoutingPolicies: ModelRoutingPolicyRecord[];
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
@@ -70,6 +76,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly skills: SkillRepository;
   readonly skillVersions: SkillVersionRepository;
   readonly skillBindings: SkillBindingRepository;
+  readonly modelProviders: ModelProviderRepository;
+  readonly modelRoutingPolicies: ModelRoutingPolicyRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -82,6 +90,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.skills = new JsonFileSkillRepository(filePath);
     this.skillVersions = new JsonFileSkillVersionRepository(filePath);
     this.skillBindings = new JsonFileSkillBindingRepository(filePath);
+    this.modelProviders = new JsonFileModelProviderRepository(filePath);
+    this.modelRoutingPolicies = new JsonFileModelRoutingPolicyRepository(filePath);
   }
 }
 
@@ -172,6 +182,81 @@ class JsonFileSkillBindingRepository implements SkillBindingRepository {
   async listAll(): Promise<SkillBindingRecord[]> {
     const state = await readState(this.filePath);
     return state.skillBindings.map(copy);
+  }
+}
+
+class JsonFileModelProviderRepository implements ModelProviderRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(provider: ModelProviderRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.modelProviders = upsertBy(
+        state.modelProviders,
+        copy(provider),
+        (record) => record.id === provider.id
+      );
+    });
+  }
+
+  async getById(providerId: string): Promise<ModelProviderRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.modelProviders.find((provider) => provider.id === providerId));
+  }
+
+  async listForProject(projectId: string): Promise<ModelProviderRecord[]> {
+    const state = await readState(this.filePath);
+    return state.modelProviders
+      .filter((provider) => provider.scope === "project" && provider.targetKey === projectId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<ModelProviderRecord[]> {
+    const state = await readState(this.filePath);
+    return state.modelProviders.map(copy);
+  }
+}
+
+class JsonFileModelRoutingPolicyRepository implements ModelRoutingPolicyRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(policy: ModelRoutingPolicyRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.modelRoutingPolicies = upsertBy(
+        state.modelRoutingPolicies,
+        copy(policy),
+        (record) => record.id === policy.id
+      );
+    });
+  }
+
+  async getById(policyId: string): Promise<ModelRoutingPolicyRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.modelRoutingPolicies.find((policy) => policy.id === policyId));
+  }
+
+  async getByProjectAndRole(
+    projectId: string,
+    role: ModelRoutingPolicyRecord["role"]
+  ): Promise<ModelRoutingPolicyRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(
+      state.modelRoutingPolicies.find(
+        (policy) =>
+          policy.scope === "project" && policy.targetKey === projectId && policy.role === role
+      )
+    );
+  }
+
+  async listForProject(projectId: string): Promise<ModelRoutingPolicyRecord[]> {
+    const state = await readState(this.filePath);
+    return state.modelRoutingPolicies
+      .filter((policy) => policy.scope === "project" && policy.targetKey === projectId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<ModelRoutingPolicyRecord[]> {
+    const state = await readState(this.filePath);
+    return state.modelRoutingPolicies.map(copy);
   }
 }
 
@@ -381,7 +466,9 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       taskSnapshots: parsed.taskSnapshots ?? [],
       skills: parsed.skills ?? [],
       skillVersions: parsed.skillVersions ?? [],
-      skillBindings: parsed.skillBindings ?? []
+      skillBindings: parsed.skillBindings ?? [],
+      modelProviders: parsed.modelProviders ?? [],
+      modelRoutingPolicies: parsed.modelRoutingPolicies ?? []
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -410,7 +497,9 @@ function emptyState(): JsonFileWorkbenchState {
     taskSnapshots: [],
     skills: [],
     skillVersions: [],
-    skillBindings: []
+    skillBindings: [],
+    modelProviders: [],
+    modelRoutingPolicies: []
   };
 }
 

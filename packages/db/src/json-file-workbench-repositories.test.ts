@@ -169,6 +169,61 @@ describe("json-file workbench repositories", () => {
     ]);
   });
 
+  it("reopens model providers and routing policies from disk", async () => {
+    const filePath = await tempStateFile();
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+
+    await first.modelProviders.save({
+      id: "provider_openai",
+      scope: "project",
+      targetKey: "project_1",
+      name: "OpenAI",
+      provider: "openai",
+      config: {
+        baseUrl: "https://api.openai.com/v1",
+        secretEnvName: "OPENAI_API_KEY"
+      },
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    });
+    await first.modelRoutingPolicies.save({
+      id: "model_route_1",
+      scope: "project",
+      targetKey: "project_1",
+      role: "builder",
+      providerId: "provider_openai",
+      model: "gpt-5.4",
+      settings: { temperature: 0.2 },
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(second.modelProviders.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "provider_openai",
+        name: "OpenAI",
+        config: {
+          baseUrl: "https://api.openai.com/v1",
+          secretEnvName: "OPENAI_API_KEY"
+        }
+      })
+    ]);
+    await expect(
+      second.modelRoutingPolicies.getByProjectAndRole("project_1", "builder")
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "model_route_1",
+        role: "builder",
+        providerId: "provider_openai",
+        model: "gpt-5.4",
+        settings: { temperature: 0.2 }
+      })
+    );
+  });
+
   it("creates parent directories and writes readable JSON", async () => {
     const root = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(root);
@@ -194,7 +249,9 @@ describe("json-file workbench repositories", () => {
       taskSnapshots: [],
       skills: [],
       skillVersions: [],
-      skillBindings: []
+      skillBindings: [],
+      modelProviders: [],
+      modelRoutingPolicies: []
     });
   });
 

@@ -281,4 +281,101 @@ describe("in-memory workbench repositories", () => {
     await expect(repositories.skillBindings.getById(binding.id)).resolves.toEqual(binding);
     await expect(repositories.skillVersions.getById(version.id)).resolves.toEqual(version);
   });
+
+  it("stores model providers and routing policies with defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const provider = {
+      id: "provider_openai",
+      scope: "project" as const,
+      targetKey: "project_1",
+      name: "OpenAI",
+      provider: "openai" as const,
+      config: {
+        baseUrl: "https://api.openai.com/v1",
+        secretEnvName: "OPENAI_API_KEY"
+      },
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    };
+    const policy = {
+      id: "model_route_1",
+      scope: "project" as const,
+      targetKey: "project_1",
+      role: "builder" as const,
+      providerId: "provider_openai",
+      model: "gpt-5.4",
+      settings: {
+        temperature: 0.2
+      },
+      createdAt,
+      updatedAt: createdAt
+    };
+
+    await repositories.modelProviders.save(provider);
+    await repositories.modelRoutingPolicies.save(policy);
+
+    const savedProvider = await repositories.modelProviders.getById("provider_openai");
+    const savedPolicy = await repositories.modelRoutingPolicies.getByProjectAndRole(
+      "project_1",
+      "builder"
+    );
+
+    expect(savedProvider).toEqual(provider);
+    expect(savedPolicy).toEqual(policy);
+
+    if (!savedProvider || !savedPolicy) {
+      throw new Error("Expected saved model records.");
+    }
+    savedProvider.config.secretEnvName = "MUTATED_SECRET";
+    savedPolicy.settings = { temperature: 1 };
+
+    await expect(repositories.modelProviders.getById("provider_openai")).resolves.toEqual(provider);
+    await expect(
+      repositories.modelRoutingPolicies.getByProjectAndRole("project_1", "builder")
+    ).resolves.toEqual(policy);
+  });
+
+  it("lists model providers and routes for a project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.modelProviders.save({
+      id: "provider_project_1",
+      scope: "project",
+      targetKey: "project_1",
+      name: "Project 1 OpenAI",
+      provider: "openai",
+      config: { secretEnvName: "OPENAI_API_KEY" },
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    });
+    await repositories.modelProviders.save({
+      id: "provider_project_2",
+      scope: "project",
+      targetKey: "project_2",
+      name: "Project 2 Anthropic",
+      provider: "anthropic",
+      config: { secretEnvName: "ANTHROPIC_API_KEY" },
+      enabled: true,
+      createdAt,
+      updatedAt: createdAt
+    });
+    await repositories.modelRoutingPolicies.save({
+      id: "model_route_1",
+      scope: "project",
+      targetKey: "project_1",
+      role: "planner",
+      providerId: "provider_project_1",
+      model: "gpt-5.4",
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await expect(repositories.modelProviders.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "provider_project_1" })
+    ]);
+    await expect(repositories.modelRoutingPolicies.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "model_route_1", role: "planner" })
+    ]);
+  });
 });

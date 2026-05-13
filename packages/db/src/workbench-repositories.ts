@@ -1,6 +1,7 @@
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
+import type { AgentRole } from "@lp-agent/model-gateway";
 import type { SkillManifest, SkillScope, SkillType } from "@lp-agent/skills";
 
 export interface ProjectRecord {
@@ -93,6 +94,36 @@ export interface SkillBindingRecord {
   updatedAt: string;
 }
 
+export type ModelProviderType = "mock" | "openai" | "anthropic" | "internal" | "custom";
+
+export interface ModelProviderRecord {
+  id: string;
+  scope: SkillScope;
+  targetKey: string;
+  name: string;
+  provider: ModelProviderType;
+  config: {
+    baseUrl?: string;
+    secretEnvName?: string;
+  };
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelRoutingPolicyRecord {
+  id: string;
+  scope: SkillScope;
+  targetKey: string;
+  role: AgentRole;
+  providerId: string;
+  model: string;
+  fallback?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectRepository {
   save(project: ProjectRecord): Promise<void>;
   getById(projectId: string): Promise<ProjectRecord | undefined>;
@@ -160,6 +191,24 @@ export interface SkillBindingRepository {
   listAll(): Promise<SkillBindingRecord[]>;
 }
 
+export interface ModelProviderRepository {
+  save(provider: ModelProviderRecord): Promise<void>;
+  getById(providerId: string): Promise<ModelProviderRecord | undefined>;
+  listForProject(projectId: string): Promise<ModelProviderRecord[]>;
+  listAll(): Promise<ModelProviderRecord[]>;
+}
+
+export interface ModelRoutingPolicyRepository {
+  save(policy: ModelRoutingPolicyRecord): Promise<void>;
+  getById(policyId: string): Promise<ModelRoutingPolicyRecord | undefined>;
+  getByProjectAndRole(
+    projectId: string,
+    role: AgentRole
+  ): Promise<ModelRoutingPolicyRecord | undefined>;
+  listForProject(projectId: string): Promise<ModelRoutingPolicyRecord[]>;
+  listAll(): Promise<ModelRoutingPolicyRecord[]>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   briefs: BriefRepository;
@@ -171,6 +220,8 @@ export interface WorkbenchRepositories {
   skills: SkillRepository;
   skillVersions: SkillVersionRepository;
   skillBindings: SkillBindingRepository;
+  modelProviders: ModelProviderRepository;
+  modelRoutingPolicies: ModelRoutingPolicyRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -188,6 +239,8 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly skills = new InMemorySkillRepository();
   readonly skillVersions = new InMemorySkillVersionRepository();
   readonly skillBindings = new InMemorySkillBindingRepository();
+  readonly modelProviders = new InMemoryModelProviderRepository();
+  readonly modelRoutingPolicies = new InMemoryModelRoutingPolicyRepository();
 }
 
 class InMemorySkillRepository implements SkillRepository {
@@ -260,6 +313,65 @@ class InMemorySkillBindingRepository implements SkillBindingRepository {
 
   async listAll(): Promise<SkillBindingRecord[]> {
     return [...this.bindings.values()].map(copySkillBinding);
+  }
+}
+
+class InMemoryModelProviderRepository implements ModelProviderRepository {
+  private readonly providers = new Map<string, ModelProviderRecord>();
+
+  async save(provider: ModelProviderRecord): Promise<void> {
+    this.providers.set(provider.id, copyModelProvider(provider));
+  }
+
+  async getById(providerId: string): Promise<ModelProviderRecord | undefined> {
+    const provider = this.providers.get(providerId);
+    return provider ? copyModelProvider(provider) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<ModelProviderRecord[]> {
+    return [...this.providers.values()]
+      .filter((provider) => provider.scope === "project" && provider.targetKey === projectId)
+      .map(copyModelProvider);
+  }
+
+  async listAll(): Promise<ModelProviderRecord[]> {
+    return [...this.providers.values()].map(copyModelProvider);
+  }
+}
+
+class InMemoryModelRoutingPolicyRepository implements ModelRoutingPolicyRepository {
+  private readonly policies = new Map<string, ModelRoutingPolicyRecord>();
+
+  async save(policy: ModelRoutingPolicyRecord): Promise<void> {
+    this.policies.set(policy.id, copyModelRoutingPolicy(policy));
+  }
+
+  async getById(policyId: string): Promise<ModelRoutingPolicyRecord | undefined> {
+    const policy = this.policies.get(policyId);
+    return policy ? copyModelRoutingPolicy(policy) : undefined;
+  }
+
+  async getByProjectAndRole(
+    projectId: string,
+    role: AgentRole
+  ): Promise<ModelRoutingPolicyRecord | undefined> {
+    const policy = [...this.policies.values()].find(
+      (candidate) =>
+        candidate.scope === "project" &&
+        candidate.targetKey === projectId &&
+        candidate.role === role
+    );
+    return policy ? copyModelRoutingPolicy(policy) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<ModelRoutingPolicyRecord[]> {
+    return [...this.policies.values()]
+      .filter((policy) => policy.scope === "project" && policy.targetKey === projectId)
+      .map(copyModelRoutingPolicy);
+  }
+
+  async listAll(): Promise<ModelRoutingPolicyRecord[]> {
+    return [...this.policies.values()].map(copyModelRoutingPolicy);
   }
 }
 
@@ -416,6 +528,24 @@ function copySkillBinding(binding: SkillBindingRecord): SkillBindingRecord {
     ...binding,
     settings: binding.settings ? structuredClone(binding.settings) : undefined
   };
+}
+
+function copyModelProvider(provider: ModelProviderRecord): ModelProviderRecord {
+  return {
+    ...provider,
+    config: { ...provider.config }
+  };
+}
+
+function copyModelRoutingPolicy(policy: ModelRoutingPolicyRecord): ModelRoutingPolicyRecord {
+  const copy: ModelRoutingPolicyRecord = { ...policy };
+  if (policy.fallback) {
+    copy.fallback = structuredClone(policy.fallback);
+  }
+  if (policy.settings) {
+    copy.settings = structuredClone(policy.settings);
+  }
+  return copy;
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {
