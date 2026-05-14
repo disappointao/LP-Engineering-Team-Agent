@@ -312,9 +312,14 @@ describe("structured static artifact model output", () => {
 
   it("rejects framework package imports and requires in script output", () => {
     const cases = [
+      'import { jsx } from "react/jsx-runtime";',
       'import { createApp } from "vue"; createApp({}).mount("#app");',
+      'import { createSSRApp } from "vue/dist/vue.esm-bundler.js";',
       'import { mount } from "svelte"; mount(App, { target: document.body });',
+      'require("@angular/core/testing");',
       'const next = require("next");',
+      'const router = await import("next/dist/client/router");',
+      'await import("nuxt/app");',
       'const remix = await import("@remix-run/react");'
     ];
 
@@ -406,7 +411,12 @@ describe("structured static artifact model output", () => {
     const brandCssHrefs = [
       "https://assets.example.com/brand/foundation-campaign.css",
       "https://assets.example.com/brand/bootstrap-campaign.css",
-      "https://assets.example.com/brand/tailwind-campaign.css"
+      "https://assets.example.com/brand/tailwind-campaign.css",
+      "https://assets.example.com/brand/bulma-campaign.css",
+      "https://assets.example.com/brand/materialize-campaign.css",
+      "https://assets.example.com/brand/antd-campaign.css",
+      "https://assets.example.com/brand/uikit-campaign.css",
+      "https://assets.example.com/brand/semantic-ui-campaign.css"
     ];
 
     for (const href of brandCssHrefs) {

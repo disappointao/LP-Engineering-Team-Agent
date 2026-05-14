@@ -53,25 +53,28 @@ const FRAMEWORK_MARKERS: RegExp[] = [
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/(?:react|react-dom|vue|@angular|svelte|next|nuxt)/i
 ];
 
+const FRAMEWORK_PACKAGE_SPECIFIER =
+  "(?:react|react-dom|vue|@vue/[\\w-]+|@angular/[\\w-]+|svelte|next|nuxt|@remix-run/[\\w-]+)(?:/[\\w@./-]+)?";
+
 const FRAMEWORK_SCRIPT_MARKERS: RegExp[] = [
   /\bReact(?:DOM)?\s*\./,
   /\bReactDOM\s*\.\s*createRoot\b/,
   /\bReact\s*\.\s*createElement\b/,
-  /\bfrom\s+["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']/,
-  /\bimport\s+["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']/,
-  /\bimport\s*\(\s*["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']\s*\)/,
-  /\brequire\s*\(\s*["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']\s*\)/
+  new RegExp(`\\bfrom\\s+["']${FRAMEWORK_PACKAGE_SPECIFIER}["']`),
+  new RegExp(`\\bimport\\s+["']${FRAMEWORK_PACKAGE_SPECIFIER}["']`),
+  new RegExp(`\\bimport\\s*\\(\\s*["']${FRAMEWORK_PACKAGE_SPECIFIER}["']\\s*\\)`),
+  new RegExp(`\\brequire\\s*\\(\\s*["']${FRAMEWORK_PACKAGE_SPECIFIER}["']\\s*\\)`)
 ];
 
 const CSS_FRAMEWORK_HREFS: RegExp[] = [
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/bootstrap(?:@|\/)|\/bootstrap(?:\.min)?\.css(?:[?#]|$)|\/bootstrap@[\w.-]+\//i,
   /cdn\.tailwindcss\.com|(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/tailwindcss(?:@|\/)|\/tailwind(?:css)?(?:\.min)?\.css(?:[?#]|$)|\/tailwindcss@[\w.-]+\//i,
-  /(?:^|[\/@])bulma(?:[@/.-]|$)/i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/bulma(?:@|\/)|\/bulma(?:\.min)?\.css(?:[?#]|$)|\/bulma@[\w.-]+\//i,
   /foundation-sites|(?:^|\/)foundation(?:\.min)?\.css(?:[?#]|$)|\/foundation\/\d/i,
-  /(?:^|[\/@])materialize(?:[@/.-]|$)/i,
-  /(?:^|[\/@])(?:antd|ant-design)(?:[@/.-]|$)/i,
-  /semantic-ui/i,
-  /(?:^|[\/@])uikit(?:[@/.-]|$)/i
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/materialize(?:@|\/)|\/materialize(?:\.min)?\.css(?:[?#]|$)|\/materialize@[\w.-]+\//i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/(?:antd|ant-design)(?:@|\/)|\/(?:antd|ant-design)(?:\.min)?\.css(?:[?#]|$)|\/(?:antd|ant-design)@[\w.-]+\//i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/semantic-ui(?:@|\/)|\/semantic-ui(?:\.min)?\.css(?:[?#]|$)|\/semantic-ui@[\w.-]+\//i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/uikit(?:@|\/)|\/uikit(?:\.min)?\.css(?:[?#]|$)|\/uikit@[\w.-]+\//i
 ];
 
 export function createStructuredStaticArtifactsBuilderPrompt(brief: LPBrief): string {
