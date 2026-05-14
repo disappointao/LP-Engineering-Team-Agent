@@ -777,6 +777,25 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("falls back to legacy secret env names when canonical API key env is blank", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_legacy",
+      name: "Legacy OpenAI",
+      provider: "openai",
+      apiKeyEnv: "",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+
+    expect(provider.config).toMatchObject({
+      api: "openai-completions",
+      apiKeyEnv: "OPENAI_API_KEY"
+    });
+  });
+
   it("rejects unsupported provider API protocols and invalid API key env refs", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });

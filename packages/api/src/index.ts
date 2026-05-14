@@ -1332,8 +1332,9 @@ function normalizeModelProviderConfig(input: {
 }): ModelProviderRuntimeConfig {
   const api = normalizeModelProviderApi(input.provider, input.api);
   const baseUrl = normalizeOptionalUrl(input.baseUrl);
+  const apiKeyEnvInput = input.apiKeyEnv?.trim() ? input.apiKeyEnv : input.secretEnvName;
   const apiKeyEnv = normalizeEnvRef(
-    input.apiKeyEnv ?? input.secretEnvName,
+    apiKeyEnvInput,
     "model_provider_api_key_env_invalid"
   );
   const modelId = normalizeOptionalModelId(input.modelId);
