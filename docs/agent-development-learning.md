@@ -337,6 +337,15 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - raw model text 只允许作为内存中的瞬时值被解析，不能写入 run events、context packs、Web state 或 snapshots。
 - 学习重点：真实模型输出进入业务流前必须经过 schema 边界；parse 失败要 fail closed 并写脱敏 `model.output.parse_failed` event，而不是默默回退到 mock 数据。
 
+下一步真实 Builder 静态产物输出设计：
+
+- [2026-05-14-real-builder-static-artifacts-design.md](./superpowers/specs/2026-05-14-real-builder-static-artifacts-design.md)
+- 这一步让 Builder 在 `REAL_MODEL_RUNTIME=1` 下输出严格 JSON：`indexHtml`、`stylesCss`、`scriptJs`。
+- 产物仍然是框架无关静态 HTML/CSS/JS；Web 继续基于三文件产物生成 single-file HTML 预览和下载。
+- Builder 输出必须经过 API 侧 parse 和 artifact policy validation，失败时 fail closed，不保存 page version。
+- V1 允许外链图片、字体 CSS 和非框架品牌/素材 CSS；禁止外链 JavaScript、CSS 框架、React/Vue/Angular/Svelte 等框架或构建产物痕迹。
+- 学习重点：模型生成代码后不能直接落库或展示，必须先经过结构、资源策略、安全和框架无关校验。
+
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
 ```bash

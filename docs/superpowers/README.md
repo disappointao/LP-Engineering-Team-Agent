@@ -128,6 +128,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 structured Planner LP brief output implementation plan.
    - Read this after the structured LP brief output design when implementing strict JSON Planner prompts, `LPBriefSchema` parsing, transient runtime model text, sanitized parse events, and fail-closed real-runtime behavior.
 
+32. `specs/2026-05-14-real-builder-static-artifacts-design.md`
+   - Stage 3 real Builder static artifacts design.
+   - Read this after the structured LP brief output plan when replacing deterministic real-runtime Builder artifacts with model-generated, framework-free `index.html` / `styles.css` / `script.js` output guarded by strict JSON parsing and artifact policy validation.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
