@@ -285,6 +285,12 @@ describe("demo workbench service", () => {
       })
     ).rejects.toThrow("Planner run did not complete.");
     await expect(incompleteRepositories.briefs.listAll()).resolves.toEqual([]);
+    await expect(incompleteRepositories.runs.listForProject(incompleteProject.id)).resolves.toEqual([
+      expect.objectContaining({
+        role: "planner",
+        state: "needs_input"
+      })
+    ]);
   });
 
   it("does not create a deployment when deployer fails or does not complete", async () => {
@@ -317,8 +323,10 @@ describe("demo workbench service", () => {
     ).rejects.toThrow("Deployer run failed.");
     expect(failedDeploymentAdapter.inputs).toEqual([]);
 
+    const incompleteRepositories = createInMemoryWorkbenchRepositories();
     const incompleteDeploymentAdapter = new RecordingDeploymentAdapter();
     const incompleteService = new DemoWorkbenchService({
+      repositories: incompleteRepositories,
       deployerRuntime: new StaticRuntime({ state: "needs_approval" }),
       deploymentAdapter: incompleteDeploymentAdapter,
       now: fixedClock()
@@ -345,6 +353,14 @@ describe("demo workbench service", () => {
       })
     ).rejects.toThrow("Deployer run did not complete.");
     expect(incompleteDeploymentAdapter.inputs).toEqual([]);
+    await expect(incompleteRepositories.runs.listForProject(incompleteProject.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "deployer",
+          state: "needs_approval"
+        })
+      ])
+    );
   });
 
   it("can read records created by another service instance when repositories are shared", async () => {

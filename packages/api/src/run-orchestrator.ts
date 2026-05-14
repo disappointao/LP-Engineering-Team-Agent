@@ -106,10 +106,11 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     throw error;
   }
   const completedAt = nextRepositoryTimestamp(input.repositories, now);
+  const state = toRunRecordState(result.state);
   const run: RunRecord = {
     ...startedRun,
-    state: result.state === "completed" ? "completed" : "failed",
-    completedAt
+    state,
+    ...(state === "running" ? {} : { completedAt })
   };
   await input.repositories.runs.save(run);
 
@@ -139,6 +140,13 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     contextPack,
     result
   };
+}
+
+function toRunRecordState(state: RuntimeRunResult["state"]): RunRecord["state"] {
+  if (state === "queued") {
+    return "running";
+  }
+  return state;
 }
 
 function toThrownRunFailedEvent(input: {

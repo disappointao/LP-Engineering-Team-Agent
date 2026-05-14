@@ -23,6 +23,7 @@ import {
   type WorkbenchMessageRecord,
   type WorkbenchMessageRole,
   type WorkbenchRepositories,
+  type WorkbenchTaskSnapshotRecord,
   type WorkbenchTaskRecord,
   type WorkbenchTaskStatus,
   type WorkbenchTaskType
@@ -447,10 +448,13 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
 
       const activeProjectId = taskProject?.id ?? requestedProjectId;
-      const runEvents = activeProjectId
-        ? await repositories.runEvents.listForProject(activeProjectId)
-        : [];
       const snapshotRef = await repositories.taskSnapshots.getByTaskId(task.id);
+      const runEvents = activeProjectId
+        ? filterRunEventsForSnapshot(
+            await repositories.runEvents.listForProject(activeProjectId),
+            snapshotRef
+          )
+        : [];
       const snapshot = snapshotRef
         ? await service.getSnapshotForRecords({
             projectId: snapshotRef.projectId,
@@ -655,6 +659,27 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
     }
   };
+}
+
+function filterRunEventsForSnapshot(
+  runEvents: RunEventRecord[],
+  snapshot?: WorkbenchTaskSnapshotRecord
+): RunEventRecord[] {
+  if (!snapshot) {
+    return [];
+  }
+
+  const runIds = new Set<string>();
+  if (snapshot.briefId) {
+    runIds.add(`run_planner_${snapshot.briefId}`);
+  }
+  if (snapshot.pageVersionId) {
+    runIds.add(`run_builder_${snapshot.pageVersionId}`);
+    runIds.add(`run_reviewer_${snapshot.pageVersionId}`);
+    runIds.add(`run_deployer_${snapshot.pageVersionId}`);
+  }
+
+  return runEvents.filter((event) => runIds.has(event.runId));
 }
 
 function toSkillFlowError(error: unknown): SkillFlowErrorCode {

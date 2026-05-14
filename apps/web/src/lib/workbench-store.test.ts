@@ -211,6 +211,16 @@ describe("web workbench store", () => {
     }
     expect(firstTaskState.snapshot?.brief?.prompt).toBe("Create a first landing page in HTML.");
     expect(secondTaskState.snapshot?.brief?.prompt).toBe("Create a second landing page in HTML.");
+    expect([...new Set(firstTaskState.runEvents.map((event) => event.runId))]).toEqual([
+      "run_planner_brief_1",
+      "run_builder_version_1",
+      "run_reviewer_version_1"
+    ]);
+    expect([...new Set(secondTaskState.runEvents.map((event) => event.runId))]).toEqual([
+      "run_planner_brief_2",
+      "run_builder_version_2",
+      "run_reviewer_version_2"
+    ]);
   });
 
   it("reopens projects, tasks, messages, and LP snapshots from shared repositories", async () => {
