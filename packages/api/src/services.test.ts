@@ -846,6 +846,97 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
   });
 
+  it("uses OpenAI-compatible provider-backed runtime when REAL_MODEL_RUNTIME is enabled", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl_test",
+          model: "glm-5.1",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "planner response" },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+
+    expect(brief.id).toBe("brief_1");
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0]?.input)).toBe(
+      "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    );
+    expect(fetchCalls[0]?.init?.method).toBe("POST");
+    expect(fetchCalls[0]?.init?.headers).toMatchObject({
+      "content-type": "application/json",
+      authorization: "Bearer sk-test-secret"
+    });
+    expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
+      model: "glm-5.1",
+      messages: [{ role: "user", content: "Generate a landing page brief." }],
+      stream: false
+    });
+
+    const events = await repositories.runEvents.listForProject(project.id);
+    const modelEvent = events.find((event) => event.type === "model.completed");
+    expect(modelEvent).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.completed",
+      message: "planner model call completed",
+      payload: expect.objectContaining({
+        provider: "zhipu_openai",
+        providerName: "智谱 OpenAI Compatible",
+        api: "openai-completions",
+        model: "glm-5.1",
+        baseUrlConfigured: true,
+        apiKeyEnvConfigured: true,
+        role: "planner",
+        usage: { inputTokens: 9, outputTokens: 4 }
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
   it("keeps deterministic runtime unless REAL_MODEL_RUNTIME is explicitly enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     let fetchCallCount = 0;
