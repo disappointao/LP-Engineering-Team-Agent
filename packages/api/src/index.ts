@@ -67,6 +67,13 @@ import {
   toLPBriefParseFailurePayload,
   toLPBriefParseSuccessPayload
 } from "./structured-lp-brief";
+import {
+  BuilderStaticArtifactParseError,
+  createStructuredStaticArtifactsBuilderPrompt,
+  parseBuilderStaticArtifactsOutput,
+  toStaticArtifactParseFailurePayload,
+  toStaticArtifactParseSuccessPayload
+} from "./structured-static-artifacts";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -255,6 +262,7 @@ export class DemoWorkbenchService {
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly now: () => Date;
   private readonly structuredPlannerOutputEnabled: boolean;
+  private readonly structuredBuilderOutputEnabled: boolean;
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
@@ -265,6 +273,7 @@ export class DemoWorkbenchService {
       fetch: options.modelFetch
     };
     this.structuredPlannerOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
+    this.structuredBuilderOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
     this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
@@ -366,6 +375,10 @@ export class DemoWorkbenchService {
       const existingPageVersions = await this.repositories.pageVersions.listAll();
       return existingPageVersions.map((record) => record.id);
     });
+    let parsedBuilderArtifacts: StaticArtifacts | undefined;
+    const builderPrompt = this.structuredBuilderOutputEnabled
+      ? createStructuredStaticArtifactsBuilderPrompt(brief.brief)
+      : brief.prompt;
 
     try {
       const { result } = await runAgentStep({
@@ -377,9 +390,37 @@ export class DemoWorkbenchService {
         role: "builder",
         input: {
           brief: copyBrief(brief.brief),
-          prompt: brief.prompt
+          prompt: builderPrompt
         },
-        now: this.now
+        now: this.now,
+        finalizeResult: this.structuredBuilderOutputEnabled
+          ? ({ result }) => {
+              if (result.state !== "completed") {
+                return result;
+              }
+              try {
+                parsedBuilderArtifacts = parseBuilderStaticArtifactsOutput(
+                  result.modelOutputText ?? ""
+                );
+                return {
+                  ...result,
+                  artifacts: parsedBuilderArtifacts,
+                  events: addEventBeforeRunCompleted(
+                    result.events,
+                    toBuilderParseSuccessEvent({
+                      result,
+                      artifacts: parsedBuilderArtifacts
+                    })
+                  )
+                };
+              } catch (error) {
+                if (error instanceof BuilderStaticArtifactParseError) {
+                  return failBuilderResultForParseError({ result, error });
+                }
+                throw error;
+              }
+            }
+          : undefined
       });
 
       if (result.state === "failed") {
@@ -388,13 +429,15 @@ export class DemoWorkbenchService {
       if (result.state !== "completed") {
         throw new Error("Builder run did not complete.");
       }
-      if (!result.artifacts) {
+      const artifacts = this.structuredBuilderOutputEnabled
+        ? parsedBuilderArtifacts
+        : result.artifacts;
+      if (!artifacts) {
         throw new Error("Builder run did not return artifacts.");
       }
-      if (!hasCompleteArtifacts(result.artifacts)) {
+      if (!hasCompleteArtifacts(artifacts)) {
         throw new Error("Builder run returned incomplete artifacts.");
       }
-      const artifacts = result.artifacts;
 
       return await withRepositoryIdLock(this.repositories, async () => {
         const pageVersion: PageVersionRecord = {
@@ -1254,6 +1297,71 @@ function failPlannerResultForParseError(input: {
         message: "Planner run failed.",
         runId: input.result.runId,
         role: "planner",
+        state: "failed",
+        errorName: input.error.name
+      }
+    ]
+  };
+}
+
+function toBuilderParseSuccessEvent(input: {
+  result: RuntimeRunResult;
+  artifacts: StaticArtifacts;
+}): RuntimeEvent {
+  const payload = toStaticArtifactParseSuccessPayload(input.artifacts);
+  return {
+    ...payload,
+    type: "model.output.parsed",
+    message: "Builder output parsed as static artifacts",
+    runId: input.result.runId,
+    role: "builder",
+    schema: "StaticArtifactsSchema",
+    artifactKind: "three-file-static",
+    htmlBytes: Number(payload.htmlBytes),
+    cssBytes: Number(payload.cssBytes),
+    jsBytes: Number(payload.jsBytes),
+    hasExternalCss: Boolean(payload.hasExternalCss),
+    hasExternalImages: Boolean(payload.hasExternalImages)
+  };
+}
+
+function failBuilderResultForParseError(input: {
+  result: RuntimeRunResult;
+  error: BuilderStaticArtifactParseError;
+}): RuntimeRunResult {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...input.result,
+    state: "failed",
+    artifacts: undefined,
+    events: [
+      ...input.result.events.filter(
+        (event) => event.type !== "run.completed" && event.type !== "artifact.created"
+      ),
+      {
+        ...toStaticArtifactParseFailurePayload(input.error),
+        type: "model.output.parse_failed",
+        message: "Builder output could not be parsed as static artifacts",
+        runId: input.result.runId,
+        role: "builder",
+        schema: "StaticArtifactsSchema",
+        reason: input.error.reason,
+        ...(input.error.policyCode ? { policyCode: input.error.policyCode } : {}),
+        ...(issueSummary.issueCount !== undefined
+          ? { issueCount: issueSummary.issueCount }
+          : {}),
+        ...(issueSummary.firstIssuePath !== undefined
+          ? { firstIssuePath: issueSummary.firstIssuePath }
+          : {}),
+        ...(issueSummary.firstIssueCode !== undefined
+          ? { firstIssueCode: issueSummary.firstIssueCode }
+          : {})
+      },
+      {
+        type: "run.failed",
+        message: "Builder run failed.",
+        runId: input.result.runId,
+        role: "builder",
         state: "failed",
         errorName: input.error.name
       }
