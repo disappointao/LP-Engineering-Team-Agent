@@ -185,6 +185,7 @@ describe("json-file workbench repositories", () => {
       name: "OpenAI",
       provider: "openai",
       config: {
+        api: "openai-completions",
         baseUrl: "https://api.openai.com/v1",
         secretEnvName: "OPENAI_API_KEY"
       },
@@ -211,6 +212,7 @@ describe("json-file workbench repositories", () => {
         id: "provider_openai",
         name: "OpenAI",
         config: {
+          api: "openai-completions",
           baseUrl: "https://api.openai.com/v1",
           secretEnvName: "OPENAI_API_KEY"
         }

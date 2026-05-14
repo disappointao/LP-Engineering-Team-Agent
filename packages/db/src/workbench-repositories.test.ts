@@ -436,6 +436,7 @@ describe("in-memory workbench repositories", () => {
       name: "OpenAI",
       provider: "openai" as const,
       config: {
+        api: "openai-completions" as const,
         baseUrl: "https://api.openai.com/v1",
         secretEnvName: "OPENAI_API_KEY"
       },
@@ -529,7 +530,7 @@ describe("in-memory workbench repositories", () => {
       targetKey: "project_1",
       name: "Project 1 OpenAI",
       provider: "openai",
-      config: { secretEnvName: "OPENAI_API_KEY" },
+      config: { api: "openai-completions", secretEnvName: "OPENAI_API_KEY" },
       enabled: true,
       createdAt,
       updatedAt: createdAt
@@ -540,7 +541,7 @@ describe("in-memory workbench repositories", () => {
       targetKey: "project_2",
       name: "Project 2 Anthropic",
       provider: "anthropic",
-      config: { secretEnvName: "ANTHROPIC_API_KEY" },
+      config: { api: "anthropic-messages", secretEnvName: "ANTHROPIC_API_KEY" },
       enabled: true,
       createdAt,
       updatedAt: createdAt
