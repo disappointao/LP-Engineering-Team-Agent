@@ -36,6 +36,7 @@ export interface RunAgentStepInput {
   role: "planner" | "builder" | "reviewer" | "deployer";
   input: ContextPack["input"];
   now?: () => Date;
+  finalizeResult?: RunAgentStepFinalizer;
 }
 
 export interface RunAgentStepResult {
@@ -44,6 +45,15 @@ export interface RunAgentStepResult {
   contextPack: ContextPack;
   result: RuntimeRunResult;
 }
+
+export interface RunAgentStepFinalizeInput {
+  result: RuntimeRunResult;
+  contextPack: ContextPack;
+}
+
+export type RunAgentStepFinalizer = (
+  input: RunAgentStepFinalizeInput
+) => RuntimeRunResult | Promise<RuntimeRunResult>;
 
 export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentStepResult> {
   const now = input.now ?? (() => new Date());
@@ -104,6 +114,9 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       })
     );
     throw error;
+  }
+  if (input.finalizeResult) {
+    result = await input.finalizeResult({ result, contextPack });
   }
   const completedAt = nextRepositoryTimestamp(input.repositories, now);
   const state = toRunRecordState(result.state);
