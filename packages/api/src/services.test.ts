@@ -218,6 +218,135 @@ describe("demo workbench service", () => {
     );
   });
 
+  it("persists failed run events when a runtime throws before rethrowing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new ThrowingRuntime(new Error("Runtime unavailable.")),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+
+    await expect(
+      service.generatePageVersion({
+        projectId: project.id,
+        briefId: brief.id
+      })
+    ).rejects.toThrow("Runtime unavailable.");
+
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({ role: "planner", state: "completed" }),
+      expect.objectContaining({ role: "builder", state: "failed" })
+    ]);
+    await expect(repositories.runEvents.listForProject(project.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: "run_builder_version_1",
+          type: "run.failed",
+          message: "Runtime unavailable."
+        })
+      ])
+    );
+  });
+
+  it("does not save a brief when planner fails or does not complete", async () => {
+    const failedRepositories = createInMemoryWorkbenchRepositories();
+    const failedService = new DemoWorkbenchService({
+      repositories: failedRepositories,
+      plannerRuntime: new StaticRuntime({ state: "failed" }),
+      now: fixedClock()
+    });
+    const failedProject = await failedService.createProject({ name: "Project" });
+
+    await expect(
+      failedService.createBriefFromPrompt({
+        projectId: failedProject.id,
+        prompt: "Create a sale LP"
+      })
+    ).rejects.toThrow("Planner run failed.");
+    await expect(failedRepositories.briefs.listAll()).resolves.toEqual([]);
+
+    const incompleteRepositories = createInMemoryWorkbenchRepositories();
+    const incompleteService = new DemoWorkbenchService({
+      repositories: incompleteRepositories,
+      plannerRuntime: new StaticRuntime({ state: "needs_input" }),
+      now: fixedClock()
+    });
+    const incompleteProject = await incompleteService.createProject({ name: "Project" });
+
+    await expect(
+      incompleteService.createBriefFromPrompt({
+        projectId: incompleteProject.id,
+        prompt: "Create a sale LP"
+      })
+    ).rejects.toThrow("Planner run did not complete.");
+    await expect(incompleteRepositories.briefs.listAll()).resolves.toEqual([]);
+  });
+
+  it("does not create a deployment when deployer fails or does not complete", async () => {
+    const failedDeploymentAdapter = new RecordingDeploymentAdapter();
+    const failedService = new DemoWorkbenchService({
+      deployerRuntime: new StaticRuntime({ state: "failed" }),
+      deploymentAdapter: failedDeploymentAdapter,
+      now: fixedClock()
+    });
+    const failedProject = await failedService.createProject({ name: "Project" });
+    const failedBrief = await failedService.createBriefFromPrompt({
+      projectId: failedProject.id,
+      prompt: "Prompt"
+    });
+    const failedVersion = await failedService.generatePageVersion({
+      projectId: failedProject.id,
+      briefId: failedBrief.id
+    });
+    await failedService.reviewPageVersion({
+      projectId: failedProject.id,
+      pageVersionId: failedVersion.id
+    });
+
+    await expect(
+      failedService.approveAndCreateDeployment({
+        projectId: failedProject.id,
+        pageVersionId: failedVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).rejects.toThrow("Deployer run failed.");
+    expect(failedDeploymentAdapter.inputs).toEqual([]);
+
+    const incompleteDeploymentAdapter = new RecordingDeploymentAdapter();
+    const incompleteService = new DemoWorkbenchService({
+      deployerRuntime: new StaticRuntime({ state: "needs_approval" }),
+      deploymentAdapter: incompleteDeploymentAdapter,
+      now: fixedClock()
+    });
+    const incompleteProject = await incompleteService.createProject({ name: "Project" });
+    const incompleteBrief = await incompleteService.createBriefFromPrompt({
+      projectId: incompleteProject.id,
+      prompt: "Prompt"
+    });
+    const incompleteVersion = await incompleteService.generatePageVersion({
+      projectId: incompleteProject.id,
+      briefId: incompleteBrief.id
+    });
+    await incompleteService.reviewPageVersion({
+      projectId: incompleteProject.id,
+      pageVersionId: incompleteVersion.id
+    });
+
+    await expect(
+      incompleteService.approveAndCreateDeployment({
+        projectId: incompleteProject.id,
+        pageVersionId: incompleteVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).rejects.toThrow("Deployer run did not complete.");
+    expect(incompleteDeploymentAdapter.inputs).toEqual([]);
+  });
+
   it("can read records created by another service instance when repositories are shared", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const serviceA = new DemoWorkbenchService({ repositories, now: fixedClock() });
@@ -1975,6 +2104,14 @@ class MutableRuntime implements AgentRuntimeAdapter {
       artifacts: this.result.artifacts,
       findings: this.result.findings
     };
+  }
+}
+
+class ThrowingRuntime implements AgentRuntimeAdapter {
+  constructor(private readonly error: Error) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw this.error;
   }
 }
 

@@ -257,11 +257,13 @@ export class DemoWorkbenchService {
 
   async createBriefFromPrompt(input: CreateBriefFromPromptInput): Promise<BriefRecord> {
     await this.getProjectOrThrow(input.projectId);
-
-    return withRepositoryIdLock(this.repositories, async () => {
+    const briefId = await reserveRepositoryId(this.repositories, "brief", async () => {
       const existingBriefs = await this.repositories.briefs.listAll();
-      const briefId = nextSequentialId("brief", existingBriefs.map((record) => record.id));
-      await runAgentStep({
+      return existingBriefs.map((record) => record.id);
+    });
+
+    try {
+      const { result } = await runAgentStep({
         repositories: this.repositories,
         service: this,
         runtime: this.plannerRuntime,
@@ -273,16 +275,28 @@ export class DemoWorkbenchService {
         },
         now: this.now
       });
-      const brief: BriefRecord = {
-        id: briefId,
-        projectId: input.projectId,
-        prompt: input.prompt,
-        brief: copyBrief(sampleBrief),
-        createdAt: this.timestamp()
-      };
-      await this.repositories.briefs.save(brief);
-      return copyBriefRecord(brief);
-    });
+
+      if (result.state === "failed") {
+        throw new Error("Planner run failed.");
+      }
+      if (result.state !== "completed") {
+        throw new Error("Planner run did not complete.");
+      }
+
+      return await withRepositoryIdLock(this.repositories, async () => {
+        const brief: BriefRecord = {
+          id: briefId,
+          projectId: input.projectId,
+          prompt: input.prompt,
+          brief: copyBrief(sampleBrief),
+          createdAt: this.timestamp()
+        };
+        await this.repositories.briefs.save(brief);
+        return copyBriefRecord(brief);
+      });
+    } finally {
+      releaseRepositoryId(this.repositories, briefId);
+    }
   }
 
   async generatePageVersion(input: GeneratePageVersionInput): Promise<PageVersionRecord> {
@@ -395,7 +409,7 @@ export class DemoWorkbenchService {
       return copyDeployment(existing);
     }
 
-    await runAgentStep({
+    const { result } = await runAgentStep({
       repositories: this.repositories,
       service: this,
       runtime: this.deployerRuntime,
@@ -407,6 +421,13 @@ export class DemoWorkbenchService {
       },
       now: this.now
     });
+
+    if (result.state === "failed") {
+      throw new Error("Deployer run failed.");
+    }
+    if (result.state !== "completed") {
+      throw new Error("Deployer run did not complete.");
+    }
 
     const deployment = await this.deploymentAdapter.createHandoff({
       projectId: input.projectId,

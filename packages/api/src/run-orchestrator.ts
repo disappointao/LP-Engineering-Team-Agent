@@ -72,13 +72,39 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
   };
   await input.repositories.runs.save(startedRun);
 
-  const result = await input.runtime.run({
-    runId: input.runId,
-    projectId: input.projectId,
-    role: input.role,
-    input: contextPack.input,
-    context: contextPack.runtimeContext
-  });
+  let result: RuntimeRunResult;
+  try {
+    result = await input.runtime.run({
+      runId: input.runId,
+      projectId: input.projectId,
+      role: input.role,
+      input: contextPack.input,
+      context: contextPack.runtimeContext
+    });
+  } catch (error) {
+    const completedAt = nextRepositoryTimestamp(input.repositories, now);
+    const run: RunRecord = {
+      ...startedRun,
+      state: "failed",
+      completedAt
+    };
+    await input.repositories.runs.save(run);
+    await input.repositories.runEvents.save(
+      toRunEventRecord({
+        event: toThrownRunFailedEvent({
+          error,
+          runId: input.runId,
+          role: input.role
+        }),
+        runId: input.runId,
+        projectId: input.projectId,
+        taskId: input.taskId,
+        sequence: 1,
+        createdAt: completedAt
+      })
+    );
+    throw error;
+  }
   const completedAt = nextRepositoryTimestamp(input.repositories, now);
   const run: RunRecord = {
     ...startedRun,
@@ -112,6 +138,23 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     events,
     contextPack,
     result
+  };
+}
+
+function toThrownRunFailedEvent(input: {
+  error: unknown;
+  runId: string;
+  role: RunAgentStepInput["role"];
+}): RuntimeEvent {
+  return {
+    type: "run.failed",
+    message: input.error instanceof Error && input.error.message.trim().length > 0
+      ? input.error.message
+      : "Runtime run failed.",
+    runId: input.runId,
+    role: input.role,
+    state: "failed",
+    errorName: input.error instanceof Error ? input.error.name : undefined
   };
 }
 
