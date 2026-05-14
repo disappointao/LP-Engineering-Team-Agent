@@ -356,4 +356,47 @@ describe("model gateway", () => {
       message: "Mock model route mock-openai cannot be used when real model runtime is enabled"
     } satisfies Partial<ModelProviderConfigurationError>);
   });
+
+  it("can reject provider-resolved mock APIs for real-runtime provider-backed gateways", async () => {
+    const policy: ModelRoutingPolicy = {
+      ...createDefaultModelPolicy(),
+      planner: { provider: "project-provider", model: "planning-model" }
+    };
+    const providers = {
+      async getProvider(providerId: string) {
+        return {
+          id: providerId,
+          name: "Project Provider",
+          enabled: true,
+          config: { api: "mock" as const }
+        };
+      }
+    };
+    const defaultGateway = new ProviderBackedModelGateway({
+      policy,
+      providers
+    });
+    await expect(
+      defaultGateway.complete({ role: "planner", prompt: "Plan", projectId: "project_1" })
+    ).resolves.toMatchObject({
+      provider: "project-provider",
+      providerName: "Project Provider",
+      api: "mock",
+      model: "planning-model"
+    });
+
+    const realRuntimeGateway = new ProviderBackedModelGateway({
+      policy,
+      providers,
+      allowMockRoutes: false
+    });
+
+    await expect(
+      realRuntimeGateway.complete({ role: "planner", prompt: "Plan", projectId: "project_1" })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_mock_route_disabled",
+      message: "Mock model route project-provider cannot be used when real model runtime is enabled"
+    } satisfies Partial<ModelProviderConfigurationError>);
+  });
 });

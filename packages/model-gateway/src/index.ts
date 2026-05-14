@@ -282,6 +282,13 @@ export class ProviderBackedModelGateway implements ModelGateway {
     }
 
     const api = route.api ?? provider.config.api;
+    if (api === "mock" && !this.allowMockRoutes) {
+      throw new ModelProviderConfigurationError(
+        "model_provider_mock_route_disabled",
+        `Mock model route ${route.provider} cannot be used when real model runtime is enabled`
+      );
+    }
+
     const resolvedRoute: ModelRoute = {
       ...route,
       ...(provider.name && !route.providerName ? { providerName: provider.name } : {}),
