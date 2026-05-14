@@ -312,6 +312,38 @@ describe("openai compatible chat completions model gateway", () => {
     expect((error as Error).message).not.toContain("secret-ish provider diagnostic");
   });
 
+  it("fails without leaking fetch failure diagnostics", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider();
+        }
+      },
+      fetch: async () => {
+        throw new Error("network failed for sk-test-secret at https://open.bigmodel.cn");
+      },
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    const error = await gateway
+      .complete({
+        role: "planner",
+        projectId: "project_1",
+        prompt: "Plan",
+        routingPolicy: createPolicy()
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      name: "ModelProviderRequestError",
+      code: "model_provider_request_failed"
+    });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain("sk-test-secret");
+    expect((error as Error).message).not.toContain("https://open.bigmodel.cn");
+  });
+
   it("fails on invalid JSON responses", async () => {
     const gateway = new ProviderBackedModelGateway({
       policy: createDefaultModelPolicy(),
