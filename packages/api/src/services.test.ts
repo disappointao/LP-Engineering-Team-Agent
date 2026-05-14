@@ -891,6 +891,58 @@ describe("demo workbench service", () => {
     expect(events.some((event) => event.type === "run.completed")).toBe(true);
   });
 
+  it("fails closed in real runtime when planner resolves to the default mock route", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    let fetchCallCount = 0;
+    const fakeFetch: ModelFetch = async () => {
+      fetchCallCount += 1;
+      throw new Error("fetch_should_not_be_called");
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+
+    await expect(
+      service.createBriefFromPrompt({
+        projectId: project.id,
+        prompt: "Generate a landing page brief."
+      })
+    ).rejects.toThrow("Planner run failed.");
+
+    expect(fetchCallCount).toBe(0);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        projectId: project.id,
+        role: "planner",
+        state: "failed",
+        completedAt: expect.any(String)
+      })
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    const failedEvent = events.find((event) => event.type === "run.failed");
+    expect(failedEvent).toMatchObject({
+      runId: "run_planner_brief_1",
+      projectId: project.id,
+      type: "run.failed",
+      message: "Mock model route mock-openai cannot be used when real model runtime is enabled",
+      payload: expect.objectContaining({
+        role: "planner",
+        state: "failed",
+        errorName: "ModelProviderConfigurationError"
+      })
+    });
+    expect(events.some((event) => event.type === "model.completed")).toBe(false);
+    expect(JSON.stringify(events)).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://");
+  });
+
   it("records failed runs when real runtime provider secrets are missing", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     let fetchCallCount = 0;

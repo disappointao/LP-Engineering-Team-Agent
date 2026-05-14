@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryModelGateway,
+  ModelProviderConfigurationError,
+  ProviderBackedModelGateway,
   agentRoles,
   createDefaultModelPolicy,
   type AgentRole,
@@ -321,5 +323,37 @@ describe("model gateway", () => {
       provider: "mock-anthropic",
       model: "code-model"
     });
+  });
+
+  it("can reject mock routes for real-runtime provider-backed gateways", async () => {
+    const providers = {
+      async getProvider() {
+        throw new Error("provider_resolver_should_not_be_called_for_mock_route");
+      }
+    };
+    const defaultGateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers
+    });
+    await expect(
+      defaultGateway.complete({ role: "planner", prompt: "Plan", projectId: "project_1" })
+    ).resolves.toMatchObject({
+      provider: "mock-openai",
+      model: "planning-model"
+    });
+
+    const realRuntimeGateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers,
+      allowMockRoutes: false
+    });
+
+    await expect(
+      realRuntimeGateway.complete({ role: "planner", prompt: "Plan", projectId: "project_1" })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_mock_route_disabled",
+      message: "Mock model route mock-openai cannot be used when real model runtime is enabled"
+    } satisfies Partial<ModelProviderConfigurationError>);
   });
 });

@@ -1163,7 +1163,8 @@ function createLocalRuntimeAdapter(
         policy,
         providers: createRepositoryModelProviderResolver(input.repositories),
         ...(input.fetch ? { fetch: input.fetch } : {}),
-        env
+        env,
+        allowMockRoutes: false
       })
     );
   }

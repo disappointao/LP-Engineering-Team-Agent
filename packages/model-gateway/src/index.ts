@@ -61,6 +61,7 @@ export interface ProviderBackedModelGatewayOptions {
   timeoutMs?: number;
   anthropicVersion?: string;
   maxTokens?: number;
+  allowMockRoutes?: boolean;
 }
 
 export interface ModelRoute {
@@ -217,6 +218,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
   private readonly timeoutMs?: number;
   private readonly anthropicVersion?: string;
   private readonly maxTokens?: number;
+  private readonly allowMockRoutes: boolean;
 
   constructor(options: ProviderBackedModelGatewayOptions) {
     this.policy = clonePolicy(options.policy);
@@ -226,6 +228,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
     this.timeoutMs = options.timeoutMs;
     this.anthropicVersion = options.anthropicVersion;
     this.maxTokens = options.maxTokens;
+    this.allowMockRoutes = options.allowMockRoutes ?? true;
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
@@ -244,6 +247,12 @@ export class ProviderBackedModelGateway implements ModelGateway {
     });
 
     if (isMockRoute(route)) {
+      if (!this.allowMockRoutes) {
+        throw new ModelProviderConfigurationError(
+          "model_provider_mock_route_disabled",
+          `Mock model route ${route.provider} cannot be used when real model runtime is enabled`
+        );
+      }
       return createMockModelResponse(request, route);
     }
 
