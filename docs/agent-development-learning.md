@@ -48,7 +48,7 @@ Agent 必须知道“现在正在做什么”。这不只是用户最后一句�
 - 是否已有 brief、page version、review findings。
 - 当前用户是继续旧任务，还是发起新任务。
 
-本项目已经有 task、message、snapshot、project 的基础结构。后续 Run Orchestration 要把这些状态正式变成可恢复的 run state。
+本项目已经有 task、message、snapshot、project 的基础结构，也已经有 deterministic run records 和 run events。后续重点是让这些状态支持失败诊断、恢复和更完整的多 agent 编排。
 
 ### 2.2 历史任务
 
@@ -114,7 +114,7 @@ Rules 是 Agent 必须遵守的约束，来源可能包括：
 - approval state。
 - 是否可复用。
 
-当前项目 MCP 只是 registry 和可见工具计算，还没有执行工具。后续做 MCP execution 时，要先设计 tool observation store，而不是直接把输出拼到 message 里。
+当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但还没有执行工具。后续做 MCP execution 时，要先设计 tool observation store，而不是直接把输出拼到 message 里。
 
 ### 2.7 文件系统和产物状态
 
@@ -138,7 +138,7 @@ Planner、Builder、Reviewer、Deployer 不是四个名字而已。真正难点�
 - Deployer 必须拿到哪些 approval 和权限。
 - 某一步失败后是重试、回滚、继续还是询问用户。
 
-当前项目已经有 role 概念，但还没有真正的多 agent 调度。Milestone 6 之后要把 handoff、dependency、blocking question、cancel/retry 逐步显式化。
+当前项目已经有 role 概念和 deterministic planner、builder、reviewer、deployer run records。Milestone 6 之后要把 handoff、dependency、blocking question、cancel/retry 逐步显式化。
 
 ### 2.9 压缩、检索、组合、注入
 
@@ -149,7 +149,7 @@ Planner、Builder、Reviewer、Deployer 不是四个名字而已。真正难点�
 - 组合：把任务、项目、rules、skills、tools、files 合成 context pack。
 - 注入：按不同 role 给不同上下文，不是一份 prompt 所有人共用。
 
-本项目已经在 Stage 2 spec 里明确要求后续引入 Context Assembly 边界。早期版本先做最小可用 context pack，不急着做向量数据库和复杂长期记忆。
+本项目已经引入 Context Assembly 边界，并先做最小可用 Context Pack v0。后续不急着做向量数据库和复杂长期记忆，先把注入来源、校验和可观察性稳定下来。
 
 ### 2.10 结构化校验和 Zod
 
@@ -185,20 +185,20 @@ Agent 系统里有很多运行时不可信输入，TypeScript 类型在这些地
 - 项目级 Skills 管理和 runtime 注入。
 - 项目级模型 provider/route 配置和 runtime route resolution。
 - 项目级 MCP connector registry、tool approval 和可见工具计算。
+- Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
+- Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
 - 中英文 UI 文案和语言自动判断。
 
 ### 已经预留但还不完整
 
-- `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy。
-- `RuntimeEvent` 已有基础事件类型，但还没有完整 run repository 和 event timeline 编排。
+- `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
+- run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
 - 真实模型 provider adapter。
-- 真正的 run orchestrator。
-- Context Assembler / Context Pack。
 - 压缩和检索。
 - MCP/tool 真执行。
 - tool observation store。
@@ -223,6 +223,8 @@ Agent 系统里有很多运行时不可信输入，TypeScript 类型在这些地
 - run state 和 task state 的区别。
 - event sourcing 的基本思想。
 - 为什么失败事件比直接 throw 更适合 Agent。
+
+本阶段完成后，学习重点从“为什么要记录 run event”转为“如何用这些 event 支撑失败诊断、刷新恢复和后续流式 UI”。
 
 当前计划：
 

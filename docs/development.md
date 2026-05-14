@@ -22,4 +22,6 @@ The first implementation uses deterministic local services for model calls, runt
 
 Stage 2 starts by moving workbench records behind repository contracts in `@lp-agent/db`. The default local implementation is still in-memory for deterministic tests, but `@lp-agent/api` now depends on repository interfaces instead of private maps so Prisma/Postgres repositories can replace the in-memory implementation without changing Web or worker callers.
 
+Stage 2 Milestone 6 persists deterministic planner, builder, reviewer, and deployer run records with ordered run events. Runtime calls now pass through a context assembly boundary before they reach the local runtime adapter. The first context pack includes project/task input, published project skills, visible MCP tools, model routing policy, approval state, and artifact workspace metadata; compression, retrieval, streaming, real tool execution, and real model providers remain future slices.
+
 Generated LP output remains static HTML/CSS/JS. The Next.js app is only the workbench shell used to create, preview, review, and hand off those artifacts.
