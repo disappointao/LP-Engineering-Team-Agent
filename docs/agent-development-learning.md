@@ -203,19 +203,20 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
+- 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
+- Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
 - 中英文 UI 文案和语言自动判断。
 
 ### 已经预留但还不完整
 
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
-- `anthropic-messages` adapter 还没有接入 Web/API/runtime 的真实执行链路。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
-- Web/API/runtime 的真实模型执行链路接线。
+- 真实模型结构化输出进入 LP 业务流的 schema parse 和修复循环。
 - 压缩和检索。
 - MCP/tool 真执行。
 - tool observation store。
