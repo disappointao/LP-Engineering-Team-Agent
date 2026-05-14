@@ -202,18 +202,20 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 项目级 MCP connector registry、tool approval 和可见工具计算。
 - Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
+- 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 中英文 UI 文案和语言自动判断。
 
 ### 已经预留但还不完整
 
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
+- `anthropic-messages` adapter 还没有接入 Web/API/runtime 的真实执行链路。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
-- 真实模型 provider adapter。
+- Web/API/runtime 的真实模型执行链路接线。
 - 压缩和检索。
 - MCP/tool 真执行。
 - tool observation store。
@@ -295,7 +297,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 这个设计参考 pi-mono 的 `provider + api + baseUrl + secret reference + models + compat` 思路，但不绑定 pi-mono 依赖。
 - 第一步只做通用配置和 mock runtime 链路验证，不做真实模型调用、streaming、tool-call 转换、fallback 或 OAuth。
 
-下一步真实 adapter 设计：
+已实现的第一个真实 adapter：
 
 - [2026-05-14-anthropic-messages-adapter-design.md](./superpowers/specs/2026-05-14-anthropic-messages-adapter-design.md)
 - 这一步只在 `packages/model-gateway` 做第一个真实协议 adapter：`anthropic-messages`。
@@ -303,6 +305,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 当前项目配置层可以保存 `paas/v4`，但真实执行要等后续 `openai-completions` adapter。
 - 学习重点是把真实外部 API 调用限制在模型网关边界内：密钥只在 adapter 内解析，返回给 runtime 的只有 provider、protocol、model、usage 和脱敏状态。
 - 当前实现计划：[2026-05-14-anthropic-messages-adapter.md](./superpowers/plans/2026-05-14-anthropic-messages-adapter.md)
+- 当前 adapter 仍只存在于 `packages/model-gateway` 边界内，尚未接入 Web/API/runtime 的真实执行路径。
 
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 

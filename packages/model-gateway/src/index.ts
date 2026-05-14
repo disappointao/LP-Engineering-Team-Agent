@@ -265,6 +265,13 @@ export class ProviderBackedModelGateway implements ModelGateway {
       );
     }
 
+    if (route.api && provider.config.api && route.api !== provider.config.api) {
+      throw new ModelProviderConfigurationError(
+        "model_provider_protocol_mismatch",
+        `Model route protocol ${route.api} does not match provider ${route.provider} protocol ${provider.config.api}`
+      );
+    }
+
     const api = route.api ?? provider.config.api;
     const resolvedRoute: ModelRoute = {
       ...route,

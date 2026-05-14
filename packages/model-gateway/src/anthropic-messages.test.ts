@@ -241,6 +241,44 @@ describe("anthropic messages model gateway", () => {
     expect(providerLookups).toBe(0);
   });
 
+  it("fails closed when route and provider protocols differ", async () => {
+    let fetchCalls = 0;
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider({ api: "openai-completions" });
+        }
+      },
+      fetch: async () => {
+        fetchCalls += 1;
+        return new Response(
+          JSON.stringify({
+            type: "message",
+            model: "glm-5.1",
+            content: [{ type: "text", text: "should not be called" }],
+            usage: { input_tokens: 1, output_tokens: 1 }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      },
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_protocol_mismatch"
+    });
+    expect(fetchCalls).toBe(0);
+  });
+
   it("fails when a real provider route has no provider config", async () => {
     const gateway = new ProviderBackedModelGateway({
       policy: createDefaultModelPolicy(),
