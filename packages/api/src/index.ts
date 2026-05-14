@@ -1037,6 +1037,7 @@ export function createDemoWorkbenchService(): DemoWorkbenchService {
 export {
   ContextPackSchema,
   assembleContextPack,
+  type AssembleContextPackInput,
   type ContextAssemblyTrace,
   type ContextPack
 } from "./context-assembler";
