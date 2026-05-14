@@ -229,6 +229,38 @@ describe("json-file workbench repositories", () => {
     );
   });
 
+  it("reopens provider-neutral model provider config from disk", async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempDirectory);
+    const filePath = join(tempDirectory, "provider-neutral-state.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    await first.modelProviders.save({
+      id: "zhipu",
+      scope: "project",
+      targetKey: "project_1",
+      name: "智谱 GLM",
+      provider: "custom",
+      config: {
+        api: "anthropic-messages",
+        baseUrl: "https://open.bigmodel.cn/api/anthropic",
+        apiKeyEnv: "ANTHROPIC_API_KEY",
+        models: [{ id: "glm-5.1", contextWindow: 200000 }]
+      },
+      enabled: true,
+      createdAt: "2026-05-14T00:00:00.000Z",
+      updatedAt: "2026-05-14T00:00:00.000Z"
+    });
+
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+    await expect(second.modelProviders.getById("zhipu")).resolves.toMatchObject({
+      config: {
+        api: "anthropic-messages",
+        apiKeyEnv: "ANTHROPIC_API_KEY",
+        models: [{ id: "glm-5.1", contextWindow: 200000 }]
+      }
+    });
+  });
+
   it("persists mcp connectors and approvals across repository instances", async () => {
     const tempDirectory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(tempDirectory);

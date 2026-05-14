@@ -479,6 +479,46 @@ describe("in-memory workbench repositories", () => {
     await expect(
       repositories.modelRoutingPolicies.getByProjectAndRole("project_1", "builder")
     ).resolves.toEqual(policy);
+
+    const providerNeutralProvider = {
+      id: "zhipu",
+      scope: "project" as const,
+      targetKey: "project_1",
+      name: "智谱 GLM",
+      provider: "custom" as const,
+      config: {
+        api: "anthropic-messages" as const,
+        baseUrl: "https://open.bigmodel.cn/api/anthropic",
+        apiKeyEnv: "ANTHROPIC_API_KEY",
+        headers: {
+          "x-extra-key": { env: "ZHIPU_EXTRA_HEADER" }
+        },
+        models: [
+          {
+            id: "glm-5.1",
+            name: "GLM-5.1",
+            contextWindow: 200000,
+            maxTokens: 128000,
+            supportsTools: true,
+            supportsStreaming: true
+          }
+        ],
+        compat: {
+          cacheControlFormat: "anthropic"
+        }
+      },
+      enabled: true,
+      createdAt: "2026-05-14T00:00:00.000Z",
+      updatedAt: "2026-05-14T00:00:00.000Z"
+    };
+    await repositories.modelProviders.save(providerNeutralProvider);
+
+    const reopened = await repositories.modelProviders.getById("zhipu");
+    expect(reopened?.config).toEqual(providerNeutralProvider.config);
+    providerNeutralProvider.config.models[0]!.id = "mutated";
+    expect((await repositories.modelProviders.getById("zhipu"))?.config.models?.[0]?.id).toBe(
+      "glm-5.1"
+    );
   });
 
   it("lists model providers and routes for a project", async () => {

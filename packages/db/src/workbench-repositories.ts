@@ -2,7 +2,7 @@ import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
 import type { MCPToolDefinition } from "@lp-agent/mcp-gateway";
-import type { AgentRole } from "@lp-agent/model-gateway";
+import type { AgentRole, ModelProviderRuntimeConfig } from "@lp-agent/model-gateway";
 import type { SkillManifest, SkillScope, SkillType } from "@lp-agent/skills";
 
 export interface ProjectRecord {
@@ -103,10 +103,7 @@ export interface ModelProviderRecord {
   targetKey: string;
   name: string;
   provider: ModelProviderType;
-  config: {
-    baseUrl?: string;
-    secretEnvName?: string;
-  };
+  config: ModelProviderRuntimeConfig;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -807,7 +804,7 @@ function copySkillBinding(binding: SkillBindingRecord): SkillBindingRecord {
 function copyModelProvider(provider: ModelProviderRecord): ModelProviderRecord {
   return {
     ...provider,
-    config: { ...provider.config }
+    config: structuredClone(provider.config)
   };
 }
 
