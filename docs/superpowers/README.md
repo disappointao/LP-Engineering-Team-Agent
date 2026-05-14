@@ -112,6 +112,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 real model runtime wiring implementation plan.
    - Read this after the real model runtime wiring design when implementing or auditing the API-owned runtime factory, repository-backed provider resolver, explicit `REAL_MODEL_RUNTIME=1` switch, fake-fetch API tests, and sanitized run event behavior.
 
+28. `specs/2026-05-14-openai-compatible-adapter-design.md`
+   - Stage 3 OpenAI-compatible Chat Completions adapter design.
+   - Read this after the real model runtime wiring plan when adding the generic `openai-completions` model-gateway adapter for Zhipu `paas/v4` and other OpenAI-compatible providers.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

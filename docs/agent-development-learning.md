@@ -317,6 +317,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 学习重点：真实模型接入不是把所有 runtime 都替换成网络调用，而是在服务边界增加可测试的 factory、env 开关、仓储 resolver、fake-fetch 单测和脱敏事件。
 - 真实 runtime 必须在角色解析到默认或配置型 mock route 时 fail closed，否则用户会误以为已经跑了真实模型。
 
+下一步 OpenAI-compatible adapter 设计：
+
+- [2026-05-14-openai-compatible-adapter-design.md](./superpowers/specs/2026-05-14-openai-compatible-adapter-design.md)
+- 这一步把 `openai-completions` 从配置占位变成真实 Chat Completions 协议 adapter。
+- 智谱 `https://open.bigmodel.cn/api/paas/v4` 是第一个目标，但 adapter 要保持通用，后续可接 OpenRouter、Ollama、LM Studio、vLLM 等 OpenAI-compatible provider。
+- 学习重点：不同 provider 可以共享同一种协议 adapter，差异通过 `baseUrl`、`apiKeyEnv`、`model` 和少量兼容配置表达，不应该在 runtime 里写死某个厂商。
+
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
 ```bash
