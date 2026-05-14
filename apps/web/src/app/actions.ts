@@ -275,8 +275,11 @@ export async function createModelProviderAction(formData: FormData): Promise<voi
     providerId: String(formData.get("providerId") ?? ""),
     name: String(formData.get("name") ?? ""),
     provider: String(formData.get("provider") ?? ""),
+    api: String(formData.get("api") ?? ""),
     baseUrl: String(formData.get("baseUrl") ?? ""),
-    secretEnvName: String(formData.get("secretEnvName") ?? "")
+    apiKeyEnv: String(formData.get("apiKeyEnv") ?? ""),
+    secretEnvName: String(formData.get("secretEnvName") ?? ""),
+    modelId: String(formData.get("modelId") ?? "")
   });
   if (!result.ok) {
     redirectToModelsWithError(result.error);

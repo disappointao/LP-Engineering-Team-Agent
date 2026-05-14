@@ -502,8 +502,46 @@ describe("submitPromptAction", () => {
       providerId: "provider_openai",
       name: "OpenAI",
       provider: "openai",
+      api: "",
       baseUrl: "https://api.openai.com/v1",
-      secretEnvName: "OPENAI_API_KEY"
+      apiKeyEnv: "",
+      secretEnvName: "OPENAI_API_KEY",
+      modelId: ""
+    });
+  });
+
+  it("passes provider-neutral protocol fields when creating a model provider", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.createModelProvider.mockResolvedValue({
+      ok: true,
+      value: { id: "zhipu" }
+    });
+
+    await expectRedirect(
+      createModelProviderAction(
+        buildSkillForm({
+          providerId: "zhipu",
+          name: "智谱 GLM",
+          provider: "custom",
+          api: "anthropic-messages",
+          baseUrl: "https://open.bigmodel.cn/api/anthropic",
+          apiKeyEnv: "ANTHROPIC_API_KEY",
+          modelId: "glm-5.1"
+        })
+      ),
+      "/?view=models"
+    );
+
+    expect(mocks.createModelProvider).toHaveBeenCalledWith({
+      projectId: "project_1",
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      secretEnvName: "",
+      modelId: "glm-5.1"
     });
   });
 
@@ -533,8 +571,11 @@ describe("submitPromptAction", () => {
       providerId: "provider_openai",
       name: "OpenAI",
       provider: "openai",
+      api: "",
       baseUrl: "https://api.openai.com/v1",
-      secretEnvName: "OPENAI_API_KEY"
+      apiKeyEnv: "",
+      secretEnvName: "OPENAI_API_KEY",
+      modelId: ""
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });

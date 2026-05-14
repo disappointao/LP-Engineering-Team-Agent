@@ -64,6 +64,7 @@ export type ModelFlowErrorCode =
   | "model_provider_name_required"
   | "model_provider_key_required"
   | "model_provider_type_unsupported"
+  | (`model_provider_${string}` & {})
   | "model_provider_already_exists"
   | "model_provider_not_found"
   | "model_provider_disabled"
@@ -126,8 +127,11 @@ export interface CreateModelProviderFormInput {
   providerId: string;
   name: string;
   provider: ModelProviderType | string;
+  api?: string;
   baseUrl?: string;
+  apiKeyEnv?: string;
   secretEnvName?: string;
+  modelId?: string;
 }
 
 export interface UpsertProjectModelRouteFormInput {
@@ -721,6 +725,12 @@ function toModelFlowError(error: unknown): ModelFlowErrorCode {
     message === "model_provider_name_required" ||
     message === "model_provider_key_required" ||
     message === "model_provider_type_unsupported" ||
+    message === "model_provider_api_required" ||
+    message === "model_provider_api_unsupported" ||
+    message === "model_provider_base_url_invalid" ||
+    message === "model_provider_api_key_env_invalid" ||
+    message === "model_provider_model_id_required" ||
+    message === "model_provider_model_limit_invalid" ||
     message === "model_provider_already_exists" ||
     message === "model_provider_not_found" ||
     message === "model_provider_disabled" ||

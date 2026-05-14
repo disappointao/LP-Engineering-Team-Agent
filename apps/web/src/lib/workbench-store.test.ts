@@ -463,9 +463,37 @@ describe("web workbench store", () => {
     expect(state.models.routes).toEqual([
       expect.objectContaining({ role: "builder", model: "gpt-5.4" })
     ]);
-    expect(state.models.resolvedPolicy.builder).toEqual({
+    expect(state.models.resolvedPolicy.builder).toMatchObject({
       provider: "provider_openai",
       model: "gpt-5.4"
+    });
+  });
+
+  it("creates provider-neutral model providers through the web store", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+
+    const provider = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+
+    expect(provider).toMatchObject({
+      ok: true,
+      value: {
+        id: "zhipu",
+        config: {
+          api: "anthropic-messages",
+          apiKeyEnv: "ANTHROPIC_API_KEY",
+          models: [{ id: "glm-5.1" }]
+        }
+      }
     });
   });
 
