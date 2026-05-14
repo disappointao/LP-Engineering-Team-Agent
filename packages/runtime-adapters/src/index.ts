@@ -96,12 +96,26 @@ export type RuntimeEvent =
       hasAssets: boolean;
     }
   | {
+      type: "model.output.parsed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "StaticArtifactsSchema";
+      artifactKind: "three-file-static";
+      htmlBytes: number;
+      cssBytes: number;
+      jsBytes: number;
+      hasExternalCss: boolean;
+      hasExternalImages: boolean;
+    }
+  | {
       type: "model.output.parse_failed";
       message: string;
       runId?: string;
       role?: AgentRole;
-      schema: "LPBriefSchema";
-      reason: "empty_output" | "invalid_json" | "schema_invalid";
+      schema: "LPBriefSchema" | "StaticArtifactsSchema";
+      reason: "empty_output" | "invalid_json" | "schema_invalid" | "policy_violation";
+      policyCode?: string;
       issueCount?: number;
       firstIssuePath?: string;
       firstIssueCode?: string;

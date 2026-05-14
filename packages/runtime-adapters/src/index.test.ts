@@ -28,6 +28,34 @@ describe("local agent runtime adapter", () => {
     expect(result.events[0]?.type).toBe("run.started");
   });
 
+  it("types builder static artifact parse runtime events", () => {
+    const parsedEvent: RuntimeEvent = {
+      type: "model.output.parsed",
+      message: "Builder output parsed as static artifacts",
+      runId: "run_builder_1",
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      artifactKind: "three-file-static",
+      htmlBytes: 128,
+      cssBytes: 64,
+      jsBytes: 32,
+      hasExternalCss: true,
+      hasExternalImages: true
+    };
+    const failedEvent: RuntimeEvent = {
+      type: "model.output.parse_failed",
+      message: "Builder output could not be parsed as static artifacts",
+      runId: "run_builder_1",
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "policy_violation",
+      policyCode: "external_script_blocked"
+    };
+
+    expect(parsedEvent.schema).toBe("StaticArtifactsSchema");
+    expect(failedEvent.reason).toBe("policy_violation");
+  });
+
   it("returns transient model output text without adding it to runtime events", async () => {
     const gateway: ModelGateway = {
       async complete(_request: ModelRequest): Promise<ModelResponse> {
