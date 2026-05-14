@@ -357,7 +357,9 @@ describe("structured static artifact model output", () => {
   it("rejects CSS framework links", () => {
     const cssFrameworkLinks = [
       "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
-      "https://cdn.tailwindcss.com"
+      "https://cdn.tailwindcss.com",
+      "https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.5.0/semantic.min.css",
+      "https://cdn.jsdelivr.net/npm/semantic-ui-css@2.5.0/semantic.min.css"
     ];
 
     for (const href of cssFrameworkLinks) {

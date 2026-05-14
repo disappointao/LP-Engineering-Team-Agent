@@ -73,7 +73,7 @@ const CSS_FRAMEWORK_HREFS: RegExp[] = [
   /foundation-sites|(?:^|\/)foundation(?:\.min)?\.css(?:[?#]|$)|\/foundation\/\d/i,
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/materialize(?:@|\/)|\/materialize(?:\.min)?\.css(?:[?#]|$)|\/materialize@[\w.-]+\//i,
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/(?:antd|ant-design)(?:@|\/)|\/(?:antd|ant-design)(?:\.min)?\.css(?:[?#]|$)|\/(?:antd|ant-design)@[\w.-]+\//i,
-  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/semantic-ui(?:@|\/)|\/semantic-ui(?:\.min)?\.css(?:[?#]|$)|\/semantic-ui@[\w.-]+\//i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/semantic-ui(?:-css)?(?:@|\/)|cdnjs\.cloudflare\.com\/ajax\/libs\/semantic-ui\/|\/semantic(?:\.min)?\.css(?:[?#]|$)|\/semantic-ui(?:-css)?@[\w.-]+\//i,
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/uikit(?:@|\/)|\/uikit(?:\.min)?\.css(?:[?#]|$)|\/uikit@[\w.-]+\//i
 ];
 
