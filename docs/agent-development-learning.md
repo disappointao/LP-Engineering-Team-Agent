@@ -331,6 +331,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 下一步结构化 LP Brief 输出设计：
 
 - [2026-05-14-structured-lp-brief-model-output-design.md](./superpowers/specs/2026-05-14-structured-lp-brief-model-output-design.md)
+- 当前实现计划：[2026-05-14-structured-lp-brief-model-output.md](./superpowers/plans/2026-05-14-structured-lp-brief-model-output.md)
 - 这一步只让 Planner 在 `REAL_MODEL_RUNTIME=1` 下输出严格 JSON，并由 API 用 `LPBriefSchema` parse 后保存为 `BriefRecord`。
 - 默认 deterministic runtime 继续使用 `sampleBrief`，确保本地开发、测试和 demo 稳定。
 - raw model text 只允许作为内存中的瞬时值被解析，不能写入 run events、context packs、Web state 或 snapshots。

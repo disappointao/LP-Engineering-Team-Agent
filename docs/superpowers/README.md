@@ -124,6 +124,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 structured Planner LP brief output design.
    - Read this after the OpenAI-compatible adapter plan when replacing the real-runtime Planner `sampleBrief` placeholder with validated `LPBriefSchema` parsing while keeping default deterministic behavior and static LP artifact generation.
 
+31. `plans/2026-05-14-structured-lp-brief-model-output.md`
+   - Stage 3 structured Planner LP brief output implementation plan.
+   - Read this after the structured LP brief output design when implementing strict JSON Planner prompts, `LPBriefSchema` parsing, transient runtime model text, sanitized parse events, and fail-closed real-runtime behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
