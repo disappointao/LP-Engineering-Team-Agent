@@ -107,6 +107,7 @@ export interface WorkbenchCopy {
     connectorsTitle: string;
     toolsTitle: string;
     visibleToolsTitle: string;
+    invalidConnectorName: string;
     enabled: string;
     disabled: string;
     enable: string;
@@ -417,6 +418,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       connectorsTitle: "Connectors",
       toolsTitle: "Tools",
       visibleToolsTitle: "Visible tools",
+      invalidConnectorName: "Invalid connector",
       enabled: "Enabled",
       disabled: "Disabled",
       enable: "Enable",
@@ -744,6 +746,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       connectorsTitle: "连接器",
       toolsTitle: "工具",
       visibleToolsTitle: "可见工具",
+      invalidConnectorName: "无效连接器",
       enabled: "已启用",
       disabled: "已停用",
       enable: "启用",

@@ -436,6 +436,129 @@ describe("HomePage project flow errors", () => {
     expect(html).not.toContain("角色：规划员, 构建员");
   });
 
+  it("renders the MCP view when a persisted connector has malformed tool roles", async () => {
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      mcp: {
+        connectors: [
+          {
+            id: "connector_broken",
+            scope: "project",
+            targetKey: "project_1",
+            name: "Broken Connector",
+            tools: [
+              {
+                name: "brokenTool",
+                permission: "assets:read",
+                requiresApproval: false
+              }
+            ],
+            enabled: true,
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    };
+    pageMocks.currentProjectId = "project_1";
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Broken Connector");
+    expect(html).toContain("brokenTool");
+  });
+
+  it("renders the MCP view when a persisted connector has malformed scalar fields", async () => {
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      mcp: {
+        connectors: [
+          {
+            id: { value: "connector_broken" },
+            scope: "project",
+            targetKey: "project_1",
+            name: { value: "Broken Connector" },
+            tools: [],
+            enabled: "false",
+            createdAt: "2026-05-12T08:00:00.000Z",
+            updatedAt: "2026-05-12T08:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    };
+    pageMocks.currentProjectId = "project_1";
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Project MCP");
+    expect(html).toContain("connector_invalid");
+    expect(html).toContain("Invalid connector");
+  });
+
   it("marks the MCP nav link active from the mcp route", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({ view: "mcp" })

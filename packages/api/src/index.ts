@@ -26,6 +26,7 @@ import {
   computeVisibleTools,
   normalizeMCPConnectorDefinition,
   type ApprovalState,
+  type MCPToolDefinition,
   type MCPToolApprovalState
 } from "@lp-agent/mcp-gateway";
 import {
@@ -690,29 +691,31 @@ export class DemoWorkbenchService {
       throw new Error("mcp_tool_approval_not_required");
     }
 
-    const existing = await this.repositories.mcpToolApprovals.getByProjectConnectorAndTool(
-      input.projectId,
-      connector.id,
-      tool.name
-    );
-    const timestamp = this.timestamp();
-    const approval: MCPToolApprovalRecord = {
-      id:
-        existing?.id ??
-        nextSequentialId(
-          "mcp_approval",
-          (await this.repositories.mcpToolApprovals.listAll()).map((record) => record.id)
-        ),
-      projectId: input.projectId,
-      connectorId: connector.id,
-      toolName: tool.name,
-      state: input.approved ? "approved" : "pending",
-      approvedByUserId: input.approved ? input.approvedByUserId ?? "local-owner" : undefined,
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp
-    };
-    await this.repositories.mcpToolApprovals.save(approval);
-    return copyMCPToolApprovalRecord(approval);
+    return withRepositoryIdLock(this.repositories, async () => {
+      const existing = await this.repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+        input.projectId,
+        connector.id,
+        tool.name
+      );
+      const timestamp = this.timestamp();
+      const approval: MCPToolApprovalRecord = {
+        id:
+          existing?.id ??
+          nextSequentialId(
+            "mcp_approval",
+            (await this.repositories.mcpToolApprovals.listAll()).map((record) => record.id)
+          ),
+        projectId: input.projectId,
+        connectorId: connector.id,
+        toolName: tool.name,
+        state: input.approved ? "approved" : "pending",
+        approvedByUserId: input.approved ? input.approvedByUserId ?? "local-owner" : undefined,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp
+      };
+      await this.repositories.mcpToolApprovals.save(approval);
+      return copyMCPToolApprovalRecord(approval);
+    });
   }
 
   async listProjectMCPState(projectId: string): Promise<ProjectMCPState> {
@@ -919,8 +922,9 @@ export class DemoWorkbenchService {
       ...new Set(input.skillVersions.flatMap((version) => version.manifest.permissions))
     ];
     const connectors = (await this.repositories.mcpConnectors.listForProject(input.projectId))
-      .filter((connector) => connector.enabled)
-      .map(copyMCPConnectorRecord);
+      .filter((connector) => connector.enabled === true)
+      .map(normalizeRuntimeMCPConnector)
+      .filter(isDefined);
     const approvals = await this.repositories.mcpToolApprovals.listForProject(input.projectId);
     const approvalStates: MCPToolApprovalState[] = approvals.map((approval) => ({
       connectorId: approval.connectorId,
@@ -1237,17 +1241,75 @@ function copyModelRoutingPolicyRecord(
 }
 
 function copyMCPConnectorRecord(connector: MCPConnectorRecord): MCPConnectorRecord {
+  const rawTools = Array.isArray((connector as { tools?: unknown }).tools)
+    ? (connector as { tools: unknown[] }).tools
+    : [];
   return {
     ...connector,
-    tools: connector.tools.map((tool) => ({
-      ...tool,
-      roles: [...tool.roles]
-    }))
+    tools: rawTools.flatMap((tool) => {
+      const copiedTool = copyMCPToolDefinition(tool);
+      return copiedTool ? [copiedTool] : [];
+    })
   };
 }
 
 function copyMCPToolApprovalRecord(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
   return { ...approval };
+}
+
+function normalizeRuntimeMCPConnector(
+  connector: MCPConnectorRecord
+): MCPConnectorRecord | undefined {
+  try {
+    const definition = normalizeMCPConnectorDefinition({
+      id: connector.id,
+      name: connector.name,
+      description: connector.description,
+      tools: connector.tools
+    });
+    return {
+      ...connector,
+      name: definition.name,
+      description: definition.description,
+      tools: definition.tools
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function copyMCPToolDefinition(tool: unknown): MCPToolDefinition | undefined {
+  if (!isRecord(tool)) {
+    return undefined;
+  }
+  const name = normalizeOptionalString(tool.name);
+  const permission = normalizeOptionalString(tool.permission);
+  if (!name || !permission || typeof tool.requiresApproval !== "boolean") {
+    return undefined;
+  }
+  const roles = Array.isArray(tool.roles)
+    ? tool.roles.filter(isMCPAgentRole)
+    : [];
+  const description = normalizeOptionalString(tool.description);
+  return {
+    name,
+    ...(description ? { description } : {}),
+    permission,
+    roles,
+    requiresApproval: tool.requiresApproval
+  };
+}
+
+function isMCPAgentRole(role: unknown): role is AgentRole {
+  return agentRoles.includes(role as AgentRole);
+}
+
+function normalizeOptionalString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function copyProjectBoundSkillState(state: ProjectBoundSkillState): ProjectBoundSkillState {

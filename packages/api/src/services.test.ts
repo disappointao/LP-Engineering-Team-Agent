@@ -16,6 +16,7 @@ import {
   DemoWorkbenchService,
   createDemoWorkbenchService,
   type BriefRecord,
+  type MCPConnectorRecord,
   type PageVersionRecord,
   type ProjectRecord,
   type WorkbenchSnapshot
@@ -1205,6 +1206,206 @@ describe("demo workbench service", () => {
       connectorId: connector.id,
       enabled: false
     });
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("keeps separate approval records when approval-required tools are approved concurrently", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Concurrent MCP" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        brandSkillManifest({
+          permissions: ["assets:read", "git:write"]
+        })
+      ),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+    const connector = await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "curateAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: true
+          },
+          {
+            name: "createPullRequest",
+            permission: "git:write",
+            roles: ["builder"],
+            requiresApproval: true
+          }
+        ]
+      })
+    });
+
+    await Promise.all([
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "curateAssets",
+        approved: true
+      }),
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "createPullRequest",
+        approved: true
+      })
+    ]);
+
+    expect(await repositories.mcpToolApprovals.listForProject(project.id)).toHaveLength(2);
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([
+      {
+        connectorId: "connector_assets",
+        name: "curateAssets",
+        permission: "assets:read",
+        requiresApproval: true
+      },
+      {
+        connectorId: "connector_assets",
+        name: "createPullRequest",
+        permission: "git:write",
+        requiresApproval: true
+      }
+    ]);
+  });
+
+  it("fails closed for malformed persisted mcp connectors while keeping the mcp state readable", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Malformed MCP" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        brandSkillManifest({
+          permissions: ["assets:read"]
+        })
+      ),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+
+    const malformedConnector = {
+      id: "connector_broken",
+      scope: "project",
+      targetKey: project.id,
+      name: "Broken Connector",
+      tools: [
+        {
+          name: "brokenTool",
+          permission: "assets:read",
+          requiresApproval: false
+        }
+      ],
+      enabled: true,
+      createdAt: "2026-05-12T08:00:00.000Z",
+      updatedAt: "2026-05-12T08:00:00.000Z"
+    } as unknown as MCPConnectorRecord;
+    (
+      repositories.mcpConnectors as unknown as {
+        listForProject(projectId: string): Promise<MCPConnectorRecord[]>;
+      }
+    ).listForProject = async (projectId) =>
+      projectId === project.id ? [malformedConnector] : [];
+
+    await expect(
+      service.listVisibleMCPToolsForProject({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).resolves.toEqual([]);
+    await expect(service.listProjectMCPState(project.id)).resolves.toMatchObject({
+      connectors: [
+        {
+          id: "connector_broken",
+          name: "Broken Connector",
+          tools: [
+            {
+              name: "brokenTool",
+              permission: "assets:read",
+              requiresApproval: false,
+              roles: []
+            }
+          ]
+        }
+      ],
+      visibleToolsByRole: {
+        builder: []
+      }
+    });
+  });
+
+  it("does not expose malformed mcp connectors with non-boolean enabled flags", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Malformed Enabled MCP" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        brandSkillManifest({
+          permissions: ["assets:read"]
+        })
+      ),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: skill.version.id
+    });
+
+    const malformedConnector = {
+      id: "connector_assets",
+      scope: "project",
+      targetKey: project.id,
+      name: "Assets",
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ],
+      enabled: "false",
+      createdAt: "2026-05-12T08:00:00.000Z",
+      updatedAt: "2026-05-12T08:00:00.000Z"
+    } as unknown as MCPConnectorRecord;
+    (
+      repositories.mcpConnectors as unknown as {
+        listForProject(projectId: string): Promise<MCPConnectorRecord[]>;
+      }
+    ).listForProject = async (projectId) =>
+      projectId === project.id ? [malformedConnector] : [];
+
     await expect(
       service.listVisibleMCPToolsForProject({
         projectId: project.id,

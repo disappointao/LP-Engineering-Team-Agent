@@ -419,81 +419,89 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <section className="mcpList" aria-labelledby="mcp-connectors-title">
                       <h2 id="mcp-connectors-title">{copy.mcpView.connectorsTitle}</h2>
                       {mcpState.connectors.length > 0 ? (
-                        mcpState.connectors.map((connector) => (
-                          <div className="mcpConnectorRow" key={connector.id}>
-                            <div>
-                              <strong>{connector.name}</strong>
-                              <span>
-                                {connector.enabled
-                                  ? copy.mcpView.enabled
-                                  : copy.mcpView.disabled}
-                              </span>
+                        mcpState.connectors.map((connector, connectorIndex) => {
+                          const renderConnector = toRenderableMCPConnector(
+                            connector,
+                            connectorIndex,
+                            copy.mcpView.invalidConnectorName
+                          );
+                          return (
+                            <div className="mcpConnectorRow" key={renderConnector.id}>
+                              <div>
+                                <strong>{renderConnector.name}</strong>
+                                <small>{renderConnector.id}</small>
+                                <span>
+                                  {renderConnector.enabled
+                                    ? copy.mcpView.enabled
+                                    : copy.mcpView.disabled}
+                                </span>
+                              </div>
+                              <form action={setMCPConnectorEnabledAction}>
+                                <input name="projectId" type="hidden" value={activeProject.id} />
+                                <input name="connectorId" type="hidden" value={renderConnector.id} />
+                                <input
+                                  name="enabled"
+                                  type="hidden"
+                                  value={renderConnector.enabled ? "false" : "true"}
+                                />
+                                <button type="submit">
+                                  {renderConnector.enabled
+                                    ? copy.mcpView.disable
+                                    : copy.mcpView.enable}
+                                </button>
+                              </form>
+                              <div className="mcpToolGrid" aria-label={copy.mcpView.toolsTitle}>
+                                {renderConnector.tools.map((tool) => {
+                                  const approval = mcpState.approvals.find(
+                                    (record) =>
+                                      record.connectorId === renderConnector.id &&
+                                      record.toolName === tool.name &&
+                                      record.state === "approved"
+                                  );
+                                  return (
+                                    <div className="mcpToolCard" key={tool.name}>
+                                      <strong>{tool.name}</strong>
+                                      <span>{copy.mcpView.permissionSummary(tool.permission)}</span>
+                                      <small>
+                                        {copy.mcpView.rolesSummary(
+                                          toMCPRoleLabels(tool.roles, copy.mcpView.roleLabels)
+                                        )}
+                                      </small>
+                                      <small>
+                                        {tool.requiresApproval
+                                          ? copy.mcpView.approvalRequired
+                                          : copy.mcpView.approvalNotRequired}
+                                      </small>
+                                      {tool.requiresApproval ? (
+                                        <form action={setMCPToolApprovalAction}>
+                                          <input
+                                            name="projectId"
+                                            type="hidden"
+                                            value={activeProject.id}
+                                          />
+                                          <input
+                                            name="connectorId"
+                                            type="hidden"
+                                            value={renderConnector.id}
+                                          />
+                                          <input name="toolName" type="hidden" value={tool.name} />
+                                          <input
+                                            name="approved"
+                                            type="hidden"
+                                            value={approval ? "false" : "true"}
+                                          />
+                                          <button type="submit">
+                                            {approval ? copy.mcpView.revoke : copy.mcpView.approve}
+                                          </button>
+                                        </form>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <form action={setMCPConnectorEnabledAction}>
-                              <input name="projectId" type="hidden" value={activeProject.id} />
-                              <input name="connectorId" type="hidden" value={connector.id} />
-                              <input
-                                name="enabled"
-                                type="hidden"
-                                value={connector.enabled ? "false" : "true"}
-                              />
-                              <button type="submit">
-                                {connector.enabled
-                                  ? copy.mcpView.disable
-                                  : copy.mcpView.enable}
-                              </button>
-                            </form>
-                            <div className="mcpToolGrid" aria-label={copy.mcpView.toolsTitle}>
-                              {connector.tools.map((tool) => {
-                                const approval = mcpState.approvals.find(
-                                  (record) =>
-                                    record.connectorId === connector.id &&
-                                    record.toolName === tool.name &&
-                                    record.state === "approved"
-                                );
-                                return (
-                                  <div className="mcpToolCard" key={tool.name}>
-                                    <strong>{tool.name}</strong>
-                                    <span>{copy.mcpView.permissionSummary(tool.permission)}</span>
-                                    <small>
-                                      {copy.mcpView.rolesSummary(
-                                        tool.roles.map((role) => copy.mcpView.roleLabels[role])
-                                      )}
-                                    </small>
-                                    <small>
-                                      {tool.requiresApproval
-                                        ? copy.mcpView.approvalRequired
-                                        : copy.mcpView.approvalNotRequired}
-                                    </small>
-                                    {tool.requiresApproval ? (
-                                      <form action={setMCPToolApprovalAction}>
-                                        <input
-                                          name="projectId"
-                                          type="hidden"
-                                          value={activeProject.id}
-                                        />
-                                        <input
-                                          name="connectorId"
-                                          type="hidden"
-                                          value={connector.id}
-                                        />
-                                        <input name="toolName" type="hidden" value={tool.name} />
-                                        <input
-                                          name="approved"
-                                          type="hidden"
-                                          value={approval ? "false" : "true"}
-                                        />
-                                        <button type="submit">
-                                          {approval ? copy.mcpView.revoke : copy.mcpView.approve}
-                                        </button>
-                                      </form>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <p>{copy.mcpView.emptyConnectors}</p>
                       )}
@@ -851,6 +859,78 @@ function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState 
       deployer: []
     }
   };
+}
+
+interface RenderableMCPTool {
+  name: string;
+  permission: string;
+  roles: unknown;
+  requiresApproval: boolean;
+}
+
+interface RenderableMCPConnector {
+  id: string;
+  name: string;
+  enabled: boolean;
+  tools: RenderableMCPTool[];
+}
+
+function toRenderableMCPConnector(
+  connector: unknown,
+  index: number,
+  invalidConnectorName: string
+): RenderableMCPConnector {
+  const source = isRecord(connector) ? connector : {};
+  const id = normalizeDisplayString(source.id) || `connector_invalid_${index + 1}`;
+  const name = normalizeDisplayString(source.name) || invalidConnectorName;
+  const tools = Array.isArray(source.tools)
+    ? source.tools.map(toRenderableMCPTool).filter(isDefined)
+    : [];
+  return {
+    id,
+    name,
+    enabled: source.enabled === true,
+    tools
+  };
+}
+
+function toRenderableMCPTool(tool: unknown, index: number): RenderableMCPTool | undefined {
+  if (!isRecord(tool)) {
+    return undefined;
+  }
+  const name = normalizeDisplayString(tool.name) || `tool_invalid_${index + 1}`;
+  const permission = normalizeDisplayString(tool.permission) || "unknown";
+  return {
+    name,
+    permission,
+    roles: tool.roles,
+    requiresApproval: tool.requiresApproval === true
+  };
+}
+
+function toMCPRoleLabels(roles: unknown, roleLabels: Record<string, string>): string[] {
+  if (!Array.isArray(roles)) {
+    return [];
+  }
+  return roles.flatMap((role) => {
+    if (typeof role !== "string") {
+      return [];
+    }
+    const label = roleLabels[role];
+    return label ? [label] : [];
+  });
+}
+
+function normalizeDisplayString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undefined {
