@@ -82,6 +82,7 @@ export type RuntimeEvent =
       baseUrlConfigured?: boolean;
       apiKeyEnvConfigured?: boolean;
       modelCapabilities?: ModelResponse["modelCapabilities"];
+      usage: ModelResponse["usage"];
     }
   | {
       type: "runtime.context.loaded";
@@ -265,7 +266,8 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
       : {}),
     ...(response.modelCapabilities
       ? { modelCapabilities: { ...response.modelCapabilities } }
-      : {})
+      : {}),
+    usage: { ...response.usage }
   };
 }
 

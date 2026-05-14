@@ -837,7 +837,8 @@ describe("demo workbench service", () => {
         model: "glm-5.1",
         baseUrlConfigured: true,
         apiKeyEnvConfigured: true,
-        role: "planner"
+        role: "planner",
+        usage: { inputTokens: 9, outputTokens: 4 }
       })
     });
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");

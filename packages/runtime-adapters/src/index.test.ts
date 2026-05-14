@@ -61,7 +61,11 @@ describe("local agent runtime adapter", () => {
         runId: "run_builder_1",
         role: "builder",
         provider: "mock-anthropic",
-        model: "code-model"
+        model: "code-model",
+        usage: {
+          inputTokens: 6,
+          outputTokens: 32
+        }
       },
       {
         type: "artifact.created",
@@ -284,7 +288,11 @@ describe("local agent runtime adapter", () => {
       expect.objectContaining({
         type: "model.completed",
         provider: "project-openai",
-        model: "gpt-5.4"
+        model: "gpt-5.4",
+        usage: {
+          inputTokens: 2,
+          outputTokens: 32
+        }
       })
     );
   });
@@ -330,7 +338,11 @@ describe("local agent runtime adapter", () => {
         api: "anthropic-messages",
         model: "glm-5.1",
         baseUrlConfigured: true,
-        apiKeyEnvConfigured: true
+        apiKeyEnvConfigured: true,
+        usage: {
+          inputTokens: 2,
+          outputTokens: 32
+        }
       })
     );
     expect(JSON.stringify(result.events)).not.toContain("ANTHROPIC_API_KEY");
