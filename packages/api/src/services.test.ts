@@ -1087,6 +1087,278 @@ describe("demo workbench service", () => {
     expect(serializedEvents).not.toContain("https://open.bigmodel.cn");
   });
 
+  it("uses parsed real Builder artifacts when REAL_MODEL_RUNTIME is enabled", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const modelBrief = {
+      ...sampleBrief,
+      title: "Model Planned Landing Page",
+      sections: sampleBrief.sections.map((section, index) => ({
+        ...section,
+        id: `model_section_${index + 1}`
+      }))
+    };
+    const modelArtifacts = completeModelArtifacts();
+    const responseQueue = [
+      JSON.stringify({
+        id: "chatcmpl_planner",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(modelBrief) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+      }),
+      JSON.stringify({
+        id: "chatcmpl_builder",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(modelArtifacts) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 80, total_tokens: 100 }
+      })
+    ];
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      const body = responseQueue.shift();
+      if (!body) {
+        throw new Error("unexpected_fetch_call");
+      }
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(pageVersion.artifacts).toEqual(modelArtifacts);
+    expect(pageVersion.artifacts.indexHtml).toContain("MODEL_BUILDER_ARTIFACT_SECRET");
+    expect(pageVersion.artifacts.indexHtml).not.toContain("Spring essentials, ready today");
+
+    const builderRequestBody = JSON.parse(String(fetchCalls[1]?.init?.body));
+    expect(builderRequestBody.model).toBe("glm-5.1");
+    expect(builderRequestBody.messages).toHaveLength(1);
+    expect(builderRequestBody.messages[0]).toMatchObject({ role: "user" });
+    expect(builderRequestBody.messages[0].content).toContain("Return exactly one JSON object");
+    expect(builderRequestBody.messages[0].content).toContain("indexHtml");
+    expect(builderRequestBody.messages[0].content).toContain("stylesCss");
+    expect(builderRequestBody.messages[0].content).toContain("scriptJs");
+    expect(builderRequestBody.messages[0].content).toContain("Do not include React, Vue, Angular, Svelte");
+    expect(builderRequestBody.messages[0].content).toContain("Model Planned Landing Page");
+
+    const events = await repositories.runEvents.listForProject(project.id);
+    const builderEvents = events.filter((event) => event.runId === "run_builder_version_1");
+    expect(builderEvents.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "artifact.created",
+      "model.output.parsed",
+      "run.completed"
+    ]);
+    expect(builderEvents.find((event) => event.type === "model.output.parsed")).toMatchObject({
+      runId: "run_builder_version_1",
+      type: "model.output.parsed",
+      message: "Builder output parsed as static artifacts",
+      payload: expect.objectContaining({
+        role: "builder",
+        schema: "StaticArtifactsSchema",
+        artifactKind: "three-file-static",
+        hasExternalCss: true,
+        hasExternalImages: true
+      })
+    });
+    const serializedBuilderEvents = JSON.stringify(builderEvents);
+    expect(serializedBuilderEvents).not.toContain("MODEL_BUILDER_ARTIFACT_SECRET");
+    expect(serializedBuilderEvents).not.toContain(modelArtifacts.stylesCss);
+    expect(serializedBuilderEvents).not.toContain(modelArtifacts.scriptJs);
+    expect(serializedBuilderEvents).not.toContain("sk-test-secret");
+    expect(serializedBuilderEvents).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(serializedBuilderEvents).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("fails closed when real Builder output violates static artifact policy", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const modelBrief = {
+      ...sampleBrief,
+      title: "Model Planned Landing Page"
+    };
+    const responseQueue = [
+      JSON.stringify({
+        id: "chatcmpl_planner",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(modelBrief) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+      }),
+      JSON.stringify({
+        id: "chatcmpl_builder",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                ...completeModelArtifacts(),
+                indexHtml: completeModelArtifacts().indexHtml.replace(
+                  '  <script src="script.js"></script>',
+                  '  <script src="https://cdn.example.com/RAW_STATIC_ARTIFACT_SECRET.js"></script>\n  <script src="script.js"></script>'
+                )
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 80, total_tokens: 100 }
+      })
+    ];
+    const fakeFetch: ModelFetch = async () => {
+      const body = responseQueue.shift();
+      if (!body) {
+        throw new Error("unexpected_fetch_call");
+      }
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+    await expect(
+      service.generatePageVersion({
+        projectId: project.id,
+        briefId: brief.id
+      })
+    ).rejects.toThrow("Builder run failed.");
+
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([]);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({ id: "run_planner_brief_1", state: "completed" }),
+      expect.objectContaining({
+        id: "run_builder_version_1",
+        projectId: project.id,
+        role: "builder",
+        state: "failed",
+        completedAt: expect.any(String)
+      })
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    const builderEvents = events.filter((event) => event.runId === "run_builder_version_1");
+    expect(builderEvents.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "model.output.parse_failed",
+      "run.failed"
+    ]);
+    expect(builderEvents.find((event) => event.type === "model.output.parse_failed")).toMatchObject({
+      runId: "run_builder_version_1",
+      type: "model.output.parse_failed",
+      message: "Builder output could not be parsed as static artifacts",
+      payload: expect.objectContaining({
+        role: "builder",
+        schema: "StaticArtifactsSchema",
+        reason: "policy_violation",
+        policyCode: "external_script_blocked"
+      })
+    });
+    const serializedBuilderEvents = JSON.stringify(builderEvents);
+    expect(serializedBuilderEvents).not.toContain("RAW_STATIC_ARTIFACT_SECRET");
+    expect(serializedBuilderEvents).not.toContain("MODEL_BUILDER_ARTIFACT_SECRET");
+    expect(serializedBuilderEvents).not.toContain("sk-test-secret");
+    expect(serializedBuilderEvents).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(serializedBuilderEvents).not.toContain("https://open.bigmodel.cn");
+  });
+
   it("keeps deterministic runtime unless REAL_MODEL_RUNTIME is explicitly enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     let fetchCallCount = 0;
@@ -2876,6 +3148,43 @@ function completeArtifacts(): StaticArtifacts {
     indexHtml: "<!doctype html><html></html>",
     stylesCss: ":root {}",
     scriptJs: "window.lpAgent = true;"
+  };
+}
+
+function completeModelArtifacts(): StaticArtifacts {
+  return {
+    indexHtml: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model Built LP</title>
+  <meta name="description" content="MODEL_BUILDER_ARTIFACT_SECRET static LP.">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">
+  <link rel="stylesheet" href="https://assets.example.com/brand/campaign.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>MODEL_BUILDER_ARTIFACT_SECRET</h1>
+      <p>Model generated static LP artifacts.</p>
+      <a href="#products" data-track="cta:hero">Shop now</a>
+      <img src="https://cdn.example.com/product.jpg" alt="Product">
+    </section>
+    <section id="products"><h2>Products</h2></section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>`,
+    stylesCss: `:root { --color-primary: #0f766e; }
+body { margin: 0; font-family: Inter, system-ui, sans-serif; }
+.hero { padding: 64px 24px; }`,
+    scriptJs: `document.querySelectorAll("[data-track]").forEach((element) => {
+  element.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("lp-agent-track"));
+  });
+});`
   };
 }
 
