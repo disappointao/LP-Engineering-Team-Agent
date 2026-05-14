@@ -116,6 +116,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 OpenAI-compatible Chat Completions adapter design.
    - Read this after the real model runtime wiring plan when adding the generic `openai-completions` model-gateway adapter for Zhipu `paas/v4` and other OpenAI-compatible providers.
 
+29. `plans/2026-05-14-openai-compatible-adapter.md`
+   - Stage 3 OpenAI-compatible Chat Completions adapter implementation plan.
+   - Read this after the OpenAI-compatible adapter design when implementing fake-fetch tests, the generic `openai-completions` adapter, Zhipu `paas/v4` smoke testing, runtime dispatch, and Web/API runtime coverage.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

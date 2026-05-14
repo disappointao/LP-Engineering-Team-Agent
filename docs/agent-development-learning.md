@@ -320,8 +320,10 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 下一步 OpenAI-compatible adapter 设计：
 
 - [2026-05-14-openai-compatible-adapter-design.md](./superpowers/specs/2026-05-14-openai-compatible-adapter-design.md)
+- 当前实现计划：[2026-05-14-openai-compatible-adapter.md](./superpowers/plans/2026-05-14-openai-compatible-adapter.md)
 - 这一步把 `openai-completions` 从配置占位变成真实 Chat Completions 协议 adapter。
 - 智谱 `https://open.bigmodel.cn/api/paas/v4` 是第一个目标，但 adapter 要保持通用，后续可接 OpenRouter、Ollama、LM Studio、vLLM 等 OpenAI-compatible provider。
+- 真实集成测试默认跳过；本地验证智谱 `paas/v4` 时使用 `OPENAI_COMPATIBLE_BASE_URL`、`OPENAI_COMPATIBLE_API_KEY`、`OPENAI_COMPATIBLE_DEFAULT_MODEL`。
 - 学习重点：不同 provider 可以共享同一种协议 adapter，差异通过 `baseUrl`、`apiKeyEnv`、`model` 和少量兼容配置表达，不应该在 runtime 里写死某个厂商。
 
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
