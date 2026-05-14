@@ -224,6 +224,12 @@ Agent 系统里有很多运行时不可信输入，TypeScript 类型在这些地
 - event sourcing 的基本思想。
 - 为什么失败事件比直接 throw 更适合 Agent。
 
+当前计划：
+
+- [2026-05-14-run-orchestration-context-assembly.md](./superpowers/plans/2026-05-14-run-orchestration-context-assembly.md)
+- 这个计划先做 deterministic run records、ordered run events、Context Pack v0 和 Web timeline。
+- 这个计划不做真实模型、MCP 执行、流式输出、向量检索和实时协作。
+
 ### 阶段 2：Context Pack v0
 
 先定义一个小而稳定的上下文包：

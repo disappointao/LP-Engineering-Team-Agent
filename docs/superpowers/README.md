@@ -84,6 +84,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Implementation plan for the Stage 2 MCP Connector Registry MVP.
    - Read this after the MCP connector registry spec when implementing repository-backed connector state, approval-aware visible tools, runtime context wiring, and the Web MCP view.
 
+21. `plans/2026-05-14-run-orchestration-context-assembly.md`
+   - Stage 2 Milestone 6 implementation plan.
+   - Read this after the MCP connector registry plan when implementing or auditing persisted run events, context pack assembly, runtime schema validation, and Web timeline rendering.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
