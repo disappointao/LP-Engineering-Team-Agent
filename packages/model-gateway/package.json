@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run src/index.test.ts src/anthropic-messages.test.ts src/openai-completions.test.ts src/anthropic-messages.integration.test.ts",
+    "test": "vitest run src/index.test.ts src/anthropic-messages.test.ts src/openai-completions.test.ts src/anthropic-messages.integration.test.ts src/openai-completions.integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
