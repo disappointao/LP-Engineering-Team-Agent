@@ -381,6 +381,15 @@ pnpm --filter @lp-agent/model-gateway test
 - tool output 要结构化。
 - tool observation 要有 schema，不能只保存任意文本。
 
+下一步 Skill Command 执行 MVP 设计：
+
+- [2026-05-14-skill-command-execution-design.md](./superpowers/specs/2026-05-14-skill-command-execution-design.md)
+- 第一版先做已发布 `deployment` skill 预声明 command 的受控执行，不开放任意 shell 输入。
+- 每次 command 执行都需要显式审批，通过 API 侧校验 skill 绑定、发布状态、权限、secret reference 和模板变量后再调用 runner。
+- `ToolCommandRunner` 是 adapter 边界；第一版可以在 API 进程中调用 fake/local runner，后续再迁移到 `apps/agent-worker`、队列、流式日志和 cancel。
+- `ToolObservationRecord` 是后续 MCP/tool execution、部署 skill、文件操作共享的 observation 底座；事件和 observation 必须脱敏，不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
+- 这一步不是完整自动部署系统，而是给未来部署 workflow 提供安全、可审计的 skill cmd 执行入口。
+
 ### 阶段 5：压缩和检索
 
 当历史和工具输出变多后再做：
