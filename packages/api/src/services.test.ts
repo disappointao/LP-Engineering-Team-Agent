@@ -21,6 +21,10 @@ import {
   type ProjectRecord,
   type WorkbenchSnapshot
 } from "./index";
+import {
+  ContextPackSchema,
+  assembleContextPack
+} from "./context-assembler";
 
 describe("demo workbench service", () => {
   it("exports record contracts used by API consumers", () => {
@@ -885,6 +889,65 @@ describe("demo workbench service", () => {
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);
+  });
+
+  it("assembles and validates a role-specific context pack", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      taskId: "task_1",
+      input: {
+        prompt: brief.prompt,
+        brief: brief.brief
+      },
+      now: fixedClock()
+    });
+
+    expect(ContextPackSchema.parse(contextPack)).toMatchObject({
+      projectId: project.id,
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP"
+      },
+      runtimeContext: {
+        skills: [
+          expect.objectContaining({
+            id: "skill_brand",
+            content: "# Brand LP"
+          })
+        ],
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        }
+      },
+      trace: {
+        injected: expect.arrayContaining(["skills:1", "mcpTools:0", "modelRoutingPolicy:1"]),
+        omitted: expect.arrayContaining(["history:not_implemented"])
+      }
+    });
   });
 
   it("creates project mcp connectors and computes visible tools from skills and approvals", async () => {

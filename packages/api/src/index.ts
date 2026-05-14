@@ -167,6 +167,11 @@ export interface ListVisibleMCPToolsInput {
   role: AgentRole;
 }
 
+export interface CreateRuntimeContextForRoleInput {
+  projectId: string;
+  role: AgentRole;
+}
+
 export interface ProjectMCPState {
   connectors: MCPConnectorRecord[];
   approvals: MCPToolApprovalRecord[];
@@ -758,6 +763,13 @@ export class DemoWorkbenchService {
     });
   }
 
+  async createRuntimeContextForRole(
+    input: CreateRuntimeContextForRoleInput
+  ): Promise<RuntimeRunContext> {
+    await this.getProjectOrThrow(input.projectId);
+    return this.createRuntimeContext(input.projectId, input.role);
+  }
+
   async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {
     await this.getProjectOrThrow(input.projectId);
     const providerId = normalizeIdentifier(input.providerId, "model_provider_key_required");
@@ -1020,6 +1032,13 @@ export class DemoWorkbenchService {
 export function createDemoWorkbenchService(): DemoWorkbenchService {
   return new DemoWorkbenchService();
 }
+
+export {
+  ContextPackSchema,
+  assembleContextPack,
+  type ContextAssemblyTrace,
+  type ContextPack
+} from "./context-assembler";
 
 function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
   return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(createDefaultModelPolicy()));

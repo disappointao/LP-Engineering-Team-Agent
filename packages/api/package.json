@@ -18,7 +18,8 @@
     "@lp-agent/mcp-gateway": "workspace:*",
     "@lp-agent/model-gateway": "workspace:*",
     "@lp-agent/runtime-adapters": "workspace:*",
-    "@lp-agent/skills": "workspace:*"
+    "@lp-agent/skills": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
