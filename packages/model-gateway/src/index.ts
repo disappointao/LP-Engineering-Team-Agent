@@ -247,6 +247,10 @@ export class ProviderBackedModelGateway implements ModelGateway {
       return createMockModelResponse(request, route);
     }
 
+    if (route.api === "openai-completions") {
+      throwModelProviderProtocolNotImplemented(route.api);
+    }
+
     const provider = await this.providers.getProvider(route.provider);
     if (!provider) {
       throw new ModelProviderConfigurationError(
@@ -286,10 +290,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
     }
 
     if (api === "openai-completions") {
-      throw new ModelProviderConfigurationError(
-        "model_provider_protocol_not_implemented",
-        `Model provider protocol ${api} is not implemented yet`
-      );
+      throwModelProviderProtocolNotImplemented(api);
     }
 
     return createMockModelResponse(request, resolvedRoute);
@@ -391,6 +392,13 @@ function isModelRoute(route: unknown): route is ModelRoute {
 
 function isMockRoute(route: ModelRoute): boolean {
   return route.api === "mock" || (!route.api && route.provider.startsWith("mock-"));
+}
+
+function throwModelProviderProtocolNotImplemented(api: ModelProviderApi): never {
+  throw new ModelProviderConfigurationError(
+    "model_provider_protocol_not_implemented",
+    `Model provider protocol ${api} is not implemented yet`
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {

@@ -106,32 +106,12 @@ export async function completeAnthropicMessages(
     );
   }
 
-  const response = await fetchAnthropicMessages({
+  const parsed = await performAnthropicMessagesRequest({
     input,
     baseUrl,
     apiKey,
     fetch: fetchImpl
   });
-
-  if (!response.ok) {
-    throw new ModelProviderRequestError(
-      "model_provider_http_error",
-      `Model provider ${input.route.provider} returned HTTP ${response.status}`,
-      response.status
-    );
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new ModelProviderResponseError(
-      "model_provider_response_json_invalid",
-      `Model provider ${input.route.provider} returned invalid JSON`
-    );
-  }
-
-  const parsed = parseAnthropicMessagesResponse(payload, input.route.provider);
 
   return {
     provider: input.route.provider,
@@ -151,7 +131,7 @@ export async function completeAnthropicMessages(
   };
 }
 
-async function fetchAnthropicMessages({
+async function performAnthropicMessagesRequest({
   input,
   baseUrl,
   apiKey,
@@ -161,7 +141,12 @@ async function fetchAnthropicMessages({
   baseUrl: string;
   apiKey: string;
   fetch: ModelFetch;
-}): Promise<Response> {
+}): Promise<{
+  text: string;
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+}> {
   const controller = new AbortController();
   const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -180,31 +165,56 @@ async function fetchAnthropicMessages({
 
   try {
     return await Promise.race([
-      fetch(toAnthropicMessagesUrl(baseUrl), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": input.anthropicVersion ?? defaultAnthropicVersion
-        },
-        body: JSON.stringify({
-          model: input.route.model,
-          max_tokens: input.maxTokens ?? defaultMaxTokens,
-          messages: [{ role: "user", content: input.request.prompt }]
-        }),
-        signal: controller.signal
-      }),
+      (async () => {
+        const response = await fetch(toAnthropicMessagesUrl(baseUrl), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": input.anthropicVersion ?? defaultAnthropicVersion
+          },
+          body: JSON.stringify({
+            model: input.route.model,
+            max_tokens: input.maxTokens ?? defaultMaxTokens,
+            messages: [{ role: "user", content: input.request.prompt }]
+          }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new ModelProviderRequestError(
+            "model_provider_http_error",
+            `Model provider ${input.route.provider} returned HTTP ${response.status}`,
+            response.status
+          );
+        }
+
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          if (controller.signal.aborted) {
+            throw createTimeoutError(input.route.provider);
+          }
+          throw new ModelProviderResponseError(
+            "model_provider_response_json_invalid",
+            `Model provider ${input.route.provider} returned invalid JSON`
+          );
+        }
+
+        return parseAnthropicMessagesResponse(payload, input.route.provider);
+      })(),
       timeoutPromise
     ]);
   } catch (error) {
-    if (error instanceof ModelProviderRequestError) {
+    if (
+      error instanceof ModelProviderRequestError ||
+      error instanceof ModelProviderResponseError
+    ) {
       throw error;
     }
     if (controller.signal.aborted) {
-      throw new ModelProviderRequestError(
-        "model_provider_request_timeout",
-        `Model provider ${input.route.provider} request timed out`
-      );
+      throw createTimeoutError(input.route.provider);
     }
 
     throw new ModelProviderRequestError(
@@ -214,6 +224,13 @@ async function fetchAnthropicMessages({
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function createTimeoutError(providerId: string): ModelProviderRequestError {
+  return new ModelProviderRequestError(
+    "model_provider_request_timeout",
+    `Model provider ${providerId} request timed out`
+  );
 }
 
 function parseAnthropicMessagesResponse(

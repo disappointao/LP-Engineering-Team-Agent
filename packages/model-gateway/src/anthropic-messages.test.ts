@@ -160,4 +160,80 @@ describe("anthropic messages model gateway", () => {
       text: "planner response from mock-openai/planning-model"
     });
   });
+
+  it("times out when response body parsing exceeds the provider timeout", async () => {
+    const response = new Response("", {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+    response.json = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return {
+        type: "message",
+        model: "glm-5.1",
+        content: [{ type: "text", text: "late body" }],
+        usage: { input_tokens: 1, output_tokens: 1 }
+      };
+    };
+
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () => response,
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" },
+      timeoutMs: 1
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderRequestError",
+      code: "model_provider_request_timeout"
+    });
+  });
+
+  it("fails closed for explicit OpenAI-compatible routes before provider lookup", async () => {
+    const policy = createPolicy();
+    policy.builder = {
+      provider: "missing-openai-provider",
+      providerName: "Missing OpenAI",
+      api: "openai-completions",
+      model: "glm-5.1",
+      baseUrlConfigured: true,
+      apiKeyEnvConfigured: true
+    };
+
+    let providerLookups = 0;
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          providerLookups += 1;
+          return undefined;
+        }
+      }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: policy
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_protocol_not_implemented"
+    });
+    expect(providerLookups).toBe(0);
+  });
 });
