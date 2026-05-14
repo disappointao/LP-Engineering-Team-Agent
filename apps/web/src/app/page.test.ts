@@ -335,6 +335,9 @@ describe("HomePage project flow errors", () => {
 
     expect(text).toContain("Project models");
     expect(text).toContain("Spring Campaign");
+    expect(text).toContain("API protocol");
+    expect(text).toContain("Anthropic Messages compatible");
+    expect(text).toContain("Default model id");
     expect(inputs.some((input) => input.props?.name === "providerId")).toBe(true);
     expect(selects.some((select) => select.props?.name === "provider")).toBe(true);
     expect(text).toContain("mock-anthropic/code-model");
@@ -632,7 +635,11 @@ describe("HomePage project flow errors", () => {
             targetKey: "project_1",
             name: "OpenAI",
             provider: "openai",
-            config: { secretEnvName: "OPENAI_API_KEY" },
+            config: {
+              api: "anthropic-messages",
+              apiKeyEnv: "OPENAI_API_KEY",
+              baseUrl: "https://api.openai.com/v1"
+            },
             enabled: true,
             createdAt: "2026-05-12T08:00:00.000Z",
             updatedAt: "2026-05-12T08:00:00.000Z"
@@ -665,6 +672,9 @@ describe("HomePage project flow errors", () => {
     const text = collectText(page).join(" ");
 
     expect(text).toContain("OpenAI");
+    expect(text).toContain("anthropic-messages");
+    expect(text).toContain("Base URL configured");
+    expect(text).toContain("API key env configured");
     expect(text).toContain("provider_openai/gpt-5.4");
     expect(text).toContain("Builder");
   });

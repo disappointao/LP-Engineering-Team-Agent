@@ -47,4 +47,17 @@ describe("web i18n", () => {
     expect(en.projectFlow.createDescription).not.toContain("repository");
     expect(en.chat.suggestions.join(" ")).not.toContain("deployment");
   });
+
+  it("has localized model provider protocol copy", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    expect(en.modelsView.providerApiLabel).toBe("API protocol");
+    expect(en.modelsView.providerApis["anthropic-messages"]).toBe("Anthropic Messages compatible");
+    expect(zh.modelsView.providerApiLabel).toBe("API 协议");
+    expect(zh.modelsView.providerApis["openai-completions"]).toBe(
+      "OpenAI Chat Completions 兼容"
+    );
+    expect(zh.modelsView.errors.model_provider_api_key_env_invalid).toContain("环境变量");
+  });
 });

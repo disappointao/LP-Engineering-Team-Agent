@@ -581,17 +581,32 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         )}
                       </select>
 
+                      <label htmlFor="api">{copy.modelsView.providerApiLabel}</label>
+                      <select id="api" name="api" defaultValue="mock">
+                        {(["mock", "openai-completions", "anthropic-messages"] as const).map(
+                          (api) => (
+                            <option value={api} key={api}>
+                              {copy.modelsView.providerApis[api]}
+                            </option>
+                          )
+                        )}
+                      </select>
+
                       <label htmlFor="baseUrl">{copy.modelsView.baseUrlLabel}</label>
                       <input id="baseUrl" name="baseUrl" aria-describedby="base-url-example" />
                       <small id="base-url-example">https://api.openai.com/v1</small>
 
-                      <label htmlFor="secretEnvName">{copy.modelsView.secretEnvNameLabel}</label>
+                      <label htmlFor="apiKeyEnv">{copy.modelsView.apiKeyEnvLabel}</label>
                       <input
-                        id="secretEnvName"
-                        name="secretEnvName"
-                        aria-describedby="secret-env-example"
+                        id="apiKeyEnv"
+                        name="apiKeyEnv"
+                        aria-describedby="api-key-env-example"
                       />
-                      <small id="secret-env-example">OPENAI_API_KEY</small>
+                      <small id="api-key-env-example">ANTHROPIC_API_KEY</small>
+
+                      <label htmlFor="modelId">{copy.modelsView.providerModelIdLabel}</label>
+                      <input id="modelId" name="modelId" aria-describedby="model-id-example" />
+                      <small id="model-id-example">glm-5.1</small>
 
                       <button type="submit">{copy.modelsView.createProvider}</button>
                     </form>
@@ -605,6 +620,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               <strong>{provider.name}</strong>
                               <span>
                                 {copy.modelsView.providerTypes[provider.provider]} ·{" "}
+                                {provider.config.api ?? "legacy"} ·{" "}
+                                {provider.config.baseUrl
+                                  ? copy.modelsView.baseUrlConfigured
+                                  : copy.modelsView.fallbackLabel} ·{" "}
+                                {provider.config.apiKeyEnv || provider.config.secretEnvName
+                                  ? copy.modelsView.apiKeyEnvConfigured
+                                  : copy.modelsView.fallbackLabel} ·{" "}
                                 {provider.enabled
                                   ? copy.modelsView.enabled
                                   : copy.modelsView.disabled}

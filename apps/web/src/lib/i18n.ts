@@ -134,8 +134,13 @@ export interface WorkbenchCopy {
     providerIdLabel: string;
     providerNameLabel: string;
     providerTypeLabel: string;
+    providerApiLabel: string;
     baseUrlLabel: string;
     secretEnvNameLabel: string;
+    apiKeyEnvLabel: string;
+    providerModelIdLabel: string;
+    baseUrlConfigured: string;
+    apiKeyEnvConfigured: string;
     createProvider: string;
     providersTitle: string;
     routesTitle: string;
@@ -149,6 +154,7 @@ export interface WorkbenchCopy {
     fallbackLabel: string;
     roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
     providerTypes: Record<"mock" | "openai" | "anthropic" | "internal" | "custom", string>;
+    providerApis: Record<"mock" | "openai-completions" | "anthropic-messages", string>;
     errors: Record<ModelFlowErrorCode, string>;
   };
   status: {
@@ -460,8 +466,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       providerIdLabel: "Provider key",
       providerNameLabel: "Display name",
       providerTypeLabel: "Provider type",
+      providerApiLabel: "API protocol",
       baseUrlLabel: "Base URL",
       secretEnvNameLabel: "Secret env var",
+      apiKeyEnvLabel: "API key env var",
+      providerModelIdLabel: "Default model id",
+      baseUrlConfigured: "Base URL configured",
+      apiKeyEnvConfigured: "API key env configured",
       createProvider: "Create provider",
       providersTitle: "Providers",
       routesTitle: "Role routes",
@@ -485,6 +496,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         anthropic: "Anthropic",
         internal: "Internal",
         custom: "Custom"
+      },
+      providerApis: {
+        mock: "Mock",
+        "openai-completions": "OpenAI Chat Completions compatible",
+        "anthropic-messages": "Anthropic Messages compatible"
       },
       errors: {
         project_not_found: "The selected project is no longer available.",
@@ -794,8 +810,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       providerIdLabel: "供应商键",
       providerNameLabel: "显示名称",
       providerTypeLabel: "供应商类型",
+      providerApiLabel: "API 协议",
       baseUrlLabel: "Base URL",
       secretEnvNameLabel: "密钥环境变量",
+      apiKeyEnvLabel: "API Key 环境变量",
+      providerModelIdLabel: "默认模型 ID",
+      baseUrlConfigured: "已配置 Base URL",
+      apiKeyEnvConfigured: "已配置 API Key 环境变量",
       createProvider: "创建供应商",
       providersTitle: "供应商",
       routesTitle: "角色路由",
@@ -819,6 +840,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         anthropic: "Anthropic",
         internal: "内部",
         custom: "自定义"
+      },
+      providerApis: {
+        mock: "Mock",
+        "openai-completions": "OpenAI Chat Completions 兼容",
+        "anthropic-messages": "Anthropic Messages 兼容"
       },
       errors: {
         project_not_found: "当前项目已经不可用。",
