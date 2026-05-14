@@ -291,6 +291,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 当前设计：
 
 - [2026-05-14-provider-neutral-model-config-design.md](./superpowers/specs/2026-05-14-provider-neutral-model-config-design.md)
+- 当前实现计划：[2026-05-14-provider-neutral-model-config.md](./superpowers/plans/2026-05-14-provider-neutral-model-config.md)
 - 这个设计参考 pi-mono 的 `provider + api + baseUrl + secret reference + models + compat` 思路，但不绑定 pi-mono 依赖。
 - 第一步只做通用配置和 mock runtime 链路验证，不做真实模型调用、streaming、tool-call 转换、fallback 或 OAuth。
 

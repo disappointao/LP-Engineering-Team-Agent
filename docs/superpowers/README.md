@@ -92,6 +92,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 model provider configuration design.
    - Read this after the run orchestration/context assembly plan when adding pi-mono-inspired but project-owned provider-neutral model configuration, API protocol selection, sanitized runtime provider metadata, and mock-chain verification before real provider adapters.
 
+23. `plans/2026-05-14-provider-neutral-model-config.md`
+   - Stage 3 provider-neutral model config implementation plan.
+   - Read this after the provider-neutral model config spec when implementing generic provider API protocol selection, non-secret provider config storage, sanitized runtime metadata, Web Models controls, and mock-chain verification.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
