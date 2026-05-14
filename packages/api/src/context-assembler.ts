@@ -37,9 +37,25 @@ const RuntimeArtifactWorkspaceSchema = z.object({
   writableFiles: z.array(z.string().min(1))
 });
 
+const ModelProviderApiSchema = z.enum(["mock", "openai-completions", "anthropic-messages"]);
+
 const ModelRouteSchema = z.object({
   provider: z.string().min(1),
-  model: z.string().min(1)
+  providerName: z.string().min(1).optional(),
+  api: ModelProviderApiSchema.optional(),
+  model: z.string().min(1),
+  baseUrlConfigured: z.boolean().optional(),
+  apiKeyEnvConfigured: z.boolean().optional(),
+  modelCapabilities: z
+    .object({
+      name: z.string().min(1).optional(),
+      contextWindow: z.number().int().positive().optional(),
+      maxTokens: z.number().int().positive().optional(),
+      supportsTools: z.boolean().optional(),
+      supportsStreaming: z.boolean().optional(),
+      supportsImages: z.boolean().optional()
+    })
+    .optional()
 });
 
 const ModelRoutingPolicySchema = z.object({
@@ -105,6 +121,9 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
         `skills:${runtimeContext.skills.length}`,
         `mcpTools:${runtimeContext.mcpTools.length}`,
         runtimeContext.modelRoutingPolicy ? "modelRoutingPolicy:1" : "modelRoutingPolicy:0",
+        runtimeContext.modelRoutingPolicy
+          ? `modelProvider:${input.role}:${runtimeContext.modelRoutingPolicy[input.role].api ?? "legacy"}`
+          : "modelProvider:0",
         `artifactWorkspace:${runtimeContext.artifactWorkspace.mode}`
       ],
       omitted: ["history:not_implemented", "toolObservations:not_implemented"]

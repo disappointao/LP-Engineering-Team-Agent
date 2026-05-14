@@ -37,6 +37,7 @@ import {
   agentRoles,
   createDefaultModelPolicy,
   type AgentRole,
+  type ModelRoute,
   type ModelProviderApi,
   type ModelProviderRuntimeConfig,
   type ModelRoutingPolicy
@@ -992,9 +993,15 @@ export class DemoWorkbenchService {
       if (route.model.trim().length === 0) {
         throw new Error("model_id_required");
       }
+      const api = resolveProviderApi(provider);
       resolved[role] = {
         provider: provider.id,
-        model: route.model
+        providerName: provider.name,
+        api,
+        model: route.model,
+        baseUrlConfigured: Boolean(provider.config.baseUrl),
+        apiKeyEnvConfigured: Boolean(provider.config.apiKeyEnv ?? provider.config.secretEnvName),
+        modelCapabilities: toRouteModelCapabilities(provider, route.model)
       };
     }
 
@@ -1335,6 +1342,40 @@ function normalizeModelProviderConfig(input: {
     ...(baseUrl ? { baseUrl } : {}),
     ...(apiKeyEnv ? { apiKeyEnv } : {}),
     ...(modelId ? { models: [{ id: modelId }] } : {})
+  };
+}
+
+function resolveProviderApi(provider: ModelProviderRecord): ModelProviderApi {
+  if (provider.config.api) {
+    return provider.config.api;
+  }
+  return normalizeModelProviderApi(provider.provider, undefined);
+}
+
+function findProviderModelConfig(
+  provider: ModelProviderRecord,
+  modelId: string
+): NonNullable<ModelProviderRuntimeConfig["models"]>[number] | undefined {
+  return provider.config.models?.find((model) => model.id === modelId);
+}
+
+function toRouteModelCapabilities(
+  provider: ModelProviderRecord,
+  modelId: string
+): ModelRoute["modelCapabilities"] {
+  const model = findProviderModelConfig(provider, modelId);
+  if (!model) {
+    return {};
+  }
+  return {
+    ...(model.name ? { name: model.name } : {}),
+    ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+    ...(model.maxTokens !== undefined ? { maxTokens: model.maxTokens } : {}),
+    ...(model.supportsTools !== undefined ? { supportsTools: model.supportsTools } : {}),
+    ...(model.supportsStreaming !== undefined
+      ? { supportsStreaming: model.supportsStreaming }
+      : {}),
+    ...(model.supportsImages !== undefined ? { supportsImages: model.supportsImages } : {})
   };
 }
 

@@ -725,6 +725,40 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(provider)).not.toContain("sk-");
   });
 
+  it("resolves model routes with sanitized provider metadata", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const policy = await service.resolveModelRoutingPolicyForProject(project.id);
+
+    expect(policy.builder).toEqual({
+      provider: "zhipu",
+      providerName: "智谱 GLM",
+      api: "anthropic-messages",
+      model: "glm-5.1",
+      baseUrlConfigured: true,
+      apiKeyEnvConfigured: true,
+      modelCapabilities: {}
+    });
+    expect(JSON.stringify(policy)).not.toContain("ANTHROPIC_API_KEY");
+  });
+
   it("maps legacy provider types to default API protocols", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });
@@ -793,10 +827,12 @@ describe("demo workbench service", () => {
     const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
     await service.generatePageVersion({ projectId: project.id, briefId: brief.id });
 
-    expect(builderRuntime.requests[0]?.context?.modelRoutingPolicy?.builder).toEqual({
-      provider: "provider_openai",
-      model: "gpt-5.4"
-    });
+    expect(builderRuntime.requests[0]?.context?.modelRoutingPolicy?.builder).toEqual(
+      expect.objectContaining({
+        provider: "provider_openai",
+        model: "gpt-5.4"
+      })
+    );
   });
 
   it("rejects disabled model providers during route resolution", async () => {
@@ -928,14 +964,18 @@ describe("demo workbench service", () => {
     ]);
     expect(state.routes).toHaveLength(2);
     expect(new Set(state.routes.map((route) => route.id)).size).toBe(2);
-    expect(state.resolvedPolicy.planner).toEqual({
-      provider: provider.id,
-      model: "gpt-5-planner"
-    });
-    expect(state.resolvedPolicy.builder).toEqual({
-      provider: provider.id,
-      model: "gpt-5-builder"
-    });
+    expect(state.resolvedPolicy.planner).toEqual(
+      expect.objectContaining({
+        provider: provider.id,
+        model: "gpt-5-planner"
+      })
+    );
+    expect(state.resolvedPolicy.builder).toEqual(
+      expect.objectContaining({
+        provider: provider.id,
+        model: "gpt-5-builder"
+      })
+    );
   });
 
   it("updates the same model route id when upserting an existing role", async () => {
@@ -969,10 +1009,12 @@ describe("demo workbench service", () => {
       model: "gpt-5.5"
     });
     expect(state.routes).toHaveLength(1);
-    expect(state.resolvedPolicy.builder).toEqual({
-      provider: provider.id,
-      model: "gpt-5.5"
-    });
+    expect(state.resolvedPolicy.builder).toEqual(
+      expect.objectContaining({
+        provider: provider.id,
+        model: "gpt-5.5"
+      })
+    );
   });
 
   it("rejects invalid model provider input", async () => {
@@ -1256,6 +1298,12 @@ describe("demo workbench service", () => {
             content: "# Brand LP"
           })
         ],
+        modelRoutingPolicy: {
+          builder: expect.objectContaining({
+            provider: "mock-anthropic",
+            model: "code-model"
+          })
+        },
         artifactWorkspace: {
           mode: "memory",
           writableFiles: ["index.html", "styles.css", "script.js"]
