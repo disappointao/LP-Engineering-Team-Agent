@@ -53,6 +53,14 @@ const FRAMEWORK_MARKERS: RegExp[] = [
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/(?:react|react-dom|vue|@angular|svelte|next|nuxt)/i
 ];
 
+const FRAMEWORK_SCRIPT_MARKERS: RegExp[] = [
+  /\bReact(?:DOM)?\s*\./,
+  /\bReactDOM\s*\.\s*createRoot\b/,
+  /\bReact\s*\.\s*createElement\b/,
+  /\bimport\s+.*\bfrom\s+["'](?:react|react-dom(?:\/client)?)["']/,
+  /\brequire\s*\(\s*["'](?:react|react-dom(?:\/client)?)["']\s*\)/
+];
+
 const CSS_FRAMEWORK_HREFS: RegExp[] = [
   /(?:^|[\/@])bootstrap(?:[@/.-]|$)/i,
   /cdn\.tailwindcss\.com|(?:^|[\/@])tailwind(?:css)?(?:[@/.-]|$)/i,
@@ -213,6 +221,11 @@ function validateArtifactPolicy(artifacts: StaticArtifacts): void {
 
   for (const marker of FRAMEWORK_MARKERS) {
     if (marker.test(combined)) {
+      throw policyViolation("framework_marker_detected");
+    }
+  }
+  for (const marker of FRAMEWORK_SCRIPT_MARKERS) {
+    if (marker.test(artifacts.scriptJs)) {
       throw policyViolation("framework_marker_detected");
     }
   }

@@ -287,6 +287,16 @@ describe("structured static artifact model output", () => {
     expect(parsed.indexHtml).toContain("React quickly to customer demand");
   });
 
+  it("rejects React runtime APIs in script output", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      scriptJs: "const root = ReactDOM.createRoot(document.getElementById('root')); root.render(React.createElement(App));"
+    }));
+
+    expect(error.reason).toBe("policy_violation");
+    expect(error.policyCode).toBe("framework_marker_detected");
+  });
+
   it("does not expose raw policy-violating output in failure payloads", () => {
     const error = captureParseError(JSON.stringify({
       ...validArtifacts(),
