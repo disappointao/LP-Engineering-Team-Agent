@@ -310,9 +310,11 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 下一步真实 runtime 接线设计：
 
 - [2026-05-14-real-model-runtime-wiring-design.md](./superpowers/specs/2026-05-14-real-model-runtime-wiring-design.md)
+- 当前实现计划：[2026-05-14-real-model-runtime-wiring.md](./superpowers/plans/2026-05-14-real-model-runtime-wiring.md)
 - 这一步把 `ProviderBackedModelGateway` 接入 Web/API/runtime，但必须通过 `REAL_MODEL_RUNTIME=1` 显式开启。
 - `REAL_MODEL_PROVIDER_TEST=1` 只控制真实 provider 集成测试，不应该触发 Web/API 的真实模型运行。
 - 这一阶段只验证真实模型能进入 run timeline，LP 产物仍保持 deterministic 静态 HTML/CSS/JS，不直接由模型输出驱动。
+- 学习重点：真实模型接入不是把所有 runtime 都替换成网络调用，而是在服务边界增加可测试的 factory、env 开关、仓储 resolver、fake-fetch 单测和脱敏事件。
 
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 

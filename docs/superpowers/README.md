@@ -108,6 +108,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 real model runtime wiring design.
    - Read this after the Anthropic Messages adapter plan when wiring `ProviderBackedModelGateway` into Web/API/runtime behind an explicit local opt-in switch while preserving deterministic defaults and static LP artifact generation.
 
+27. `plans/2026-05-14-real-model-runtime-wiring.md`
+   - Stage 3 real model runtime wiring implementation plan.
+   - Read this after the real model runtime wiring design when implementing or auditing the API-owned runtime factory, repository-backed provider resolver, explicit `REAL_MODEL_RUNTIME=1` switch, fake-fetch API tests, and sanitized run event behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
