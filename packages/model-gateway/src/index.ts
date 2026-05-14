@@ -1,3 +1,9 @@
+import {
+  ModelProviderConfigurationError,
+  completeAnthropicMessages,
+  type ModelFetch
+} from "./anthropic-messages";
+
 export type AgentRole = "planner" | "builder" | "reviewer" | "deployer";
 
 export type ModelProviderApi = "mock" | "openai-completions" | "anthropic-messages";
@@ -24,6 +30,37 @@ export interface ModelProviderRuntimeConfig {
   headers?: Record<string, ModelProviderHeaderRef>;
   models?: ModelProviderModelConfig[];
   compat?: Record<string, unknown>;
+}
+
+export {
+  ModelProviderConfigurationError,
+  ModelProviderRequestError,
+  ModelProviderResponseError,
+  completeAnthropicMessages,
+  toAnthropicMessagesUrl,
+  type AnthropicMessagesCompleteInput,
+  type ModelFetch
+} from "./anthropic-messages";
+
+export interface ModelProviderRuntimeRecord {
+  id: string;
+  name?: string;
+  enabled: boolean;
+  config: ModelProviderRuntimeConfig;
+}
+
+export interface ModelProviderRuntimeResolver {
+  getProvider(providerId: string): Promise<ModelProviderRuntimeRecord | undefined>;
+}
+
+export interface ProviderBackedModelGatewayOptions {
+  policy: ModelRoutingPolicy;
+  providers: ModelProviderRuntimeResolver;
+  fetch?: ModelFetch;
+  env?: Record<string, string | undefined>;
+  timeoutMs?: number;
+  anthropicVersion?: string;
+  maxTokens?: number;
 }
 
 export interface ModelRoute {
@@ -157,26 +194,7 @@ export class InMemoryModelGateway implements ModelGateway {
       context: request.context ? cloneModelRequestContext(request.context) : undefined
     });
 
-    return {
-      provider: route.provider,
-      ...(route.providerName ? { providerName: route.providerName } : {}),
-      ...(route.api ? { api: route.api } : {}),
-      model: route.model,
-      ...(route.baseUrlConfigured !== undefined
-        ? { baseUrlConfigured: route.baseUrlConfigured }
-        : {}),
-      ...(route.apiKeyEnvConfigured !== undefined
-        ? { apiKeyEnvConfigured: route.apiKeyEnvConfigured }
-        : {}),
-      ...(route.modelCapabilities
-        ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
-        : {}),
-      text: `${request.role} response from ${route.provider}/${route.model}`,
-      usage: {
-        inputTokens: Math.ceil(request.prompt.length / 4),
-        outputTokens: 32
-      }
-    };
+    return createMockModelResponse(request, route);
   }
 
   getAuditLog(): readonly ModelAuditEntry[] {
@@ -188,6 +206,127 @@ export class InMemoryModelGateway implements ModelGateway {
       context: entry.context ? cloneModelRequestContext(entry.context) : undefined
     }));
   }
+}
+
+export class ProviderBackedModelGateway implements ModelGateway {
+  private readonly auditEntries: ModelAuditEntry[] = [];
+  private readonly policy: Partial<ModelRoutingPolicy>;
+  private readonly providers: ModelProviderRuntimeResolver;
+  private readonly fetch?: ModelFetch;
+  private readonly env?: Record<string, string | undefined>;
+  private readonly timeoutMs?: number;
+  private readonly anthropicVersion?: string;
+  private readonly maxTokens?: number;
+
+  constructor(options: ProviderBackedModelGatewayOptions) {
+    this.policy = clonePolicy(options.policy);
+    this.providers = options.providers;
+    this.fetch = options.fetch;
+    this.env = options.env;
+    this.timeoutMs = options.timeoutMs;
+    this.anthropicVersion = options.anthropicVersion;
+    this.maxTokens = options.maxTokens;
+  }
+
+  async complete(request: ModelRequest): Promise<ModelResponse> {
+    const policy = request.routingPolicy ? clonePolicy(request.routingPolicy) : this.policy;
+    const route = policy[request.role];
+    if (!route) {
+      throw new ModelRouteNotConfiguredError(request.role);
+    }
+
+    this.auditEntries.push({
+      role: request.role,
+      projectId: request.projectId,
+      ...cloneRoute(route),
+      promptLength: request.prompt.length,
+      context: request.context ? cloneModelRequestContext(request.context) : undefined
+    });
+
+    if (isMockRoute(route)) {
+      return createMockModelResponse(request, route);
+    }
+
+    const provider = await this.providers.getProvider(route.provider);
+    if (!provider) {
+      throw new ModelProviderConfigurationError(
+        "model_provider_config_missing",
+        `Model provider config not found for ${route.provider}`
+      );
+    }
+    if (!provider.enabled) {
+      throw new ModelProviderConfigurationError(
+        "model_provider_disabled",
+        `Model provider ${route.provider} is disabled`
+      );
+    }
+
+    const api = route.api ?? provider.config.api;
+    const resolvedRoute: ModelRoute = {
+      ...route,
+      ...(provider.name && !route.providerName ? { providerName: provider.name } : {}),
+      api,
+      baseUrlConfigured: isNonEmptyString(provider.config.baseUrl),
+      apiKeyEnvConfigured:
+        isNonEmptyString(provider.config.apiKeyEnv) ||
+        isNonEmptyString(provider.config.secretEnvName)
+    };
+
+    if (api === "anthropic-messages") {
+      return completeAnthropicMessages({
+        request,
+        route: resolvedRoute,
+        providerConfig: provider.config,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        anthropicVersion: this.anthropicVersion,
+        maxTokens: this.maxTokens
+      });
+    }
+
+    if (api === "openai-completions") {
+      throw new ModelProviderConfigurationError(
+        "model_provider_protocol_not_implemented",
+        `Model provider protocol ${api} is not implemented yet`
+      );
+    }
+
+    return createMockModelResponse(request, resolvedRoute);
+  }
+
+  getAuditLog(): readonly ModelAuditEntry[] {
+    return this.auditEntries.map((entry) => ({
+      ...cloneRoute(entry),
+      role: entry.role,
+      projectId: entry.projectId,
+      promptLength: entry.promptLength,
+      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
+    }));
+  }
+}
+
+function createMockModelResponse(request: ModelRequest, route: ModelRoute): ModelResponse {
+  return {
+    provider: route.provider,
+    ...(route.providerName ? { providerName: route.providerName } : {}),
+    ...(route.api ? { api: route.api } : {}),
+    model: route.model,
+    ...(route.baseUrlConfigured !== undefined
+      ? { baseUrlConfigured: route.baseUrlConfigured }
+      : {}),
+    ...(route.apiKeyEnvConfigured !== undefined
+      ? { apiKeyEnvConfigured: route.apiKeyEnvConfigured }
+      : {}),
+    ...(route.modelCapabilities
+      ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
+      : {}),
+    text: `${request.role} response from ${route.provider}/${route.model}`,
+    usage: {
+      inputTokens: Math.ceil(request.prompt.length / 4),
+      outputTokens: 32
+    }
+  };
 }
 
 function cloneModelRequestContext(context: ModelRequestContext): ModelRequestContext {
@@ -248,6 +387,10 @@ function isModelRoute(route: unknown): route is ModelRoute {
 
   const candidate = route as Partial<ModelRoute>;
   return isNonEmptyString(candidate.provider) && isNonEmptyString(candidate.model);
+}
+
+function isMockRoute(route: ModelRoute): boolean {
+  return route.api === "mock" || (!route.api && route.provider.startsWith("mock-"));
 }
 
 function isNonEmptyString(value: unknown): value is string {
