@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createJsonFileWorkbenchRepositories } from "./index";
+import {
+  createJsonFileWorkbenchRepositories,
+  type RunEventRecord,
+  type RunRecord,
+  type ToolObservationRecord
+} from "./index";
 
 const createdAt = "2026-05-13T00:00:00.000Z";
 const tempDirs: string[] = [];
@@ -277,6 +282,91 @@ describe("json-file workbench repositories", () => {
     await expect(second.mcpConnectors.listForProject("project_1")).resolves.toEqual([
       expect.objectContaining({
         tools: [expect.objectContaining({ roles: ["builder"] })]
+      })
+    ]);
+  });
+
+  it("reopens runs, ordered events, and tool observations from disk", async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempDirectory);
+    const filePath = join(tempDirectory, "run-workbench-state.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const run: RunRecord = {
+      id: "run_builder_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      state: "completed",
+      startedAt: createdAt,
+      completedAt: "2026-05-13T00:01:00.000Z",
+      contextSummary: {
+        injected: ["skills:1"],
+        omitted: []
+      }
+    };
+    const firstEvent: RunEventRecord = {
+      id: "run_event_1",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 2,
+      type: "model.completed",
+      message: "builder model call completed",
+      payload: {
+        provider: "mock-anthropic"
+      },
+      createdAt: "2026-05-13T00:00:30.000Z"
+    };
+    const secondEvent: RunEventRecord = {
+      id: "run_event_2",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 1,
+      type: "run.started",
+      message: "builder run started",
+      payload: {
+        role: "builder"
+      },
+      createdAt
+    };
+    const observation: ToolObservationRecord = {
+      id: "tool_observation_1",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      toolName: "searchAssets",
+      input: {
+        query: "hero"
+      },
+      outputSummary: "Found three candidate hero images.",
+      state: "completed",
+      createdAt
+    };
+
+    await first.runs.save(run);
+    await first.runEvents.save(firstEvent);
+    await first.runEvents.save(secondEvent);
+    await first.toolObservations.save(observation);
+
+    const copyFilePath = join(tempDirectory, "run-workbench-state-copy.json");
+    const second = createJsonFileWorkbenchRepositories({
+      filePath: copyFilePath
+    });
+    const raw = await readFile(filePath, "utf8");
+    await writeFile(copyFilePath, raw, "utf8");
+
+    await expect(second.runs.getById(run.id)).resolves.toEqual(run);
+    await expect(second.runEvents.listForRun(run.id)).resolves.toEqual([
+      expect.objectContaining({ id: "run_event_2", sequence: 1 }),
+      expect.objectContaining({ id: "run_event_1", sequence: 2 })
+    ]);
+    await expect(second.toolObservations.listForRun(run.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "tool_observation_1",
+        input: {
+          query: "hero"
+        }
       })
     ]);
   });

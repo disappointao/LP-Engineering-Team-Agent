@@ -18,12 +18,18 @@ import type {
   PageVersionRepository,
   ProjectRecord,
   ProjectRepository,
+  RunEventRecord,
+  RunEventRepository,
+  RunRecord,
+  RunRepository,
   SkillBindingRecord,
   SkillBindingRepository,
   SkillRecord,
   SkillRepository,
   SkillVersionRecord,
   SkillVersionRepository,
+  ToolObservationRecord,
+  ToolObservationRepository,
   WorkbenchMessageRecord,
   WorkbenchMessageRepository,
   WorkbenchRepositories,
@@ -52,6 +58,9 @@ interface JsonFileWorkbenchState {
   modelRoutingPolicies: ModelRoutingPolicyRecord[];
   mcpConnectors: MCPConnectorRecord[];
   mcpToolApprovals: MCPToolApprovalRecord[];
+  runs: RunRecord[];
+  runEvents: RunEventRecord[];
+  toolObservations: ToolObservationRecord[];
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
@@ -86,6 +95,9 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly modelRoutingPolicies: ModelRoutingPolicyRepository;
   readonly mcpConnectors: MCPConnectorRepository;
   readonly mcpToolApprovals: MCPToolApprovalRepository;
+  readonly runs: RunRepository;
+  readonly runEvents: RunEventRepository;
+  readonly toolObservations: ToolObservationRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -102,6 +114,115 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.modelRoutingPolicies = new JsonFileModelRoutingPolicyRepository(filePath);
     this.mcpConnectors = new JsonFileMCPConnectorRepository(filePath);
     this.mcpToolApprovals = new JsonFileMCPToolApprovalRepository(filePath);
+    this.runs = new JsonFileRunRepository(filePath);
+    this.runEvents = new JsonFileRunEventRepository(filePath);
+    this.toolObservations = new JsonFileToolObservationRepository(filePath);
+  }
+}
+
+class JsonFileRunRepository implements RunRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(run: RunRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.runs = upsertBy(state.runs, copy(run), (record) => record.id === run.id);
+    });
+  }
+
+  async getById(runId: string): Promise<RunRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.runs.find((run) => run.id === runId));
+  }
+
+  async listForProject(projectId: string): Promise<RunRecord[]> {
+    const state = await readState(this.filePath);
+    return state.runs.filter((run) => run.projectId === projectId).map(copy);
+  }
+
+  async listForTask(taskId: string): Promise<RunRecord[]> {
+    const state = await readState(this.filePath);
+    return state.runs.filter((run) => run.taskId === taskId).map(copy);
+  }
+
+  async listAll(): Promise<RunRecord[]> {
+    const state = await readState(this.filePath);
+    return state.runs.map(copy);
+  }
+}
+
+class JsonFileRunEventRepository implements RunEventRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(event: RunEventRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.runEvents = upsertBy(state.runEvents, copy(event), (record) => record.id === event.id);
+    });
+  }
+
+  async listForRun(runId: string): Promise<RunEventRecord[]> {
+    return this.sequenceSortedEvents((event) => event.runId === runId);
+  }
+
+  async listForTask(taskId: string): Promise<RunEventRecord[]> {
+    return this.timelineSortedEvents((event) => event.taskId === taskId);
+  }
+
+  async listForProject(projectId: string): Promise<RunEventRecord[]> {
+    return this.timelineSortedEvents((event) => event.projectId === projectId);
+  }
+
+  async listAll(): Promise<RunEventRecord[]> {
+    return this.timelineSortedEvents(() => true);
+  }
+
+  private async sequenceSortedEvents(
+    matches: (event: RunEventRecord) => boolean
+  ): Promise<RunEventRecord[]> {
+    const state = await readState(this.filePath);
+    return state.runEvents.filter(matches).sort(compareRunEventsBySequence).map(copy);
+  }
+
+  private async timelineSortedEvents(
+    matches: (event: RunEventRecord) => boolean
+  ): Promise<RunEventRecord[]> {
+    const state = await readState(this.filePath);
+    return state.runEvents.filter(matches).sort(compareRunEventsByTimeline).map(copy);
+  }
+}
+
+class JsonFileToolObservationRepository implements ToolObservationRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(observation: ToolObservationRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.toolObservations = upsertBy(
+        state.toolObservations,
+        copy(observation),
+        (record) => record.id === observation.id
+      );
+    });
+  }
+
+  async listForRun(runId: string): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations((observation) => observation.runId === runId);
+  }
+
+  async listForTask(taskId: string): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations((observation) => observation.taskId === taskId);
+  }
+
+  async listAll(): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations(() => true);
+  }
+
+  private async sortedObservations(
+    matches: (observation: ToolObservationRecord) => boolean
+  ): Promise<ToolObservationRecord[]> {
+    const state = await readState(this.filePath);
+    return state.toolObservations
+      .filter(matches)
+      .sort(compareToolObservationsByTimeline)
+      .map(copy);
   }
 }
 
@@ -553,7 +674,10 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       modelProviders: parsed.modelProviders ?? [],
       modelRoutingPolicies: parsed.modelRoutingPolicies ?? [],
       mcpConnectors: parsed.mcpConnectors ?? [],
-      mcpToolApprovals: parsed.mcpToolApprovals ?? []
+      mcpToolApprovals: parsed.mcpToolApprovals ?? [],
+      runs: parsed.runs ?? [],
+      runEvents: parsed.runEvents ?? [],
+      toolObservations: parsed.toolObservations ?? []
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -586,7 +710,10 @@ function emptyState(): JsonFileWorkbenchState {
     modelProviders: [],
     modelRoutingPolicies: [],
     mcpConnectors: [],
-    mcpToolApprovals: []
+    mcpToolApprovals: [],
+    runs: [],
+    runEvents: [],
+    toolObservations: []
   };
 }
 
@@ -607,6 +734,34 @@ function copy<T>(record: T): T {
 
 function copyOptional<T>(record: T | undefined): T | undefined {
   return record ? copy(record) : undefined;
+}
+
+function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {
+  return (
+    a.sequence - b.sequence ||
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareRunEventsByTimeline(a: RunEventRecord, b: RunEventRecord): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.runId.localeCompare(b.runId) ||
+    a.sequence - b.sequence ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareToolObservationsByTimeline(
+  a: ToolObservationRecord,
+  b: ToolObservationRecord
+): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.runId.localeCompare(b.runId) ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 function isMissingFileError(error: unknown): boolean {

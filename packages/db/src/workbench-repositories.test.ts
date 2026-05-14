@@ -247,6 +247,19 @@ describe("in-memory workbench repositories", () => {
       },
       createdAt
     };
+    const crossRunEvent: RunEventRecord = {
+      id: "run_event_3",
+      runId: "run_reviewer_1",
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 1,
+      type: "review.started",
+      message: "reviewer run started",
+      payload: {
+        role: "reviewer"
+      },
+      createdAt: "2026-05-12T00:00:15.000Z"
+    };
     const observation: ToolObservationRecord = {
       id: "tool_observation_1",
       runId: run.id,
@@ -264,7 +277,11 @@ describe("in-memory workbench repositories", () => {
     await repositories.runs.save(run);
     await repositories.runEvents.save(firstEvent);
     await repositories.runEvents.save(secondEvent);
+    await repositories.runEvents.save(crossRunEvent);
     await repositories.toolObservations.save(observation);
+    run.contextSummary.injected.push("mutated-original");
+    firstEvent.payload.provider = "mutated-original";
+    observation.input.query = "mutated-original";
 
     const savedRun = await repositories.runs.getById(run.id);
     if (!savedRun) {
@@ -273,6 +290,8 @@ describe("in-memory workbench repositories", () => {
     savedRun.contextSummary.injected.push("mutated");
     const savedObservation = await repositories.toolObservations.listForRun(run.id);
     savedObservation[0]!.input.query = "mutated";
+    const savedEvents = await repositories.runEvents.listForRun(run.id);
+    savedEvents[1]!.payload.provider = "mutated";
 
     await expect(repositories.runs.listForProject("project_1")).resolves.toEqual([
       expect.objectContaining({
@@ -291,15 +310,31 @@ describe("in-memory workbench repositories", () => {
       expect.objectContaining({
         id: "run_event_2",
         sequence: 1,
-        type: "run.started"
+        type: "run.started",
+        payload: {
+          role: "builder"
+        }
       }),
       expect.objectContaining({
         id: "run_event_1",
         sequence: 2,
-        type: "model.completed"
+        type: "model.completed",
+        payload: {
+          provider: "mock-anthropic",
+          model: "code-model"
+        }
       })
     ]);
-    await expect(repositories.runEvents.listForTask("task_1")).resolves.toHaveLength(2);
+    await expect(repositories.runEvents.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({ id: "run_event_2" }),
+      expect.objectContaining({ id: "run_event_3" }),
+      expect.objectContaining({ id: "run_event_1" })
+    ]);
+    await expect(repositories.runEvents.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "run_event_2" }),
+      expect.objectContaining({ id: "run_event_3" }),
+      expect.objectContaining({ id: "run_event_1" })
+    ]);
     await expect(repositories.toolObservations.listForRun(run.id)).resolves.toEqual([
       expect.objectContaining({
         id: "tool_observation_1",

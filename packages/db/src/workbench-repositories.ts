@@ -403,25 +403,32 @@ class InMemoryRunEventRepository implements RunEventRepository {
   }
 
   async listForRun(runId: string): Promise<RunEventRecord[]> {
-    return this.sortedEvents((event) => event.runId === runId);
+    return this.sequenceSortedEvents((event) => event.runId === runId);
   }
 
   async listForTask(taskId: string): Promise<RunEventRecord[]> {
-    return this.sortedEvents((event) => event.taskId === taskId);
+    return this.timelineSortedEvents((event) => event.taskId === taskId);
   }
 
   async listForProject(projectId: string): Promise<RunEventRecord[]> {
-    return this.sortedEvents((event) => event.projectId === projectId);
+    return this.timelineSortedEvents((event) => event.projectId === projectId);
   }
 
   async listAll(): Promise<RunEventRecord[]> {
-    return this.sortedEvents(() => true);
+    return this.timelineSortedEvents(() => true);
   }
 
-  private sortedEvents(matches: (event: RunEventRecord) => boolean): RunEventRecord[] {
+  private sequenceSortedEvents(matches: (event: RunEventRecord) => boolean): RunEventRecord[] {
     return [...this.events.values()]
       .filter(matches)
-      .sort((a, b) => a.sequence - b.sequence)
+      .sort(compareRunEventsBySequence)
+      .map(copyRunEvent);
+  }
+
+  private timelineSortedEvents(matches: (event: RunEventRecord) => boolean): RunEventRecord[] {
+    return [...this.events.values()]
+      .filter(matches)
+      .sort(compareRunEventsByTimeline)
       .map(copyRunEvent);
   }
 }
@@ -450,6 +457,7 @@ class InMemoryToolObservationRepository implements ToolObservationRepository {
   ): ToolObservationRecord[] {
     return [...this.observations.values()]
       .filter(matches)
+      .sort(compareToolObservationsByTimeline)
       .map(copyToolObservation);
   }
 }
@@ -826,6 +834,34 @@ function copyMCPConnector(connector: MCPConnectorRecord): MCPConnectorRecord {
 
 function copyMCPToolApproval(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
   return { ...approval };
+}
+
+function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {
+  return (
+    a.sequence - b.sequence ||
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareRunEventsByTimeline(a: RunEventRecord, b: RunEventRecord): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.runId.localeCompare(b.runId) ||
+    a.sequence - b.sequence ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareToolObservationsByTimeline(
+  a: ToolObservationRecord,
+  b: ToolObservationRecord
+): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.runId.localeCompare(b.runId) ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 function copyRun(run: RunRecord): RunRecord {
