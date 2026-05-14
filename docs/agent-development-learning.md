@@ -304,6 +304,22 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 学习重点是把真实外部 API 调用限制在模型网关边界内：密钥只在 adapter 内解析，返回给 runtime 的只有 provider、protocol、model、usage 和脱敏状态。
 - 当前实现计划：[2026-05-14-anthropic-messages-adapter.md](./superpowers/plans/2026-05-14-anthropic-messages-adapter.md)
 
+真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
+
+```bash
+set -a
+source .env.local
+set +a
+pnpm --filter @lp-agent/model-gateway test
+```
+
+`.env.local` 中必须至少包含：
+
+- `REAL_MODEL_PROVIDER_TEST=1`
+- `ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic`
+- `ANTHROPIC_API_KEY=...`
+- `ANTHROPIC_DEFAULT_MODEL=glm-5.1`
+
 ### 阶段 4：工具执行和 MCP Execution
 
 先做只读工具，再做写工具：
