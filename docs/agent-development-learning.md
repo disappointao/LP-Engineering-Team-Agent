@@ -173,6 +173,21 @@ Agent 系统里有很多运行时不可信输入，TypeScript 类型在这些地
 
 原则是：边界数据必须 parse，内部可信对象不要到处重复 parse。也就是说，Zod 是运行时边界校验工具，不是替代 TypeScript 的所有类型系统。
 
+### 2.11 Provider-neutral 模型网关
+
+真实 Agent 系统不要把模型厂商写死在业务流程里。更稳的做法是拆成几层：
+
+- provider identity：例如 `zhipu`、`openrouter`、`ollama`。
+- API protocol：例如 `anthropic-messages`、`openai-completions`、`mock`。
+- endpoint config：例如 `baseUrl`、headers。
+- secret reference：只保存环境变量名或未来 secret manager 引用，不保存密钥值。
+- model manifest：模型 id、上下文窗口、最大输出、是否支持工具/流式/图片。
+- compat：不同兼容 API 的细节差异。
+
+pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直接照搬整套实现。原因是本项目是 Web 多用户系统，MVP 需要先打通 LP Agent 和普通任务工作流；命令式取密钥、复杂 OAuth、大量内置 provider 和完整 SDK 都应该后置。
+
+当前采用的方向是：项目自己维护轻量 provider manifest，先做配置和 mock 链路验证，再按协议逐步接真实 adapter。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型
@@ -260,14 +275,24 @@ Agent 系统里有很多运行时不可信输入，TypeScript 类型在这些地
 - adapter 读取环境变量或未来 secret manager。
 - 保留 mock provider 方便本地测试。
 - 记录 provider、model、usage、错误。
+- 先做 provider-neutral 配置和 mock 链路验证，再接真实外部 API。
+- 把 provider id 和 API protocol 分开，不要用 `openai`、`anthropic` 这类厂商名直接决定运行逻辑。
 
 学习重点：
 
 - provider-neutral interface。
+- provider manifest。
+- API protocol adapter。
 - fallback。
 - 超时、重试、错误分类。
 - 成本和上下文预算。
 - 真实模型返回结构化 JSON 后必须先用 schema parse，再进入业务逻辑。
+
+当前设计：
+
+- [2026-05-14-provider-neutral-model-config-design.md](./superpowers/specs/2026-05-14-provider-neutral-model-config-design.md)
+- 这个设计参考 pi-mono 的 `provider + api + baseUrl + secret reference + models + compat` 思路，但不绑定 pi-mono 依赖。
+- 第一步只做通用配置和 mock runtime 链路验证，不做真实模型调用、streaming、tool-call 转换、fallback 或 OAuth。
 
 ### 阶段 4：工具执行和 MCP Execution
 

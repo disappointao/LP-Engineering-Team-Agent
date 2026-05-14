@@ -88,6 +88,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 2 Milestone 6 implementation plan.
    - Read this after the MCP connector registry plan when implementing or auditing persisted run events, context pack assembly, runtime schema validation, and Web timeline rendering.
 
+22. `specs/2026-05-14-provider-neutral-model-config-design.md`
+   - Stage 3 model provider configuration design.
+   - Read this after the run orchestration/context assembly plan when adding pi-mono-inspired but project-owned provider-neutral model configuration, API protocol selection, sanitized runtime provider metadata, and mock-chain verification before real provider adapters.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
