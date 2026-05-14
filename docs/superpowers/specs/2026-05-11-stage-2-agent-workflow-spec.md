@@ -125,6 +125,35 @@ The key design choice is to keep the agent runtime provider-agnostic. `packages/
 10. Deployer adapter creates handoff metadata.
 11. Web shows preview, downloads, run timeline, and deployment state.
 
+## Agent Context and Memory Roadmap
+
+Stage 2 should get the simplest working agent path running first, but code written for that path must leave room for a real context system. The product should not let each agent role hand-build prompts from scattered repositories. Runtime input should move toward an explicit context assembly boundary that can gather, compress, retrieve, combine, and inject the right information for each run.
+
+The first implementation can keep this boundary inside `packages/api`, near the run orchestrator. If it grows beyond a small use-case helper, extract it into a focused package such as `packages/context-engine` without changing Web callers or runtime adapter callers.
+
+Context sources to preserve as first-class concepts:
+
+- Current task context: active task, latest user request, task type, project binding, and current run state.
+- Historical task context: prior messages, previous LP briefs, generated page versions, review findings, and run outcomes.
+- User and project preferences: locale, preferred artifact mode, brand/ecommerce defaults, model preferences, and future team preferences.
+- Rules: repository `AGENTS.md`, tracked Superpowers specs, project rules, bound skill instructions, approval rules, and generated LP constraints.
+- Skills: enabled published skills resolved by scope and role, including their content, permissions, and entrypoints.
+- Tool state: visible MCP tools, approval status, tool call inputs, tool outputs, errors, and structured observations.
+- File system and artifact state: writable artifact workspace, generated files, file manifests, diffs, and future desktop-local file paths.
+- Multi-agent coordination state: planner/builder/reviewer/deployer handoffs, dependency status, blocking questions, cancellation state, and retry state.
+
+Compression, retrieval, composition, and injection rules:
+
+- Long chat history, large tool outputs, and repeated run logs should be summarized before entering model context.
+- Retrieval should prefer project-scoped and task-relevant records before global history.
+- Tool outputs should be stored as structured observations, not only appended as chat text.
+- File context should prefer manifests, diffs, and selected snippets over full file dumps.
+- Each agent role receives a role-specific context pack. Planner needs goals, constraints, preferences, and relevant history; builder needs the brief, skills, artifact workspace, allowed files, and design rules; reviewer needs acceptance criteria, artifacts, findings history, and policy rules; deployer needs approval state, deployment skills, and tool permissions.
+- Context assembly should enforce a token budget per role and keep a trace of which sources were injected, summarized, omitted, or blocked by permissions.
+- Runtime boundary objects should have explicit schemas. Continue using Zod for structured runtime validation where data crosses trust boundaries, especially context packs, run events, tool observations, agent handoffs, and structured model outputs.
+
+This roadmap is deliberately incremental. The near-term goal is not to build a full memory system before the first real run. The near-term goal is to route all future real-agent work through stable context interfaces so later memory, retrieval, summarization, and multi-agent coordination can be added without rewriting the Web flow or runtime adapters.
+
 ## Persistence Strategy
 
 Use the existing Prisma schema as the source of truth for Stage 2. The first implementation can run against Postgres in development. If local setup friction is high, add a documented Docker Compose file before adding a second database provider.
@@ -350,14 +379,15 @@ Acceptance:
 
 ### Milestone 6: Run Orchestration and Events
 
-Goal: make planner, builder, reviewer, and deployer runs visible and persisted.
+Goal: make planner, builder, reviewer, and deployer runs visible and persisted, while introducing the first context assembly boundary for real-agent work.
 
 Primary files:
 
 - Create `packages/api/src/run-orchestrator.ts`.
+- Create `packages/api/src/context-assembler.ts` or a similarly focused helper if the orchestration code would otherwise build prompts directly.
 - Extend `packages/runtime-adapters/src/index.ts` only where the adapter contract is missing required event data.
 - Modify `apps/web` run timeline UI.
-- Add tests for event ordering, failure states, and resumable snapshots.
+- Add tests for event ordering, failure states, resumable snapshots, and role-specific context pack assembly.
 
 Acceptance:
 
@@ -365,6 +395,9 @@ Acceptance:
 - Events are ordered by sequence.
 - Failed runs preserve diagnostic events.
 - The Web UI can show run state after refresh.
+- Runtime requests are created from an explicit role-specific context pack, not ad hoc prompt assembly inside the Web layer.
+- Context assembly records which skills, MCP tools, artifact workspace, preferences, rules, and history summaries were injected or omitted.
+- Context packs and persisted run events are validated through explicit runtime schemas before they are consumed by the runtime adapter or Web timeline.
 
 ### Milestone 7: Deployment Handoff Adapter Boundary
 
@@ -502,6 +535,7 @@ Stage 2 is done when:
 - A user can configure model routes per role.
 - A user can register MCP tools and see permission-filtered visibility.
 - Planner, builder, reviewer, and deployer runs are persisted with event timelines.
+- Agent runs use an explicit context assembly boundary that can evolve toward compression, retrieval, structured tool observations, file-state injection, and multi-agent handoffs.
 - Workspace and project member roles are persisted.
 - Deployment approval records reviewer identity.
 - Generated output exports as single-file HTML and three-file static artifacts.

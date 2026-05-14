@@ -14,7 +14,7 @@ This directory contains Superpowers-generated specs and implementation plans. Re
 
 3. `specs/2026-05-11-stage-2-agent-workflow-spec.md`
    - Stage 2 product spec.
-   - Read this after the V1 design. It assumes the current MVP exists and defines the next product stage: persisted projects, skills, model routing, MCP, run timelines, deployment handoff, and team collaboration primitives.
+   - Read this after the V1 design. It assumes the current MVP exists and defines the next product stage: persisted projects, skills, model routing, MCP, run timelines, agent context assembly, runtime schema validation, deployment handoff, and team collaboration primitives.
 
 4. `specs/2026-05-12-chat-agent-workbench-ui-spec.md`
    - Stage 2 Web UI slice spec.
