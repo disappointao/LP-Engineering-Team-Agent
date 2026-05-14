@@ -384,11 +384,14 @@ pnpm --filter @lp-agent/model-gateway test
 下一步 Skill Command 执行 MVP 设计：
 
 - [2026-05-14-skill-command-execution-design.md](./superpowers/specs/2026-05-14-skill-command-execution-design.md)
+- 当前实现计划：[2026-05-14-skill-command-execution.md](./superpowers/plans/2026-05-14-skill-command-execution.md)
 - 第一版先做已发布 `deployment` skill 预声明 command 的受控执行，不开放任意 shell 输入。
 - 每次 command 执行都需要显式审批，通过 API 侧校验 skill 绑定、发布状态、权限、secret reference 和模板变量后再调用 runner。
 - `ToolCommandRunner` 是 adapter 边界；第一版可以在 API 进程中调用 fake/local runner，后续再迁移到 `apps/agent-worker`、队列、流式日志和 cancel。
 - `ToolObservationRecord` 是后续 MCP/tool execution、部署 skill、文件操作共享的 observation 底座；事件和 observation 必须脱敏，不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
 - 这一步不是完整自动部署系统，而是给未来部署 workflow 提供安全、可审计的 skill cmd 执行入口。
+- 实现时要把“能执行命令”和“安全边界”分开看：manifest 只声明允许执行什么，API 负责校验绑定、发布状态、审批、权限、secret reference、模板变量和 page version 归属，runner 只拿到已经解析好的 argv/env/workingDirectory。
+- 这一步会先形成 `ToolCommandRunner`、`ToolObservationRecord`、`tool.started/tool.completed/tool.failed` 的最小闭环，再逐步扩展到 MCP execution、worker 队列、流式日志、cancel/retry 和部署编排。
 
 ### 阶段 5：压缩和检索
 

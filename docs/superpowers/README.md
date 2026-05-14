@@ -140,6 +140,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 4 skill command execution design.
    - Read this after the real Builder static artifacts plan when adding controlled deployment skill commands, one-shot approval, command runner adapters, structured tool observations, and sanitized tool run events.
 
+35. `plans/2026-05-14-skill-command-execution.md`
+   - Stage 4 skill command execution implementation plan.
+   - Read this after the skill command execution design when implementing controlled deployment skill command manifests, one-shot approval validation, command runner adapters, sanitized tool observations, and tool run events.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
