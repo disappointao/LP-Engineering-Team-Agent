@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
-import { createInMemoryWorkbenchRepositories, createJsonFileWorkbenchRepositories } from "@lp-agent/db";
+import {
+  createInMemoryWorkbenchRepositories,
+  createJsonFileWorkbenchRepositories,
+  type RunEventRecord,
+  type RunRecord
+} from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
 import type {
@@ -116,6 +121,101 @@ describe("demo workbench service", () => {
       currentPageVersion: reviewed,
       deployment
     });
+  });
+
+  it("persists planner, builder, reviewer, and deployer run events in order", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: pageVersion.id
+    });
+    await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: pageVersion.id,
+      reviewerUserId: "reviewer_1"
+    });
+
+    const runs = await repositories.runs.listForProject(project.id);
+    const events = await repositories.runEvents.listForProject(project.id);
+
+    expect(runs.map((run: RunRecord) => run.role)).toEqual([
+      "planner",
+      "builder",
+      "reviewer",
+      "deployer"
+    ]);
+    expect(runs.every((run: RunRecord) => run.state === "completed")).toBe(true);
+    expect(events.map((event: RunEventRecord) => `${event.runId}:${event.sequence}:${event.type}`)).toEqual([
+      "run_planner_brief_1:1:run.started",
+      "run_planner_brief_1:2:runtime.context.loaded",
+      "run_planner_brief_1:3:model.completed",
+      "run_planner_brief_1:4:run.completed",
+      "run_builder_version_1:1:run.started",
+      "run_builder_version_1:2:runtime.context.loaded",
+      "run_builder_version_1:3:model.completed",
+      "run_builder_version_1:4:artifact.created",
+      "run_builder_version_1:5:run.completed",
+      "run_reviewer_version_1:1:run.started",
+      "run_reviewer_version_1:2:runtime.context.loaded",
+      "run_reviewer_version_1:3:model.completed",
+      "run_reviewer_version_1:4:review.completed",
+      "run_reviewer_version_1:5:run.completed",
+      "run_deployer_version_1:1:run.started",
+      "run_deployer_version_1:2:runtime.context.loaded",
+      "run_deployer_version_1:3:model.completed",
+      "run_deployer_version_1:4:run.completed"
+    ]);
+    expect(runs[1]?.contextSummary.injected).toEqual(
+      expect.arrayContaining(["artifactWorkspace:memory"])
+    );
+  });
+
+  it("persists failed run events before surfacing generation failure", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const builderRuntime = new RecordingRuntime({ state: "failed" });
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+
+    await expect(
+      service.generatePageVersion({
+        projectId: project.id,
+        briefId: brief.id
+      })
+    ).rejects.toThrow("Builder run failed.");
+
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({ role: "planner", state: "completed" }),
+      expect.objectContaining({ role: "builder", state: "failed" })
+    ]);
+    await expect(repositories.runEvents.listForProject(project.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: "run_builder_version_1",
+          type: "run.failed"
+        })
+      ])
+    );
   });
 
   it("can read records created by another service instance when repositories are shared", async () => {
@@ -885,7 +985,7 @@ describe("demo workbench service", () => {
         writableFiles: ["index.html", "styles.css", "script.js"]
       }
     });
-    expect(builderRuntime.requests[0]?.runId).toBe("run_builder_1");
+    expect(builderRuntime.requests[0]?.runId).toBe("run_builder_version_1");
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);

@@ -10,10 +10,13 @@ import {
   type PageVersionRecord,
   type ProjectRecord,
   type ReviewStatus,
+  type RunEventRecord,
+  type RunRecord,
   type SkillBindingRecord,
   type SkillContentType,
   type SkillRecord,
   type SkillVersionRecord,
+  type ToolObservationRecord,
   type WorkbenchRepositories
 } from "@lp-agent/db";
 import {
@@ -47,6 +50,7 @@ import {
   canUseSkill,
   type SkillManifest
 } from "@lp-agent/skills";
+import { runAgentStep } from "./run-orchestrator";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -61,10 +65,13 @@ export type {
   PageVersionRecord,
   ProjectRecord,
   ReviewStatus,
+  RunEventRecord,
+  RunRecord,
   SkillBindingRecord,
   SkillContentType,
   SkillRecord,
-  SkillVersionRecord
+  SkillVersionRecord,
+  ToolObservationRecord
 } from "@lp-agent/db";
 export type { AgentRole } from "@lp-agent/model-gateway";
 
@@ -208,23 +215,29 @@ export interface ProjectModelState {
 
 export interface DemoWorkbenchServiceOptions {
   repositories?: WorkbenchRepositories;
+  plannerRuntime?: AgentRuntimeAdapter;
   builderRuntime?: AgentRuntimeAdapter;
   reviewerRuntime?: AgentRuntimeAdapter;
+  deployerRuntime?: AgentRuntimeAdapter;
   deploymentAdapter?: GitDeploymentAdapter;
   now?: () => Date;
 }
 
 export class DemoWorkbenchService {
   private readonly repositories: WorkbenchRepositories;
+  private readonly plannerRuntime: AgentRuntimeAdapter;
   private readonly builderRuntime: AgentRuntimeAdapter;
   private readonly reviewerRuntime: AgentRuntimeAdapter;
+  private readonly deployerRuntime: AgentRuntimeAdapter;
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly now: () => Date;
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+    this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter();
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter();
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter();
+    this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter();
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
     this.now = options.now ?? (() => new Date());
   }
@@ -247,8 +260,21 @@ export class DemoWorkbenchService {
 
     return withRepositoryIdLock(this.repositories, async () => {
       const existingBriefs = await this.repositories.briefs.listAll();
+      const briefId = nextSequentialId("brief", existingBriefs.map((record) => record.id));
+      await runAgentStep({
+        repositories: this.repositories,
+        service: this,
+        runtime: this.plannerRuntime,
+        runId: `run_planner_${briefId}`,
+        projectId: input.projectId,
+        role: "planner",
+        input: {
+          prompt: input.prompt
+        },
+        now: this.now
+      });
       const brief: BriefRecord = {
-        id: nextSequentialId("brief", existingBriefs.map((record) => record.id)),
+        id: briefId,
         projectId: input.projectId,
         prompt: input.prompt,
         brief: copyBrief(sampleBrief),
@@ -268,15 +294,18 @@ export class DemoWorkbenchService {
     });
 
     try {
-      const result = await this.builderRuntime.run({
-        runId: `run_builder_${pageVersionId.replace(/^version_/, "")}`,
+      const { result } = await runAgentStep({
+        repositories: this.repositories,
+        service: this,
+        runtime: this.builderRuntime,
+        runId: `run_builder_${pageVersionId}`,
         projectId: input.projectId,
         role: "builder",
         input: {
           brief: copyBrief(brief.brief),
           prompt: brief.prompt
         },
-        context: await this.createRuntimeContext(input.projectId, "builder")
+        now: this.now
       });
 
       if (result.state === "failed") {
@@ -320,7 +349,10 @@ export class DemoWorkbenchService {
 
     const brief = await this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
 
-    const result = await this.reviewerRuntime.run({
+    const { result } = await runAgentStep({
+      repositories: this.repositories,
+      service: this,
+      runtime: this.reviewerRuntime,
       runId: `run_reviewer_${pageVersion.id}`,
       projectId: input.projectId,
       role: "reviewer",
@@ -328,7 +360,7 @@ export class DemoWorkbenchService {
         brief: copyBrief(brief.brief),
         prompt: "Review for launch blockers."
       },
-      context: await this.createRuntimeContext(input.projectId, "reviewer")
+      now: this.now
     });
 
     if (result.state === "failed") {
@@ -362,6 +394,19 @@ export class DemoWorkbenchService {
     if (existing) {
       return copyDeployment(existing);
     }
+
+    await runAgentStep({
+      repositories: this.repositories,
+      service: this,
+      runtime: this.deployerRuntime,
+      runId: `run_deployer_${pageVersion.id}`,
+      projectId: input.projectId,
+      role: "deployer",
+      input: {
+        prompt: "Prepare deployment handoff."
+      },
+      now: this.now
+    });
 
     const deployment = await this.deploymentAdapter.createHandoff({
       projectId: input.projectId,
@@ -1041,6 +1086,13 @@ export {
   type ContextAssemblyTrace,
   type ContextPack
 } from "./context-assembler";
+
+export {
+  RunEventRecordSchema,
+  runAgentStep,
+  type RunAgentStepInput,
+  type RunAgentStepResult
+} from "./run-orchestrator";
 
 function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
   return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(createDefaultModelPolicy()));
