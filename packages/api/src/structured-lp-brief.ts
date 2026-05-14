@@ -27,7 +27,6 @@ export class PlannerLPBriefParseError extends Error {
 }
 
 export function createStructuredLPBriefPlannerPrompt(userPrompt: string): string {
-  const normalizedPrompt = userPrompt.trim();
   return [
     "You are the Planner for an LP Engineering Team Agent.",
     "Return exactly one JSON object that matches LPBriefSchema.",
@@ -53,7 +52,7 @@ export function createStructuredLPBriefPlannerPrompt(userPrompt: string): string
     "- complianceNotes: string[]",
     "",
     "User request:",
-    normalizedPrompt
+    userPrompt
   ].join("\n");
 }
 

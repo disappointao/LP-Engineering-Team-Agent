@@ -10,15 +10,14 @@ import {
 
 describe("structured LP brief model output", () => {
   it("builds a strict JSON Planner prompt that preserves the user prompt", () => {
-    const prompt = createStructuredLPBriefPlannerPrompt(
-      "生成一个面向春季促销的电商 LP，突出限时优惠。"
-    );
+    const userPrompt = "  生成一个面向春季促销的电商 LP，突出限时优惠。\n保留这行。  ";
+    const prompt = createStructuredLPBriefPlannerPrompt(userPrompt);
 
     expect(prompt).toContain("Return exactly one JSON object");
     expect(prompt).toContain("Do not wrap the JSON in Markdown fences");
     expect(prompt).toContain("LPBriefSchema");
     expect(prompt).toContain("Framework-free static HTML/CSS/JS");
-    expect(prompt).toContain("生成一个面向春季促销的电商 LP，突出限时优惠。");
+    expect(prompt).toContain(userPrompt);
   });
 
   it("parses a complete LPBriefSchema JSON object", () => {
