@@ -85,6 +85,28 @@ export type RuntimeEvent =
       usage: ModelResponse["usage"];
     }
   | {
+      type: "model.output.parsed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema";
+      title: string;
+      sectionCount: number;
+      productCount: number;
+      hasAssets: boolean;
+    }
+  | {
+      type: "model.output.parse_failed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema";
+      reason: "empty_output" | "invalid_json" | "schema_invalid";
+      issueCount?: number;
+      firstIssuePath?: string;
+      firstIssueCode?: string;
+    }
+  | {
       type: "runtime.context.loaded";
       message: string;
       runId?: string;
@@ -127,6 +149,7 @@ export interface RuntimeRunResult {
   findings?: ReviewFinding[];
   projectId?: string;
   role?: AgentRole;
+  modelOutputText?: string;
 }
 
 export interface AgentRuntimeAdapter {
@@ -203,7 +226,8 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         state,
         events,
         artifacts,
-        findings
+        findings,
+        modelOutputText: modelResponse.text
       };
     } catch (error) {
       events.push(toRunFailedEvent(request, error));

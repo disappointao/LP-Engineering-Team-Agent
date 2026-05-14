@@ -28,6 +28,31 @@ describe("local agent runtime adapter", () => {
     expect(result.events[0]?.type).toBe("run.started");
   });
 
+  it("returns transient model output text without adding it to runtime events", async () => {
+    const gateway: ModelGateway = {
+      async complete(_request: ModelRequest): Promise<ModelResponse> {
+        return {
+          provider: "test-provider",
+          model: "test-model",
+          text: "RAW_MODEL_OUTPUT_SECRET",
+          usage: { inputTokens: 1, outputTokens: 2 }
+        };
+      }
+    };
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await adapter.run({
+      runId: "run_planner_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan" }
+    });
+
+    expect(result.state).toBe("completed");
+    expect(result.modelOutputText).toBe("RAW_MODEL_OUTPUT_SECRET");
+    expect(JSON.stringify(result.events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
   it("runs a builder flow through the model gateway and creates static artifacts", async () => {
     const adapter = new LocalAgentRuntimeAdapter();
 
