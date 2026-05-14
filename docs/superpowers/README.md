@@ -132,6 +132,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 real Builder static artifacts design.
    - Read this after the structured LP brief output plan when replacing deterministic real-runtime Builder artifacts with model-generated, framework-free `index.html` / `styles.css` / `script.js` output guarded by strict JSON parsing and artifact policy validation.
 
+33. `plans/2026-05-14-real-builder-static-artifacts.md`
+   - Stage 3 real Builder static artifacts implementation plan.
+   - Read this after the real Builder static artifacts design when implementing strict Builder artifact JSON prompts, static artifact parsing, framework/resource policy validation, sanitized Builder parse events, and fail-closed real-runtime behavior.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

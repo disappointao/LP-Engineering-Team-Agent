@@ -340,6 +340,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 下一步真实 Builder 静态产物输出设计：
 
 - [2026-05-14-real-builder-static-artifacts-design.md](./superpowers/specs/2026-05-14-real-builder-static-artifacts-design.md)
+- 当前实现计划：[2026-05-14-real-builder-static-artifacts.md](./superpowers/plans/2026-05-14-real-builder-static-artifacts.md)
 - 这一步让 Builder 在 `REAL_MODEL_RUNTIME=1` 下输出严格 JSON：`indexHtml`、`stylesCss`、`scriptJs`。
 - 产物仍然是框架无关静态 HTML/CSS/JS；Web 继续基于三文件产物生成 single-file HTML 预览和下载。
 - Builder 输出必须经过 API 侧 parse 和 artifact policy validation，失败时 fail closed，不保存 page version。
