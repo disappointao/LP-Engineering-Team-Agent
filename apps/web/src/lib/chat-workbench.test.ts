@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { StaticArtifacts } from "@lp-agent/artifacts";
+import type { RunEventRecord } from "@lp-agent/api";
 import { createDemoWorkbenchSnapshot } from "./demo-workbench";
 import { createArtifactDownloadLinks } from "./export-links";
 import { createChatWorkbenchThread, createGeneralTaskThread } from "./chat-workbench";
@@ -59,6 +61,58 @@ describe("chat workbench view model", () => {
     expect(thread.toolEvents.every((event) => event.status === "complete")).toBe(true);
   });
 
+  it("uses persisted run events for the LP tool timeline when provided", () => {
+    const copy = getWorkbenchCopy("en");
+    const runEvents: RunEventRecord[] = [
+      {
+        id: "event_1",
+        runId: "run_planner_brief_1",
+        projectId: "project_1",
+        sequence: 1,
+        type: "run.started",
+        message: "planner run started",
+        payload: { role: "planner" },
+        createdAt: "2026-05-14T00:00:00.000Z"
+      },
+      {
+        id: "event_2",
+        runId: "run_builder_version_1",
+        projectId: "project_1",
+        sequence: 1,
+        type: "run.started",
+        message: "builder run started",
+        payload: { role: "builder" },
+        createdAt: "2026-05-14T00:00:01.000Z"
+      }
+    ];
+
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: "Create LP",
+      objective: "Convert",
+      pageVersion: {
+        id: "version_1",
+        projectId: "project_1",
+        briefId: "brief_1",
+        artifacts: completeArtifacts(),
+        reviewStatus: "passed",
+        findings: [],
+        createdAt: "2026-05-14T00:00:00.000Z"
+      },
+      downloadLinks: [],
+      runEvents
+    });
+
+    expect(thread.toolEvents.map((event) => event.id)).toEqual([
+      "run_planner_brief_1:1",
+      "run_builder_version_1:1"
+    ]);
+    expect(thread.toolEvents[0]).toMatchObject({
+      role: "planner",
+      operation: "planner run started"
+    });
+  });
+
   it("includes single html and three static file artifact cards", async () => {
     const copy = getWorkbenchCopy("en");
     const snapshot = await createDemoWorkbenchSnapshot();
@@ -100,3 +154,11 @@ describe("chat workbench view model", () => {
     expect(reviewer?.meta).toContain("0");
   });
 });
+
+function completeArtifacts(): StaticArtifacts {
+  return {
+    indexHtml: "<main>LP</main>",
+    stylesCss: "body { margin: 0; }",
+    scriptJs: "console.log('ready');"
+  };
+}

@@ -1,4 +1,4 @@
-import type { PageVersionRecord } from "@lp-agent/api";
+import type { PageVersionRecord, RunEventRecord } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
@@ -46,6 +46,7 @@ interface CreateChatWorkbenchThreadInput {
   objective: string;
   pageVersion: PageVersionRecord;
   downloadLinks: ArtifactDownloadLink[];
+  runEvents?: RunEventRecord[];
 }
 
 export function createChatWorkbenchThread({
@@ -53,39 +54,12 @@ export function createChatWorkbenchThread({
   prompt,
   objective,
   pageVersion,
-  downloadLinks
+  downloadLinks,
+  runEvents = []
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
-  const reviewStatus = copy.status[pageVersion.reviewStatus];
-  const findingsCount = pageVersion.findings.length;
-  const toolEvents: ChatToolEvent[] = [
-    {
-      id: "planner",
-      role: "planner",
-      label: copy.run.planner[0],
-      operation: copy.run.planner[1],
-      status: "complete",
-      statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.fields.objective}: ${objective}`
-    },
-    {
-      id: "builder",
-      role: "builder",
-      label: copy.run.builder[0],
-      operation: copy.run.builder[1],
-      status: "complete",
-      statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.chat.filesLabel}: ${downloadLinks.length}`
-    },
-    {
-      id: "reviewer",
-      role: "reviewer",
-      label: copy.run.reviewer[0],
-      operation: copy.run.reviewer[1],
-      status: "complete",
-      statusLabel: copy.chat.toolStatusComplete,
-      meta: `${copy.status.review}: ${reviewStatus} - ${copy.chat.findingsLabel}: ${findingsCount}`
-    }
-  ];
+  const toolEvents: ChatToolEvent[] = runEvents.length > 0
+    ? runEvents.map((event) => toChatToolEvent(event, copy))
+    : createFallbackToolEvents({ copy, objective, pageVersion, downloadLinks });
 
   const artifacts: ChatArtifactCard[] = downloadLinks.map((link, index) => ({
     ...link,
@@ -110,6 +84,66 @@ export function createChatWorkbenchThread({
       sendLabel: copy.chat.sendLabel
     }
   };
+}
+
+function createFallbackToolEvents(input: {
+  copy: WorkbenchCopy;
+  objective: string;
+  pageVersion: PageVersionRecord;
+  downloadLinks: ArtifactDownloadLink[];
+}): ChatToolEvent[] {
+  const reviewStatus = input.copy.status[input.pageVersion.reviewStatus];
+  const findingsCount = input.pageVersion.findings.length;
+  return [
+    {
+      id: "planner",
+      role: "planner",
+      label: input.copy.run.planner[0],
+      operation: input.copy.run.planner[1],
+      status: "complete",
+      statusLabel: input.copy.chat.toolStatusComplete,
+      meta: `${input.copy.fields.objective}: ${input.objective}`
+    },
+    {
+      id: "builder",
+      role: "builder",
+      label: input.copy.run.builder[0],
+      operation: input.copy.run.builder[1],
+      status: "complete",
+      statusLabel: input.copy.chat.toolStatusComplete,
+      meta: `${input.copy.chat.filesLabel}: ${input.downloadLinks.length}`
+    },
+    {
+      id: "reviewer",
+      role: "reviewer",
+      label: input.copy.run.reviewer[0],
+      operation: input.copy.run.reviewer[1],
+      status: "complete",
+      statusLabel: input.copy.chat.toolStatusComplete,
+      meta: `${input.copy.status.review}: ${reviewStatus} - ${input.copy.chat.findingsLabel}: ${findingsCount}`
+    }
+  ];
+}
+
+function toChatToolEvent(event: RunEventRecord, copy: WorkbenchCopy): ChatToolEvent {
+  const role = toChatToolRole(event);
+  return {
+    id: `${event.runId}:${event.sequence}`,
+    role,
+    label: role === "assistant" ? copy.chat.generalToolLabel : copy.run[role][0],
+    operation: event.message,
+    status: "complete",
+    statusLabel: copy.chat.toolStatusComplete,
+    meta: event.type
+  };
+}
+
+function toChatToolRole(event: RunEventRecord): ChatToolRole {
+  const role = event.payload.role;
+  if (role === "planner" || role === "builder" || role === "reviewer") {
+    return role;
+  }
+  return "assistant";
 }
 
 export function createGeneralTaskThread({

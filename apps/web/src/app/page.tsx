@@ -119,7 +119,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             prompt: completedSnapshot.brief.prompt,
             objective: completedSnapshot.brief.brief.objective,
             pageVersion: completedSnapshot.pageVersion,
-            downloadLinks
+            downloadLinks,
+            runEvents: pageState.runEvents
           })
         : createGeneralTaskThread({
             copy,

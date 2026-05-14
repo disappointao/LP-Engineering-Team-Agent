@@ -10,6 +10,7 @@ import {
   type ProjectModelState,
   type ProjectRecord,
   type ProjectSkillState,
+  type RunEventRecord,
   type SkillBindingRecord,
   type SkillContentType,
   type SkillDraftResult,
@@ -181,6 +182,7 @@ export type WorkbenchPageState =
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
+      runEvents: RunEventRecord[];
       snapshot?: WorkbenchSnapshot;
     };
 
@@ -445,6 +447,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
 
       const activeProjectId = taskProject?.id ?? requestedProjectId;
+      const runEvents = activeProjectId
+        ? await repositories.runEvents.listForProject(activeProjectId)
+        : [];
       const snapshotRef = await repositories.taskSnapshots.getByTaskId(task.id);
       const snapshot = snapshotRef
         ? await service.getSnapshotForRecords({
@@ -463,6 +468,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         activeTaskId: task.id,
         task: { ...task },
         messages: await listMessages(task.id),
+        runEvents,
         snapshot
       };
     },

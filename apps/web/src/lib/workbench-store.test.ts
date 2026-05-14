@@ -153,6 +153,31 @@ describe("web workbench store", () => {
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 
+  it("includes persisted run events for the active task project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a simple HTML LP",
+      implicitProjectName: "Implicit project"
+    });
+    if (!result.ok) {
+      throw new Error("Expected prompt submission to succeed.");
+    }
+
+    const state = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(state.kind).toBe("task_ready");
+    if (state.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(state.runEvents.map((event) => event.type)).toEqual(
+      expect.arrayContaining(["run.started", "runtime.context.loaded", "model.completed"])
+    );
+  });
+
   it("restores the LP snapshot that belongs to the requested task", async () => {
     const store = createWebWorkbenchStore();
     const project = await store.createProject({
