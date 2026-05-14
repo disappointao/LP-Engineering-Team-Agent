@@ -302,6 +302,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 智谱的 `https://open.bigmodel.cn/api/anthropic` 属于 Claude/Anthropic Messages 兼容入口；智谱的 `https://open.bigmodel.cn/api/paas/v4/` 属于 OpenAI/智谱 Chat Completions 入口。
 - 当前项目配置层可以保存 `paas/v4`，但真实执行要等后续 `openai-completions` adapter。
 - 学习重点是把真实外部 API 调用限制在模型网关边界内：密钥只在 adapter 内解析，返回给 runtime 的只有 provider、protocol、model、usage 和脱敏状态。
+- 当前实现计划：[2026-05-14-anthropic-messages-adapter.md](./superpowers/plans/2026-05-14-anthropic-messages-adapter.md)
 
 ### 阶段 4：工具执行和 MCP Execution
 
