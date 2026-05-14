@@ -90,4 +90,73 @@ describe("run agent step finalization", () => {
     ]);
     expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
   });
+
+  it("persists failed run state when API post-processing throws", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Project",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    const runtime: AgentRuntimeAdapter = {
+      async run(request) {
+        return {
+          runId: request.runId,
+          projectId: request.projectId,
+          role: request.role,
+          state: "completed",
+          modelOutputText: "RAW_MODEL_OUTPUT_SECRET",
+          events: [
+            {
+              type: "run.started",
+              message: "planner run started",
+              runId: request.runId,
+              role: request.role
+            },
+            {
+              type: "run.completed",
+              message: "planner run completed",
+              runId: request.runId,
+              state: "completed"
+            }
+          ]
+        };
+      }
+    };
+    const service = {
+      async createRuntimeContextForRole() {
+        return createDefaultRuntimeContext();
+      }
+    };
+
+    await expect(
+      runAgentStep({
+        repositories,
+        service,
+        runtime,
+        runId: "run_planner_brief_1",
+        projectId: "project_1",
+        role: "planner",
+        input: { prompt: "Plan" },
+        now: () => new Date("2026-05-14T00:00:00.000Z"),
+        finalizeResult() {
+          throw new Error("Planner finalizer crashed.");
+        }
+      })
+    ).rejects.toThrow("Planner finalizer crashed.");
+
+    const runs = await repositories.runs.listForProject("project_1");
+    expect(runs).toHaveLength(1);
+    const [run] = runs;
+    expect(run).toBeDefined();
+    expect(run?.state).toBe("failed");
+    expect(run?.completedAt).toBeDefined();
+
+    const events = await repositories.runEvents.listForProject("project_1");
+    expect(events.map((event) => event.type)).toEqual(["run.failed"]);
+    const [event] = events;
+    expect(event).toBeDefined();
+    expect(event?.message).toBe("Planner finalizer crashed.");
+    expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
 });

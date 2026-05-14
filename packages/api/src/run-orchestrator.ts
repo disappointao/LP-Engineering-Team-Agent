@@ -91,6 +91,9 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       input: contextPack.input,
       context: contextPack.runtimeContext
     });
+    if (input.finalizeResult) {
+      result = await input.finalizeResult({ result, contextPack });
+    }
   } catch (error) {
     const completedAt = nextRepositoryTimestamp(input.repositories, now);
     const run: RunRecord = {
@@ -114,9 +117,6 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       })
     );
     throw error;
-  }
-  if (input.finalizeResult) {
-    result = await input.finalizeResult({ result, contextPack });
   }
   const completedAt = nextRepositoryTimestamp(input.repositories, now);
   const state = toRunRecordState(result.state);
