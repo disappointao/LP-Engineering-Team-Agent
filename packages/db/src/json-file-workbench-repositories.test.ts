@@ -301,24 +301,11 @@ describe("json-file workbench repositories", () => {
       completedAt: "2026-05-13T00:01:00.000Z",
       contextSummary: {
         injected: ["skills:1"],
-        omitted: []
+        omitted: ["history:0"]
       }
     };
     const firstEvent: RunEventRecord = {
       id: "run_event_1",
-      runId: run.id,
-      projectId: run.projectId,
-      taskId: run.taskId,
-      sequence: 2,
-      type: "model.completed",
-      message: "builder model call completed",
-      payload: {
-        provider: "mock-anthropic"
-      },
-      createdAt: "2026-05-13T00:00:30.000Z"
-    };
-    const secondEvent: RunEventRecord = {
-      id: "run_event_2",
       runId: run.id,
       projectId: run.projectId,
       taskId: run.taskId,
@@ -329,6 +316,19 @@ describe("json-file workbench repositories", () => {
         role: "builder"
       },
       createdAt
+    };
+    const secondEvent: RunEventRecord = {
+      id: "run_event_2",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 2,
+      type: "model.completed",
+      message: "builder model call completed",
+      payload: {
+        provider: "mock-anthropic"
+      },
+      createdAt: "2026-05-13T00:00:30.000Z"
     };
     const observation: ToolObservationRecord = {
       id: "tool_observation_1",
@@ -357,9 +357,18 @@ describe("json-file workbench repositories", () => {
     await writeFile(copyFilePath, raw, "utf8");
 
     await expect(second.runs.getById(run.id)).resolves.toEqual(run);
+    await expect(second.runs.listForTask("task_1")).resolves.toEqual([run]);
     await expect(second.runEvents.listForRun(run.id)).resolves.toEqual([
-      expect.objectContaining({ id: "run_event_2", sequence: 1 }),
-      expect.objectContaining({ id: "run_event_1", sequence: 2 })
+      expect.objectContaining({
+        id: "run_event_1",
+        sequence: 1,
+        type: "run.started",
+        message: "builder run started",
+        payload: {
+          role: "builder"
+        }
+      }),
+      expect.objectContaining({ id: "run_event_2", sequence: 2 })
     ]);
     await expect(second.toolObservations.listForRun(run.id)).resolves.toEqual([
       expect.objectContaining({
