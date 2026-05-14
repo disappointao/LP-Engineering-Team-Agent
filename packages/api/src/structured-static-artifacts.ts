@@ -57,13 +57,15 @@ const FRAMEWORK_SCRIPT_MARKERS: RegExp[] = [
   /\bReact(?:DOM)?\s*\./,
   /\bReactDOM\s*\.\s*createRoot\b/,
   /\bReact\s*\.\s*createElement\b/,
-  /\bimport\s+.*\bfrom\s+["'](?:react|react-dom(?:\/client)?)["']/,
-  /\brequire\s*\(\s*["'](?:react|react-dom(?:\/client)?)["']\s*\)/
+  /\bfrom\s+["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']/,
+  /\bimport\s+["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']/,
+  /\bimport\s*\(\s*["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']\s*\)/,
+  /\brequire\s*\(\s*["'](?:react|react-dom(?:\/client)?|vue|@vue\/[\w-]+|@angular(?:\/[\w-]+)?|svelte(?:\/[\w-]+)?|next(?:\/[\w-]+)?|nuxt|@remix-run\/[\w-]+)["']\s*\)/
 ];
 
 const CSS_FRAMEWORK_HREFS: RegExp[] = [
-  /(?:^|[\/@])bootstrap(?:[@/.-]|$)/i,
-  /cdn\.tailwindcss\.com|(?:^|[\/@])tailwind(?:css)?(?:[@/.-]|$)/i,
+  /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/bootstrap(?:@|\/)|\/bootstrap(?:\.min)?\.css(?:[?#]|$)|\/bootstrap@[\w.-]+\//i,
+  /cdn\.tailwindcss\.com|(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/tailwindcss(?:@|\/)|\/tailwind(?:css)?(?:\.min)?\.css(?:[?#]|$)|\/tailwindcss@[\w.-]+\//i,
   /(?:^|[\/@])bulma(?:[@/.-]|$)/i,
   /foundation-sites|(?:^|\/)foundation(?:\.min)?\.css(?:[?#]|$)|\/foundation\/\d/i,
   /(?:^|[\/@])materialize(?:[@/.-]|$)/i,
@@ -199,7 +201,8 @@ function schemaInvalid(
 function validateArtifactPolicy(artifacts: StaticArtifacts): void {
   const html = artifacts.indexHtml;
   const htmlWithoutComments = stripHtmlComments(html);
-  const combined = [htmlWithoutComments, artifacts.stylesCss, artifacts.scriptJs].join("\n");
+  const activeCombined = [htmlWithoutComments, artifacts.stylesCss, artifacts.scriptJs].join("\n");
+  const frameworkScanText = [html, artifacts.stylesCss, artifacts.scriptJs].join("\n");
 
   validateHtmlDocument(htmlWithoutComments);
 
@@ -209,7 +212,7 @@ function validateArtifactPolicy(artifacts: StaticArtifacts): void {
   if (!hasRequiredLocalScript(htmlWithoutComments)) {
     throw policyViolation("missing_script_marker");
   }
-  if (/javascript\s*:/i.test(combined)) {
+  if (/javascript\s*:/i.test(activeCombined)) {
     throw policyViolation("javascript_url_blocked");
   }
   if (/<[a-z][^>]*\son[a-z]+\s*=/i.test(htmlWithoutComments)) {
@@ -220,7 +223,7 @@ function validateArtifactPolicy(artifacts: StaticArtifacts): void {
   validateStylesheetLinks(htmlWithoutComments);
 
   for (const marker of FRAMEWORK_MARKERS) {
-    if (marker.test(combined)) {
+    if (marker.test(frameworkScanText)) {
       throw policyViolation("framework_marker_detected");
     }
   }

@@ -275,6 +275,19 @@ describe("structured static artifact model output", () => {
     }
   });
 
+  it("rejects framework and build output markers in HTML comments", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        "</head>",
+        "<!-- __NEXT_DATA__ /@vite/client --></head>"
+      )
+    }));
+
+    expect(error.reason).toBe("policy_violation");
+    expect(error.policyCode).toBe("framework_marker_detected");
+  });
+
   it("allows ordinary marketing copy that mentions React as a verb", () => {
     const parsed = parseBuilderStaticArtifactsOutput(JSON.stringify({
       ...validArtifacts(),
@@ -295,6 +308,25 @@ describe("structured static artifact model output", () => {
 
     expect(error.reason).toBe("policy_violation");
     expect(error.policyCode).toBe("framework_marker_detected");
+  });
+
+  it("rejects framework package imports and requires in script output", () => {
+    const cases = [
+      'import { createApp } from "vue"; createApp({}).mount("#app");',
+      'import { mount } from "svelte"; mount(App, { target: document.body });',
+      'const next = require("next");',
+      'const remix = await import("@remix-run/react");'
+    ];
+
+    for (const scriptJs of cases) {
+      const error = captureParseError(JSON.stringify({
+        ...validArtifacts(),
+        scriptJs
+      }));
+
+      expect(error.reason).toBe("policy_violation");
+      expect(error.policyCode).toBe("framework_marker_detected");
+    }
   });
 
   it("does not expose raw policy-violating output in failure payloads", () => {
@@ -371,15 +403,23 @@ describe("structured static artifact model output", () => {
   });
 
   it("allows non-framework brand CSS filenames that contain framework words", () => {
-    const parsed = parseBuilderStaticArtifactsOutput(JSON.stringify({
-      ...validArtifacts(),
-      indexHtml: validArtifacts().indexHtml.replace(
-        "https://assets.example.com/brand/campaign.css",
-        "https://assets.example.com/brand/foundation-campaign.css"
-      )
-    }));
+    const brandCssHrefs = [
+      "https://assets.example.com/brand/foundation-campaign.css",
+      "https://assets.example.com/brand/bootstrap-campaign.css",
+      "https://assets.example.com/brand/tailwind-campaign.css"
+    ];
 
-    expect(parsed.indexHtml).toContain("foundation-campaign.css");
+    for (const href of brandCssHrefs) {
+      const parsed = parseBuilderStaticArtifactsOutput(JSON.stringify({
+        ...validArtifacts(),
+        indexHtml: validArtifacts().indexHtml.replace(
+          "https://assets.example.com/brand/campaign.css",
+          href
+        )
+      }));
+
+      expect(parsed.indexHtml).toContain(href);
+    }
   });
 
   it("allows external images, font CSS, and non-framework CSS links", () => {
