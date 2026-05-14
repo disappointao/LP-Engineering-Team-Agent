@@ -64,7 +64,12 @@ export type ModelFlowErrorCode =
   | "model_provider_name_required"
   | "model_provider_key_required"
   | "model_provider_type_unsupported"
-  | (`model_provider_${string}` & {})
+  | "model_provider_api_required"
+  | "model_provider_api_unsupported"
+  | "model_provider_base_url_invalid"
+  | "model_provider_api_key_env_invalid"
+  | "model_provider_model_id_required"
+  | "model_provider_model_limit_invalid"
   | "model_provider_already_exists"
   | "model_provider_not_found"
   | "model_provider_disabled"
