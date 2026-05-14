@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run src/structured-lp-brief.test.ts src/run-orchestrator.test.ts src/services.test.ts",
+    "test": "vitest run src/structured-lp-brief.test.ts src/structured-static-artifacts.test.ts src/run-orchestrator.test.ts src/services.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
