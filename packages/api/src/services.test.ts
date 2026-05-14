@@ -950,6 +950,49 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("rejects invalid brief values in context packs", () => {
+    expect(() =>
+      ContextPackSchema.parse({
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Create a sale LP",
+          brief: {
+            title: ""
+          }
+        },
+        runtimeContext: {
+          skills: [],
+          mcpTools: [],
+          approval: {
+            state: "not_required"
+          },
+          artifactWorkspace: {
+            mode: "memory",
+            writableFiles: ["index.html"]
+          }
+        },
+        trace: {
+          injected: [],
+          omitted: []
+        },
+        createdAt: "2026-05-11T00:00:00.000Z"
+      })
+    ).toThrow();
+  });
+
+  it("rejects unsupported roles when creating runtime context directly", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    await expect(
+      service.createRuntimeContextForRole({
+        projectId: project.id,
+        role: "writer" as never
+      })
+    ).rejects.toThrow("model_role_unsupported");
+  });
+
   it("creates project mcp connectors and computes visible tools from skills and approvals", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });

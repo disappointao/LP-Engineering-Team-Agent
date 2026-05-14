@@ -767,7 +767,8 @@ export class DemoWorkbenchService {
     input: CreateRuntimeContextForRoleInput
   ): Promise<RuntimeRunContext> {
     await this.getProjectOrThrow(input.projectId);
-    return this.createRuntimeContext(input.projectId, input.role);
+    const role = normalizeAgentRole(input.role);
+    return this.createRuntimeContext(input.projectId, role);
   }
 
   async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {

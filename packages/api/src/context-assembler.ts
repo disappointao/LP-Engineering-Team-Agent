@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { WorkbenchRepositories } from "@lp-agent/db";
-import type { LPBrief } from "@lp-agent/lp-schema";
+import { LPBriefSchema } from "@lp-agent/lp-schema";
 import { agentRoles, type AgentRole } from "@lp-agent/model-gateway";
 import type {
   RuntimeRunContext,
@@ -57,9 +57,9 @@ export const RuntimeRunContextSchema: z.ZodType<RuntimeRunContext> = z.object({
   modelRoutingPolicy: ModelRoutingPolicySchema.optional()
 });
 
-export const RuntimeRunInputSchema: z.ZodType<RuntimeRunInput> = z.object({
+export const RuntimeRunInputSchema: z.ZodType<RuntimeRunInput, z.ZodTypeDef, unknown> = z.object({
   prompt: z.string().optional(),
-  brief: z.custom<LPBrief>().optional()
+  brief: LPBriefSchema.optional()
 });
 
 export const ContextPackSchema = z.object({
