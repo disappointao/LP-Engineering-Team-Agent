@@ -148,6 +148,54 @@ export interface MCPToolApprovalRecord {
   updatedAt: string;
 }
 
+export type RunRecordState =
+  | "running"
+  | "needs_input"
+  | "needs_approval"
+  | "failed"
+  | "completed"
+  | "cancelled";
+export type ToolObservationState = "completed" | "failed";
+
+export interface RunRecord {
+  id: string;
+  projectId: string;
+  taskId?: string;
+  role: AgentRole;
+  state: RunRecordState;
+  startedAt: string;
+  completedAt?: string;
+  contextSummary: {
+    injected: string[];
+    omitted: string[];
+  };
+}
+
+export interface RunEventRecord {
+  id: string;
+  runId: string;
+  projectId: string;
+  taskId?: string;
+  sequence: number;
+  type: string;
+  message: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ToolObservationRecord {
+  id: string;
+  runId: string;
+  projectId: string;
+  taskId?: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  outputSummary: string;
+  state: ToolObservationState;
+  errorName?: string;
+  createdAt: string;
+}
+
 export interface ProjectRepository {
   save(project: ProjectRecord): Promise<void>;
   getById(projectId: string): Promise<ProjectRecord | undefined>;
@@ -251,6 +299,29 @@ export interface MCPToolApprovalRepository {
   listAll(): Promise<MCPToolApprovalRecord[]>;
 }
 
+export interface RunRepository {
+  save(run: RunRecord): Promise<void>;
+  getById(runId: string): Promise<RunRecord | undefined>;
+  listForProject(projectId: string): Promise<RunRecord[]>;
+  listForTask(taskId: string): Promise<RunRecord[]>;
+  listAll(): Promise<RunRecord[]>;
+}
+
+export interface RunEventRepository {
+  save(event: RunEventRecord): Promise<void>;
+  listForRun(runId: string): Promise<RunEventRecord[]>;
+  listForTask(taskId: string): Promise<RunEventRecord[]>;
+  listForProject(projectId: string): Promise<RunEventRecord[]>;
+  listAll(): Promise<RunEventRecord[]>;
+}
+
+export interface ToolObservationRepository {
+  save(observation: ToolObservationRecord): Promise<void>;
+  listForRun(runId: string): Promise<ToolObservationRecord[]>;
+  listForTask(taskId: string): Promise<ToolObservationRecord[]>;
+  listAll(): Promise<ToolObservationRecord[]>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   briefs: BriefRepository;
@@ -266,6 +337,9 @@ export interface WorkbenchRepositories {
   modelRoutingPolicies: ModelRoutingPolicyRepository;
   mcpConnectors: MCPConnectorRepository;
   mcpToolApprovals: MCPToolApprovalRepository;
+  runs: RunRepository;
+  runEvents: RunEventRepository;
+  toolObservations: ToolObservationRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -287,6 +361,97 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly modelRoutingPolicies = new InMemoryModelRoutingPolicyRepository();
   readonly mcpConnectors = new InMemoryMCPConnectorRepository();
   readonly mcpToolApprovals = new InMemoryMCPToolApprovalRepository();
+  readonly runs = new InMemoryRunRepository();
+  readonly runEvents = new InMemoryRunEventRepository();
+  readonly toolObservations = new InMemoryToolObservationRepository();
+}
+
+class InMemoryRunRepository implements RunRepository {
+  private readonly runs = new Map<string, RunRecord>();
+
+  async save(run: RunRecord): Promise<void> {
+    this.runs.set(run.id, copyRun(run));
+  }
+
+  async getById(runId: string): Promise<RunRecord | undefined> {
+    const run = this.runs.get(runId);
+    return run ? copyRun(run) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<RunRecord[]> {
+    return [...this.runs.values()]
+      .filter((run) => run.projectId === projectId)
+      .map(copyRun);
+  }
+
+  async listForTask(taskId: string): Promise<RunRecord[]> {
+    return [...this.runs.values()]
+      .filter((run) => run.taskId === taskId)
+      .map(copyRun);
+  }
+
+  async listAll(): Promise<RunRecord[]> {
+    return [...this.runs.values()].map(copyRun);
+  }
+}
+
+class InMemoryRunEventRepository implements RunEventRepository {
+  private readonly events = new Map<string, RunEventRecord>();
+
+  async save(event: RunEventRecord): Promise<void> {
+    this.events.set(event.id, copyRunEvent(event));
+  }
+
+  async listForRun(runId: string): Promise<RunEventRecord[]> {
+    return this.sortedEvents((event) => event.runId === runId);
+  }
+
+  async listForTask(taskId: string): Promise<RunEventRecord[]> {
+    return this.sortedEvents((event) => event.taskId === taskId);
+  }
+
+  async listForProject(projectId: string): Promise<RunEventRecord[]> {
+    return this.sortedEvents((event) => event.projectId === projectId);
+  }
+
+  async listAll(): Promise<RunEventRecord[]> {
+    return this.sortedEvents(() => true);
+  }
+
+  private sortedEvents(matches: (event: RunEventRecord) => boolean): RunEventRecord[] {
+    return [...this.events.values()]
+      .filter(matches)
+      .sort((a, b) => a.sequence - b.sequence)
+      .map(copyRunEvent);
+  }
+}
+
+class InMemoryToolObservationRepository implements ToolObservationRepository {
+  private readonly observations = new Map<string, ToolObservationRecord>();
+
+  async save(observation: ToolObservationRecord): Promise<void> {
+    this.observations.set(observation.id, copyToolObservation(observation));
+  }
+
+  async listForRun(runId: string): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations((observation) => observation.runId === runId);
+  }
+
+  async listForTask(taskId: string): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations((observation) => observation.taskId === taskId);
+  }
+
+  async listAll(): Promise<ToolObservationRecord[]> {
+    return this.sortedObservations(() => true);
+  }
+
+  private sortedObservations(
+    matches: (observation: ToolObservationRecord) => boolean
+  ): ToolObservationRecord[] {
+    return [...this.observations.values()]
+      .filter(matches)
+      .map(copyToolObservation);
+  }
 }
 
 class InMemorySkillRepository implements SkillRepository {
@@ -661,6 +826,30 @@ function copyMCPConnector(connector: MCPConnectorRecord): MCPConnectorRecord {
 
 function copyMCPToolApproval(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
   return { ...approval };
+}
+
+function copyRun(run: RunRecord): RunRecord {
+  return {
+    ...run,
+    contextSummary: {
+      injected: [...run.contextSummary.injected],
+      omitted: [...run.contextSummary.omitted]
+    }
+  };
+}
+
+function copyRunEvent(event: RunEventRecord): RunEventRecord {
+  return {
+    ...event,
+    payload: structuredClone(event.payload)
+  };
+}
+
+function copyToolObservation(observation: ToolObservationRecord): ToolObservationRecord {
+  return {
+    ...observation,
+    input: structuredClone(observation.input)
+  };
 }
 
 function copyBriefRecord(record: BriefRecord): BriefRecord {

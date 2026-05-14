@@ -6,9 +6,12 @@ import {
   type MCPToolApprovalRecord,
   type PageVersionRecord,
   type ProjectRecord,
+  type RunEventRecord,
+  type RunRecord,
   type SkillBindingRecord,
   type SkillRecord,
-  type SkillVersionRecord
+  type SkillVersionRecord,
+  type ToolObservationRecord
 } from "./index";
 
 const createdAt = "2026-05-12T00:00:00.000Z";
@@ -200,6 +203,111 @@ describe("in-memory workbench repositories", () => {
       pageVersionId: "version_1",
       createdAt
     });
+  });
+
+  it("persists runs, ordered events, and tool observations with defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const run: RunRecord = {
+      id: "run_builder_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      state: "completed",
+      startedAt: createdAt,
+      completedAt: "2026-05-12T00:01:00.000Z",
+      contextSummary: {
+        injected: ["skills:1", "mcpTools:1"],
+        omitted: []
+      }
+    };
+    const firstEvent: RunEventRecord = {
+      id: "run_event_1",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 2,
+      type: "model.completed",
+      message: "builder model call completed",
+      payload: {
+        provider: "mock-anthropic",
+        model: "code-model"
+      },
+      createdAt: "2026-05-12T00:00:30.000Z"
+    };
+    const secondEvent: RunEventRecord = {
+      id: "run_event_2",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      sequence: 1,
+      type: "run.started",
+      message: "builder run started",
+      payload: {
+        role: "builder"
+      },
+      createdAt
+    };
+    const observation: ToolObservationRecord = {
+      id: "tool_observation_1",
+      runId: run.id,
+      projectId: run.projectId,
+      taskId: run.taskId,
+      toolName: "searchAssets",
+      input: {
+        query: "hero"
+      },
+      outputSummary: "Found three candidate hero images.",
+      state: "completed",
+      createdAt
+    };
+
+    await repositories.runs.save(run);
+    await repositories.runEvents.save(firstEvent);
+    await repositories.runEvents.save(secondEvent);
+    await repositories.toolObservations.save(observation);
+
+    const savedRun = await repositories.runs.getById(run.id);
+    if (!savedRun) {
+      throw new Error("Expected saved run.");
+    }
+    savedRun.contextSummary.injected.push("mutated");
+    const savedObservation = await repositories.toolObservations.listForRun(run.id);
+    savedObservation[0]!.input.query = "mutated";
+
+    await expect(repositories.runs.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_builder_1",
+        state: "completed",
+        contextSummary: {
+          injected: ["skills:1", "mcpTools:1"],
+          omitted: []
+        }
+      })
+    ]);
+    await expect(repositories.runs.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({ id: "run_builder_1" })
+    ]);
+    await expect(repositories.runEvents.listForRun(run.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_event_2",
+        sequence: 1,
+        type: "run.started"
+      }),
+      expect.objectContaining({
+        id: "run_event_1",
+        sequence: 2,
+        type: "model.completed"
+      })
+    ]);
+    await expect(repositories.runEvents.listForTask("task_1")).resolves.toHaveLength(2);
+    await expect(repositories.toolObservations.listForRun(run.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "tool_observation_1",
+        input: {
+          query: "hero"
+        }
+      })
+    ]);
   });
 
   it("persists skills, versions, and bindings with defensive copies", async () => {
