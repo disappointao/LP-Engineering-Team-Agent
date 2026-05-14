@@ -3,6 +3,7 @@ import {
   completeAnthropicMessages,
   type ModelFetch
 } from "./anthropic-messages";
+import { completeOpenAIChatCompletions } from "./openai-completions";
 
 export type AgentRole = "planner" | "builder" | "reviewer" | "deployer";
 
@@ -41,6 +42,11 @@ export {
   type AnthropicMessagesCompleteInput,
   type ModelFetch
 } from "./anthropic-messages";
+export {
+  completeOpenAIChatCompletions,
+  toOpenAIChatCompletionsUrl,
+  type OpenAIChatCompletionsCompleteInput
+} from "./openai-completions";
 
 export interface ModelProviderRuntimeRecord {
   id: string;
@@ -256,10 +262,6 @@ export class ProviderBackedModelGateway implements ModelGateway {
       return createMockModelResponse(request, route);
     }
 
-    if (route.api === "openai-completions") {
-      throwModelProviderProtocolNotImplemented(route.api);
-    }
-
     const provider = await this.providers.getProvider(route.provider);
     if (!provider) {
       throw new ModelProviderConfigurationError(
@@ -313,7 +315,15 @@ export class ProviderBackedModelGateway implements ModelGateway {
     }
 
     if (api === "openai-completions") {
-      throwModelProviderProtocolNotImplemented(api);
+      return completeOpenAIChatCompletions({
+        request,
+        route: resolvedRoute,
+        providerConfig: provider.config,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        maxTokens: this.maxTokens
+      });
     }
 
     return createMockModelResponse(request, resolvedRoute);
@@ -415,13 +425,6 @@ function isModelRoute(route: unknown): route is ModelRoute {
 
 function isMockRoute(route: ModelRoute): boolean {
   return route.api === "mock" || (!route.api && route.provider.startsWith("mock-"));
-}
-
-function throwModelProviderProtocolNotImplemented(api: ModelProviderApi): never {
-  throw new ModelProviderConfigurationError(
-    "model_provider_protocol_not_implemented",
-    `Model provider protocol ${api} is not implemented yet`
-  );
 }
 
 function isNonEmptyString(value: unknown): value is string {

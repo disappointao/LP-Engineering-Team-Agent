@@ -205,42 +205,6 @@ describe("anthropic messages model gateway", () => {
     });
   });
 
-  it("fails closed for explicit OpenAI-compatible routes before provider lookup", async () => {
-    const policy = createPolicy();
-    policy.builder = {
-      provider: "missing-openai-provider",
-      providerName: "Missing OpenAI",
-      api: "openai-completions",
-      model: "glm-5.1",
-      baseUrlConfigured: true,
-      apiKeyEnvConfigured: true
-    };
-
-    let providerLookups = 0;
-    const gateway = new ProviderBackedModelGateway({
-      policy: createDefaultModelPolicy(),
-      providers: {
-        async getProvider() {
-          providerLookups += 1;
-          return undefined;
-        }
-      }
-    });
-
-    await expect(
-      gateway.complete({
-        role: "builder",
-        projectId: "project_1",
-        prompt: "Generate",
-        routingPolicy: policy
-      })
-    ).rejects.toMatchObject({
-      name: "ModelProviderConfigurationError",
-      code: "model_provider_protocol_not_implemented"
-    });
-    expect(providerLookups).toBe(0);
-  });
-
   it("fails closed when route and provider protocols differ", async () => {
     let fetchCalls = 0;
     const gateway = new ProviderBackedModelGateway({
