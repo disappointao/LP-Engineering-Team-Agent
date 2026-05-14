@@ -117,4 +117,101 @@ describe("skills registry rules", () => {
       })
     ).toBe(true);
   });
+
+  it("keeps commands optional for existing manifests", () => {
+    const parsed = SkillManifestSchema.parse(sampleTemplateSkill);
+
+    expect(parsed.commands).toBeUndefined();
+  });
+
+  it("validates deployment skill command manifests", () => {
+    const parsed = SkillManifestSchema.parse({
+      ...sampleTemplateSkill,
+      id: "skill_static_deploy",
+      name: "Static deploy",
+      type: "deployment",
+      reviewState: "validated",
+      permissions: ["artifact:read", "deploy:static"],
+      requiredSecrets: ["STATIC_DEPLOY_TOKEN"],
+      commands: [
+        {
+          id: "publish_static",
+          name: "Publish static artifacts",
+          description: "Uploads the generated static LP files.",
+          permission: "deploy:static",
+          requiresApproval: true,
+          command: "static-deploy",
+          args: [
+            "--project",
+            "{{projectId}}",
+            "--html",
+            "{{artifact.indexHtmlPath}}"
+          ],
+          env: [
+            { name: "STATIC_DEPLOY_TOKEN", secretRef: "STATIC_DEPLOY_TOKEN" },
+            { name: "LP_PROJECT_ID", value: "{{projectId}}" }
+          ],
+          workingDirectory: "{{artifactDir}}",
+          timeoutMs: 120000
+        }
+      ]
+    });
+
+    expect(parsed.commands?.[0]).toMatchObject({
+      id: "publish_static",
+      command: "static-deploy",
+      permission: "deploy:static",
+      requiresApproval: true
+    });
+  });
+
+  it("rejects command env bindings that provide both value and secretRef", () => {
+    expect(() =>
+      SkillManifestSchema.parse({
+        ...sampleTemplateSkill,
+        type: "deployment",
+        reviewState: "validated",
+        permissions: ["deploy:static"],
+        requiredSecrets: ["STATIC_DEPLOY_TOKEN"],
+        commands: [
+          {
+            id: "publish_static",
+            name: "Publish static artifacts",
+            permission: "deploy:static",
+            requiresApproval: true,
+            command: "static-deploy",
+            args: [],
+            env: [
+              {
+                name: "STATIC_DEPLOY_TOKEN",
+                value: "inline",
+                secretRef: "STATIC_DEPLOY_TOKEN"
+              }
+            ]
+          }
+        ]
+      })
+    ).toThrow();
+  });
+
+  it("rejects shell-style command lines in command executable fields", () => {
+    expect(() =>
+      SkillManifestSchema.parse({
+        ...sampleTemplateSkill,
+        type: "deployment",
+        reviewState: "validated",
+        permissions: ["deploy:static"],
+        commands: [
+          {
+            id: "publish_static",
+            name: "Publish static artifacts",
+            permission: "deploy:static",
+            requiresApproval: true,
+            command: "pnpm deploy",
+            args: []
+          }
+        ]
+      })
+    ).toThrow();
+  });
 });

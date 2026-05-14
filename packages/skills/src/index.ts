@@ -6,6 +6,42 @@ export type SkillType = z.infer<typeof SkillTypeSchema>;
 export const SkillScopeSchema = z.enum(["global", "organization", "workspace", "project"]);
 export type SkillScope = z.infer<typeof SkillScopeSchema>;
 
+export const SkillCommandEnvBindingSchema = z
+  .object({
+    name: z.string().min(1),
+    value: z.string().optional(),
+    secretRef: z.string().min(1).optional()
+  })
+  .strict()
+  .superRefine((binding, ctx) => {
+    const hasValue = binding.value !== undefined;
+    const hasSecretRef = binding.secretRef !== undefined;
+    if (hasValue === hasSecretRef) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "command env bindings must set exactly one of value or secretRef",
+        path: ["value"]
+      });
+    }
+  });
+export type SkillCommandEnvBinding = z.infer<typeof SkillCommandEnvBindingSchema>;
+
+export const SkillCommandManifestSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().min(1).optional(),
+    permission: z.string().min(1),
+    requiresApproval: z.boolean(),
+    command: z.string().min(1).regex(/^[A-Za-z0-9._/-]+$/),
+    args: z.array(z.string()),
+    env: z.array(SkillCommandEnvBindingSchema).optional(),
+    workingDirectory: z.string().min(1).optional(),
+    timeoutMs: z.number().int().positive().max(300000).optional()
+  })
+  .strict();
+export type SkillCommandManifest = z.infer<typeof SkillCommandManifestSchema>;
+
 export const SkillManifestSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -16,6 +52,7 @@ export const SkillManifestSchema = z.object({
   permissions: z.array(z.string().min(1)).default([]),
   requiredSecrets: z.array(z.string().min(1)).default([]),
   entrypoints: z.array(z.string().min(1)).default([]),
+  commands: z.array(SkillCommandManifestSchema).optional(),
   reviewState: z.enum(["draft", "validated", "published", "deprecated", "archived"])
 }).strict();
 export type SkillManifest = z.infer<typeof SkillManifestSchema>;
