@@ -76,7 +76,12 @@ export type RuntimeEvent =
       runId?: string;
       role?: AgentRole;
       provider: string;
+      providerName?: string;
+      api?: ModelResponse["api"];
       model: string;
+      baseUrlConfigured?: boolean;
+      apiKeyEnvConfigured?: boolean;
+      modelCapabilities?: ModelResponse["modelCapabilities"];
     }
   | {
       type: "runtime.context.loaded";
@@ -249,7 +254,18 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
     runId: request.runId,
     role: request.role,
     provider: response.provider,
-    model: response.model
+    ...(response.providerName ? { providerName: response.providerName } : {}),
+    ...(response.api ? { api: response.api } : {}),
+    model: response.model,
+    ...(response.baseUrlConfigured !== undefined
+      ? { baseUrlConfigured: response.baseUrlConfigured }
+      : {}),
+    ...(response.apiKeyEnvConfigured !== undefined
+      ? { apiKeyEnvConfigured: response.apiKeyEnvConfigured }
+      : {}),
+    ...(response.modelCapabilities
+      ? { modelCapabilities: { ...response.modelCapabilities } }
+      : {})
   };
 }
 

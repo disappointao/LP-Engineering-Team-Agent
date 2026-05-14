@@ -289,6 +289,53 @@ describe("local agent runtime adapter", () => {
     );
   });
 
+  it("surfaces sanitized provider metadata in model completed events", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await runtime.run({
+      runId: "run_builder_provider_metadata",
+      projectId: "project_1",
+      role: "builder",
+      input: { brief: sampleBrief, prompt: "Build" },
+      context: {
+        skills: [],
+        mcpTools: [],
+        approval: { state: "not_required" },
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        },
+        modelRoutingPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: {
+            provider: "zhipu",
+            providerName: "智谱 GLM",
+            api: "anthropic-messages",
+            model: "glm-5.1",
+            baseUrlConfigured: true,
+            apiKeyEnvConfigured: true
+          },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    });
+
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "model.completed",
+        provider: "zhipu",
+        providerName: "智谱 GLM",
+        api: "anthropic-messages",
+        model: "glm-5.1",
+        baseUrlConfigured: true,
+        apiKeyEnvConfigured: true
+      })
+    );
+    expect(JSON.stringify(result.events)).not.toContain("ANTHROPIC_API_KEY");
+  });
+
   it("creates a defensive default runtime context for deterministic local runs", () => {
     const context = createDefaultRuntimeContext();
     context.artifactWorkspace.writableFiles.push("mutated.html");
