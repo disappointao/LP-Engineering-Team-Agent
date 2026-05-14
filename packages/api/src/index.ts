@@ -994,6 +994,7 @@ export class DemoWorkbenchService {
         throw new Error("model_id_required");
       }
       const api = resolveProviderApi(provider);
+      const modelCapabilities = toRouteModelCapabilities(provider, route.model);
       resolved[role] = {
         provider: provider.id,
         providerName: provider.name,
@@ -1001,7 +1002,7 @@ export class DemoWorkbenchService {
         model: route.model,
         baseUrlConfigured: Boolean(provider.config.baseUrl),
         apiKeyEnvConfigured: Boolean(provider.config.apiKeyEnv ?? provider.config.secretEnvName),
-        modelCapabilities: toRouteModelCapabilities(provider, route.model)
+        ...(modelCapabilities ? { modelCapabilities } : {})
       };
     }
 
@@ -1365,9 +1366,9 @@ function toRouteModelCapabilities(
 ): ModelRoute["modelCapabilities"] {
   const model = findProviderModelConfig(provider, modelId);
   if (!model) {
-    return {};
+    return undefined;
   }
-  return {
+  const capabilities = {
     ...(model.name ? { name: model.name } : {}),
     ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
     ...(model.maxTokens !== undefined ? { maxTokens: model.maxTokens } : {}),
@@ -1377,6 +1378,7 @@ function toRouteModelCapabilities(
       : {}),
     ...(model.supportsImages !== undefined ? { supportsImages: model.supportsImages } : {})
   };
+  return Object.keys(capabilities).length > 0 ? capabilities : undefined;
 }
 
 function normalizeAgentRole(role: unknown): AgentRole {

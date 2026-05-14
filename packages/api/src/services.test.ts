@@ -753,9 +753,9 @@ describe("demo workbench service", () => {
       api: "anthropic-messages",
       model: "glm-5.1",
       baseUrlConfigured: true,
-      apiKeyEnvConfigured: true,
-      modelCapabilities: {}
+      apiKeyEnvConfigured: true
     });
+    expect(policy.builder).not.toHaveProperty("modelCapabilities");
     expect(JSON.stringify(policy)).not.toContain("ANTHROPIC_API_KEY");
   });
 
@@ -1310,7 +1310,12 @@ describe("demo workbench service", () => {
         }
       },
       trace: {
-        injected: expect.arrayContaining(["skills:1", "mcpTools:0", "modelRoutingPolicy:1"]),
+        injected: expect.arrayContaining([
+          "skills:1",
+          "mcpTools:0",
+          "modelRoutingPolicy:1",
+          "modelProvider:builder:legacy"
+        ]),
         omitted: expect.arrayContaining(["history:not_implemented"])
       }
     });
