@@ -286,7 +286,7 @@ describe("json-file workbench repositories", () => {
     ]);
   });
 
-  it("reopens runs, ordered events, and tool observations from disk", async () => {
+  it("reopens runs, run events, and tool observations from disk", async () => {
     const tempDirectory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(tempDirectory);
     const filePath = join(tempDirectory, "run-workbench-state.json");
