@@ -133,6 +133,7 @@ describe("anthropic messages model gateway", () => {
       messages: [{ role: "user", content: "生成一个电商 LP" }]
     });
     expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(result)).not.toContain("ANTHROPIC_API_KEY");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-test-secret");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("ANTHROPIC_API_KEY");
   });
