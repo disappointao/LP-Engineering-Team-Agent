@@ -133,8 +133,30 @@ describe("structured static artifact model output", () => {
       role: "builder",
       schema: "StaticArtifactsSchema",
       reason: "schema_invalid",
+      firstIssuePath: "$root",
       firstIssueCode: "unrecognized_keys"
     });
+  });
+
+  it("does not expose secret-like extra key names in failure payloads", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      "sk-test-secret": "do not leak"
+    }));
+    const payload = toStaticArtifactParseFailurePayload(error);
+
+    expect(payload).toEqual({
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "schema_invalid",
+      issueCount: 1,
+      firstIssuePath: "$root",
+      firstIssueCode: "unrecognized_keys"
+    });
+    expect(JSON.stringify(payload)).not.toContain("sk-test-secret");
+    expect(payload).not.toHaveProperty("rawOutput");
+    expect(payload).not.toHaveProperty("output");
+    expect(payload).not.toHaveProperty("content");
   });
 
   it("does not expose raw schema-invalid output in failure payloads", () => {
@@ -154,6 +176,19 @@ describe("structured static artifact model output", () => {
       indexHtml: validArtifacts().indexHtml.replace(
         '<link rel="stylesheet" href="styles.css">',
         ""
+      )
+    }));
+
+    expect(error.reason).toBe("policy_violation");
+    expect(error.policyCode).toBe("missing_stylesheet_marker");
+  });
+
+  it("does not satisfy required local markers from HTML comments", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        '<link rel="stylesheet" href="styles.css">',
+        '<!-- <link rel="stylesheet" href="styles.css"> -->'
       )
     }));
 
@@ -187,6 +222,19 @@ describe("structured static artifact model output", () => {
     expect(error.policyCode).toBe("external_script_blocked");
   });
 
+  it("rejects script tags that only provide data-src", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        '  <script src="script.js"></script>',
+        '  <script data-src="script.js">console.log("inline")</script>\n  <script src="script.js"></script>'
+      )
+    }));
+
+    expect(error.reason).toBe("policy_violation");
+    expect(error.policyCode).toBe("external_script_blocked");
+  });
+
   it("rejects javascript URLs and inline event handlers", () => {
     const javascriptUrlError = captureParseError(JSON.stringify({
       ...validArtifacts(),
@@ -207,9 +255,12 @@ describe("structured static artifact model output", () => {
       "data-reactroot",
       "data-svelte",
       "__SVELTEKIT",
+      "<div id=\"svelte\"></div>",
       "ng-version",
-      "id=\"__nuxt\"",
+      "<div id=\"__nuxt\"></div>",
       "/@vite/client",
+      "/assets/index-abc123.js",
+      "window.__remixContext = {}",
       "webpackJsonp",
       "node_modules/vue/dist/vue.global.js"
     ];
@@ -222,6 +273,18 @@ describe("structured static artifact model output", () => {
       expect(error.reason).toBe("policy_violation");
       expect(error.policyCode).toBe("framework_marker_detected");
     }
+  });
+
+  it("allows ordinary marketing copy that mentions React as a verb", () => {
+    const parsed = parseBuilderStaticArtifactsOutput(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        "Static artifact output.",
+        "React quickly to customer demand with launch-ready merchandising."
+      )
+    }));
+
+    expect(parsed.indexHtml).toContain("React quickly to customer demand");
   });
 
   it("does not expose raw policy-violating output in failure payloads", () => {
@@ -262,6 +325,51 @@ describe("structured static artifact model output", () => {
       expect(error.reason).toBe("policy_violation");
       expect(error.policyCode).toBe("css_framework_blocked");
     }
+  });
+
+  it("rejects unquoted CSS framework href attributes", () => {
+    const cssFrameworkLinks = [
+      "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
+      "https://cdn.tailwindcss.com"
+    ];
+
+    for (const href of cssFrameworkLinks) {
+      const error = captureParseError(JSON.stringify({
+        ...validArtifacts(),
+        indexHtml: validArtifacts().indexHtml.replace(
+          '<link rel="stylesheet" href="styles.css">',
+          `<link rel="stylesheet" href="styles.css">\n  <link rel=stylesheet href=${href}>`
+        )
+      }));
+
+      expect(error.reason).toBe("policy_violation");
+      expect(error.policyCode).toBe("css_framework_blocked");
+    }
+  });
+
+  it("rejects CSS framework hrefs when stylesheet is one rel token", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        '<link rel="stylesheet" href="styles.css">',
+        '<link rel="stylesheet" href="styles.css">\n  <link rel="stylesheet preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'
+      )
+    }));
+
+    expect(error.reason).toBe("policy_violation");
+    expect(error.policyCode).toBe("css_framework_blocked");
+  });
+
+  it("allows non-framework brand CSS filenames that contain framework words", () => {
+    const parsed = parseBuilderStaticArtifactsOutput(JSON.stringify({
+      ...validArtifacts(),
+      indexHtml: validArtifacts().indexHtml.replace(
+        "https://assets.example.com/brand/campaign.css",
+        "https://assets.example.com/brand/foundation-campaign.css"
+      )
+    }));
+
+    expect(parsed.indexHtml).toContain("foundation-campaign.css");
   });
 
   it("allows external images, font CSS, and non-framework CSS links", () => {

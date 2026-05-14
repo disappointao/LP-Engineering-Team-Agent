@@ -40,27 +40,28 @@ const FRAMEWORK_MARKERS: RegExp[] = [
   /__NEXT_DATA__/i,
   /data-reactroot/i,
   /react-dom/i,
-  /\bReact(?:DOM)?\b/,
   /vue\.(?:global|runtime|esm)|__vue__|data-v-[\da-f]+/i,
   /ng-version|@angular/i,
-  /id\s*=\s*["']__nuxt["']|nuxt-app|__NUXT__/i,
-  /data-svelte|__SVELTEKIT|sveltekit/i,
+  /(?:^|[\s<])id\s*=\s*(?:"__nuxt"|'__nuxt'|__nuxt\b)|nuxt-app|__NUXT__/i,
+  /data-svelte|(?:^|[\s<])id\s*=\s*(?:"svelte"|'svelte'|svelte\b)|__SVELTEKIT|sveltekit/i,
   /\/@vite\/client|\bimport\.meta\b/i,
   /\bwebpackJsonp\b|\b__webpack_require__\b/i,
   /\/_next\//i,
+  /\/assets\/index-[\w.-]+\.js\b/i,
+  /__remix(?:Context|Manifest|RouteModules)|\/build\/_assets\//i,
   /\bnode_modules\b/i,
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/(?:react|react-dom|vue|@angular|svelte|next|nuxt)/i
 ];
 
 const CSS_FRAMEWORK_HREFS: RegExp[] = [
-  /bootstrap/i,
-  /tailwind/i,
-  /bulma/i,
-  /foundation/i,
-  /materialize/i,
-  /ant(?:d|-design)/i,
+  /(?:^|[\/@])bootstrap(?:[@/.-]|$)/i,
+  /cdn\.tailwindcss\.com|(?:^|[\/@])tailwind(?:css)?(?:[@/.-]|$)/i,
+  /(?:^|[\/@])bulma(?:[@/.-]|$)/i,
+  /foundation-sites|(?:^|\/)foundation(?:\.min)?\.css(?:[?#]|$)|\/foundation\/\d/i,
+  /(?:^|[\/@])materialize(?:[@/.-]|$)/i,
+  /(?:^|[\/@])(?:antd|ant-design)(?:[@/.-]|$)/i,
   /semantic-ui/i,
-  /uikit/i
+  /(?:^|[\/@])uikit(?:[@/.-]|$)/i
 ];
 
 export function createStructuredStaticArtifactsBuilderPrompt(brief: LPBrief): string {
@@ -107,7 +108,7 @@ export function parseBuilderStaticArtifactsOutput(output: string): StaticArtifac
   const keys = Object.keys(candidate);
   const extraKeys = keys.filter((key) => !isRequiredArtifactKey(key));
   if (extraKeys.length > 0) {
-    throw schemaInvalid(extraKeys[0] ?? "", "unrecognized_keys", extraKeys.length);
+    throw schemaInvalid("$root", "unrecognized_keys", extraKeys.length);
   }
 
   const artifacts: StaticArtifacts = {
@@ -189,25 +190,26 @@ function schemaInvalid(
 
 function validateArtifactPolicy(artifacts: StaticArtifacts): void {
   const html = artifacts.indexHtml;
-  const combined = [artifacts.indexHtml, artifacts.stylesCss, artifacts.scriptJs].join("\n");
+  const htmlWithoutComments = stripHtmlComments(html);
+  const combined = [htmlWithoutComments, artifacts.stylesCss, artifacts.scriptJs].join("\n");
 
-  validateHtmlDocument(html);
+  validateHtmlDocument(htmlWithoutComments);
 
-  if (!html.includes(REQUIRED_STYLESHEET_MARKER)) {
+  if (!hasRequiredLocalStylesheet(htmlWithoutComments)) {
     throw policyViolation("missing_stylesheet_marker");
   }
-  if (!html.includes(REQUIRED_SCRIPT_MARKER)) {
+  if (!hasRequiredLocalScript(htmlWithoutComments)) {
     throw policyViolation("missing_script_marker");
   }
   if (/javascript\s*:/i.test(combined)) {
     throw policyViolation("javascript_url_blocked");
   }
-  if (/<[a-z][^>]*\son[a-z]+\s*=/i.test(html)) {
+  if (/<[a-z][^>]*\son[a-z]+\s*=/i.test(htmlWithoutComments)) {
     throw policyViolation("inline_event_handler_blocked");
   }
 
-  validateScriptTags(html);
-  validateStylesheetLinks(html);
+  validateScriptTags(htmlWithoutComments);
+  validateStylesheetLinks(htmlWithoutComments);
 
   for (const marker of FRAMEWORK_MARKERS) {
     if (marker.test(combined)) {
@@ -245,9 +247,8 @@ function validateScriptTags(html: string): void {
 
 function validateStylesheetLinks(html: string): void {
   for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
-    const rel = getAttributeValue(tag, "rel")?.toLowerCase();
     const href = getAttributeValue(tag, "href");
-    if (rel === "stylesheet" && href && href !== "styles.css" && isCssFrameworkHref(href)) {
+    if (hasRelToken(tag, "stylesheet") && href && href !== "styles.css" && isCssFrameworkHref(href)) {
       throw policyViolation("css_framework_blocked");
     }
   }
@@ -260,9 +261,39 @@ function policyViolation(policyCode: string): BuilderStaticArtifactParseError {
   });
 }
 
+function stripHtmlComments(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "");
+}
+
+function hasRequiredLocalStylesheet(html: string): boolean {
+  return (html.match(/<link\b[^>]*>/gi) ?? []).some((tag) => {
+    return hasRelToken(tag, "stylesheet") && getAttributeValue(tag, "href") === "styles.css";
+  });
+}
+
+function hasRequiredLocalScript(html: string): boolean {
+  return (html.match(/<script\b[^>]*>/gi) ?? []).some((tag) => {
+    return getAttributeValue(tag, "src") === "script.js";
+  });
+}
+
 function getAttributeValue(tag: string, attribute: string): string | undefined {
-  const pattern = new RegExp(`${attribute}\\s*=\\s*(['"])(.*?)\\1`, "i");
-  return tag.match(pattern)?.[2];
+  const unquotedAttributeValue = "([^\\s\"'=<>`]+)";
+  const pattern = new RegExp(
+    `(?:^|[\\s/])${escapeRegExp(attribute)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|${unquotedAttributeValue})`,
+    "i"
+  );
+  const match = tag.match(pattern);
+  return match?.[1] ?? match?.[2] ?? match?.[3];
+}
+
+function hasRelToken(tag: string, token: string): boolean {
+  const rel = getAttributeValue(tag, "rel");
+  return rel?.split(/\s+/).some((relToken) => relToken.toLowerCase() === token) ?? false;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function isCssFrameworkHref(href: string): boolean {
@@ -270,15 +301,14 @@ function isCssFrameworkHref(href: string): boolean {
 }
 
 function hasExternalStylesheet(html: string): boolean {
-  return (html.match(/<link\b[^>]*>/gi) ?? []).some((tag) => {
-    const rel = getAttributeValue(tag, "rel")?.toLowerCase();
+  return (stripHtmlComments(html).match(/<link\b[^>]*>/gi) ?? []).some((tag) => {
     const href = getAttributeValue(tag, "href");
-    return rel === "stylesheet" && !!href && href !== "styles.css" && /^(?:https?:)?\/\//i.test(href);
+    return hasRelToken(tag, "stylesheet") && !!href && href !== "styles.css" && /^(?:https?:)?\/\//i.test(href);
   });
 }
 
 function hasExternalImage(html: string): boolean {
-  return (html.match(/<img\b[^>]*>/gi) ?? []).some((tag) => {
+  return (stripHtmlComments(html).match(/<img\b[^>]*>/gi) ?? []).some((tag) => {
     const src = getAttributeValue(tag, "src");
     return !!src && /^(?:https?:)?\/\//i.test(src);
   });
