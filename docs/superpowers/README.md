@@ -96,6 +96,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 provider-neutral model config implementation plan.
    - Read this after the provider-neutral model config spec when implementing generic provider API protocol selection, non-secret provider config storage, sanitized runtime metadata, Web Models controls, and mock-chain verification.
 
+24. `specs/2026-05-14-anthropic-messages-adapter-design.md`
+   - Stage 3 first real model provider adapter design.
+   - Read this after the provider-neutral model config plan when adding the `anthropic-messages` model-gateway adapter for Zhipu Claude-compatible and Anthropic-compatible endpoints, fake-fetch tests, opt-in real provider verification, and secret-safe response metadata.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

@@ -295,6 +295,14 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 这个设计参考 pi-mono 的 `provider + api + baseUrl + secret reference + models + compat` 思路，但不绑定 pi-mono 依赖。
 - 第一步只做通用配置和 mock runtime 链路验证，不做真实模型调用、streaming、tool-call 转换、fallback 或 OAuth。
 
+下一步真实 adapter 设计：
+
+- [2026-05-14-anthropic-messages-adapter-design.md](./superpowers/specs/2026-05-14-anthropic-messages-adapter-design.md)
+- 这一步只在 `packages/model-gateway` 做第一个真实协议 adapter：`anthropic-messages`。
+- 智谱的 `https://open.bigmodel.cn/api/anthropic` 属于 Claude/Anthropic Messages 兼容入口；智谱的 `https://open.bigmodel.cn/api/paas/v4/` 属于 OpenAI/智谱 Chat Completions 入口。
+- 当前项目配置层可以保存 `paas/v4`，但真实执行要等后续 `openai-completions` adapter。
+- 学习重点是把真实外部 API 调用限制在模型网关边界内：密钥只在 adapter 内解析，返回给 runtime 的只有 provider、protocol、model、usage 和脱敏状态。
+
 ### 阶段 4：工具执行和 MCP Execution
 
 先做只读工具，再做写工具：
