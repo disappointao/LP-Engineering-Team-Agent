@@ -753,6 +753,20 @@ describe("HomePage project flow errors", () => {
     expect(inputs.some((input) => input.props?.name === "prompt")).toBe(false);
   });
 
+  it("shows provider protocol model errors from the query string", async () => {
+    setActiveEmptyProjectState();
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        view: "models",
+        modelError: "model_provider_api_required"
+      })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("Choose a provider API protocol.");
+  });
+
   it("uses the active task project as the models project context and submits it in forms", async () => {
     pageMocks.pageState = {
       kind: "task_ready",

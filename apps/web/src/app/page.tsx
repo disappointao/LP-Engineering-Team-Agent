@@ -980,6 +980,12 @@ function toModelFlowError(value: string | undefined): ModelFlowErrorCode | undef
     value === "model_provider_name_required" ||
     value === "model_provider_key_required" ||
     value === "model_provider_type_unsupported" ||
+    value === "model_provider_api_required" ||
+    value === "model_provider_api_unsupported" ||
+    value === "model_provider_base_url_invalid" ||
+    value === "model_provider_api_key_env_invalid" ||
+    value === "model_provider_model_id_required" ||
+    value === "model_provider_model_limit_invalid" ||
     value === "model_provider_already_exists" ||
     value === "model_provider_not_found" ||
     value === "model_provider_disabled" ||
