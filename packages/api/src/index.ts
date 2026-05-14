@@ -49,7 +49,9 @@ import {
 import {
   LocalAgentRuntimeAdapter,
   type AgentRuntimeAdapter,
-  type RuntimeRunContext
+  type RuntimeEvent,
+  type RuntimeRunContext,
+  type RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import {
   SkillManifestSchema,
@@ -58,6 +60,13 @@ import {
   type SkillManifest
 } from "@lp-agent/skills";
 import { runAgentStep } from "./run-orchestrator";
+import {
+  PlannerLPBriefParseError,
+  createStructuredLPBriefPlannerPrompt,
+  parsePlannerLPBriefOutput,
+  toLPBriefParseFailurePayload,
+  toLPBriefParseSuccessPayload
+} from "./structured-lp-brief";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -245,14 +254,17 @@ export class DemoWorkbenchService {
   private readonly deployerRuntime: AgentRuntimeAdapter;
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly now: () => Date;
+  private readonly structuredPlannerOutputEnabled: boolean;
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+    const env = options.env ?? getProcessEnv();
     const runtimeFactoryInput = {
       repositories: this.repositories,
-      env: options.env,
+      env,
       fetch: options.modelFetch
     };
+    this.structuredPlannerOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
     this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
@@ -280,6 +292,10 @@ export class DemoWorkbenchService {
       const existingBriefs = await this.repositories.briefs.listAll();
       return existingBriefs.map((record) => record.id);
     });
+    let parsedPlannerBrief: LPBrief | undefined;
+    const plannerPrompt = this.structuredPlannerOutputEnabled
+      ? createStructuredLPBriefPlannerPrompt(input.prompt)
+      : input.prompt;
 
     try {
       const { result } = await runAgentStep({
@@ -290,9 +306,34 @@ export class DemoWorkbenchService {
         projectId: input.projectId,
         role: "planner",
         input: {
-          prompt: input.prompt
+          prompt: plannerPrompt
         },
-        now: this.now
+        now: this.now,
+        finalizeResult: this.structuredPlannerOutputEnabled
+          ? ({ result }) => {
+              if (result.state !== "completed") {
+                return result;
+              }
+              try {
+                parsedPlannerBrief = parsePlannerLPBriefOutput(result.modelOutputText ?? "");
+                return {
+                  ...result,
+                  events: addEventBeforeRunCompleted(
+                    result.events,
+                    toPlannerParseSuccessEvent({
+                      result,
+                      brief: parsedPlannerBrief
+                    })
+                  )
+                };
+              } catch (error) {
+                if (error instanceof PlannerLPBriefParseError) {
+                  return failPlannerResultForParseError({ result, error });
+                }
+                throw error;
+              }
+            }
+          : undefined
       });
 
       if (result.state === "failed") {
@@ -307,7 +348,7 @@ export class DemoWorkbenchService {
           id: briefId,
           projectId: input.projectId,
           prompt: input.prompt,
-          brief: copyBrief(sampleBrief),
+          brief: copyBrief(parsedPlannerBrief ?? sampleBrief),
           createdAt: this.timestamp()
         };
         await this.repositories.briefs.save(brief);
@@ -1149,6 +1190,75 @@ interface LocalRuntimeAdapterFactoryInput {
   repositories: WorkbenchRepositories;
   env?: RuntimeEnvironment;
   fetch?: ModelFetch;
+}
+
+function addEventBeforeRunCompleted(
+  events: RuntimeEvent[],
+  event: RuntimeEvent
+): RuntimeEvent[] {
+  const completedIndex = events.findIndex((candidate) => candidate.type === "run.completed");
+  if (completedIndex === -1) {
+    return [...events, event];
+  }
+  return [...events.slice(0, completedIndex), event, ...events.slice(completedIndex)];
+}
+
+function toPlannerParseSuccessEvent(input: {
+  result: RuntimeRunResult;
+  brief: LPBrief;
+}): RuntimeEvent {
+  return {
+    ...toLPBriefParseSuccessPayload(input.brief),
+    type: "model.output.parsed",
+    message: "Planner output parsed as LP brief",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    title: input.brief.title,
+    sectionCount: input.brief.sections.length,
+    productCount: input.brief.productData.length,
+    hasAssets: input.brief.assets.length > 0
+  };
+}
+
+function failPlannerResultForParseError(input: {
+  result: RuntimeRunResult;
+  error: PlannerLPBriefParseError;
+}): RuntimeRunResult {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...input.result,
+    state: "failed",
+    events: [
+      ...input.result.events.filter((event) => event.type !== "run.completed"),
+      {
+        ...toLPBriefParseFailurePayload(input.error),
+        type: "model.output.parse_failed",
+        message: "Planner output could not be parsed as LP brief",
+        runId: input.result.runId,
+        role: "planner",
+        schema: "LPBriefSchema",
+        reason: input.error.reason,
+        ...(issueSummary.issueCount !== undefined
+          ? { issueCount: issueSummary.issueCount }
+          : {}),
+        ...(issueSummary.firstIssuePath !== undefined
+          ? { firstIssuePath: issueSummary.firstIssuePath }
+          : {}),
+        ...(issueSummary.firstIssueCode !== undefined
+          ? { firstIssueCode: issueSummary.firstIssueCode }
+          : {})
+      },
+      {
+        type: "run.failed",
+        message: "Planner run failed.",
+        runId: input.result.runId,
+        role: "planner",
+        state: "failed",
+        errorName: input.error.name
+      }
+    ]
+  };
 }
 
 function createLocalRuntimeAdapter(

@@ -762,6 +762,15 @@ describe("demo workbench service", () => {
 
   it("uses provider-backed runtime when REAL_MODEL_RUNTIME is enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const modelBrief = {
+      ...sampleBrief,
+      title: "Model Planned Landing Page",
+      objective: "Convert real model output into a validated LP brief.",
+      sections: sampleBrief.sections.map((section, index) => ({
+        ...section,
+        id: `model_section_${index + 1}`
+      }))
+    };
     const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
     const fakeFetch: ModelFetch = async (input, init) => {
       fetchCalls.push({ input, init });
@@ -769,7 +778,7 @@ describe("demo workbench service", () => {
         JSON.stringify({
           type: "message",
           model: "glm-5.1",
-          content: [{ type: "text", text: "planner response" }],
+          content: [{ type: "text", text: JSON.stringify(modelBrief) }],
           usage: { input_tokens: 9, output_tokens: 4 }
         }),
         { status: 200, headers: { "content-type": "application/json" } }
@@ -808,6 +817,8 @@ describe("demo workbench service", () => {
     });
 
     expect(brief.id).toBe("brief_1");
+    expect(brief.brief.title).toBe("Model Planned Landing Page");
+    expect(brief.brief.sections[0]?.id).toBe("model_section_1");
     expect(fetchCalls).toHaveLength(1);
     expect(String(fetchCalls[0]?.input)).toBe(
       "https://open.bigmodel.cn/api/anthropic/v1/messages"
@@ -818,11 +829,16 @@ describe("demo workbench service", () => {
       "x-api-key": "sk-test-secret",
       "anthropic-version": "2023-06-01"
     });
-    expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
+    const requestBody = JSON.parse(String(fetchCalls[0]?.init?.body));
+    expect(requestBody).toMatchObject({
       model: "glm-5.1",
-      max_tokens: 1024,
-      messages: [{ role: "user", content: "Generate a landing page brief." }]
+      max_tokens: 1024
     });
+    expect(requestBody.messages).toHaveLength(1);
+    expect(requestBody.messages[0]).toMatchObject({ role: "user" });
+    expect(requestBody.messages[0].content).toContain("Return exactly one JSON object");
+    expect(requestBody.messages[0].content).toContain("LPBriefSchema");
+    expect(requestBody.messages[0].content).toContain("Generate a landing page brief.");
 
     const events = await repositories.runEvents.listForProject(project.id);
     const modelEvent = events.find((event) => event.type === "model.completed");
@@ -841,6 +857,21 @@ describe("demo workbench service", () => {
         usage: { inputTokens: 9, outputTokens: 4 }
       })
     });
+    expect(events.find((event) => event.type === "model.output.parsed")).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.output.parsed",
+      message: "Planner output parsed as LP brief",
+      payload: expect.objectContaining({
+        role: "planner",
+        schema: "LPBriefSchema",
+        title: "Model Planned Landing Page",
+        sectionCount: sampleBrief.sections.length,
+        productCount: sampleBrief.productData.length,
+        hasAssets: false
+      })
+    });
+    expect(events.some((event) => event.type === "run.completed")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(JSON.stringify(modelBrief));
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("ANTHROPIC_API_KEY");
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
@@ -848,6 +879,15 @@ describe("demo workbench service", () => {
 
   it("uses OpenAI-compatible provider-backed runtime when REAL_MODEL_RUNTIME is enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const modelBrief = {
+      ...sampleBrief,
+      title: "Model Planned Landing Page",
+      objective: "Convert real model output into a validated LP brief.",
+      sections: sampleBrief.sections.map((section, index) => ({
+        ...section,
+        id: `model_section_${index + 1}`
+      }))
+    };
     const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
     const fakeFetch: ModelFetch = async (input, init) => {
       fetchCalls.push({ input, init });
@@ -858,7 +898,7 @@ describe("demo workbench service", () => {
           choices: [
             {
               index: 0,
-              message: { role: "assistant", content: "planner response" },
+              message: { role: "assistant", content: JSON.stringify(modelBrief) },
               finish_reason: "stop"
             }
           ],
@@ -900,6 +940,8 @@ describe("demo workbench service", () => {
     });
 
     expect(brief.id).toBe("brief_1");
+    expect(brief.brief.title).toBe("Model Planned Landing Page");
+    expect(brief.brief.sections[0]?.id).toBe("model_section_1");
     expect(fetchCalls).toHaveLength(1);
     expect(String(fetchCalls[0]?.input)).toBe(
       "https://open.bigmodel.cn/api/paas/v4/chat/completions"
@@ -909,11 +951,14 @@ describe("demo workbench service", () => {
       "content-type": "application/json",
       authorization: "Bearer sk-test-secret"
     });
-    expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
-      model: "glm-5.1",
-      messages: [{ role: "user", content: "Generate a landing page brief." }],
-      stream: false
-    });
+    const requestBody = JSON.parse(String(fetchCalls[0]?.init?.body));
+    expect(requestBody.model).toBe("glm-5.1");
+    expect(requestBody.stream).toBe(false);
+    expect(requestBody.messages).toHaveLength(1);
+    expect(requestBody.messages[0]).toMatchObject({ role: "user" });
+    expect(requestBody.messages[0].content).toContain("Return exactly one JSON object");
+    expect(requestBody.messages[0].content).toContain("LPBriefSchema");
+    expect(requestBody.messages[0].content).toContain("Generate a landing page brief.");
 
     const events = await repositories.runEvents.listForProject(project.id);
     const modelEvent = events.find((event) => event.type === "model.completed");
@@ -932,9 +977,114 @@ describe("demo workbench service", () => {
         usage: { inputTokens: 9, outputTokens: 4 }
       })
     });
+    expect(events.find((event) => event.type === "model.output.parsed")).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.output.parsed",
+      message: "Planner output parsed as LP brief",
+      payload: expect.objectContaining({
+        role: "planner",
+        schema: "LPBriefSchema",
+        title: "Model Planned Landing Page",
+        sectionCount: sampleBrief.sections.length,
+        productCount: sampleBrief.productData.length,
+        hasAssets: false
+      })
+    });
+    expect(events.some((event) => event.type === "run.completed")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(JSON.stringify(modelBrief));
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("fails planner run without saving raw model output when structured LP brief parsing fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fakeFetch: ModelFetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl_test",
+          model: "glm-5.1",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "```json\n{\"title\":\"RAW_MODEL_OUTPUT_SECRET\"}\n```"
+              },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    await expect(
+      service.createBriefFromPrompt({
+        projectId: project.id,
+        prompt: "Generate a landing page brief."
+      })
+    ).rejects.toThrow("Planner run failed.");
+
+    await expect(repositories.briefs.listAll()).resolves.toEqual([]);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        projectId: project.id,
+        role: "planner",
+        state: "failed",
+        completedAt: expect.any(String)
+      })
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "model.output.parse_failed",
+      "run.failed"
+    ]);
+    expect(events.find((event) => event.type === "model.output.parse_failed")).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.output.parse_failed",
+      message: "Planner output could not be parsed as LP brief",
+      payload: expect.objectContaining({
+        role: "planner",
+        schema: "LPBriefSchema",
+        reason: "invalid_json"
+      })
+    });
+    const serializedEvents = JSON.stringify(events);
+    expect(serializedEvents).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+    expect(serializedEvents).not.toContain("```json");
+    expect(serializedEvents).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(serializedEvents).not.toContain("https://open.bigmodel.cn");
   });
 
   it("keeps deterministic runtime unless REAL_MODEL_RUNTIME is explicitly enabled", async () => {
