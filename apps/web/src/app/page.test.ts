@@ -332,6 +332,10 @@ describe("HomePage project flow errors", () => {
     const text = collectText(page);
     const inputs = collectElements(page, "input");
     const selects = collectElements(page, "select");
+    const apiSelect = selects.find((select) => select.props?.name === "api");
+    const apiOptionValues = collectElements(apiSelect, "option").map(
+      (option) => option.props?.value
+    );
 
     expect(text).toContain("Project models");
     expect(text).toContain("Spring Campaign");
@@ -340,6 +344,8 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Default model id");
     expect(inputs.some((input) => input.props?.name === "providerId")).toBe(true);
     expect(selects.some((select) => select.props?.name === "provider")).toBe(true);
+    expect(apiSelect).toBeDefined();
+    expect(apiOptionValues).toEqual(["mock", "openai-completions", "anthropic-messages"]);
     expect(text).toContain("mock-anthropic/code-model");
   });
 
