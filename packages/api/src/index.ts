@@ -34,12 +34,16 @@ import {
 } from "@lp-agent/mcp-gateway";
 import {
   InMemoryModelGateway,
+  ProviderBackedModelGateway,
   agentRoles,
   createDefaultModelPolicy,
   type AgentRole,
-  type ModelRoute,
+  type ModelFetch,
   type ModelProviderApi,
   type ModelProviderRuntimeConfig,
+  type ModelProviderRuntimeRecord,
+  type ModelProviderRuntimeResolver,
+  type ModelRoute,
   type ModelRoutingPolicy
 } from "@lp-agent/model-gateway";
 import {
@@ -219,6 +223,8 @@ export interface ProjectModelState {
   resolvedPolicy: ModelRoutingPolicy;
 }
 
+export type RuntimeEnvironment = Record<string, string | undefined>;
+
 export interface DemoWorkbenchServiceOptions {
   repositories?: WorkbenchRepositories;
   plannerRuntime?: AgentRuntimeAdapter;
@@ -226,6 +232,8 @@ export interface DemoWorkbenchServiceOptions {
   reviewerRuntime?: AgentRuntimeAdapter;
   deployerRuntime?: AgentRuntimeAdapter;
   deploymentAdapter?: GitDeploymentAdapter;
+  env?: RuntimeEnvironment;
+  modelFetch?: ModelFetch;
   now?: () => Date;
 }
 
@@ -240,10 +248,15 @@ export class DemoWorkbenchService {
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
-    this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter();
-    this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter();
-    this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter();
-    this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter();
+    const runtimeFactoryInput = {
+      repositories: this.repositories,
+      env: options.env,
+      fetch: options.modelFetch
+    };
+    this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
+    this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
+    this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
+    this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
     this.now = options.now ?? (() => new Date());
   }
@@ -1132,8 +1145,54 @@ export {
   type RunAgentStepResult
 } from "./run-orchestrator";
 
-function createLocalRuntimeAdapter(): LocalAgentRuntimeAdapter {
-  return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(createDefaultModelPolicy()));
+interface LocalRuntimeAdapterFactoryInput {
+  repositories: WorkbenchRepositories;
+  env?: RuntimeEnvironment;
+  fetch?: ModelFetch;
+}
+
+function createLocalRuntimeAdapter(
+  input?: LocalRuntimeAdapterFactoryInput
+): LocalAgentRuntimeAdapter {
+  const policy = createDefaultModelPolicy();
+  const env = input?.env ?? getProcessEnv();
+
+  if (env.REAL_MODEL_RUNTIME === "1" && input) {
+    return new LocalAgentRuntimeAdapter(
+      new ProviderBackedModelGateway({
+        policy,
+        providers: createRepositoryModelProviderResolver(input.repositories),
+        ...(input.fetch ? { fetch: input.fetch } : {}),
+        env
+      })
+    );
+  }
+
+  return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(policy));
+}
+
+function createRepositoryModelProviderResolver(
+  repositories: WorkbenchRepositories
+): ModelProviderRuntimeResolver {
+  return {
+    async getProvider(providerId: string): Promise<ModelProviderRuntimeRecord | undefined> {
+      const provider = await repositories.modelProviders.getById(providerId);
+      if (!provider) {
+        return undefined;
+      }
+
+      return {
+        id: provider.id,
+        name: provider.name,
+        enabled: provider.enabled,
+        config: structuredClone(provider.config)
+      };
+    }
+  };
+}
+
+function getProcessEnv(): RuntimeEnvironment {
+  return typeof process === "undefined" ? {} : process.env;
 }
 
 function createWorkbenchRuntimeContext(input: {

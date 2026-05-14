@@ -11,6 +11,7 @@ import {
 } from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
+import type { ModelFetch } from "@lp-agent/model-gateway";
 import type {
   AgentRuntimeAdapter,
   RuntimeRunRequest,
@@ -757,6 +758,203 @@ describe("demo workbench service", () => {
     });
     expect(policy.builder).not.toHaveProperty("modelCapabilities");
     expect(JSON.stringify(policy)).not.toContain("ANTHROPIC_API_KEY");
+  });
+
+  it("uses provider-backed runtime when REAL_MODEL_RUNTIME is enabled", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      return new Response(
+        JSON.stringify({
+          type: "message",
+          model: "glm-5.1",
+          content: [{ type: "text", text: "planner response" }],
+          usage: { input_tokens: 9, output_tokens: 4 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        ANTHROPIC_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+
+    expect(brief.id).toBe("brief_1");
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0]?.input)).toBe(
+      "https://open.bigmodel.cn/api/anthropic/v1/messages"
+    );
+    expect(fetchCalls[0]?.init?.method).toBe("POST");
+    expect(fetchCalls[0]?.init?.headers).toMatchObject({
+      "content-type": "application/json",
+      "x-api-key": "sk-test-secret",
+      "anthropic-version": "2023-06-01"
+    });
+    expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
+      model: "glm-5.1",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: "Generate a landing page brief." }]
+    });
+
+    const events = await repositories.runEvents.listForProject(project.id);
+    const modelEvent = events.find((event) => event.type === "model.completed");
+    expect(modelEvent).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.completed",
+      message: "planner model call completed",
+      payload: expect.objectContaining({
+        provider: "zhipu",
+        providerName: "智谱 GLM",
+        api: "anthropic-messages",
+        model: "glm-5.1",
+        baseUrlConfigured: true,
+        apiKeyEnvConfigured: true,
+        role: "planner"
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("keeps deterministic runtime unless REAL_MODEL_RUNTIME is explicitly enabled", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    let fetchCallCount = 0;
+    const fakeFetch: ModelFetch = async () => {
+      fetchCallCount += 1;
+      throw new Error("fetch_should_not_be_called");
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_PROVIDER_TEST: "1",
+        ANTHROPIC_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+
+    expect(brief.id).toBe("brief_1");
+    expect(fetchCallCount).toBe(0);
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.some((event) => event.type === "run.completed")).toBe(true);
+  });
+
+  it("records failed runs when real runtime provider secrets are missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    let fetchCallCount = 0;
+    const fakeFetch: ModelFetch = async () => {
+      fetchCallCount += 1;
+      throw new Error("fetch_should_not_be_called");
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    await expect(
+      service.createBriefFromPrompt({
+        projectId: project.id,
+        prompt: "Generate a landing page brief."
+      })
+    ).rejects.toThrow("Planner run failed.");
+
+    expect(fetchCallCount).toBe(0);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        projectId: project.id,
+        role: "planner",
+        state: "failed",
+        completedAt: expect.any(String)
+      })
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    const failedEvent = events.find((event) => event.type === "run.failed");
+    expect(failedEvent).toMatchObject({
+      runId: "run_planner_brief_1",
+      projectId: project.id,
+      type: "run.failed",
+      message: "Environment variable for provider zhipu is not configured",
+      payload: expect.objectContaining({
+        role: "planner",
+        state: "failed",
+        errorName: "ModelProviderConfigurationError"
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
   });
 
   it("maps legacy provider types to default API protocols", async () => {
