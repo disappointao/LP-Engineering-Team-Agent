@@ -120,6 +120,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 OpenAI-compatible Chat Completions adapter implementation plan.
    - Read this after the OpenAI-compatible adapter design when implementing fake-fetch tests, the generic `openai-completions` adapter, Zhipu `paas/v4` smoke testing, runtime dispatch, and Web/API runtime coverage.
 
+30. `specs/2026-05-14-structured-lp-brief-model-output-design.md`
+   - Stage 3 structured Planner LP brief output design.
+   - Read this after the OpenAI-compatible adapter plan when replacing the real-runtime Planner `sampleBrief` placeholder with validated `LPBriefSchema` parsing while keeping default deterministic behavior and static LP artifact generation.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
