@@ -302,12 +302,12 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - [2026-05-14-anthropic-messages-adapter-design.md](./superpowers/specs/2026-05-14-anthropic-messages-adapter-design.md)
 - 这一步只在 `packages/model-gateway` 做第一个真实协议 adapter：`anthropic-messages`。
 - 智谱的 `https://open.bigmodel.cn/api/anthropic` 属于 Claude/Anthropic Messages 兼容入口；智谱的 `https://open.bigmodel.cn/api/paas/v4/` 属于 OpenAI/智谱 Chat Completions 入口。
-- 当前项目配置层可以保存 `paas/v4`，但真实执行要等后续 `openai-completions` adapter。
+- `paas/v4` 真实执行需要走 `openai-completions` adapter；当前阶段已经补齐该 adapter，并通过 provider-backed runtime fake-fetch 测试覆盖接线路径。
 - 学习重点是把真实外部 API 调用限制在模型网关边界内：密钥只在 adapter 内解析，返回给 runtime 的只有 provider、protocol、model、usage 和脱敏状态。
 - 当前实现计划：[2026-05-14-anthropic-messages-adapter.md](./superpowers/plans/2026-05-14-anthropic-messages-adapter.md)
-- 当前 adapter 仍只存在于 `packages/model-gateway` 边界内，尚未接入 Web/API/runtime 的真实执行路径。
+- `anthropic-messages` adapter 已可通过 `REAL_MODEL_RUNTIME=1` 的 provider-backed runtime 路径进入 Web/API flow；默认开发和测试仍保持 deterministic runtime。
 
-下一步真实 runtime 接线设计：
+已实现的真实 runtime 接线设计：
 
 - [2026-05-14-real-model-runtime-wiring-design.md](./superpowers/specs/2026-05-14-real-model-runtime-wiring-design.md)
 - 当前实现计划：[2026-05-14-real-model-runtime-wiring.md](./superpowers/plans/2026-05-14-real-model-runtime-wiring.md)
@@ -317,12 +317,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 学习重点：真实模型接入不是把所有 runtime 都替换成网络调用，而是在服务边界增加可测试的 factory、env 开关、仓储 resolver、fake-fetch 单测和脱敏事件。
 - 真实 runtime 必须在角色解析到默认或配置型 mock route 时 fail closed，否则用户会误以为已经跑了真实模型。
 
-下一步 OpenAI-compatible adapter 设计：
+已实现的 OpenAI-compatible adapter 设计：
 
 - [2026-05-14-openai-compatible-adapter-design.md](./superpowers/specs/2026-05-14-openai-compatible-adapter-design.md)
 - 当前实现计划：[2026-05-14-openai-compatible-adapter.md](./superpowers/plans/2026-05-14-openai-compatible-adapter.md)
 - 这一步把 `openai-completions` 从配置占位变成真实 Chat Completions 协议 adapter。
 - 智谱 `https://open.bigmodel.cn/api/paas/v4` 是第一个目标，但 adapter 要保持通用，后续可接 OpenRouter、Ollama、LM Studio、vLLM 等 OpenAI-compatible provider。
+- `openai-completions` 已接入 `ProviderBackedModelGateway` 和 Web/API runtime fake-fetch 覆盖；真实调用仍必须显式配置 provider route、API key env，并打开 `REAL_MODEL_RUNTIME=1`。
 - 真实集成测试默认跳过；本地验证智谱 `paas/v4` 时使用 `OPENAI_COMPATIBLE_BASE_URL`、`OPENAI_COMPATIBLE_API_KEY`、`OPENAI_COMPATIBLE_DEFAULT_MODEL`。
 - 学习重点：不同 provider 可以共享同一种协议 adapter，差异通过 `baseUrl`、`apiKeyEnv`、`model` 和少量兼容配置表达，不应该在 runtime 里写死某个厂商。
 

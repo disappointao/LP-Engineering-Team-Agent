@@ -176,6 +176,46 @@ describe("openai compatible chat completions model gateway", () => {
     expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2 });
   });
 
+  it("fails on blank text content parts", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider();
+        }
+      },
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            model: "glm-5.1",
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "   " }]
+                }
+              }
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        ),
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "planner",
+        projectId: "project_1",
+        prompt: "Plan",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderResponseError",
+      code: "model_provider_response_shape_invalid"
+    });
+  });
+
   it("includes max_tokens when configured on the gateway", async () => {
     let requestBody: unknown;
     const gateway = new ProviderBackedModelGateway({
@@ -208,6 +248,42 @@ describe("openai compatible chat completions model gateway", () => {
     });
 
     expect(requestBody).toMatchObject({ max_tokens: 256 });
+  });
+
+  it.each([
+    ["compat.maxTokens", { maxTokens: 384 }],
+    ["compat.max_tokens", { max_tokens: 384 }]
+  ])("includes max_tokens when configured through provider %s", async (_name, compat) => {
+    let requestBody: unknown;
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider({ compat });
+        }
+      },
+      fetch: async (_input, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(
+          JSON.stringify({
+            model: "glm-5.1",
+            choices: [{ message: { role: "assistant", content: "OK" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      },
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    await gateway.complete({
+      role: "planner",
+      projectId: "project_1",
+      prompt: "Plan",
+      routingPolicy: createPolicy()
+    });
+
+    expect(requestBody).toMatchObject({ max_tokens: 384 });
   });
 
   it("fails without a configured base URL", async () => {

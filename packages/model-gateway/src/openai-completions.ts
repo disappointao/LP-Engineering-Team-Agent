@@ -281,7 +281,7 @@ function parseMessageContent(content: unknown): string | undefined {
       }
       const contentPart = part as { type?: unknown; text?: unknown };
       if (contentPart.type === "text" && typeof contentPart.text === "string") {
-        return contentPart.text.length > 0 ? [contentPart.text] : [];
+        return contentPart.text.trim().length > 0 ? [contentPart.text] : [];
       }
       return [];
     })
