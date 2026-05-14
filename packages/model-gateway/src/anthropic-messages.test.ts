@@ -136,6 +136,10 @@ describe("anthropic messages model gateway", () => {
     expect(JSON.stringify(result)).not.toContain("ANTHROPIC_API_KEY");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-test-secret");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(gateway.getAuditLog())).toContain("\"api\":\"anthropic-messages\"");
+    expect(JSON.stringify(gateway.getAuditLog())).not.toContain("https://open.bigmodel.cn");
+    expect(JSON.stringify(gateway.getAuditLog())).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-test-secret");
   });
 
   it("keeps mock routes deterministic without provider config", async () => {
