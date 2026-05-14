@@ -307,6 +307,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 当前实现计划：[2026-05-14-anthropic-messages-adapter.md](./superpowers/plans/2026-05-14-anthropic-messages-adapter.md)
 - 当前 adapter 仍只存在于 `packages/model-gateway` 边界内，尚未接入 Web/API/runtime 的真实执行路径。
 
+下一步真实 runtime 接线设计：
+
+- [2026-05-14-real-model-runtime-wiring-design.md](./superpowers/specs/2026-05-14-real-model-runtime-wiring-design.md)
+- 这一步把 `ProviderBackedModelGateway` 接入 Web/API/runtime，但必须通过 `REAL_MODEL_RUNTIME=1` 显式开启。
+- `REAL_MODEL_PROVIDER_TEST=1` 只控制真实 provider 集成测试，不应该触发 Web/API 的真实模型运行。
+- 这一阶段只验证真实模型能进入 run timeline，LP 产物仍保持 deterministic 静态 HTML/CSS/JS，不直接由模型输出驱动。
+
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
 ```bash

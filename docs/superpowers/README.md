@@ -104,6 +104,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 3 first real model provider adapter implementation plan.
    - Read this after the Anthropic Messages adapter spec when implementing fake-fetch unit tests, provider-backed model-gateway dispatch, opt-in real provider verification, and secret-safe adapter behavior.
 
+26. `specs/2026-05-14-real-model-runtime-wiring-design.md`
+   - Stage 3 real model runtime wiring design.
+   - Read this after the Anthropic Messages adapter plan when wiring `ProviderBackedModelGateway` into Web/API/runtime behind an explicit local opt-in switch while preserving deterministic defaults and static LP artifact generation.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
