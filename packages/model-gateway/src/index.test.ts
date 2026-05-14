@@ -213,6 +213,59 @@ describe("model gateway", () => {
     });
   });
 
+  it("records sanitized provider protocol metadata from request-scoped routes", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+
+    const result = await gateway.complete({
+      role: "builder",
+      prompt: "Generate HTML",
+      projectId: "project_1",
+      routingPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: {
+          provider: "zhipu",
+          providerName: "智谱 GLM",
+          api: "anthropic-messages",
+          model: "glm-5.1",
+          baseUrlConfigured: true,
+          apiKeyEnvConfigured: true,
+          modelCapabilities: {
+            contextWindow: 200000,
+            maxTokens: 128000,
+            supportsTools: true,
+            supportsStreaming: true
+          }
+        },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
+    });
+
+    expect(result).toMatchObject({
+      provider: "zhipu",
+      providerName: "智谱 GLM",
+      api: "anthropic-messages",
+      model: "glm-5.1",
+      baseUrlConfigured: true,
+      apiKeyEnvConfigured: true,
+      modelCapabilities: {
+        contextWindow: 200000,
+        maxTokens: 128000,
+        supportsTools: true,
+        supportsStreaming: true
+      }
+    });
+    expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-");
+    expect(gateway.getAuditLog()[0]).toMatchObject({
+      provider: "zhipu",
+      providerName: "智谱 GLM",
+      api: "anthropic-messages",
+      model: "glm-5.1",
+      baseUrlConfigured: true,
+      apiKeyEnvConfigured: true
+    });
+  });
+
   it("copies request-scoped routing policy before storing audit context", async () => {
     const policy = createDefaultModelPolicy();
     policy.builder.provider = "project-openai";

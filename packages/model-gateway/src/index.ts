@@ -1,8 +1,41 @@
 export type AgentRole = "planner" | "builder" | "reviewer" | "deployer";
 
+export type ModelProviderApi = "mock" | "openai-completions" | "anthropic-messages";
+
+export interface ModelProviderHeaderRef {
+  env: string;
+}
+
+export interface ModelProviderModelConfig {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  supportsTools?: boolean;
+  supportsStreaming?: boolean;
+  supportsImages?: boolean;
+}
+
+export interface ModelProviderRuntimeConfig {
+  api: ModelProviderApi;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  secretEnvName?: string;
+  headers?: Record<string, ModelProviderHeaderRef>;
+  models?: ModelProviderModelConfig[];
+  compat?: Record<string, unknown>;
+}
+
 export interface ModelRoute {
   provider: string;
+  providerName?: string;
+  api?: ModelProviderApi;
   model: string;
+  baseUrlConfigured?: boolean;
+  apiKeyEnvConfigured?: boolean;
+  modelCapabilities?: Omit<ModelProviderModelConfig, "id" | "name"> & {
+    name?: string;
+  };
 }
 
 export type ModelRoutingPolicy = Record<AgentRole, ModelRoute>;
@@ -56,7 +89,12 @@ export interface ModelRequest {
 
 export interface ModelResponse {
   provider: string;
+  providerName?: string;
+  api?: ModelProviderApi;
   model: string;
+  baseUrlConfigured?: boolean;
+  apiKeyEnvConfigured?: boolean;
+  modelCapabilities?: ModelRoute["modelCapabilities"];
   text: string;
   usage: {
     inputTokens: number;
@@ -114,15 +152,25 @@ export class InMemoryModelGateway implements ModelGateway {
     this.auditEntries.push({
       role: request.role,
       projectId: request.projectId,
-      provider: route.provider,
-      model: route.model,
+      ...cloneRoute(route),
       promptLength: request.prompt.length,
       context: request.context ? cloneModelRequestContext(request.context) : undefined
     });
 
     return {
       provider: route.provider,
+      ...(route.providerName ? { providerName: route.providerName } : {}),
+      ...(route.api ? { api: route.api } : {}),
       model: route.model,
+      ...(route.baseUrlConfigured !== undefined
+        ? { baseUrlConfigured: route.baseUrlConfigured }
+        : {}),
+      ...(route.apiKeyEnvConfigured !== undefined
+        ? { apiKeyEnvConfigured: route.apiKeyEnvConfigured }
+        : {}),
+      ...(route.modelCapabilities
+        ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
+        : {}),
       text: `${request.role} response from ${route.provider}/${route.model}`,
       usage: {
         inputTokens: Math.ceil(request.prompt.length / 4),
@@ -133,7 +181,10 @@ export class InMemoryModelGateway implements ModelGateway {
 
   getAuditLog(): readonly ModelAuditEntry[] {
     return this.auditEntries.map((entry) => ({
-      ...entry,
+      ...cloneRoute(entry),
+      role: entry.role,
+      projectId: entry.projectId,
+      promptLength: entry.promptLength,
       context: entry.context ? cloneModelRequestContext(entry.context) : undefined
     }));
   }
@@ -159,11 +210,35 @@ function clonePolicy(policy: ModelRoutingPolicy): Partial<ModelRoutingPolicy> {
   return agentRoles.reduce<Partial<ModelRoutingPolicy>>((cloned, role) => {
     const route = policy[role];
     if (isModelRoute(route)) {
-      cloned[role] = { provider: route.provider, model: route.model };
+      cloned[role] = cloneRoute(route);
     }
 
     return cloned;
   }, {});
+}
+
+function cloneRoute(route: ModelRoute): ModelRoute {
+  return {
+    provider: route.provider,
+    ...(route.providerName ? { providerName: route.providerName } : {}),
+    ...(route.api ? { api: route.api } : {}),
+    model: route.model,
+    ...(route.baseUrlConfigured !== undefined
+      ? { baseUrlConfigured: route.baseUrlConfigured }
+      : {}),
+    ...(route.apiKeyEnvConfigured !== undefined
+      ? { apiKeyEnvConfigured: route.apiKeyEnvConfigured }
+      : {}),
+    ...(route.modelCapabilities
+      ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
+      : {})
+  };
+}
+
+function cloneModelCapabilities(
+  capabilities: NonNullable<ModelRoute["modelCapabilities"]>
+): NonNullable<ModelRoute["modelCapabilities"]> {
+  return { ...capabilities };
 }
 
 function isModelRoute(route: unknown): route is ModelRoute {
