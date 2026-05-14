@@ -236,4 +236,253 @@ describe("anthropic messages model gateway", () => {
     });
     expect(providerLookups).toBe(0);
   });
+
+  it("fails when a real provider route has no provider config", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return undefined;
+        }
+      }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_config_missing"
+    });
+  });
+
+  it("fails when a provider is disabled", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return { ...createZhipuProvider(), enabled: false };
+        }
+      }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_disabled"
+    });
+  });
+
+  it("fails without a configured base URL", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider({ baseUrl: undefined });
+        }
+      },
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_base_url_missing"
+    });
+  });
+
+  it("fails without an API key env reference", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider({ apiKeyEnv: undefined });
+        }
+      },
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_api_key_env_missing"
+    });
+  });
+
+  it("fails without the resolved API key value", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      env: {}
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderConfigurationError",
+      code: "model_provider_api_key_missing"
+    });
+  });
+
+  it("fails without leaking provider response text on non-2xx responses", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () =>
+        new Response("secret-ish provider diagnostic", {
+          status: 429
+        }),
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    const error = await gateway
+      .complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      name: "ModelProviderRequestError",
+      code: "model_provider_http_error",
+      status: 429
+    });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain("secret-ish provider diagnostic");
+  });
+
+  it("fails on invalid JSON responses", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () => new Response("not-json", { status: 200 }),
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderResponseError",
+      code: "model_provider_response_json_invalid"
+    });
+  });
+
+  it("fails on unsupported response shapes", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () =>
+        new Response(JSON.stringify({ content: [], usage: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }),
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderResponseError",
+      code: "model_provider_response_shape_invalid"
+    });
+  });
+
+  it("fails on request timeout", async () => {
+    let abortObserved = false;
+    const fakeFetch: ModelFetch = async (_input, init) =>
+      new Promise<Response>((_resolve) => {
+        if (init?.signal?.aborted) {
+          abortObserved = true;
+          return;
+        }
+
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            abortObserved = true;
+          },
+          { once: true }
+        );
+      });
+
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: fakeFetch,
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" },
+      timeoutMs: 1
+    });
+
+    await expect(
+      gateway.complete({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    ).rejects.toMatchObject({
+      name: "ModelProviderRequestError",
+      code: "model_provider_request_timeout"
+    });
+    expect(abortObserved).toBe(true);
+  });
 });
