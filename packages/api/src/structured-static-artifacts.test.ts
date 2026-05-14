@@ -78,6 +78,76 @@ describe("structured static artifact model output", () => {
     });
   });
 
+  it("rejects missing required artifact fields", () => {
+    const missingIndexHtmlError = captureParseError(JSON.stringify({
+      stylesCss: validArtifacts().stylesCss,
+      scriptJs: validArtifacts().scriptJs
+    }));
+    expect(toStaticArtifactParseFailurePayload(missingIndexHtmlError)).toMatchObject({
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "schema_invalid",
+      firstIssuePath: "indexHtml",
+      firstIssueCode: "invalid_type"
+    });
+
+    const missingScriptJsError = captureParseError(JSON.stringify({
+      indexHtml: validArtifacts().indexHtml,
+      stylesCss: validArtifacts().stylesCss
+    }));
+    expect(toStaticArtifactParseFailurePayload(missingScriptJsError)).toMatchObject({
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "schema_invalid",
+      firstIssuePath: "scriptJs",
+      firstIssueCode: "invalid_type"
+    });
+  });
+
+  it("rejects non-string artifact fields", () => {
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ["indexHtml", { ...validArtifacts(), indexHtml: 123 }],
+      ["stylesCss", { ...validArtifacts(), stylesCss: ["body {}"] }],
+      ["scriptJs", { ...validArtifacts(), scriptJs: { source: "console.log('x')" } }]
+    ];
+
+    for (const [fieldName, candidate] of cases) {
+      const error = captureParseError(JSON.stringify(candidate));
+      expect(toStaticArtifactParseFailurePayload(error)).toMatchObject({
+        role: "builder",
+        schema: "StaticArtifactsSchema",
+        reason: "schema_invalid",
+        firstIssuePath: fieldName,
+        firstIssueCode: "invalid_type"
+      });
+    }
+  });
+
+  it("rejects extra artifact fields in V0", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      packageJson: "{\"scripts\":{\"build\":\"vite\"}}"
+    }));
+
+    expect(toStaticArtifactParseFailurePayload(error)).toMatchObject({
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "schema_invalid",
+      firstIssueCode: "unrecognized_keys"
+    });
+  });
+
+  it("does not expose raw schema-invalid output in failure payloads", () => {
+    const error = captureParseError(JSON.stringify({
+      ...validArtifacts(),
+      stylesCss: ["RAW_SCHEMA_STATIC_ARTIFACT_SECRET"]
+    }));
+    const payload = toStaticArtifactParseFailurePayload(error);
+
+    expect(error.reason).toBe("schema_invalid");
+    expect(JSON.stringify(payload)).not.toContain("RAW_SCHEMA_STATIC_ARTIFACT_SECRET");
+  });
+
   it("rejects HTML without the required local stylesheet marker", () => {
     const error = captureParseError(JSON.stringify({
       ...validArtifacts(),
@@ -135,6 +205,8 @@ describe("structured static artifact model output", () => {
     const cases = [
       "__NEXT_DATA__",
       "data-reactroot",
+      "data-svelte",
+      "__SVELTEKIT",
       "ng-version",
       "id=\"__nuxt\"",
       "/@vite/client",
@@ -152,17 +224,44 @@ describe("structured static artifact model output", () => {
     }
   });
 
-  it("rejects CSS framework links", () => {
+  it("does not expose raw policy-violating output in failure payloads", () => {
     const error = captureParseError(JSON.stringify({
       ...validArtifacts(),
       indexHtml: validArtifacts().indexHtml.replace(
-        '<link rel="stylesheet" href="styles.css">',
-        '<link rel="stylesheet" href="styles.css">\n  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'
+        "</body>",
+        "<script src=\"https://cdn.example.com/RAW_POLICY_STATIC_ARTIFACT_SECRET.js\"></script></body>"
       )
     }));
+    const payload = toStaticArtifactParseFailurePayload(error);
 
     expect(error.reason).toBe("policy_violation");
-    expect(error.policyCode).toBe("css_framework_blocked");
+    expect(payload).toMatchObject({
+      role: "builder",
+      schema: "StaticArtifactsSchema",
+      reason: "policy_violation",
+      policyCode: "external_script_blocked"
+    });
+    expect(JSON.stringify(payload)).not.toContain("RAW_POLICY_STATIC_ARTIFACT_SECRET");
+  });
+
+  it("rejects CSS framework links", () => {
+    const cssFrameworkLinks = [
+      "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
+      "https://cdn.tailwindcss.com"
+    ];
+
+    for (const href of cssFrameworkLinks) {
+      const error = captureParseError(JSON.stringify({
+        ...validArtifacts(),
+        indexHtml: validArtifacts().indexHtml.replace(
+          '<link rel="stylesheet" href="styles.css">',
+          `<link rel="stylesheet" href="styles.css">\n  <link rel="stylesheet" href="${href}">`
+        )
+      }));
+
+      expect(error.reason).toBe("policy_violation");
+      expect(error.policyCode).toBe("css_framework_blocked");
+    }
   });
 
   it("allows external images, font CSS, and non-framework CSS links", () => {
