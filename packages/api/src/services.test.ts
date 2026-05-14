@@ -688,12 +688,85 @@ describe("demo workbench service", () => {
       name: "OpenAI",
       provider: "openai",
       config: {
+        api: "openai-completions",
         baseUrl: "https://api.openai.com/v1",
-        secretEnvName: "OPENAI_API_KEY"
+        apiKeyEnv: "OPENAI_API_KEY"
       },
       enabled: true
     });
     expect(policy.builder).toEqual({ provider: "mock-anthropic", model: "code-model" });
+  });
+
+  it("creates provider-neutral model providers with explicit API protocol", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu",
+      name: "智谱 GLM",
+      provider: "custom",
+      api: "anthropic-messages",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      apiKeyEnv: "ANTHROPIC_API_KEY",
+      modelId: "glm-5.1"
+    });
+
+    expect(provider).toMatchObject({
+      id: "zhipu",
+      provider: "custom",
+      config: {
+        api: "anthropic-messages",
+        baseUrl: "https://open.bigmodel.cn/api/anthropic",
+        apiKeyEnv: "ANTHROPIC_API_KEY",
+        models: [{ id: "glm-5.1" }]
+      }
+    });
+    expect(JSON.stringify(provider)).not.toContain("sk-");
+  });
+
+  it("maps legacy provider types to default API protocols", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_openai",
+      name: "OpenAI",
+      provider: "openai",
+      secretEnvName: "OPENAI_API_KEY"
+    });
+
+    expect(provider.config).toMatchObject({
+      api: "openai-completions",
+      apiKeyEnv: "OPENAI_API_KEY"
+    });
+  });
+
+  it("rejects unsupported provider API protocols and invalid API key env refs", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    await expect(
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "bad_api",
+        name: "Bad API",
+        provider: "custom",
+        api: "not-real"
+      })
+    ).rejects.toThrow("model_provider_api_unsupported");
+
+    await expect(
+      service.createModelProvider({
+        projectId: project.id,
+        providerId: "bad_env",
+        name: "Bad Env",
+        provider: "custom",
+        api: "anthropic-messages",
+        apiKeyEnv: "sk-real-secret-value"
+      })
+    ).rejects.toThrow("model_provider_api_key_env_invalid");
   });
 
   it("upserts project model routes and uses them during runtime calls", async () => {
@@ -924,7 +997,7 @@ describe("demo workbench service", () => {
         provider: "openai",
         secretEnvName: "sk-real-secret-value"
       })
-    ).rejects.toThrow("model_secret_reference_invalid");
+    ).rejects.toThrow("model_provider_api_key_env_invalid");
   });
 
   it("keeps published skill versions published when validation is retried", async () => {

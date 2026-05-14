@@ -37,6 +37,8 @@ import {
   agentRoles,
   createDefaultModelPolicy,
   type AgentRole,
+  type ModelProviderApi,
+  type ModelProviderRuntimeConfig,
   type ModelRoutingPolicy
 } from "@lp-agent/model-gateway";
 import {
@@ -190,8 +192,11 @@ export interface CreateModelProviderInput {
   providerId: string;
   name: string;
   provider: ModelProviderType;
+  api?: ModelProviderApi | string;
   baseUrl?: string;
+  apiKeyEnv?: string;
   secretEnvName?: string;
+  modelId?: string;
 }
 
 export interface SetModelProviderEnabledInput {
@@ -843,8 +848,12 @@ export class DemoWorkbenchService {
     const name = normalizeNonEmpty(input.name, "model_provider_name_required");
     const provider = normalizeModelProviderType(input.provider);
     const config = normalizeModelProviderConfig({
+      provider,
+      api: input.api,
       baseUrl: input.baseUrl,
-      secretEnvName: input.secretEnvName
+      apiKeyEnv: input.apiKeyEnv,
+      secretEnvName: input.secretEnvName,
+      modelId: input.modelId
     });
 
     return withRepositoryIdLock(this.repositories, async () => {
@@ -1251,23 +1260,82 @@ function normalizeModelProviderType(provider: unknown): ModelProviderType {
   throw new Error("model_provider_type_unsupported");
 }
 
-function normalizeModelProviderConfig(input: {
-  baseUrl?: string;
-  secretEnvName?: string;
-}): ModelProviderRecord["config"] {
-  const config: ModelProviderRecord["config"] = {};
-  const baseUrl = input.baseUrl?.trim();
-  const secretEnvName = input.secretEnvName?.trim();
-  if (baseUrl) {
-    config.baseUrl = baseUrl;
+function normalizeModelProviderApi(
+  provider: ModelProviderType,
+  api: unknown
+): ModelProviderApi {
+  if (api === "mock" || api === "openai-completions" || api === "anthropic-messages") {
+    return api;
   }
-  if (secretEnvName) {
-    if (!/^[A-Z][A-Z0-9_]*$/.test(secretEnvName)) {
-      throw new Error("model_secret_reference_invalid");
+  if (typeof api === "string" && api.trim().length > 0) {
+    throw new Error("model_provider_api_unsupported");
+  }
+  if (provider === "mock") {
+    return "mock";
+  }
+  if (provider === "openai") {
+    return "openai-completions";
+  }
+  if (provider === "anthropic") {
+    return "anthropic-messages";
+  }
+  throw new Error("model_provider_api_required");
+}
+
+function normalizeEnvRef(value: string | undefined, errorCode: string): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  if (!/^[A-Z][A-Z0-9_]*$/.test(normalized)) {
+    throw new Error(errorCode);
+  }
+  return normalized;
+}
+
+function normalizeOptionalUrl(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("invalid_protocol");
     }
-    config.secretEnvName = secretEnvName;
+    return normalized;
+  } catch {
+    throw new Error("model_provider_base_url_invalid");
   }
-  return config;
+}
+
+function normalizeOptionalModelId(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeModelProviderConfig(input: {
+  provider: ModelProviderType;
+  api?: ModelProviderApi | string;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  secretEnvName?: string;
+  modelId?: string;
+}): ModelProviderRuntimeConfig {
+  const api = normalizeModelProviderApi(input.provider, input.api);
+  const baseUrl = normalizeOptionalUrl(input.baseUrl);
+  const apiKeyEnv = normalizeEnvRef(
+    input.apiKeyEnv ?? input.secretEnvName,
+    "model_provider_api_key_env_invalid"
+  );
+  const modelId = normalizeOptionalModelId(input.modelId);
+
+  return {
+    api,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(apiKeyEnv ? { apiKeyEnv } : {}),
+    ...(modelId ? { models: [{ id: modelId }] } : {})
+  };
 }
 
 function normalizeAgentRole(role: unknown): AgentRole {
