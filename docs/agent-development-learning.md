@@ -465,6 +465,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 ### 阶段 6：多 Agent 协作
 
+下一步 Agent Handoff State v0 设计：
+
+- [2026-05-15-agent-handoff-state-design.md](./superpowers/specs/2026-05-15-agent-handoff-state-design.md)
+- 第一版只覆盖 LP 固定链路：Planner -> Builder -> Reviewer -> Deployer，不做开放式 agent swarm 或通用 DAG。
+- handoff 会成为 repository 里的结构化状态，同时写入 `handoff.created`、`handoff.blocked`、`handoff.consumed` run event，供 timeline 和后续 Context Pack 使用。
+- Reviewer 不通过时会写 `blocked` handoff，并阻止 Deployer run 创建；retry/resume、团队审批和 UI handoff 卡片后续再做。
+- 学习重点是把“角色之间怎么交接”从隐含顺序变成可查询、可审计、可恢复的运行状态。
+
 从固定角色开始，不急着做开放式 agent swarm：
 
 - Planner 输出结构化计划。

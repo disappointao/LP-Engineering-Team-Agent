@@ -160,6 +160,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 5 context memory and deterministic retrieval implementation plan.
    - Read this after the context memory design when implementing model/runtime memory context contracts, API memory assembly, Context Pack injection, safety tests, and documentation updates.
 
+40. `specs/2026-05-15-agent-handoff-state-design.md`
+   - Stage 6 structured agent handoff state design.
+   - Read this after the context memory plan when adding fixed LP-chain Planner, Builder, Reviewer, and Deployer handoff records, safe handoff run events, blocked deployment behavior, and role-relevant Context Pack handoff summaries.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
