@@ -31,6 +31,11 @@ import {
   ContextPackSchema,
   assembleContextPack
 } from "./context-assembler";
+import type {
+  ToolCommandRunner,
+  ToolCommandRunInput,
+  ToolCommandRunResult
+} from "./tool-command-runner";
 
 describe("demo workbench service", () => {
   it("exports record contracts used by API consumers", () => {
@@ -666,6 +671,323 @@ describe("demo workbench service", () => {
         binding: expect.objectContaining({ enabled: true })
       })
     ]);
+  });
+
+  it("executes an approved deployment skill command with artifact workspace", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runnerResult: ToolCommandRunResult = {
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: ""
+    };
+    const runner = new RecordingToolCommandRunner(runnerResult);
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const artifactFragment = pageVersion.artifacts.stylesCss.slice(0, 7);
+    runnerResult.stdout = `published secret-token ${artifactFragment}`;
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(deploymentSkillManifest()),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      pageVersionId: pageVersion.id,
+      approvedByUserId: "user_1"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    const serializedEvents = JSON.stringify(events);
+    const serializedObservation = JSON.stringify(result.observation);
+
+    expect(result.run).toMatchObject({
+      id: "run_skill_command_1",
+      role: "deployer",
+      state: "completed"
+    });
+    expect(result.observation).toMatchObject({
+      id: "tool_observation_1",
+      runId: result.run.id,
+      projectId: project.id,
+      toolName: "skill:skill_static_deploy:publish_static",
+      state: "completed",
+      exitCode: 0
+    });
+    expect(runner.inputs).toHaveLength(1);
+    expect(runner.inputs[0]).toMatchObject({
+      runId: "run_skill_command_1",
+      projectId: project.id,
+      skillId: "skill_static_deploy",
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      command: "static-deploy",
+      env: {
+        STATIC_DEPLOY_TOKEN: "secret-token",
+        LP_PROJECT_ID: project.id
+      },
+      timeoutMs: 120000
+    });
+    expect(runner.inputs[0]?.args).toEqual([
+      "--project",
+      project.id,
+      "--html",
+      expect.stringMatching(/index\.html$/)
+    ]);
+    expect(runner.inputs[0]?.workingDirectory).toEqual(expect.stringMatching(/artifacts$/));
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.completed",
+      "run.completed"
+    ]);
+    expect(serializedEvents).not.toContain("secret-token");
+    expect(serializedEvents).not.toContain(artifactFragment);
+    expect(serializedObservation).not.toContain("secret-token");
+    expect(serializedObservation).not.toContain(artifactFragment);
+  });
+
+  it("persists failed deployment skill command results", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "failed",
+      exitCode: 2,
+      stdout: "",
+      stderr: "permission denied",
+      errorName: "command_failed"
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        deploymentSkillManifest({ commands: [commandWithoutArtifacts()] })
+      ),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      approvedByUserId: "user_1"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+
+    expect(result.run.state).toBe("failed");
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      exitCode: 2,
+      errorName: "command_failed",
+      outputSummary: "permission denied"
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+  });
+
+  it("persists failed deployment skill command observations when runner throws", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    let artifactFragment = "";
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: new ThrowingToolCommandRunner(() => {
+        const error = new Error(`runner failed with secret-token ${artifactFragment}`);
+        error.name = `unsafe secret-token ${artifactFragment}`;
+        return error;
+      }),
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    artifactFragment = pageVersion.artifacts.stylesCss.slice(0, 7);
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(deploymentSkillManifest()),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      pageVersionId: pageVersion.id,
+      approvedByUserId: "user_1"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    const observations = await repositories.toolObservations.listForRun(result.run.id);
+    const serializedRecords = JSON.stringify({ events, observation: result.observation });
+
+    expect(result.run.state).toBe("failed");
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      errorName: "skill_command_runner_error"
+    });
+    expect(observations).toEqual([
+      expect.objectContaining({
+        id: result.observation.id,
+        state: "failed",
+        errorName: "skill_command_runner_error"
+      })
+    ]);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+    expect(serializedRecords).not.toContain("secret-token");
+    expect(serializedRecords).not.toContain(artifactFragment);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "tool.failed",
+          payload: expect.objectContaining({
+            errorName: "skill_command_runner_error"
+          })
+        }),
+        expect.objectContaining({
+          type: "run.failed",
+          payload: expect.objectContaining({
+            errorName: "skill_command_runner_error"
+          })
+        })
+      ])
+    );
+  });
+
+  it("rejects deployment skill command validation failures before invoking runner", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(deploymentSkillManifest()),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_not_bound");
+
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "missing",
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_not_found");
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        approvedByUserId: " "
+      })
+    ).rejects.toThrow("skill_command_approval_required");
+
+    expect(runner.inputs).toEqual([]);
+  });
+
+  it("rejects deployment skill command permission, secret, and template failures before invoking runner", async () => {
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: ""
+    });
+
+    await expectDeploymentCommandFailure({
+      runner,
+      manifest: deploymentSkillManifest({ permissions: ["artifact:read"] }),
+      expectedError: "skill_command_permission_denied"
+    });
+    await expectDeploymentCommandFailure({
+      runner,
+      manifest: deploymentSkillManifest({ requiredSecrets: [] }),
+      expectedError: "skill_command_secret_not_declared"
+    });
+    await expectDeploymentCommandFailure({
+      runner,
+      manifest: deploymentSkillManifest({
+        commands: [{ ...commandWithoutArtifacts(), args: ["{{unknown}}"] }]
+      }),
+      expectedError: "skill_command_unknown_template_variable"
+    });
+
+    expect(runner.inputs).toEqual([]);
   });
 
   it("creates project model providers and resolves default routes", async () => {
@@ -3115,6 +3437,29 @@ class RecordingRuntime extends StaticRuntime {
   }
 }
 
+class RecordingToolCommandRunner implements ToolCommandRunner {
+  readonly inputs: ToolCommandRunInput[] = [];
+
+  constructor(private readonly result: ToolCommandRunResult) {}
+
+  async run(input: ToolCommandRunInput): Promise<ToolCommandRunResult> {
+    this.inputs.push({
+      ...input,
+      args: [...input.args],
+      env: { ...input.env }
+    });
+    return this.result;
+  }
+}
+
+class ThrowingToolCommandRunner implements ToolCommandRunner {
+  constructor(private readonly createError: () => Error) {}
+
+  async run(): Promise<ToolCommandRunResult> {
+    throw this.createError();
+  }
+}
+
 class RecordingDeploymentAdapter implements GitDeploymentAdapter {
   readonly inputs: Array<{
     projectId: string;
@@ -3206,4 +3551,85 @@ function brandSkillManifest(overrides: Partial<SkillManifest> = {}): SkillManife
     reviewState: "published",
     ...overrides
   };
+}
+
+function deploymentSkillManifest(overrides: Partial<SkillManifest> = {}): SkillManifest {
+  return brandSkillManifest({
+    id: "skill_static_deploy",
+    name: "Static deploy",
+    type: "deployment",
+    description: "Deploys static LP artifacts.",
+    permissions: ["artifact:read", "deploy:static"],
+    requiredSecrets: ["STATIC_DEPLOY_TOKEN"],
+    entrypoints: ["skills/static-deploy.md"],
+    reviewState: "published",
+    commands: [
+      {
+        id: "publish_static",
+        name: "Publish static artifacts",
+        permission: "deploy:static",
+        requiresApproval: true,
+        command: "static-deploy",
+        args: ["--project", "{{projectId}}", "--html", "{{artifact.indexHtmlPath}}"],
+        env: [
+          { name: "STATIC_DEPLOY_TOKEN", secretRef: "STATIC_DEPLOY_TOKEN" },
+          { name: "LP_PROJECT_ID", value: "{{projectId}}" }
+        ],
+        workingDirectory: "{{artifactDir}}",
+        timeoutMs: 120000
+      }
+    ],
+    ...overrides
+  });
+}
+
+function commandWithoutArtifacts(): NonNullable<SkillManifest["commands"]>[number] {
+  return {
+    id: "publish_static",
+    name: "Publish static artifacts",
+    permission: "deploy:static",
+    requiresApproval: true,
+    command: "static-deploy",
+    args: ["--project", "{{projectId}}"],
+    env: [
+      { name: "STATIC_DEPLOY_TOKEN", secretRef: "STATIC_DEPLOY_TOKEN" },
+      { name: "LP_PROJECT_ID", value: "{{projectId}}" }
+    ],
+    timeoutMs: 120000
+  };
+}
+
+async function expectDeploymentCommandFailure(input: {
+  runner: RecordingToolCommandRunner;
+  manifest: SkillManifest;
+  expectedError: string;
+}): Promise<void> {
+  const repositories = createInMemoryWorkbenchRepositories();
+  const service = new DemoWorkbenchService({
+    repositories,
+    toolCommandRunner: input.runner,
+    env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+    now: fixedClock()
+  });
+  const project = await service.createProject({ name: "Project" });
+  const skill = await service.createSkillDraft({
+    manifestJson: JSON.stringify(input.manifest),
+    content: "# Static deploy",
+    contentType: "text/markdown"
+  });
+  await service.validateSkillVersion({ skillVersionId: skill.version.id });
+  const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+  await service.bindSkillVersionToProject({
+    projectId: project.id,
+    skillVersionId: published.id
+  });
+
+  await expect(
+    service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      approvedByUserId: "user_1"
+    })
+  ).rejects.toThrow(input.expectedError);
 }

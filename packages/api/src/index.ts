@@ -61,6 +61,19 @@ import {
 } from "@lp-agent/skills";
 import { runAgentStep } from "./run-orchestrator";
 import {
+  cleanupCommandWorkspace,
+  createArtifactTemplateVariables,
+  assertWorkingDirectoryAllowed,
+  materializeStaticArtifactsCommandWorkspace,
+  redactCommandOutput,
+  resolveCommandTemplate,
+  resolveSkillCommandEnvironment,
+  resolveSkillCommandTimeout,
+  summarizeCommandOutput,
+  type CommandTemplateVariables,
+  type CommandWorkspace
+} from "./skill-command-execution";
+import {
   PlannerLPBriefParseError,
   createStructuredLPBriefPlannerPrompt,
   parsePlannerLPBriefOutput,
@@ -74,6 +87,12 @@ import {
   toStaticArtifactParseFailurePayload,
   toStaticArtifactParseSuccessPayload
 } from "./structured-static-artifacts";
+import {
+  RejectingToolCommandRunner,
+  type ToolCommandRunner,
+  type ToolCommandRunInput,
+  type ToolCommandRunResult
+} from "./tool-command-runner";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -134,6 +153,19 @@ export interface ApproveAndCreateDeploymentInput {
   projectId: string;
   pageVersionId: string;
   reviewerUserId: string;
+}
+
+export interface ExecuteProjectSkillCommandInput {
+  projectId: string;
+  skillVersionId: string;
+  commandId: string;
+  pageVersionId?: string;
+  approvedByUserId: string;
+}
+
+export interface SkillCommandExecutionResult {
+  run: RunRecord;
+  observation: ToolObservationRecord;
 }
 
 export interface CreateSkillDraftInput {
@@ -248,6 +280,7 @@ export interface DemoWorkbenchServiceOptions {
   reviewerRuntime?: AgentRuntimeAdapter;
   deployerRuntime?: AgentRuntimeAdapter;
   deploymentAdapter?: GitDeploymentAdapter;
+  toolCommandRunner?: ToolCommandRunner;
   env?: RuntimeEnvironment;
   modelFetch?: ModelFetch;
   now?: () => Date;
@@ -260,6 +293,8 @@ export class DemoWorkbenchService {
   private readonly reviewerRuntime: AgentRuntimeAdapter;
   private readonly deployerRuntime: AgentRuntimeAdapter;
   private readonly deploymentAdapter: GitDeploymentAdapter;
+  private readonly toolCommandRunner: ToolCommandRunner;
+  private readonly env: RuntimeEnvironment;
   private readonly now: () => Date;
   private readonly structuredPlannerOutputEnabled: boolean;
   private readonly structuredBuilderOutputEnabled: boolean;
@@ -267,6 +302,7 @@ export class DemoWorkbenchService {
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
     const env = options.env ?? getProcessEnv();
+    this.env = env;
     const runtimeFactoryInput = {
       repositories: this.repositories,
       env,
@@ -279,6 +315,7 @@ export class DemoWorkbenchService {
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
+    this.toolCommandRunner = options.toolCommandRunner ?? new RejectingToolCommandRunner();
     this.now = options.now ?? (() => new Date());
   }
 
@@ -540,6 +577,247 @@ export class DemoWorkbenchService {
     });
     await this.repositories.deployments.save(deployment);
     return copyDeployment(deployment);
+  }
+
+  async executeProjectSkillCommand(
+    input: ExecuteProjectSkillCommandInput
+  ): Promise<SkillCommandExecutionResult> {
+    await this.getProjectOrThrow(input.projectId);
+    if (input.approvedByUserId.trim().length === 0) {
+      throw new Error("skill_command_approval_required");
+    }
+    const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    const bindings = await this.repositories.skillBindings.listForProject(input.projectId);
+    const binding = bindings.find(
+      (candidate) =>
+        isProjectSkillBindingForProject(candidate, input.projectId) &&
+        candidate.skillVersionId === input.skillVersionId &&
+        candidate.enabled
+    );
+    if (!binding) {
+      throw new Error("skill_command_not_bound");
+    }
+    if (version.manifest.type !== "deployment") {
+      throw new Error("skill_command_not_deployment");
+    }
+    if (version.reviewState !== "published" || version.manifest.reviewState !== "published") {
+      throw new Error("skill_command_not_published");
+    }
+
+    const command = (version.manifest.commands ?? []).find(
+      (candidate) => candidate.id === input.commandId
+    );
+    if (!command) {
+      throw new Error("skill_command_not_found");
+    }
+    if (!version.manifest.permissions.includes(command.permission)) {
+      throw new Error("skill_command_permission_denied");
+    }
+
+    const pageVersion = input.pageVersionId
+      ? await this.repositories.pageVersions.getById(input.pageVersionId)
+      : undefined;
+    if (input.pageVersionId && (!pageVersion || pageVersion.projectId !== input.projectId)) {
+      throw new Error("skill_command_page_version_not_found");
+    }
+
+    const runId = await reserveRepositoryId(this.repositories, "run_skill_command", async () => {
+      const existingRuns = await this.repositories.runs.listAll();
+      return existingRuns.map((record) => record.id);
+    });
+    let observationId: string | undefined;
+    let workspace: CommandWorkspace | undefined;
+
+    try {
+      observationId = await reserveRepositoryId(
+        this.repositories,
+        "tool_observation",
+        async () => {
+          const observations = await this.repositories.toolObservations.listAll();
+          return observations.map((record) => record.id);
+        }
+      );
+
+      if (pageVersion) {
+        workspace = await materializeStaticArtifactsCommandWorkspace({
+          runId,
+          artifacts: pageVersion.artifacts
+        });
+      }
+
+      const variables: CommandTemplateVariables = {
+        projectId: input.projectId,
+        skillId: version.skillId,
+        skillVersionId: version.id,
+        commandId: command.id,
+        runId,
+        ...createArtifactTemplateVariables({
+          workspace,
+          pageVersionId: pageVersion?.id
+        })
+      };
+      const env = resolveSkillCommandEnvironment({
+        manifest: version.manifest,
+        command,
+        runtimeEnv: this.env,
+        variables
+      });
+      const args = command.args.map((arg) => resolveCommandTemplate(arg, variables));
+      const workingDirectory = command.workingDirectory
+        ? resolveCommandTemplate(command.workingDirectory, variables)
+        : workspace?.artifactDir;
+      assertWorkingDirectoryAllowed({ workingDirectory, workspace });
+
+      const startedAt = this.timestamp();
+      const run: RunRecord = {
+        id: runId,
+        projectId: input.projectId,
+        role: "deployer",
+        state: "running",
+        startedAt,
+        contextSummary: {
+          injected: [`skillCommand:${version.skillId}:${command.id}`],
+          omitted: []
+        }
+      };
+      await this.repositories.runs.save(run);
+
+      let sequence = 1;
+      const saveEvent = async (
+        type: string,
+        message: string,
+        payload: Record<string, unknown>
+      ): Promise<void> => {
+        await this.repositories.runEvents.save({
+          id: `${runId}_event_${sequence}`,
+          runId,
+          projectId: input.projectId,
+          sequence,
+          type,
+          message,
+          payload,
+          createdAt: this.timestamp()
+        });
+        sequence += 1;
+      };
+      const basePayload = {
+        skillId: version.skillId,
+        skillVersionId: version.id,
+        commandId: command.id,
+        permission: command.permission,
+        approvedByUserId: input.approvedByUserId
+      };
+      await saveEvent("run.started", "Deployment skill command run started.", basePayload);
+      await saveEvent("tool.started", "Deployment skill command started.", {
+        ...basePayload,
+        observationId
+      });
+
+      const commandRunInput: ToolCommandRunInput = {
+        runId,
+        projectId: input.projectId,
+        skillId: version.skillId,
+        skillVersionId: version.id,
+        commandId: command.id,
+        command: command.command,
+        args,
+        env,
+        ...(workingDirectory ? { workingDirectory } : {}),
+        timeoutMs: resolveSkillCommandTimeout(command)
+      };
+      const runnerResult = await this.runToolCommandSafely(commandRunInput);
+      const completedAt = this.timestamp();
+      const finalState = runnerResult.state === "completed" ? "completed" : "failed";
+      const secretValues = (command.env ?? [])
+        .flatMap((binding) => {
+          if (!binding.secretRef) {
+            return [];
+          }
+          const value = this.env[binding.secretRef];
+          return value ? [value] : [];
+        });
+      const artifactValues = pageVersion
+        ? [
+            pageVersion.artifacts.indexHtml,
+            pageVersion.artifacts.stylesCss,
+            pageVersion.artifacts.scriptJs
+          ]
+        : [];
+      const sensitiveValues = [...secretValues, ...artifactValues];
+      const sanitizedErrorName = sanitizeRunnerErrorName(
+        runnerResult.errorName,
+        sensitiveValues,
+        finalState
+      );
+      const finalPayload = {
+        ...basePayload,
+        observationId,
+        ...(runnerResult.exitCode !== undefined ? { exitCode: runnerResult.exitCode } : {}),
+        ...(sanitizedErrorName !== undefined ? { errorName: sanitizedErrorName } : {})
+      };
+      await saveEvent(
+        finalState === "completed" ? "tool.completed" : "tool.failed",
+        finalState === "completed"
+          ? "Deployment skill command completed."
+          : "Deployment skill command failed.",
+        finalPayload
+      );
+      await saveEvent(
+        finalState === "completed" ? "run.completed" : "run.failed",
+        finalState === "completed"
+          ? "Deployment skill command run completed."
+          : "Deployment skill command run failed.",
+        finalPayload
+      );
+
+      const observation: ToolObservationRecord = {
+        id: observationId,
+        runId,
+        projectId: input.projectId,
+        toolName: `skill:${version.skillId}:${command.id}`,
+        input: {
+          skillId: version.skillId,
+          skillVersionId: version.id,
+          commandId: command.id,
+          permission: command.permission,
+          approvedByUserId: input.approvedByUserId,
+          ...(pageVersion ? { pageVersionId: pageVersion.id } : {}),
+          argCount: args.length,
+          envNames: Object.keys(env).sort()
+        },
+        outputSummary: summarizeSkillCommandOutput({
+          runnerResult,
+          pageVersion,
+          secretValues
+        }),
+        state: finalState,
+        ...(runnerResult.exitCode !== undefined ? { exitCode: runnerResult.exitCode } : {}),
+        ...(sanitizedErrorName !== undefined ? { errorName: sanitizedErrorName } : {}),
+        createdAt: startedAt,
+        completedAt
+      };
+      await this.repositories.toolObservations.save(observation);
+
+      const finalRun: RunRecord = {
+        ...run,
+        state: finalState,
+        completedAt
+      };
+      await this.repositories.runs.save(finalRun);
+
+      return {
+        run: copyRunRecord(finalRun),
+        observation: copyToolObservationRecord(observation)
+      };
+    } finally {
+      releaseRepositoryId(this.repositories, runId);
+      if (observationId) {
+        releaseRepositoryId(this.repositories, observationId);
+      }
+      if (workspace) {
+        await cleanupCommandWorkspace(workspace);
+      }
+    }
   }
 
   async getSnapshot(projectId: string): Promise<WorkbenchSnapshot> {
@@ -1208,6 +1486,24 @@ export class DemoWorkbenchService {
       .filter((record) => record.projectId === projectId && record.briefId === briefId)
       .at(-1);
   }
+
+  private async runToolCommandSafely(
+    input: ToolCommandRunInput
+  ): Promise<ToolCommandRunResult> {
+    try {
+      return await this.toolCommandRunner.run(input);
+    } catch (error) {
+      return {
+        state: "failed",
+        stdout: "",
+        stderr: error instanceof Error ? error.message : "Tool command runner failed.",
+        errorName:
+          error instanceof Error && error.name
+            ? error.name
+            : "skill_command_runner_error"
+      };
+    }
+  }
 }
 
 export function createDemoWorkbenchService(): DemoWorkbenchService {
@@ -1228,6 +1524,13 @@ export {
   type RunAgentStepInput,
   type RunAgentStepResult
 } from "./run-orchestrator";
+
+export {
+  RejectingToolCommandRunner,
+  type ToolCommandRunner,
+  type ToolCommandRunInput,
+  type ToolCommandRunResult
+} from "./tool-command-runner";
 
 interface LocalRuntimeAdapterFactoryInput {
   repositories: WorkbenchRepositories;
@@ -1741,6 +2044,66 @@ function copyMCPToolApprovalRecord(approval: MCPToolApprovalRecord): MCPToolAppr
   return { ...approval };
 }
 
+function sanitizeRunnerErrorName(
+  errorName: string | undefined,
+  sensitiveValues: string[],
+  state: ToolObservationRecord["state"]
+): string | undefined {
+  if (errorName === undefined) {
+    return state === "failed" ? "skill_command_runner_error" : undefined;
+  }
+  const trimmed = errorName.trim();
+  if (
+    trimmed.length === 0 ||
+    trimmed !== errorName ||
+    trimmed.length > 80 ||
+    /\s/.test(trimmed) ||
+    !/^[A-Za-z0-9_.:-]+$/.test(trimmed)
+  ) {
+    return "skill_command_runner_error";
+  }
+  if (redactCommandOutput(trimmed, sensitiveValues) !== trimmed) {
+    return "skill_command_runner_error";
+  }
+  return trimmed;
+}
+
+function summarizeSkillCommandOutput(input: {
+  runnerResult: ToolCommandRunResult;
+  pageVersion?: PageVersionRecord;
+  secretValues: string[];
+}): string {
+  if (!input.pageVersion) {
+    return summarizeCommandOutput(
+      input.runnerResult.stdout,
+      input.runnerResult.stderr,
+      input.secretValues
+    );
+  }
+  return summarizeCommandOutput(
+    `stdout: ${input.runnerResult.stdout.length} chars`,
+    `stderr: ${input.runnerResult.stderr.length} chars`,
+    input.secretValues
+  );
+}
+
+function copyRunRecord(run: RunRecord): RunRecord {
+  return {
+    ...run,
+    contextSummary: {
+      injected: [...run.contextSummary.injected],
+      omitted: [...run.contextSummary.omitted]
+    }
+  };
+}
+
+function copyToolObservationRecord(observation: ToolObservationRecord): ToolObservationRecord {
+  return {
+    ...observation,
+    input: structuredClone(observation.input)
+  };
+}
+
 function normalizeRuntimeMCPConnector(
   connector: MCPConnectorRecord
 ): MCPConnectorRecord | undefined {
@@ -1809,7 +2172,12 @@ function copySkillManifest(manifest: SkillManifest): SkillManifest {
     ...manifest,
     permissions: [...manifest.permissions],
     requiredSecrets: [...manifest.requiredSecrets],
-    entrypoints: [...manifest.entrypoints]
+    entrypoints: [...manifest.entrypoints],
+    commands: manifest.commands?.map((command) => ({
+      ...command,
+      args: [...command.args],
+      env: command.env?.map((binding) => ({ ...binding }))
+    }))
   };
 }
 
