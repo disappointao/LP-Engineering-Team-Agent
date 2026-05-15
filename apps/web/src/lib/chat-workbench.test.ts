@@ -140,7 +140,9 @@ describe("chat workbench view model", () => {
           role: "deployer",
           commandId: "publish_static",
           exitCode: 0,
-          outputSummary: "stdout: 47 chars\nstderr: 0 chars"
+          outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+          rawOutput: "secret-token",
+          secretEnvValue: "secret-token"
         },
         createdAt: "2026-05-15T08:00:01.000Z"
       }
@@ -156,11 +158,40 @@ describe("chat workbench view model", () => {
     });
 
     expect(thread.toolEvents.map((event) => event.label)).toEqual(["Deployer", "Deployer"]);
-    expect(thread.toolEvents[1]?.meta).toContain("tool.completed");
-    expect(thread.toolEvents[1]?.meta).toContain("publish_static");
-    expect(thread.toolEvents[1]?.meta).toContain("exit 0");
-    expect(thread.toolEvents[1]?.meta).toContain("stdout: 47 chars");
+    expect(thread.toolEvents[1]?.meta).toBe(
+      "tool.completed - publish_static - exit 0 - stdout: 47 chars\nstderr: 0 chars"
+    );
     expect(thread.toolEvents[1]?.meta).not.toContain("secret-token");
+  });
+
+  it("defaults tool events without a payload role to the deployer timeline lane", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_1",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "tool.started",
+          message: "Deployment skill command started.",
+          payload: {
+            commandId: "publish_static"
+          },
+          createdAt: "2026-05-15T08:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      role: "deployer",
+      label: "Deployer",
+      meta: "tool.started - publish_static"
+    });
   });
 
   it("marks failed tool events with failed status copy", () => {
