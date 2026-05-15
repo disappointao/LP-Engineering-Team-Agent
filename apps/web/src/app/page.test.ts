@@ -112,6 +112,15 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
   return [];
 }
 
+function collectFormPayload(form: { props?: Record<string, unknown> }): Record<string, unknown> {
+  return Object.fromEntries(
+    collectElements(form.props?.children, "input").map((input) => [
+      input.props?.name,
+      input.props?.value
+    ])
+  );
+}
+
 function projectSkillState(reviewState: "draft" | "validated" | "published", enabled = true) {
   return {
     skill: {
@@ -1156,12 +1165,131 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Simulation only");
     expect(text).toContain("Publish static");
     expect(text).toContain("deploy:simulate");
-    expect(forms.some((form) => form.props?.action === executeSkillCommandAction)).toBe(true);
+    const commandForm = forms.find((form) => form.props?.action === executeSkillCommandAction);
+    expect(commandForm).toBeDefined();
+    expect(collectFormPayload(commandForm!)).toMatchObject({
+      projectId: "project_1",
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static",
+      pageVersionId: ""
+    });
     expect(
       inputs.some(
         (input) => input.props?.name === "commandId" && input.props?.value === "publish_static"
       )
     ).toBe(true);
+  });
+
+  it("includes the current page version in skill command forms for task snapshots", async () => {
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Create a campaign landing page",
+          type: "lp_generation",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [deploymentBoundSkill],
+        availableVersions: []
+      },
+      skillCommands: [
+        {
+          skillId: "skill_static_deploy",
+          skillName: "Static deploy",
+          skillVersionId: "skill_version_deploy",
+          commandId: "publish_static",
+          commandName: "Publish static",
+          permission: "deploy:simulate",
+          requiresApproval: true
+        }
+      ],
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Create a campaign landing page",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a campaign landing page",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      runEvents: [],
+      snapshot: {
+        project: {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        brief: {
+          id: "brief_1",
+          projectId: "project_1",
+          prompt: "Create a campaign landing page",
+          brief: {
+            objective: "Convert paid traffic.",
+            audience: "Returning shoppers",
+            offer: "Save 25%.",
+            primaryCta: "Shop now"
+          },
+          createdAt: "2026-05-12T08:03:00.000Z"
+        },
+        currentPageVersion: {
+          id: "page_version_1",
+          projectId: "project_1",
+          briefId: "brief_1",
+          artifacts: {
+            indexHtml: [
+              "<!doctype html><html><head>",
+              "<link rel=\"stylesheet\" href=\"styles.css\">",
+              "</head><body>",
+              "<h1>Spring Campaign</h1>",
+              "  <script src=\"script.js\"></script>",
+              "</body></html>"
+            ].join(""),
+            stylesCss: "body { color: #111827; }",
+            scriptJs: "window.lpAgent = true;"
+          },
+          reviewStatus: "passed",
+          findings: [],
+          createdAt: "2026-05-12T08:04:00.000Z"
+        },
+        deployment: undefined
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const commandForm = collectElements(page, "form").find(
+      (form) => form.props?.action === executeSkillCommandAction
+    );
+
+    expect(commandForm).toBeDefined();
+    expect(collectFormPayload(commandForm!)).toMatchObject({
+      projectId: "project_1",
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static",
+      pageVersionId: "page_version_1"
+    });
   });
 
   it("renders localized Chinese skill command copy", async () => {
