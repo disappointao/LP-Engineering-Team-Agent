@@ -722,6 +722,7 @@ describe("demo workbench service", () => {
     const serializedEvents = JSON.stringify(events);
     const serializedObservation = JSON.stringify(result.observation);
     const completedToolEvent = events.find((event) => event.type === "tool.completed");
+    const completedRunEvent = events.find((event) => event.type === "run.completed");
 
     expect(result.run).toMatchObject({
       id: "run_skill_command_1",
@@ -763,26 +764,32 @@ describe("demo workbench service", () => {
       "tool.completed",
       "run.completed"
     ]);
+    expect(result.observation.outputSummary).toBe("stdout: 30 chars\nstderr: 0 chars");
     expect(completedToolEvent?.payload).toMatchObject({
-      outputSummary: "stdout: 30 chars\nstderr: 0 chars"
+      outputSummary: result.observation.outputSummary
+    });
+    expect(completedRunEvent?.payload).toMatchObject({
+      outputSummary: result.observation.outputSummary
     });
     expect(serializedEvents).toContain("stdout: 30 chars");
     expect(serializedEvents).toContain("stderr: 0 chars");
     expect(serializedEvents).not.toContain("published secret-token");
     expect(serializedEvents).not.toContain(artifactFragment);
     expect(serializedEvents).not.toContain("secret-token");
-    expect(serializedEvents).not.toContain(artifactFragment);
     expect(serializedObservation).not.toContain("secret-token");
     expect(serializedObservation).not.toContain(artifactFragment);
   });
 
   it("persists failed deployment skill command results", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const failedStdout = "publish failed with secret-token stdout";
+    const failedStderr = "deploy denied secret-token stderr";
+    const failedOutputSummary = `stdout: ${failedStdout.length} chars\nstderr: ${failedStderr.length} chars`;
     const runner = new RecordingToolCommandRunner({
       state: "failed",
       exitCode: 2,
-      stdout: "",
-      stderr: "",
+      stdout: failedStdout,
+      stderr: failedStderr,
       errorName: "deploy_failed"
     });
     const service = new DemoWorkbenchService({
@@ -813,21 +820,36 @@ describe("demo workbench service", () => {
       approvedByUserId: "user_1"
     });
     const events = await repositories.runEvents.listForRun(result.run.id);
+    const serializedEvents = JSON.stringify(events);
+    const serializedObservation = JSON.stringify(result.observation);
     const failedToolEvent = events.find((event) => event.type === "tool.failed");
+    const failedRunEvent = events.find((event) => event.type === "run.failed");
 
     expect(result.run.state).toBe("failed");
     expect(result.observation).toMatchObject({
       state: "failed",
       exitCode: 2,
       errorName: "deploy_failed",
-      outputSummary: "stdout: 0 chars\nstderr: 0 chars"
+      outputSummary: failedOutputSummary
     });
     expect(failedToolEvent?.payload).toMatchObject({
-      outputSummary: "stdout: 0 chars\nstderr: 0 chars",
+      outputSummary: result.observation.outputSummary,
       errorName: "deploy_failed"
     });
-    expect(JSON.stringify(result.observation)).not.toContain("permission denied");
-    expect(JSON.stringify(result.observation)).not.toContain("secret-token");
+    expect(failedRunEvent?.payload).toMatchObject({
+      outputSummary: result.observation.outputSummary,
+      errorName: "deploy_failed"
+    });
+    expect(serializedEvents).toContain(`stdout: ${failedStdout.length} chars`);
+    expect(serializedEvents).toContain(`stderr: ${failedStderr.length} chars`);
+    expect(serializedEvents).not.toContain(failedStdout);
+    expect(serializedEvents).not.toContain(failedStderr);
+    expect(serializedEvents).not.toContain("secret-token");
+    expect(serializedObservation).toContain(`stdout: ${failedStdout.length} chars`);
+    expect(serializedObservation).toContain(`stderr: ${failedStderr.length} chars`);
+    expect(serializedObservation).not.toContain(failedStdout);
+    expect(serializedObservation).not.toContain(failedStderr);
+    expect(serializedObservation).not.toContain("secret-token");
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
       "tool.started",
