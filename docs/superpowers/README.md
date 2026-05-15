@@ -144,6 +144,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 4 skill command execution implementation plan.
    - Read this after the skill command execution design when implementing controlled deployment skill command manifests, one-shot approval validation, command runner adapters, sanitized tool observations, and tool run events.
 
+36. `specs/2026-05-15-skill-command-web-loop-design.md`
+   - Stage 4.1 skill command Web loop design.
+   - Read this after the skill command execution plan when adding the Web-facing simulated command launcher, one-shot approval UI, mock runner wiring, and sanitized timeline display.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

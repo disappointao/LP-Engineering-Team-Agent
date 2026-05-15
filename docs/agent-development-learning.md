@@ -359,6 +359,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 命令结果会保存为脱敏 `ToolObservationRecord`，并写入脱敏的 `tool.started`、`tool.completed` 或 `tool.failed` run event；事件和 observation 不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
 - 这不是完整自动部署系统，也还没有部署 UI、worker 执行、MCP execution、流式日志、cancel/retry 或部署编排。
 
+下一步 Stage 4.1 Skill Command Web 模拟执行闭环设计：
+
+- [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
+- 目标是把已经完成的 API/service command execution 边界接到 Web 工作台，让用户能看到项目已绑定 skills 的可执行 commands、进行一次性审批，并在对话 timeline 中看到 `tool.started`、`tool.completed` 或 `tool.failed`。
+- 第一版只做模拟执行，不跑真实 shell，不做自动部署，不做 worker 队列，不做流式日志，也不做 cancel/retry。
+- 这一步的学习重点是区分“产品流程可用”和“真实工具执行”：Web 可以先打通发现、审批、调用、observation、timeline 的完整体验，同时继续通过 `ToolCommandRunner` 保留以后切换真实 runner、MCP execution 和部署编排的边界。
+
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
 ```bash
@@ -402,6 +409,13 @@ pnpm --filter @lp-agent/model-gateway test
 - 这一步不是完整自动部署系统，也还没有自动部署 UI、worker 执行或 MCP execution，而是给未来部署 workflow 提供安全、可审计的 skill cmd 执行入口。
 - 实现时要把“能执行命令”和“安全边界”分开看：manifest 只声明允许执行什么，API 负责校验绑定、发布状态、审批、权限、secret reference、模板变量和 page version 归属，runner 只拿到已经解析好的 argv/env/workingDirectory。
 - 这一步已经形成 `ToolCommandRunner`、`ToolObservationRecord`、`tool.started/tool.completed/tool.failed` 的最小闭环，后续再逐步扩展到 MCP execution、worker 队列、流式日志、cancel/retry 和部署编排。
+
+下一步 Skill Command Web 模拟执行闭环：
+
+- [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
+- 先把 Web 里的 command 发现、一次性审批、模拟执行、run event 展示打通。
+- 不在这个阶段引入真实 shell、真实部署、worker 队列、流式日志、cancel/retry 或 MCP execution。
+- 这能让工具执行从“后端能力”变成“用户可见的 Agent 工具过程”，同时保持后续切换真实 runner 的架构边界。
 
 ### 阶段 5：压缩和检索
 
