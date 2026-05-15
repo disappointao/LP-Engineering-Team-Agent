@@ -711,7 +711,8 @@ export class DemoWorkbenchService {
         skillVersionId: version.id,
         commandId: command.id,
         permission: command.permission,
-        approvedByUserId: input.approvedByUserId
+        approvedByUserId: input.approvedByUserId,
+        ...(pageVersion ? { pageVersionId: pageVersion.id } : {})
       };
       await saveEvent("run.started", "Deployment skill command run started.", basePayload);
       await saveEvent("tool.started", "Deployment skill command started.", {

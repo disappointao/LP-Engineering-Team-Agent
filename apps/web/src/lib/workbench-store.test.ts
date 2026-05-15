@@ -253,6 +253,91 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("scopes skill command run events to the active task page version", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({
+      name: "Spring LP"
+    });
+
+    await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a first landing page in HTML.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a second landing page in HTML.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    const secondTaskStateBeforeCommand = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_2"
+    });
+    if (
+      secondTaskStateBeforeCommand.kind !== "task_ready" ||
+      !secondTaskStateBeforeCommand.snapshot?.currentPageVersion
+    ) {
+      throw new Error("Expected second task page version.");
+    }
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+
+    const command = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.value.id,
+      commandId: "publish_static",
+      pageVersionId: secondTaskStateBeforeCommand.snapshot.currentPageVersion.id,
+      approvedByUserId: "local-web-user"
+    });
+    if (!command.ok) {
+      throw new Error(`Expected command execution to succeed, got ${command.error}.`);
+    }
+
+    const firstTaskState = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    const secondTaskState = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_2"
+    });
+
+    expect(firstTaskState.kind).toBe("task_ready");
+    expect(secondTaskState.kind).toBe("task_ready");
+    if (firstTaskState.kind !== "task_ready" || secondTaskState.kind !== "task_ready") {
+      throw new Error("Expected task-ready states.");
+    }
+    expect(firstTaskState.runEvents.some((event) => event.runId.startsWith("run_skill_command_")))
+      .toBe(false);
+    expect(secondTaskState.runEvents.map((event) => event.runId)).toEqual(
+      expect.arrayContaining([command.value.run.id])
+    );
+    expect(
+      secondTaskState.runEvents.filter((event) => event.runId === command.value.run.id)
+    ).toHaveLength(4);
+  });
+
   it("reopens projects, tasks, messages, and LP snapshots from shared repositories", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const firstStore = createWebWorkbenchStore({ repositories });
@@ -487,6 +572,46 @@ describe("web workbench store", () => {
         requiresApproval: true
       }
     ]);
+  });
+
+  it("excludes commands from disabled skill bindings", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+    const disabled = await store.setProjectSkillBindingEnabled({
+      projectId: project.id,
+      bindingId: binding.value.id,
+      enabled: false
+    });
+    if (!disabled.ok) {
+      throw new Error(`Expected disable to succeed, got ${disabled.error}.`);
+    }
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.skillCommands).toEqual([]);
   });
 
   it("executes skill commands with the simulated Web runner", async () => {

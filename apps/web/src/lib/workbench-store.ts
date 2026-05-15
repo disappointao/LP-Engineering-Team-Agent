@@ -774,7 +774,18 @@ function filterRunEventsForSnapshot(
   }
 
   return runEvents.filter(
-    (event) => runIds.has(event.runId) || event.runId.startsWith("run_skill_command_")
+    (event) => runIds.has(event.runId) || isSkillCommandRunEventForSnapshot(event, snapshot)
+  );
+}
+
+function isSkillCommandRunEventForSnapshot(
+  event: RunEventRecord,
+  snapshot: WorkbenchTaskSnapshotRecord
+): boolean {
+  return (
+    event.runId.startsWith("run_skill_command_") &&
+    typeof event.payload.pageVersionId === "string" &&
+    event.payload.pageVersionId === snapshot.pageVersionId
   );
 }
 

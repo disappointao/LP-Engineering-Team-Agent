@@ -766,9 +766,11 @@ describe("demo workbench service", () => {
     ]);
     expect(result.observation.outputSummary).toBe("stdout: 30 chars\nstderr: 0 chars");
     expect(completedToolEvent?.payload).toMatchObject({
+      pageVersionId: pageVersion.id,
       outputSummary: result.observation.outputSummary
     });
     expect(completedRunEvent?.payload).toMatchObject({
+      pageVersionId: pageVersion.id,
       outputSummary: result.observation.outputSummary
     });
     expect(serializedEvents).toContain("stdout: 30 chars");
