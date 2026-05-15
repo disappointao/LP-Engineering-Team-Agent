@@ -11,10 +11,12 @@ import {
   type ProjectRecord,
   type ProjectSkillState,
   type RunEventRecord,
+  type SkillCommandExecutionResult,
   type SkillBindingRecord,
   type SkillContentType,
   type SkillDraftResult,
   type SkillVersionRecord,
+  type ToolCommandRunner,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
 import {
@@ -29,6 +31,7 @@ import {
   type WorkbenchTaskType
 } from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
 
 export type {
   MCPConnectorRecord,
@@ -58,6 +61,18 @@ export type SkillFlowErrorCode =
   | "skill_binding_not_found"
   | "publish_not_allowed"
   | "skill_operation_failed";
+
+export type SkillCommandFlowErrorCode =
+  | "project_not_found"
+  | "skill_command_not_found"
+  | "skill_command_not_bound"
+  | "skill_command_not_deployment"
+  | "skill_command_not_published"
+  | "skill_command_permission_denied"
+  | "skill_command_approval_required"
+  | "skill_command_page_version_not_found"
+  | "skill_command_unknown_template_variable"
+  | "skill_command_execution_failed";
 
 export type ModelFlowErrorCode =
   | "project_not_found"
@@ -96,6 +111,17 @@ export interface WebProjectModelState extends ProjectModelState {
   resolutionError?: ModelFlowErrorCode;
 }
 
+export interface ProjectSkillCommandView {
+  skillId: string;
+  skillName: string;
+  skillVersionId: string;
+  commandId: string;
+  commandName: string;
+  description?: string;
+  permission: string;
+  requiresApproval: boolean;
+}
+
 type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProjectFlowErrorCode };
@@ -107,6 +133,10 @@ export interface CreateProjectFormInput {
 export type SkillActionResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: SkillFlowErrorCode };
+
+export type SkillCommandActionResult =
+  | { ok: true; value: SkillCommandExecutionResult }
+  | { ok: false; error: SkillCommandFlowErrorCode };
 
 export type ModelActionResult<T> =
   | { ok: true; value: T }
@@ -125,6 +155,14 @@ export interface CreateSkillDraftFormInput {
 export interface BindSkillVersionFormInput {
   projectId: string;
   skillVersionId: string;
+}
+
+export interface ExecuteSkillCommandFormInput {
+  projectId: string;
+  skillVersionId: string;
+  commandId: string;
+  pageVersionId?: string;
+  approvedByUserId: string;
 }
 
 export interface CreateModelProviderFormInput {
@@ -179,6 +217,7 @@ export type WorkbenchPageState =
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
+      skillCommands: ProjectSkillCommandView[];
       models: WebProjectModelState;
       mcp: ProjectMCPState;
     }
@@ -187,6 +226,7 @@ export type WorkbenchPageState =
       projects: ProjectRecord[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
+      skillCommands: ProjectSkillCommandView[];
       models: WebProjectModelState;
       mcp: ProjectMCPState;
       activeTaskId: string;
@@ -220,6 +260,7 @@ export interface WebWorkbenchStore {
     bindingId: string;
     enabled: boolean;
   }): Promise<SkillActionResult<SkillBindingRecord>>;
+  executeSkillCommand(input: ExecuteSkillCommandFormInput): Promise<SkillCommandActionResult>;
   createModelProvider(
     input: CreateModelProviderFormInput
   ): Promise<ModelActionResult<ModelProviderRecord>>;
@@ -246,6 +287,7 @@ export interface WebWorkbenchStore {
 
 export interface WebWorkbenchStoreOptions {
   repositories?: WorkbenchRepositories;
+  toolCommandRunner?: ToolCommandRunner;
 }
 
 export function validateProjectInput(input: CreateProjectFormInput): ValidationResult<CreateProjectFormInput> {
@@ -321,9 +363,39 @@ export function deriveImplicitProjectName(prompt: string, fallback: string): str
       : "Untitled LP Project";
 }
 
+export function deriveProjectSkillCommands(
+  skillState: ProjectSkillState
+): ProjectSkillCommandView[] {
+  return skillState.boundSkills.flatMap((boundSkill) => {
+    const { skill, version, binding } = boundSkill;
+    if (
+      !binding.enabled ||
+      version.reviewState !== "published" ||
+      version.manifest.reviewState !== "published" ||
+      version.manifest.type !== "deployment"
+    ) {
+      return [];
+    }
+
+    return (version.manifest.commands ?? []).map((command) => ({
+      skillId: skill.id,
+      skillName: skill.name,
+      skillVersionId: version.id,
+      commandId: command.id,
+      commandName: command.name,
+      ...(command.description ? { description: command.description } : {}),
+      permission: command.permission,
+      requiresApproval: command.requiresApproval
+    }));
+  });
+}
+
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
-  const service = new DemoWorkbenchService({ repositories });
+  const service = new DemoWorkbenchService({
+    repositories,
+    toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner()
+  });
 
   const listProjects = async () =>
     (await repositories.projects.listAll()).map((project) => ({ ...project }));
@@ -446,11 +518,13 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         const requestedProject = requestedProjectId
           ? await repositories.projects.getById(requestedProjectId)
           : undefined;
+        const skills = await loadSkillState(requestedProject?.id);
         return {
           kind: "empty",
           projects: currentProjects,
           tasks: currentTasks,
-          skills: await loadSkillState(requestedProject?.id),
+          skills,
+          skillCommands: deriveProjectSkillCommands(skills),
           models: await loadModelState(requestedProject?.id),
           mcp: await loadMCPState(requestedProject?.id)
         };
@@ -471,11 +545,13 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             pageVersionId: snapshotRef.pageVersionId
           })
         : undefined;
+      const skills = await loadSkillState(activeProjectId);
       return {
         kind: "task_ready",
         projects: currentProjects,
         tasks: currentTasks,
-        skills: await loadSkillState(activeProjectId),
+        skills,
+        skillCommands: deriveProjectSkillCommands(skills),
         models: await loadModelState(activeProjectId),
         mcp: await loadMCPState(activeProjectId),
         activeTaskId: task.id,
@@ -608,6 +684,15 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
     },
 
+    async executeSkillCommand(input) {
+      try {
+        const value = await service.executeProjectSkillCommand(input);
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toSkillCommandFlowError(error) };
+      }
+    },
+
     async createModelProvider(input) {
       try {
         const value = await service.createModelProvider({
@@ -688,7 +773,9 @@ function filterRunEventsForSnapshot(
     runIds.add(`run_deployer_${snapshot.pageVersionId}`);
   }
 
-  return runEvents.filter((event) => runIds.has(event.runId));
+  return runEvents.filter(
+    (event) => runIds.has(event.runId) || event.runId.startsWith("run_skill_command_")
+  );
 }
 
 function toSkillFlowError(error: unknown): SkillFlowErrorCode {
@@ -721,6 +808,27 @@ function toSkillFlowError(error: unknown): SkillFlowErrorCode {
     return "manifest_validation_failed";
   }
   return "skill_operation_failed";
+}
+
+function toSkillCommandFlowError(error: unknown): SkillCommandFlowErrorCode {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message === "project_not_found" ||
+    message === "skill_command_not_found" ||
+    message === "skill_command_not_bound" ||
+    message === "skill_command_not_deployment" ||
+    message === "skill_command_not_published" ||
+    message === "skill_command_permission_denied" ||
+    message === "skill_command_approval_required" ||
+    message === "skill_command_page_version_not_found" ||
+    message === "skill_command_unknown_template_variable"
+  ) {
+    return message;
+  }
+  if (message === "Project not found.") {
+    return "project_not_found";
+  }
+  return "skill_command_execution_failed";
 }
 
 function toModelFlowError(error: unknown): ModelFlowErrorCode {

@@ -35,6 +35,34 @@ function brandSkillManifestJson(): string {
   });
 }
 
+function deploymentSkillManifestJson(): string {
+  return JSON.stringify({
+    id: "skill_static_deploy",
+    name: "Static deploy",
+    version: "1.0.0",
+    type: "deployment",
+    scope: "project",
+    description: "Simulates static LP publishing.",
+    permissions: ["deploy:simulate"],
+    requiredSecrets: [],
+    entrypoints: ["deploy.md"],
+    commands: [
+      {
+        id: "publish_static",
+        name: "Publish static",
+        description: "Simulate publishing generated static files.",
+        permission: "deploy:simulate",
+        requiresApproval: true,
+        command: "static-deploy",
+        args: ["--project", "{{projectId}}"],
+        env: [{ name: "LP_PROJECT_ID", value: "{{projectId}}" }],
+        timeoutMs: 30000
+      }
+    ],
+    reviewState: "published"
+  });
+}
+
 describe("web workbench store", () => {
   it("creates projects and exposes them in creation order", async () => {
     const store = createWebWorkbenchStore();
@@ -70,6 +98,7 @@ describe("web workbench store", () => {
         boundSkills: [],
         availableVersions: []
       },
+      skillCommands: [],
       models: {
         providers: [],
         routes: [],
@@ -102,6 +131,7 @@ describe("web workbench store", () => {
         boundSkills: [],
         availableVersions: []
       },
+      skillCommands: [],
       models: {
         providers: [],
         routes: [],
@@ -340,6 +370,7 @@ describe("web workbench store", () => {
         boundSkills: [],
         availableVersions: []
       },
+      skillCommands: [],
       models: {
         providers: [],
         routes: [],
@@ -413,6 +444,123 @@ describe("web workbench store", () => {
         version: expect.objectContaining({ reviewState: "published" })
       })
     ]);
+  });
+
+  it("discovers bound published deployment skill commands", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.skillCommands).toEqual([
+      {
+        skillId: "skill_static_deploy",
+        skillName: "Static deploy",
+        skillVersionId: published.value.id,
+        commandId: "publish_static",
+        commandName: "Publish static",
+        description: "Simulate publishing generated static files.",
+        permission: "deploy:simulate",
+        requiresApproval: true
+      }
+    ]);
+  });
+
+  it("executes skill commands with the simulated Web runner", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "Project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+
+    const result = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.value.id,
+      commandId: "publish_static",
+      approvedByUserId: "local-web-user"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        run: {
+          role: "deployer",
+          state: "completed"
+        },
+        observation: {
+          state: "completed",
+          outputSummary: "stdout: 47 chars\nstderr: 0 chars"
+        }
+      }
+    });
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.completed",
+      "run.completed"
+    ]);
+    expect(JSON.stringify(events)).toContain("stdout: 47 chars");
+  });
+
+  it("maps skill command execution validation errors to stable codes", async () => {
+    const store = createWebWorkbenchStore();
+
+    await expect(
+      store.executeSkillCommand({
+        projectId: "missing_project",
+        skillVersionId: "missing_version",
+        commandId: "publish_static",
+        approvedByUserId: "local-web-user"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "project_not_found"
+    });
   });
 
   it("maps skill store validation errors to stable codes", async () => {
