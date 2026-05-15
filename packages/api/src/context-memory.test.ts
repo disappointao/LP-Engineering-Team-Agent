@@ -127,6 +127,52 @@ describe("context memory", () => {
     );
   });
 
+  it("redacts secret-like values from same-project message previews and current retrieval query", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Current build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Build loyalty recovery page with secret-token token=secret-token for winback buyers.",
+      createdAt: "2026-05-14T00:01:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: "Build loyalty recovery page using Bearer sk-test-secret and api_key=secret-token",
+        brief: {
+          ...sampleBrief,
+          objective: "Win back buyers without password=secret-token",
+          audience: "Dormant loyalty shoppers"
+        }
+      },
+      limits: {
+        previewCharacters: 140
+      }
+    });
+
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("secret-token");
+    expect(serialized).not.toContain("sk-test-secret");
+    expect(memory.messages[0]?.preview).toContain("[REDACTED]");
+    expect(memory.messages[0]?.preview).toContain("loyalty");
+    expect(memory.retrieval.query).toContain("[REDACTED]");
+    expect(memory.retrieval.query).toContain("loyalty");
+    expect(memory.retrieval.query).toContain("Win back buyers");
+  });
+
   it("ranks current task non-matches before non-current non-matches", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.tasks.save({
@@ -509,6 +555,58 @@ describe("context memory", () => {
     });
 
     expect(memory.messages.length).toBeLessThan(3);
+    expect(memory.retrieval.omitted).toContain("memory:total:budget_exceeded");
+  });
+
+  it("keeps serialized memory within total budget when the current prompt is large", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Current build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    for (const id of ["message_1", "message_2"]) {
+      await repositories.messages.save({
+        id,
+        taskId: "task_1",
+        role: "assistant",
+        content: `Spring campaign note ${id} ${"x".repeat(120)}`,
+        createdAt: `2026-05-14T00:0${id.at(-1)}:00.000Z`
+      });
+    }
+    const fullQuery = toContextMemoryQuery({
+      role: "builder",
+      input: {
+        prompt: `Build a spring sale page ${"customer ".repeat(500)}`
+      }
+    });
+    const limit = 700;
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: `Build a spring sale page ${"customer ".repeat(500)}`
+      },
+      limits: {
+        messages: 2,
+        runs: 0,
+        tools: 0,
+        artifacts: 0,
+        totalCharacters: limit
+      }
+    });
+
+    expect(JSON.stringify(memory).length).toBeLessThanOrEqual(limit);
+    expect(memory.retrieval.query.length).toBeLessThan(fullQuery.length);
+    expect(memory.retrieval.selected).toEqual(
+      memory.messages.map((message) => `message:${message.id}`)
+    );
     expect(memory.retrieval.omitted).toContain("memory:total:budget_exceeded");
   });
 });

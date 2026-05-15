@@ -35,6 +35,8 @@ const CURRENT_TASK_SCORE = 100;
 const KEYWORD_MATCH_SCORE = 10;
 const FAILED_SCORE = 50;
 const RECENCY_SCORE_DIVISOR = 1_000_000_000_000_000;
+const CONTEXT_MEMORY_REDACTION = "[REDACTED]";
+const TOTAL_BUDGET_EXCEEDED_REASON = "memory:total:budget_exceeded";
 
 const ContextMemoryFileSchema = z.object({
   name: z.enum(["index.html", "styles.css", "script.js"]),
@@ -136,14 +138,18 @@ export async function assembleContextMemory(
 
   const messageSummaries = allMessages
     .filter((message) => projectTaskIds.has(message.taskId))
-    .map((message) => ({
-      id: message.id,
-      taskId: message.taskId,
-      role: message.role,
-      preview: truncatePreview(message.content, limits.previewCharacters),
-      createdAt: message.createdAt,
-      score: scoreMessage(message, input.taskId, queryKeywords)
-    }))
+    .map((message) => {
+      const sanitizedContent = sanitizeContextMemoryText(message.content);
+
+      return {
+        id: message.id,
+        taskId: message.taskId,
+        role: message.role,
+        preview: truncatePreview(sanitizedContent, limits.previewCharacters),
+        createdAt: message.createdAt,
+        score: scoreMessage(message, input.taskId, queryKeywords, sanitizedContent)
+      };
+    })
     .sort(compareScoredMessages);
   const runSummaries = summarizeRuns({
     runs: await input.repositories.runs.listForProject(input.projectId),
@@ -163,46 +169,40 @@ export async function assembleContextMemory(
     briefs
   });
 
-  const selectedMemory = applyTotalCharacterBudget(
-    {
-      messages: selectWithBudget({
-        source: messageSummaries,
-        sourceName: "messages",
-        limit: limits.messages,
-        omitted
-      }),
-      runs: selectWithBudget({
-        source: runSummaries,
-        sourceName: "runs",
-        limit: limits.runs,
-        omitted
-      }),
-      tools: selectWithBudget({
-        source: toolSummaries,
-        sourceName: "tools",
-        limit: limits.tools,
-        omitted
-      }),
-      artifacts: selectWithBudget({
-        source: artifactSummaries,
-        sourceName: "artifacts",
-        limit: limits.artifacts,
-        omitted
-      })
-    },
-    limits.totalCharacters,
-    omitted
-  );
-
   const memory: ContextMemory = {
-    ...selectedMemory,
+    messages: selectWithBudget({
+      source: messageSummaries,
+      sourceName: "messages",
+      limit: limits.messages,
+      omitted
+    }),
+    runs: selectWithBudget({
+      source: runSummaries,
+      sourceName: "runs",
+      limit: limits.runs,
+      omitted
+    }),
+    tools: selectWithBudget({
+      source: toolSummaries,
+      sourceName: "tools",
+      limit: limits.tools,
+      omitted
+    }),
+    artifacts: selectWithBudget({
+      source: artifactSummaries,
+      sourceName: "artifacts",
+      limit: limits.artifacts,
+      omitted
+    }),
     retrieval: {
       query,
       strategy: CONTEXT_MEMORY_STRATEGY,
-      selected: toSelectedSourceIds(selectedMemory),
+      selected: [],
       omitted
     }
   };
+  memory.retrieval.selected = toSelectedSourceIds(memory);
+  applyTotalCharacterBudget(memory, limits.totalCharacters);
 
   return ContextMemorySchema.parse(memory);
 }
@@ -211,7 +211,7 @@ export function toContextMemoryQuery(input: {
   role: AgentRole;
   input: RuntimeRunInput;
 }): string {
-  return [
+  const query = [
     input.role,
     input.input.prompt,
     input.input.brief?.objective,
@@ -222,6 +222,7 @@ export function toContextMemoryQuery(input: {
     .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
     .map((part) => part.trim())
     .join(" ");
+  return sanitizeContextMemoryText(query);
 }
 
 export function truncatePreview(value: string, limit: number): string {
@@ -231,9 +232,10 @@ export function truncatePreview(value: string, limit: number): string {
 function scoreMessage(
   message: WorkbenchMessageRecord,
   currentTaskId: string | undefined,
-  queryKeywords: Set<string>
+  queryKeywords: Set<string>,
+  content: string = message.content
 ): number {
-  const contentKeywords = toKeywords(message.content);
+  const contentKeywords = toKeywords(content);
   const keywordScore = [...queryKeywords].reduce(
     (score, keyword) => score + (contentKeywords.has(keyword) ? KEYWORD_MATCH_SCORE : 0),
     0
@@ -318,7 +320,7 @@ function summarizeTools(input: {
       ...(observation.taskId ? { taskId: observation.taskId } : {}),
       toolName: observation.toolName,
       state: observation.state,
-      outputSummary: observation.outputSummary,
+      outputSummary: sanitizeContextMemoryText(observation.outputSummary),
       ...(observation.exitCode !== undefined ? { exitCode: observation.exitCode } : {}),
       ...(observation.errorName ? { errorName: observation.errorName } : {}),
       createdAt: observation.createdAt,
@@ -419,7 +421,19 @@ function compareScoredArtifacts(
 }
 
 function toKeywords(value: string): Set<string> {
-  const stopwords = new Set(["a", "an", "and", "for", "in", "into", "of", "the", "to", "with"]);
+  const stopwords = new Set([
+    "a",
+    "an",
+    "and",
+    "for",
+    "in",
+    "into",
+    "of",
+    "redacted",
+    "the",
+    "to",
+    "with"
+  ]);
   return new Set(
     value
       .toLowerCase()
@@ -435,8 +449,19 @@ function getPrimaryCta(brief: RuntimeRunInput["brief"]): string | undefined {
 }
 
 function toOptionalNonEmptyString(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
+  const trimmed = value === undefined ? undefined : sanitizeContextMemoryText(value).trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function sanitizeContextMemoryText(value: string): string {
+  return value
+    .replace(
+      /\b((?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      `$1${CONTEXT_MEMORY_REDACTION}`
+    )
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}\b/giu, `$1${CONTEXT_MEMORY_REDACTION}`)
+    .replace(/\bsk-[A-Za-z0-9_-]{6,}\b/giu, CONTEXT_MEMORY_REDACTION)
+    .replace(/\bsecret-token\b/giu, CONTEXT_MEMORY_REDACTION);
 }
 
 function selectWithBudget<T>(input: {
@@ -459,46 +484,73 @@ function selectWithBudget<T>(input: {
   return selected;
 }
 
-function applyTotalCharacterBudget(
-  memory: Pick<ContextMemory, "messages" | "runs" | "tools" | "artifacts">,
-  totalCharacters: number,
-  omitted: string[]
-): Pick<ContextMemory, "messages" | "runs" | "tools" | "artifacts"> {
-  const selectedMemory = {
-    messages: [...memory.messages],
-    runs: [...memory.runs],
-    tools: [...memory.tools],
-    artifacts: [...memory.artifacts]
-  };
+function applyTotalCharacterBudget(memory: ContextMemory, totalCharacters: number): void {
   const budget = Math.max(0, Math.floor(totalCharacters));
-  let removedAny = false;
+  if (contextMemoryCharacterCount(memory) <= budget) {
+    return;
+  }
+
+  markTotalBudgetExceeded(memory);
+  const originalQuery = memory.retrieval.query;
+  truncateQueryToBudget(memory, originalQuery, budget);
+  if (contextMemoryCharacterCount(memory) <= budget) {
+    return;
+  }
 
   for (const sourceName of ["artifacts", "tools", "runs", "messages"] as const) {
-    while (
-      selectedMemory[sourceName].length > 0 &&
-      memoryCharacterCount(selectedMemory) > budget
-    ) {
-      selectedMemory[sourceName].pop();
-      removedAny = true;
+    while (memory[sourceName].length > 0) {
+      memory[sourceName].pop();
+      refreshSelectedMemory(memory);
+      truncateQueryToBudget(memory, originalQuery, budget);
+      if (contextMemoryCharacterCount(memory) <= budget) {
+        return;
+      }
+    }
+  }
+}
+
+function markTotalBudgetExceeded(memory: ContextMemory): void {
+  if (!memory.retrieval.omitted.includes(TOTAL_BUDGET_EXCEEDED_REASON)) {
+    memory.retrieval.omitted.push(TOTAL_BUDGET_EXCEEDED_REASON);
+  }
+}
+
+function truncateQueryToBudget(memory: ContextMemory, query: string, budget: number): void {
+  memory.retrieval.query = query;
+  if (contextMemoryCharacterCount(memory) <= budget) {
+    return;
+  }
+
+  memory.retrieval.query = "";
+  if (contextMemoryCharacterCount(memory) > budget) {
+    return;
+  }
+
+  let low = 0;
+  let high = query.length;
+  let best = "";
+  while (low <= high) {
+    const midpoint = Math.floor((low + high) / 2);
+    const candidate = query.slice(0, midpoint);
+    memory.retrieval.query = candidate;
+
+    if (contextMemoryCharacterCount(memory) <= budget) {
+      best = candidate;
+      low = midpoint + 1;
+    } else {
+      high = midpoint - 1;
     }
   }
 
-  if (removedAny) {
-    omitted.push("memory:total:budget_exceeded");
-  }
-
-  return selectedMemory;
+  memory.retrieval.query = best;
 }
 
-function memoryCharacterCount(
-  memory: Pick<ContextMemory, "messages" | "runs" | "tools" | "artifacts">
-): number {
-  return [
-    ...memory.messages,
-    ...memory.runs,
-    ...memory.tools,
-    ...memory.artifacts
-  ].reduce((total, item) => total + JSON.stringify(item).length, 0);
+function contextMemoryCharacterCount(memory: ContextMemory): number {
+  return JSON.stringify(memory).length;
+}
+
+function refreshSelectedMemory(memory: ContextMemory): void {
+  memory.retrieval.selected = toSelectedSourceIds(memory);
 }
 
 function toSelectedSourceIds(
