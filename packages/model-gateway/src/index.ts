@@ -180,12 +180,30 @@ export interface ModelContextMemory {
   retrieval: ModelContextMemoryRetrieval;
 }
 
+export interface ModelAgentHandoffArtifactRefs {
+  briefId?: string;
+  pageVersionId?: string;
+}
+
+export interface ModelAgentHandoffSummary {
+  id: string;
+  fromRunId: string;
+  fromRole: AgentRole;
+  toRole: AgentRole;
+  state: "ready" | "blocked" | "consumed";
+  summary: string;
+  blockingReason?: string;
+  artifactRefs?: ModelAgentHandoffArtifactRefs;
+  updatedAt: string;
+}
+
 export interface ModelRequestContext {
   skills: ModelSkillContext[];
   mcpTools: ModelMCPToolContext[];
   approval: ModelApprovalContext;
   artifactWorkspace: ModelArtifactWorkspaceContext;
   memory?: ModelContextMemory;
+  handoffs?: ModelAgentHandoffSummary[];
 }
 
 export interface ModelRequest {
@@ -441,8 +459,18 @@ function cloneModelRequestContext(context: ModelRequestContext): ModelRequestCon
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
     },
-    ...(context.memory ? { memory: cloneModelContextMemory(context.memory) } : {})
+    ...(context.memory ? { memory: cloneModelContextMemory(context.memory) } : {}),
+    ...(context.handoffs ? { handoffs: cloneModelAgentHandoffs(context.handoffs) } : {})
   };
+}
+
+function cloneModelAgentHandoffs(
+  handoffs: ModelAgentHandoffSummary[]
+): ModelAgentHandoffSummary[] {
+  return handoffs.map((handoff) => ({
+    ...handoff,
+    ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {})
+  }));
 }
 
 function cloneModelContextMemory(memory: ModelContextMemory): ModelContextMemory {

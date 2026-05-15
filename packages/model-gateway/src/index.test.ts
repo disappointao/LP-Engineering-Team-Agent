@@ -8,6 +8,7 @@ import {
   type AgentRole,
   type ModelGateway,
   type ModelAuditEntry,
+  type ModelRequestContext,
   type ModelRoutingPolicy
 } from "./index";
 
@@ -232,6 +233,58 @@ describe("model gateway", () => {
         omitted: ["memory:artifacts:budget_exceeded"]
       }
     });
+  });
+
+  it("clones handoff summaries in audit contexts", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const context = baseModelContext({
+      handoffs: [
+        {
+          id: "handoff_1",
+          fromRunId: "run_planner_1",
+          fromRole: "planner",
+          toRole: "builder",
+          state: "ready",
+          summary: "Planner produced LP brief",
+          artifactRefs: {
+            briefId: "brief_1"
+          },
+          updatedAt: "2026-05-15T08:00:00.000Z"
+        }
+      ]
+    });
+
+    await gateway.complete({
+      role: "builder",
+      projectId: "project_1",
+      prompt: "Build",
+      context
+    });
+    context.handoffs![0]!.artifactRefs!.briefId = "mutated";
+    context.handoffs!.push({
+      id: "handoff_mutated",
+      fromRunId: "run_mutated",
+      fromRole: "planner",
+      toRole: "builder",
+      state: "ready",
+      summary: "mutated",
+      updatedAt: "2026-05-15T08:01:00.000Z"
+    });
+
+    expect(gateway.getAuditLog()[0]?.context?.handoffs).toEqual([
+      {
+        id: "handoff_1",
+        fromRunId: "run_planner_1",
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Planner produced LP brief",
+        artifactRefs: {
+          briefId: "brief_1"
+        },
+        updatedAt: "2026-05-15T08:00:00.000Z"
+      }
+    ]);
   });
 
   it("can be replaced by a provider-neutral gateway implementation", async () => {
@@ -523,3 +576,16 @@ describe("model gateway", () => {
     } satisfies Partial<ModelProviderConfigurationError>);
   });
 });
+
+function baseModelContext(overrides: Partial<ModelRequestContext> = {}): ModelRequestContext {
+  return {
+    skills: [],
+    mcpTools: [],
+    approval: { state: "not_required" },
+    artifactWorkspace: {
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    },
+    ...overrides
+  };
+}

@@ -4,6 +4,7 @@ import {
   InMemoryModelGateway,
   createDefaultModelPolicy,
   type AgentRole,
+  type ModelAgentHandoffSummary,
   type ModelGateway,
   type ModelContextMemory,
   type ModelRequestContext,
@@ -48,12 +49,23 @@ export interface RuntimeArtifactWorkspace {
   writableFiles: string[];
 }
 
+export interface RuntimeAgentHandoffArtifactRefs {
+  briefId?: string;
+  pageVersionId?: string;
+}
+
+export interface RuntimeAgentHandoffSummary
+  extends Omit<ModelAgentHandoffSummary, "artifactRefs"> {
+  artifactRefs?: RuntimeAgentHandoffArtifactRefs;
+}
+
 export interface RuntimeRunContext {
   skills: RuntimeSkillContext[];
   mcpTools: RuntimeMCPToolContext[];
   approval: RuntimeApprovalContext;
   artifactWorkspace: RuntimeArtifactWorkspace;
   memory?: ModelContextMemory;
+  handoffs?: RuntimeAgentHandoffSummary[];
   modelRoutingPolicy?: ModelRoutingPolicy;
 }
 
@@ -339,7 +351,8 @@ function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext 
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
     },
-    ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {})
+    ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {}),
+    ...(context.handoffs ? { handoffs: cloneRuntimeHandoffs(context.handoffs) } : {})
   };
 }
 
@@ -380,10 +393,20 @@ function cloneRuntimeContext(context: RuntimeRunContext): RuntimeRunContext {
       writableFiles: [...context.artifactWorkspace.writableFiles]
     },
     ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {}),
+    ...(context.handoffs ? { handoffs: cloneRuntimeHandoffs(context.handoffs) } : {}),
     ...(context.modelRoutingPolicy
       ? { modelRoutingPolicy: cloneModelRoutingPolicy(context.modelRoutingPolicy) }
       : {})
   };
+}
+
+function cloneRuntimeHandoffs(
+  handoffs: RuntimeAgentHandoffSummary[]
+): RuntimeAgentHandoffSummary[] {
+  return handoffs.map((handoff) => ({
+    ...handoff,
+    ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {})
+  }));
 }
 
 function cloneRuntimeMemory(memory: ModelContextMemory): ModelContextMemory {

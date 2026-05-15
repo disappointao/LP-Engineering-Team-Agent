@@ -8,7 +8,12 @@ import {
   type ModelResponse
 } from "@lp-agent/model-gateway";
 import { createDefaultRuntimeContext, LocalAgentRuntimeAdapter } from "./index";
-import type { RuntimeEvent, RuntimeRunRequest, RuntimeRunResult } from "./index";
+import type {
+  RuntimeEvent,
+  RuntimeRunContext,
+  RuntimeRunRequest,
+  RuntimeRunResult
+} from "./index";
 
 describe("local agent runtime adapter", () => {
   it("exports the runtime adapter contract names used by orchestration packages", () => {
@@ -223,6 +228,54 @@ describe("local agent runtime adapter", () => {
     });
 
     expect(gateway.requests[0]?.prompt).toBe(JSON.stringify(sampleBrief));
+  });
+
+  it("forwards handoff summaries to model requests with defensive clones", async () => {
+    const gateway = new RecordingPortableGateway();
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+    const context = completeRuntimeContext({
+      handoffs: [
+        {
+          id: "handoff_1",
+          fromRunId: "run_builder_1",
+          fromRole: "builder",
+          toRole: "reviewer",
+          state: "ready",
+          summary: "Builder produced static LP artifacts",
+          artifactRefs: {
+            pageVersionId: "version_1"
+          },
+          updatedAt: "2026-05-15T08:00:00.000Z"
+        }
+      ]
+    });
+
+    await runtime.run({
+      runId: "run_reviewer_1",
+      projectId: "project_1",
+      role: "reviewer",
+      input: {
+        prompt: "Review",
+        brief: sampleBrief
+      },
+      context
+    });
+    context.handoffs![0]!.artifactRefs!.pageVersionId = "mutated";
+
+    expect(gateway.requests[0]?.context?.handoffs).toEqual([
+      {
+        id: "handoff_1",
+        fromRunId: "run_builder_1",
+        fromRole: "builder",
+        toRole: "reviewer",
+        state: "ready",
+        summary: "Builder produced static LP artifacts",
+        artifactRefs: {
+          pageVersionId: "version_1"
+        },
+        updatedAt: "2026-05-15T08:00:00.000Z"
+      }
+    ]);
   });
 
   it("passes scoped skills, visible MCP tools, approval, and workspace context into model calls", async () => {
@@ -666,4 +719,19 @@ function isRunCompletedEvent(
   event: RuntimeEvent
 ): event is Extract<RuntimeEvent, { type: "run.completed" }> {
   return event.type === "run.completed";
+}
+
+function completeRuntimeContext(
+  overrides: Partial<RuntimeRunContext> = {}
+): RuntimeRunContext {
+  return {
+    skills: [],
+    mcpTools: [],
+    approval: { state: "not_required" },
+    artifactWorkspace: {
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    },
+    ...overrides
+  };
 }
