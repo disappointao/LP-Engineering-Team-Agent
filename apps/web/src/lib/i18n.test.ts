@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "./i18n";
+import type { SkillCommandFlowErrorCode } from "./workbench-store";
+
+const skillCommandErrorCodes: SkillCommandFlowErrorCode[] = [
+  "skill_command_not_found",
+  "skill_command_not_bound",
+  "skill_command_not_deployment",
+  "skill_command_not_published",
+  "skill_command_permission_denied",
+  "skill_command_approval_required",
+  "skill_command_page_version_not_found",
+  "skill_command_unknown_template_variable",
+  "skill_command_execution_failed"
+];
 
 describe("web i18n", () => {
   it("chooses Chinese for zh language environments", () => {
@@ -59,5 +72,15 @@ describe("web i18n", () => {
       "OpenAI Chat Completions 兼容"
     );
     expect(zh.modelsView.errors.model_provider_api_key_env_invalid).toContain("环境变量");
+  });
+
+  it("exposes localized skill command errors for both locales", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    for (const code of skillCommandErrorCodes) {
+      expect(en.skillsView.errors[code]).toBeTruthy();
+      expect(zh.skillsView.errors[code]).toBeTruthy();
+    }
   });
 });

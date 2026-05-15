@@ -972,7 +972,16 @@ function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undef
     value === "skill_version_not_published" ||
     value === "skill_binding_not_found" ||
     value === "publish_not_allowed" ||
-    value === "skill_operation_failed"
+    value === "skill_operation_failed" ||
+    value === "skill_command_not_found" ||
+    value === "skill_command_not_bound" ||
+    value === "skill_command_not_deployment" ||
+    value === "skill_command_not_published" ||
+    value === "skill_command_permission_denied" ||
+    value === "skill_command_approval_required" ||
+    value === "skill_command_page_version_not_found" ||
+    value === "skill_command_unknown_template_variable" ||
+    value === "skill_command_execution_failed"
   ) {
     return value;
   }

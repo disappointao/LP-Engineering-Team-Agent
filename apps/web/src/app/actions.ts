@@ -274,8 +274,8 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
   const pageVersionId = String(formData.get("pageVersionId") ?? "").trim();
   const result = await getWebWorkbenchStore().executeSkillCommand({
     projectId,
-    skillVersionId: String(formData.get("skillVersionId") ?? ""),
-    commandId: String(formData.get("commandId") ?? ""),
+    skillVersionId: String(formData.get("skillVersionId") ?? "").trim(),
+    commandId: String(formData.get("commandId") ?? "").trim(),
     ...(pageVersionId ? { pageVersionId } : {}),
     approvedByUserId: localWebApprovalUserId
   });

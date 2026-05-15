@@ -298,6 +298,20 @@ describe("HomePage project flow errors", () => {
     expect(sections.some((section) => section.props?.className === "chatWorkspace" && section.props?.["aria-label"] === "Skills")).toBe(true);
   });
 
+  it("renders localized skill command errors", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({
+        view: "skills",
+        skillError: "skill_command_not_bound"
+      }),
+      acceptLanguage: "zh-CN"
+    });
+
+    expect(html).toContain("该技能命令未绑定到当前项目。");
+  });
+
   it("renders the models management view from the models route", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {

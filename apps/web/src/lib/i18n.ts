@@ -392,7 +392,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_version_not_published: "Publish the skill version before binding it.",
         skill_binding_not_found: "The selected skill binding is no longer available.",
         publish_not_allowed: "This skill version cannot be published yet.",
-        skill_operation_failed: "The skill operation failed. Try again."
+        skill_operation_failed: "The skill operation failed. Try again.",
+        skill_command_not_found: "The selected skill command is no longer available.",
+        skill_command_not_bound: "This skill command is not bound to the current project.",
+        skill_command_not_deployment: "This skill command is not a deployment command.",
+        skill_command_not_published: "Publish the skill before running this command.",
+        skill_command_permission_denied: "This skill command is not allowed.",
+        skill_command_approval_required: "Approve this skill command before running it.",
+        skill_command_page_version_not_found: "The selected page version is no longer available.",
+        skill_command_unknown_template_variable: "The skill command has an unknown template variable.",
+        skill_command_execution_failed: "The skill command failed. Try again."
       }
     },
     mcpView: {
@@ -736,7 +745,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_version_not_published: "请先发布技能版本再绑定。",
         skill_binding_not_found: "当前技能绑定已经不可用。",
         publish_not_allowed: "该技能版本暂不能发布。",
-        skill_operation_failed: "技能操作失败，请重试。"
+        skill_operation_failed: "技能操作失败，请重试。",
+        skill_command_not_found: "当前技能命令已经不可用。",
+        skill_command_not_bound: "该技能命令未绑定到当前项目。",
+        skill_command_not_deployment: "该技能命令不是部署命令。",
+        skill_command_not_published: "请先发布技能再运行该命令。",
+        skill_command_permission_denied: "该技能命令不允许执行。",
+        skill_command_approval_required: "请先批准该技能命令再运行。",
+        skill_command_page_version_not_found: "当前页面版本已经不可用。",
+        skill_command_unknown_template_variable: "该技能命令包含未知模板变量。",
+        skill_command_execution_failed: "技能命令执行失败，请重试。"
       }
     },
     mcpView: {

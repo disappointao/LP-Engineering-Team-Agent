@@ -541,6 +541,35 @@ describe("submitPromptAction", () => {
     });
   });
 
+  it("ignores submitted approval user ids when executing skill commands", async () => {
+    const formData = buildSkillCommandForm({
+      skillVersionId: " skill_version_1 ",
+      commandId: " publish_static "
+    });
+    formData.set("approvedByUserId", "attacker");
+
+    await expectRedirect(executeSkillCommandAction(formData), "/?view=skills");
+
+    expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
+      projectId: "project_2",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      pageVersionId: "version_1",
+      approvedByUserId: "local-web-user"
+    });
+  });
+
+  it("redirects blank skill command project ids without calling the store", async () => {
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm({ projectId: "   " })),
+      "/?view=skills&skillError=project_not_found"
+    );
+
+    expect(mocks.executeSkillCommand).not.toHaveBeenCalled();
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("redirects skill command actions with stable command errors", async () => {
     mocks.executeSkillCommand.mockResolvedValue({
       ok: false,
