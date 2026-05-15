@@ -241,6 +241,45 @@ describe("demo workbench service", () => {
     );
   });
 
+  it("consumes only the handoff for the artifact being processed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create first LP"
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create second LP"
+    });
+
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id
+    });
+
+    await expect(repositories.agentHandoffs.listInbound({
+      projectId: project.id,
+      toRole: "builder"
+    })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: "ready",
+          artifactRefs: {
+            briefId: firstBrief.id
+          }
+        }),
+        expect.objectContaining({
+          state: "consumed",
+          artifactRefs: {
+            briefId: secondBrief.id
+          }
+        })
+      ])
+    );
+  });
+
   it("creates ready reviewer handoff before deployer and consumes it during deployment", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
@@ -350,6 +389,65 @@ describe("demo workbench service", () => {
       })
     ).rejects.toThrow("agent_handoff_blocked");
     expect(deployerRuntime.requests).toEqual([]);
+  });
+
+  it("allows deployment after a blocked review is followed by a passing re-review", async () => {
+    const blockingFinding: ReviewFinding = {
+      severity: "blocking",
+      target: "section:hero",
+      explanation: "Hero section is missing a CTA.",
+      suggestedFix: "Add a primary CTA.",
+      blocksDeployment: true
+    };
+    const reviewerRuntime = new MutableRuntime({
+      state: "completed",
+      findings: [blockingFinding]
+    });
+    const service = new DemoWorkbenchService({
+      reviewerRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: pageVersion.id
+    });
+    await expect(
+      service.approveAndCreateDeployment({
+        projectId: project.id,
+        pageVersionId: pageVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).rejects.toThrow("agent_handoff_blocked");
+
+    reviewerRuntime.result = {
+      state: "completed",
+      findings: []
+    };
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: pageVersion.id
+    });
+
+    await expect(
+      service.approveAndCreateDeployment({
+        projectId: project.id,
+        pageVersionId: pageVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).resolves.toMatchObject({
+      pageVersionId: pageVersion.id,
+      status: "pr_opened"
+    });
   });
 
   it("persists failed run events before surfacing generation failure", async () => {
@@ -3044,6 +3142,29 @@ describe("demo workbench service", () => {
     ]);
     expect(contextPack.trace.injected).toContain("handoffs:1");
     expect(contextPack.trace.omitted).not.toContain("handoffs:none");
+  });
+
+  it("omits handoffs when handoff context assembly fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    repositories.agentHandoffs.listInbound = async () => {
+      throw new Error("handoff_repository_unavailable");
+    };
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Build"
+      },
+      now: fixedClock()
+    });
+
+    expect(ContextPackSchema.parse(contextPack).runtimeContext.handoffs).toEqual([]);
+    expect(contextPack.trace.omitted).toContain("handoffs:error");
   });
 
   it("passes context memory through runAgentStep into runtime requests", async () => {

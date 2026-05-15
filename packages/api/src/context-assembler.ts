@@ -124,7 +124,7 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
     role: input.role,
     input: input.input
   });
-  const handoffContext = await assembleRuntimeHandoffs({
+  const handoffContext = await assembleRuntimeHandoffsSafely({
     repositories: input.repositories,
     projectId: input.projectId,
     taskId: input.taskId,
@@ -170,4 +170,23 @@ function cloneRuntimeInput(input: RuntimeRunInput): RuntimeRunInput {
     ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
     ...(input.brief !== undefined ? { brief: structuredClone(input.brief) } : {})
   };
+}
+
+async function assembleRuntimeHandoffsSafely(input: {
+  repositories: WorkbenchRepositories;
+  projectId: string;
+  taskId?: string;
+  role: AgentRole;
+}): Promise<Awaited<ReturnType<typeof assembleRuntimeHandoffs>>> {
+  try {
+    return await assembleRuntimeHandoffs(input);
+  } catch {
+    return {
+      handoffs: [],
+      trace: {
+        injected: [],
+        omitted: ["handoffs:error"]
+      }
+    };
+  }
 }

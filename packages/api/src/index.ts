@@ -469,7 +469,10 @@ export class DemoWorkbenchService {
         beforeRuntime: () =>
           this.consumeReadyHandoffsForRun({
             projectId: input.projectId,
-            role: "builder"
+            role: "builder",
+            artifactRefs: {
+              briefId: brief.id
+            }
           }),
         now: this.now,
         finalizeResult: this.structuredBuilderOutputEnabled
@@ -573,7 +576,10 @@ export class DemoWorkbenchService {
       beforeRuntime: () =>
         this.consumeReadyHandoffsForRun({
           projectId: input.projectId,
-          role: "reviewer"
+          role: "reviewer",
+          artifactRefs: {
+            pageVersionId: pageVersion.id
+          }
         }),
       now: this.now
     });
@@ -651,7 +657,10 @@ export class DemoWorkbenchService {
       beforeRuntime: () =>
         this.consumeReadyHandoffsForRun({
           projectId: input.projectId,
-          role: "deployer"
+          role: "deployer",
+          artifactRefs: {
+            pageVersionId: pageVersion.id
+          }
         }),
       now: this.now
     });
@@ -1540,6 +1549,7 @@ export class DemoWorkbenchService {
     };
   }): Promise<void> {
     const reservation = await this.reserveHandoffId();
+    const handoffTimestamp = nextRepositoryTimestamp(this.repositories, this.now);
     const handoff = createAgentHandoffRecord({
       id: reservation.id,
       projectId: input.projectId,
@@ -1551,7 +1561,7 @@ export class DemoWorkbenchService {
       summary: input.summary,
       blockingReason: input.blockingReason,
       artifactRefs: input.artifactRefs,
-      now: this.now
+      now: () => new Date(handoffTimestamp)
     });
     try {
       await this.repositories.agentHandoffs.save(handoff);
@@ -1587,12 +1597,17 @@ export class DemoWorkbenchService {
     projectId: string;
     taskId?: string;
     role: AgentRole;
+    artifactRefs?: {
+      briefId?: string;
+      pageVersionId?: string;
+    };
   }): Promise<RunEventDraft[]> {
     return markInboundHandoffsConsumed({
       repositories: this.repositories,
       projectId: input.projectId,
       taskId: input.taskId,
       role: input.role,
+      artifactRefs: input.artifactRefs,
       now: this.now
     });
   }

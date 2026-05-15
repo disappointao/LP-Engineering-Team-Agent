@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -441,9 +441,9 @@ describe("json-file workbench repositories", () => {
       updatedAt: "2026-05-15T08:00:00.000Z"
     });
 
-    const second = createJsonFileWorkbenchRepositories({
-      filePath: join(tempRoot, ".", "handoffs.json")
-    });
+    const aliasPath = join(tempRoot, "handoffs-alias.json");
+    await symlink(filePath, aliasPath);
+    const second = createJsonFileWorkbenchRepositories({ filePath: aliasPath });
 
     await expect(
       second.agentHandoffs.listInbound({

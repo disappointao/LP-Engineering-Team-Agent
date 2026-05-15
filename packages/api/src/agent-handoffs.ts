@@ -173,6 +173,7 @@ export async function markInboundHandoffsConsumed(input: {
   projectId: string;
   taskId?: string;
   role: AgentRole;
+  artifactRefs?: AgentHandoffRecord["artifactRefs"];
   now: () => Date;
 }): Promise<RunEventDraft[]> {
   const inbound = await input.repositories.agentHandoffs.listInbound({
@@ -181,7 +182,10 @@ export async function markInboundHandoffsConsumed(input: {
     toRole: input.role
   });
   const ready = inbound.filter(
-    (handoff) => handoff.state === "ready" && matchesTaskScope(handoff, input.taskId)
+    (handoff) =>
+      handoff.state === "ready" &&
+      matchesTaskScope(handoff, input.taskId) &&
+      matchesArtifactRefs(handoff, input.artifactRefs)
   );
   const timestamp = input.now().toISOString();
   const events: RunEventDraft[] = [];
@@ -247,6 +251,20 @@ function toHandoffEventPayload(handoff: AgentHandoffRecord): Record<string, unkn
 
 function matchesTaskScope(handoff: AgentHandoffRecord, taskId: string | undefined): boolean {
   return taskId === undefined ? handoff.taskId === undefined : handoff.taskId === taskId;
+}
+
+function matchesArtifactRefs(
+  handoff: AgentHandoffRecord,
+  artifactRefs: AgentHandoffRecord["artifactRefs"] | undefined
+): boolean {
+  if (!artifactRefs) {
+    return true;
+  }
+  return (
+    (artifactRefs.briefId === undefined || handoff.artifactRefs?.briefId === artifactRefs.briefId) &&
+    (artifactRefs.pageVersionId === undefined ||
+      handoff.artifactRefs?.pageVersionId === artifactRefs.pageVersionId)
+  );
 }
 
 function dedupeHandoffs(handoffs: AgentHandoffRecord[]): AgentHandoffRecord[] {

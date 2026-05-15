@@ -206,6 +206,65 @@ describe("agent handoffs", () => {
     );
   });
 
+  it("marks only matching artifact handoffs consumed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_brief_1",
+        projectId: "project_1",
+        fromRunId: "run_planner_1",
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Planner produced first brief",
+        artifactRefs: {
+          briefId: "brief_1"
+        },
+        now: () => new Date("2026-05-15T08:00:00.000Z")
+      })
+    );
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_brief_2",
+        projectId: "project_1",
+        fromRunId: "run_planner_2",
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Planner produced second brief",
+        artifactRefs: {
+          briefId: "brief_2"
+        },
+        now: () => new Date("2026-05-15T08:01:00.000Z")
+      })
+    );
+
+    const events = await markInboundHandoffsConsumed({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      artifactRefs: {
+        briefId: "brief_2"
+      },
+      now: () => new Date("2026-05-15T08:02:00.000Z")
+    });
+    await Promise.all(events.map((event) => event.beforePersist?.()));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          handoffId: "handoff_brief_2"
+        })
+      })
+    ]);
+    await expect(repositories.agentHandoffs.getById("handoff_brief_1")).resolves.toEqual(
+      expect.objectContaining({ state: "ready" })
+    );
+    await expect(repositories.agentHandoffs.getById("handoff_brief_2")).resolves.toEqual(
+      expect.objectContaining({ state: "consumed" })
+    );
+  });
+
   it("keeps omitted task scope limited to project-level handoffs", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.agentHandoffs.save(
