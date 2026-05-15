@@ -156,6 +156,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 5 context memory and deterministic retrieval design.
    - Read this after the skill command Web loop plan when adding bounded project-scoped message, run, tool observation, and artifact summaries to Context Pack without vector search or model-generated summaries.
 
+39. `plans/2026-05-15-context-memory-retrieval.md`
+   - Stage 5 context memory and deterministic retrieval implementation plan.
+   - Read this after the context memory design when implementing model/runtime memory context contracts, API memory assembly, Context Pack injection, safety tests, and documentation updates.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
