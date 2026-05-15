@@ -153,7 +153,7 @@ Planner、Builder、Reviewer、Deployer 不是四个名字而已。真正难点�
 - 组合：把任务、项目、rules、skills、tools、files 合成 context pack。
 - 注入：按不同 role 给不同上下文，不是一份 prompt 所有人共用。
 
-本项目已经引入 Context Assembly 边界，并先做最小可用 Context Pack v0。后续不急着做向量数据库和复杂长期记忆，先把注入来源、校验和可观察性稳定下来。
+本项目已经引入 Context Assembly 边界，并先做最小可用 Context Pack v0。Stage 5 v0 已能把受预算约束的 deterministic `ContextMemory` 注入 Context Pack；后续不急着做向量数据库和复杂长期记忆，先把注入来源、校验和可观察性稳定下来。
 
 ### 2.10 结构化校验和 Zod
 
@@ -206,6 +206,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 项目级 MCP connector registry、tool approval 和可见工具计算。
 - Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
+- Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
 - Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
@@ -223,7 +224,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 ### 还没做
 
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
-- 压缩和检索。
+- 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
 - 文件系统 workspace 和 diff 注入。
 - 多 agent handoff 和恢复。
@@ -439,24 +440,22 @@ pnpm --filter @lp-agent/model-gateway test
 
 ### 阶段 5：压缩和检索
 
-当前设计：
+已实现的 Stage 5 Context Memory Retrieval v0：
 
 - [2026-05-15-context-memory-retrieval-design.md](./superpowers/specs/2026-05-15-context-memory-retrieval-design.md)
-- Stage 5 v0 先做 deterministic summary + keyword retrieval，不做向量数据库、embedding、模型生成摘要或跨项目长期记忆。
-- 目标是把当前 `ContextPack` 里的 `history:not_implemented` 和 `toolObservations:not_implemented` 变成可验证的 `ContextMemory` 注入。
-- `ContextMemory` 会从已有 repository 即时生成 message、run、tool observation 和 artifact metadata 摘要；v0 不新增 summary repository，避免提前处理缓存失效。
-- 检索只在同 project 内发生，当前 task、关键词命中、失败 run/tool 和较新记录会得到更高优先级。
-- memory 注入必须有预算和 trace：例如 `memory:messages:N`、`memory:tools:N`、`memory:tools:budget_exceeded`。
-- 工具 observation 只能注入 `outputSummary`、状态、退出码、错误名和 source id；不能注入 raw stdout/stderr、secret 或完整 artifact 内容。
+- 当前实现计划：[2026-05-15-context-memory-retrieval.md](./superpowers/plans/2026-05-15-context-memory-retrieval.md)
+- `ContextPack` 现在会注入 deterministic `ContextMemory`，把同 project 内的 message、run、tool observation 和 artifact metadata 生成受预算约束的摘要。
+- 真实模型 runtime 和 deterministic runtime 都通过同一个 runtime/model context 边界接收 memory；deterministic output 仍保持稳定，方便本地开发和测试。
+- memory trace 会记录注入数量、检索策略和省略原因，方便判断哪些历史进入了上下文、哪些因为预算或范围被跳过。
+- v0 仍不做向量数据库、embedding、模型生成摘要、跨项目长期记忆、跨用户长期记忆、持久 summary repository、selected file snippets 或高级压缩。
+- raw tool output、secret、完整 artifact 和 raw model text 都不能进入 memory；工具 observation 只能注入安全摘要、状态、退出码、错误名和 source id 等 allowlist metadata。
 
-后续实现时重点关注：
+后续重点关注：
 
-- message summary。
-- run summary。
-- tool output summary。
-- project-scoped retrieval。
-- artifact metadata summary。
-- selected file snippets 仍后置，必须等文件片段策略、安全预算和源码脱敏规则明确后再做。
+- 向量或混合检索。
+- 持久摘要仓库和缓存失效策略。
+- selected file snippets 的安全预算和源码脱敏规则。
+- 更高级的压缩策略和长期记忆权限边界。
 
 学习重点：
 
