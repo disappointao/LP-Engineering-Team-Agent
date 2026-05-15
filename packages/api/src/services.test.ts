@@ -961,6 +961,137 @@ describe("demo workbench service", () => {
     expect(runner.inputs).toEqual([]);
   });
 
+  it("rejects command execution for non-deployment skills", async () => {
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      toolCommandRunner: runner,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        brandSkillManifest({
+          commands: [commandWithoutArtifacts()]
+        })
+      ),
+      content: "# Template skill",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_not_deployment");
+    expect(runner.inputs).toEqual([]);
+  });
+
+  it("rejects command execution for unpublished deployment skills", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(deploymentSkillManifest()),
+      content: "# Static deployment",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+    await repositories.skillVersions.save({
+      ...published,
+      reviewState: "validated",
+      manifest: {
+        ...published.manifest,
+        reviewState: "validated"
+      }
+    });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_not_published");
+    expect(runner.inputs).toEqual([]);
+  });
+
+  it("rejects command execution when the page version belongs to another project", async () => {
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const firstProject = await service.createProject({ name: "First" });
+    const secondProject = await service.createProject({ name: "Second" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: secondProject.id,
+      prompt: "Prompt"
+    });
+    const secondProjectVersion = await service.generatePageVersion({
+      projectId: secondProject.id,
+      briefId: brief.id
+    });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(deploymentSkillManifest()),
+      content: "# Static deployment",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: firstProject.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: firstProject.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        pageVersionId: secondProjectVersion.id,
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_page_version_not_found");
+    expect(runner.inputs).toEqual([]);
+  });
+
   it("rejects deployment skill command permission, secret, and template failures before invoking runner", async () => {
     const runner = new RecordingToolCommandRunner({
       state: "completed",
