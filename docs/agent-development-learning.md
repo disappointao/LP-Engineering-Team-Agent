@@ -216,7 +216,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
-- Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 provider/deploy 仍按 adapter/runner 方式迭代。
+- Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -370,8 +370,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
 - 这一步把 API/service command execution 边界接到了 Web 工作台：用户可以从项目绑定 skills 发现可执行 commands，进行一次性审批，通过 server action 触发模拟 runner，并在对话 timeline 中看到 `tool.started`、`tool.completed` 或 `tool.failed`。
 - 这个闭环的意义是让 agent 工具过程从“后端能力”变成“可见、可审计、可恢复的产品流程”：skill command 发现、approval、server action、run events、observation 和 chat timeline 使用同一套受控边界。
-- 第一版仍然是模拟执行 loop，不跑真实 shell，不做真实部署，不做真实 provider/deploy，不做 worker 队列，不做流式日志，也不做 cancel/retry。
-- 后续真实 provider/deploy 应继续按 adapter/runner 方式迭代，把真实执行替换到 `ToolCommandRunner` 边界之后，而不是绕过 API 校验、approval、run events 或 observation。
+- 第一版仍然是模拟执行 loop，不跑真实 shell，不做真实部署，不接真实 deployment adapter，不做 worker 队列，不做流式日志，也不做 cancel/retry。
+- 后续真实 deployment adapter 应继续按 adapter/runner 方式迭代，把真实部署执行替换到 `ToolCommandRunner` 边界之后，而不是绕过 API 校验、approval、run events 或 observation。
 - UI 只展示 allowlist metadata 和安全输出摘要；raw stdout/stderr、secret、完整 artifact 内容和未脱敏错误都不应该进入 timeline。
 - 这一步的学习重点是区分“产品流程可用”和“真实工具执行”：Web 可以先打通发现、审批、调用、observation、timeline 的完整体验，同时继续保留以后切换真实 runner、MCP execution 和部署编排的边界。
 
@@ -432,7 +432,7 @@ pnpm --filter @lp-agent/model-gateway test
 - [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
 - 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
 - Web 里的 command 发现、一次性审批、模拟执行、run event 展示已经打通。
-- 这个阶段没有引入真实 shell、真实部署、真实 provider/deploy、worker 队列、流式日志、cancel/retry 或 MCP execution。
+- 这个阶段没有引入真实 shell、真实部署、真实 deployment adapter、worker 队列、流式日志、cancel/retry 或 MCP execution。
 - 这能让工具执行从“后端能力”变成“用户可见的 Agent 工具过程”，同时保持后续切换真实 runner 的架构边界。
 - 工具输出必须拆分 raw output 和 metadata summary；UI 只展示 allowlist metadata 与安全摘要，raw stdout/stderr、secret 和完整 artifact 内容留在受控 observation/日志边界内。
 - 命令执行必须持续受 approval、permission、secret redaction、scope、project/pageVersion 绑定约束；run event 要设计成可检索、可过滤、可压缩的数据，而不是只给 UI 看的一段文本。
