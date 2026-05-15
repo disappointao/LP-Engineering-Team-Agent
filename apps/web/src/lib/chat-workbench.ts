@@ -2,8 +2,8 @@ import type { PageVersionRecord, RunEventRecord } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
-export type ChatToolRole = "planner" | "builder" | "reviewer" | "assistant";
-export type ChatToolStatus = "complete";
+export type ChatToolRole = "planner" | "builder" | "reviewer" | "deployer" | "assistant";
+export type ChatToolStatus = "complete" | "failed";
 
 export interface ChatToolEvent {
   id: string;
@@ -127,23 +127,59 @@ function createFallbackToolEvents(input: {
 
 function toChatToolEvent(event: RunEventRecord, copy: WorkbenchCopy): ChatToolEvent {
   const role = toChatToolRole(event);
+  const status: ChatToolStatus = event.type.endsWith(".failed") ? "failed" : "complete";
   return {
     id: `${event.runId}:${event.sequence}`,
     role,
     label: role === "assistant" ? copy.chat.generalToolLabel : copy.run[role][0],
     operation: event.message,
-    status: "complete",
-    statusLabel: copy.chat.toolStatusComplete,
-    meta: event.type
+    status,
+    statusLabel: status === "failed" ? copy.status.failed : copy.chat.toolStatusComplete,
+    meta: formatRunEventMeta(event)
   };
 }
 
 function toChatToolRole(event: RunEventRecord): ChatToolRole {
   const role = event.payload.role;
-  if (role === "planner" || role === "builder" || role === "reviewer") {
+  if (role === "planner" || role === "builder" || role === "reviewer" || role === "deployer") {
     return role;
   }
+  if (event.type.startsWith("tool.")) {
+    return "deployer";
+  }
   return "assistant";
+}
+
+function formatRunEventMeta(event: RunEventRecord): string {
+  const parts = [event.type];
+  const commandId = toDisplayValue(event.payload.commandId);
+  const exitCode = toDisplayValue(event.payload.exitCode);
+  const errorName = toDisplayValue(event.payload.errorName);
+  const outputSummary = toDisplayValue(event.payload.outputSummary);
+
+  if (commandId) {
+    parts.push(commandId);
+  }
+  if (exitCode) {
+    parts.push(`exit ${exitCode}`);
+  }
+  if (errorName) {
+    parts.push(errorName);
+  }
+  if (outputSummary) {
+    parts.push(outputSummary);
+  }
+  return parts.join(" - ");
+}
+
+function toDisplayValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return "";
 }
 
 export function createGeneralTaskThread({

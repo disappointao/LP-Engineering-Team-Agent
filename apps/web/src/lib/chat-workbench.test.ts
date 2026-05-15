@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
-import type { RunEventRecord } from "@lp-agent/api";
+import type { PageVersionRecord, RunEventRecord } from "@lp-agent/api";
 import { createDemoWorkbenchSnapshot } from "./demo-workbench";
 import { createArtifactDownloadLinks } from "./export-links";
 import { createChatWorkbenchThread, createGeneralTaskThread } from "./chat-workbench";
@@ -113,6 +113,91 @@ describe("chat workbench view model", () => {
     });
   });
 
+  it("renders deployment skill command events with sanitized metadata", () => {
+    const runEvents: RunEventRecord[] = [
+      {
+        id: "run_skill_command_1_event_1",
+        runId: "run_skill_command_1",
+        projectId: "project_1",
+        sequence: 1,
+        type: "tool.started",
+        message: "Deployment skill command started.",
+        payload: {
+          role: "deployer",
+          skillId: "skill_static_deploy",
+          commandId: "publish_static"
+        },
+        createdAt: "2026-05-15T08:00:00.000Z"
+      },
+      {
+        id: "run_skill_command_1_event_2",
+        runId: "run_skill_command_1",
+        projectId: "project_1",
+        sequence: 2,
+        type: "tool.completed",
+        message: "Deployment skill command completed.",
+        payload: {
+          role: "deployer",
+          commandId: "publish_static",
+          exitCode: 0,
+          outputSummary: "stdout: 47 chars\nstderr: 0 chars"
+        },
+        createdAt: "2026-05-15T08:00:01.000Z"
+      }
+    ];
+
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents
+    });
+
+    expect(thread.toolEvents.map((event) => event.label)).toEqual(["Deployer", "Deployer"]);
+    expect(thread.toolEvents[1]?.meta).toContain("tool.completed");
+    expect(thread.toolEvents[1]?.meta).toContain("publish_static");
+    expect(thread.toolEvents[1]?.meta).toContain("exit 0");
+    expect(thread.toolEvents[1]?.meta).toContain("stdout: 47 chars");
+    expect(thread.toolEvents[1]?.meta).not.toContain("secret-token");
+  });
+
+  it("marks failed tool events with failed status copy", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_2",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 2,
+          type: "tool.failed",
+          message: "Deployment skill command failed.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            exitCode: 1,
+            errorName: "simulated_command_failed",
+            outputSummary: "stdout: 0 chars\nstderr: 26 chars"
+          },
+          createdAt: "2026-05-15T08:00:01.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      role: "deployer",
+      status: "failed",
+      statusLabel: "failed"
+    });
+    expect(thread.toolEvents[0]?.meta).toContain("simulated_command_failed");
+  });
+
   it("includes single html and three static file artifact cards", async () => {
     const copy = getWorkbenchCopy("en");
     const snapshot = await createDemoWorkbenchSnapshot();
@@ -160,5 +245,17 @@ function completeArtifacts(): StaticArtifacts {
     indexHtml: "<main>LP</main>",
     stylesCss: "body { margin: 0; }",
     scriptJs: "console.log('ready');"
+  };
+}
+
+function pageVersionFixture(): PageVersionRecord {
+  return {
+    id: "version_1",
+    projectId: "project_1",
+    briefId: "brief_1",
+    artifacts: completeArtifacts(),
+    reviewStatus: "passed",
+    findings: [],
+    createdAt: "2026-05-15T08:00:00.000Z"
   };
 }
