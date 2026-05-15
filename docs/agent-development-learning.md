@@ -33,7 +33,7 @@ Agent 系统更像一个可观察、可恢复、可约束的任务执行系统�
 
 - 先保证 Web 端可以创建任务、生成框架无关的 LP 静态产物。
 - 再逐步加入 Skills、模型路由、MCP、运行事件、上下文组装和团队协作。
-- 部署和真实工具执行先后置，避免早期把系统复杂度拉爆。
+- 完整自动部署和广义 MCP/tool execution 仍后置；当前只开放经过 API `ToolCommandRunner` 校验和审批的窄范围 deployment skill command 执行路径。
 
 ## 2. Agent 开发核心难点
 
@@ -86,7 +86,7 @@ Skills 是把可复用经验结构化的方式。它们不是随便拼进 prompt
 - content。
 - entrypoints。
 
-本项目已经做了项目级 skill 创建、校验、发布、绑定和 runtime context 注入。重要原则是：当前阶段 skill 只作为数据进入上下文，不执行脚本、不直接部署。
+本项目已经做了项目级 skill 创建、校验、发布、绑定和 runtime context 注入。重要原则是：skill 本身仍是 manifest、内容和规则数据；只有已发布、已绑定的 `deployment` skill 里预声明的 command，才能在 API 校验和一次性审批后通过 `ToolCommandRunner` 边界执行。
 
 ### 2.5 Rules
 
@@ -114,7 +114,7 @@ Rules 是 Agent 必须遵守的约束，来源可能包括：
 - approval state。
 - 是否可复用。
 
-当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但还没有执行工具。后续做 MCP execution 时，要先设计 tool observation store，而不是直接把输出拼到 message 里。
+当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但 MCP execution 仍未实现。Stage 4 已经先打通受控的 deployment skill command 执行，并以 `ToolObservationRecord`、脱敏 `tool.started/tool.completed/tool.failed` run event 形成第一版 durable observation/event 闭环；后续 MCP execution 应复用这个 observation 底座，而不是直接把输出拼到 message 里。
 
 ### 2.7 文件系统和产物状态
 
@@ -211,15 +211,15 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
+- Controlled deployment skill command execution 已在 API/service 层实现，并建立了 `ToolObservationRecord` observation baseline 和脱敏 tool run events。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
-- 真实模型结构化输出进入 LP 业务流的 schema parse 和修复循环；下一阶段先做 Planner `LPBriefSchema` parse，不做 repair loop。
+- 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 压缩和检索。
-- MCP/tool 真执行。
-- tool observation store。
+- MCP execution。
 - 文件系统 workspace 和 diff 注入。
 - 多 agent handoff 和恢复。
 - 团队成员、角色和审批 UI。
@@ -349,6 +349,16 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 失败路径不会静默回退到 deterministic artifacts，也不会保存 page version；默认未开启真实 runtime 时仍保留 deterministic Builder，保证本地开发和测试稳定。
 - 学习重点：模型生成代码后不能直接落库或展示，必须先经过结构、资源策略、安全和框架无关校验。
 
+已实现的 Stage 4 Skill Command MVP：
+
+- [2026-05-14-skill-command-execution-design.md](./superpowers/specs/2026-05-14-skill-command-execution-design.md)
+- 当前实现计划：[2026-05-14-skill-command-execution.md](./superpowers/plans/2026-05-14-skill-command-execution.md)
+- 这一步在 API/service 层打通了已发布 `deployment` skill 预声明 command 的受控执行，不开放任意 shell 输入。
+- 执行入口会校验项目绑定、skill 发布状态、权限、一次性 approval、secret reference、模板变量和可选 page version 归属，再调用 `ToolCommandRunner`。
+- `ToolCommandRunner` 是 adapter 边界；当前 MVP 在 API 进程内通过注入 runner 执行，默认 runner 拒绝执行，后续仍可迁移到 `apps/agent-worker`、队列、流式日志和 cancel。
+- 命令结果会保存为脱敏 `ToolObservationRecord`，并写入脱敏的 `tool.started`、`tool.completed` 或 `tool.failed` run event；事件和 observation 不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
+- 这不是完整自动部署系统，也还没有部署 UI、worker 执行、MCP execution、流式日志、cancel/retry 或部署编排。
+
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
 ```bash
@@ -381,17 +391,17 @@ pnpm --filter @lp-agent/model-gateway test
 - tool output 要结构化。
 - tool observation 要有 schema，不能只保存任意文本。
 
-下一步 Skill Command 执行 MVP 设计：
+已实现的 Skill Command 执行 MVP：
 
 - [2026-05-14-skill-command-execution-design.md](./superpowers/specs/2026-05-14-skill-command-execution-design.md)
 - 当前实现计划：[2026-05-14-skill-command-execution.md](./superpowers/plans/2026-05-14-skill-command-execution.md)
-- 第一版先做已发布 `deployment` skill 预声明 command 的受控执行，不开放任意 shell 输入。
-- 每次 command 执行都需要显式审批，通过 API 侧校验 skill 绑定、发布状态、权限、secret reference 和模板变量后再调用 runner。
-- `ToolCommandRunner` 是 adapter 边界；第一版可以在 API 进程中调用 fake/local runner，后续再迁移到 `apps/agent-worker`、队列、流式日志和 cancel。
-- `ToolObservationRecord` 是后续 MCP/tool execution、部署 skill、文件操作共享的 observation 底座；事件和 observation 必须脱敏，不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
-- 这一步不是完整自动部署系统，而是给未来部署 workflow 提供安全、可审计的 skill cmd 执行入口。
+- 第一版已经在 API/service 层实现已发布 `deployment` skill 预声明 command 的受控执行，不开放任意 shell 输入。
+- 每次 command 执行都需要一次性显式审批，通过 API 侧校验 skill 绑定、发布状态、权限、secret reference、模板变量和可选 page version 归属后再调用 runner。
+- `ToolCommandRunner` 是 adapter 边界；当前 MVP 通过注入 runner 执行，默认 runner 拒绝执行，后续再迁移到 `apps/agent-worker`、队列、流式日志和 cancel。
+- `ToolObservationRecord` 是后续 MCP/tool execution、部署 skill、文件操作共享的 observation 底座；当前事件和 observation 已做脱敏，不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
+- 这一步不是完整自动部署系统，也还没有自动部署 UI、worker 执行或 MCP execution，而是给未来部署 workflow 提供安全、可审计的 skill cmd 执行入口。
 - 实现时要把“能执行命令”和“安全边界”分开看：manifest 只声明允许执行什么，API 负责校验绑定、发布状态、审批、权限、secret reference、模板变量和 page version 归属，runner 只拿到已经解析好的 argv/env/workingDirectory。
-- 这一步会先形成 `ToolCommandRunner`、`ToolObservationRecord`、`tool.started/tool.completed/tool.failed` 的最小闭环，再逐步扩展到 MCP execution、worker 队列、流式日志、cancel/retry 和部署编排。
+- 这一步已经形成 `ToolCommandRunner`、`ToolObservationRecord`、`tool.started/tool.completed/tool.failed` 的最小闭环，后续再逐步扩展到 MCP execution、worker 队列、流式日志、cancel/retry 和部署编排。
 
 ### 阶段 5：压缩和检索
 
@@ -430,7 +440,7 @@ pnpm --filter @lp-agent/model-gateway test
 - 先做最小闭环，再做智能增强。
 - 业务入口依赖接口，不直接依赖具体 provider、MCP SDK、Git SDK 或 shell。
 - 生成 LP 产物永远保持框架无关静态 HTML/CSS/JS。
-- Skills 在当前阶段是数据，不是可执行代码。
+- Skills 在当前阶段仍是 manifest、内容和规则数据；只有预声明的 deployment skill command 会在 API 校验和一次性审批后通过 `ToolCommandRunner` 边界执行。
 - MCP registry 和 MCP execution 分开做。
 - Model routing 和真实模型 adapter 分开做。
 - Context assembly 不能散落在 Web 组件里。
