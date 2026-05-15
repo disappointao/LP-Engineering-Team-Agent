@@ -61,9 +61,10 @@ import {
 } from "@lp-agent/skills";
 import { runAgentStep } from "./run-orchestrator";
 import {
+  assertCommandTemplateVariablesKnown,
+  assertWorkingDirectoryAllowed,
   cleanupCommandWorkspace,
   createArtifactTemplateVariables,
-  assertWorkingDirectoryAllowed,
   materializeStaticArtifactsCommandWorkspace,
   redactCommandOutput,
   resolveCommandTemplate,
@@ -613,6 +614,7 @@ export class DemoWorkbenchService {
     if (!version.manifest.permissions.includes(command.permission)) {
       throw new Error("skill_command_permission_denied");
     }
+    assertSkillCommandSecretRefsDeclared(version.manifest, command);
 
     const pageVersion = input.pageVersionId
       ? await this.repositories.pageVersions.getById(input.pageVersionId)
@@ -629,6 +631,10 @@ export class DemoWorkbenchService {
     let workspace: CommandWorkspace | undefined;
 
     try {
+      preflightSkillCommandTemplates({
+        command,
+        hasPageVersion: Boolean(pageVersion)
+      });
       observationId = await reserveRepositoryId(
         this.repositories,
         "tool_observation",
@@ -2065,6 +2071,54 @@ function sanitizeRunnerErrorName(
     return "skill_command_runner_error";
   }
   return trimmed;
+}
+
+function assertSkillCommandSecretRefsDeclared(
+  manifest: SkillManifest,
+  command: NonNullable<SkillManifest["commands"]>[number]
+): void {
+  for (const binding of command.env ?? []) {
+    if (binding.secretRef && !manifest.requiredSecrets.includes(binding.secretRef)) {
+      throw new Error("skill_command_secret_not_declared");
+    }
+  }
+}
+
+function preflightSkillCommandTemplates(input: {
+  command: NonNullable<SkillManifest["commands"]>[number];
+  hasPageVersion: boolean;
+}): void {
+  const allowedVariables = [
+    "projectId",
+    "skillId",
+    "skillVersionId",
+    "commandId",
+    "runId",
+    ...(input.hasPageVersion
+      ? [
+          "pageVersionId",
+          "artifactDir",
+          "artifact.indexHtmlPath",
+          "artifact.stylesCssPath",
+          "artifact.scriptJsPath"
+        ]
+      : [])
+  ];
+  for (const value of collectSkillCommandTemplateValues(input.command)) {
+    assertCommandTemplateVariablesKnown(value, allowedVariables);
+  }
+}
+
+function collectSkillCommandTemplateValues(
+  command: NonNullable<SkillManifest["commands"]>[number]
+): string[] {
+  return [
+    ...command.args,
+    ...(command.workingDirectory ? [command.workingDirectory] : []),
+    ...(command.env ?? []).flatMap((binding) =>
+      binding.value !== undefined ? [binding.value] : []
+    )
+  ];
 }
 
 function summarizeSkillCommandOutput(input: {

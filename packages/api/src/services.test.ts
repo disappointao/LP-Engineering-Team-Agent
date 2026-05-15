@@ -1123,6 +1123,60 @@ describe("demo workbench service", () => {
     expect(runner.inputs).toEqual([]);
   });
 
+  it("rejects malformed artifact templates before invoking runner", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const existingRuns = await repositories.runs.listForProject(project.id);
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        deploymentSkillManifest({
+          commands: [{ ...commandWithoutArtifacts(), args: ["{{artifact-path}}"] }]
+        })
+      ),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        pageVersionId: pageVersion.id,
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("skill_command_unknown_template_variable");
+
+    expect(runner.inputs).toEqual([]);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual(existingRuns);
+  });
+
   it("creates project model providers and resolves default routes", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });

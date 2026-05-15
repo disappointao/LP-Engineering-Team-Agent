@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { SkillManifest } from "@lp-agent/skills";
 import {
+  assertCommandTemplateVariablesKnown,
   assertWorkingDirectoryAllowed,
   cleanupCommandWorkspace,
   materializeStaticArtifactsCommandWorkspace,
@@ -28,6 +29,23 @@ describe("skill command execution helpers", () => {
       "skill_command_unknown_template_variable"
     );
     expect(() => resolveCommandTemplate("{{artifact-path}}", variables)).toThrow(
+      "skill_command_unknown_template_variable"
+    );
+  });
+
+  it("preflights template variable names before resolving values", () => {
+    const allowed = ["projectId", "artifact.indexHtmlPath"];
+
+    expect(() =>
+      assertCommandTemplateVariablesKnown("{{projectId}} {{artifact.indexHtmlPath}}", allowed)
+    ).not.toThrow();
+    expect(() => assertCommandTemplateVariablesKnown("{{missing}}", allowed)).toThrow(
+      "skill_command_unknown_template_variable"
+    );
+    expect(() => assertCommandTemplateVariablesKnown("{{artifact-path}}", allowed)).toThrow(
+      "skill_command_unknown_template_variable"
+    );
+    expect(() => assertCommandTemplateVariablesKnown("{{projectId}", allowed)).toThrow(
       "skill_command_unknown_template_variable"
     );
   });

@@ -5,6 +5,8 @@ import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { SkillCommandManifest, SkillManifest } from "@lp-agent/skills";
 
 const TEMPLATE_PATTERN = /{{\s*([A-Za-z0-9_.]+)\s*}}/g;
+const RAW_TEMPLATE_PATTERN = /{{\s*([^{}]+)\s*}}/g;
+const TEMPLATE_VARIABLE_NAME_PATTERN = /^[A-Za-z0-9_.]+$/;
 const DEFAULT_TIMEOUT_MS = 60000;
 const OUTPUT_SUMMARY_LIMIT = 300;
 
@@ -17,6 +19,23 @@ export interface CommandWorkspace {
   indexHtmlPath: string;
   stylesCssPath: string;
   scriptJsPath: string;
+}
+
+export function assertCommandTemplateVariablesKnown(
+  value: string,
+  allowedVariables: Iterable<string>
+): void {
+  const allowed = new Set(allowedVariables);
+  const remainder = value.replace(RAW_TEMPLATE_PATTERN, (_, variableName: string) => {
+    const trimmed = variableName.trim();
+    if (!TEMPLATE_VARIABLE_NAME_PATTERN.test(trimmed) || !allowed.has(trimmed)) {
+      throw new Error("skill_command_unknown_template_variable");
+    }
+    return "";
+  });
+  if (remainder.includes("{{") || remainder.includes("}}")) {
+    throw new Error("skill_command_unknown_template_variable");
+  }
 }
 
 export function resolveCommandTemplate(
