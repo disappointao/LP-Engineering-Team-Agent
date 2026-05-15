@@ -755,9 +755,14 @@ export class DemoWorkbenchService {
         sensitiveValues,
         finalState
       );
+      const outputSummary = summarizeSkillCommandOutput({
+        runnerResult,
+        secretValues
+      });
       const finalPayload = {
         ...basePayload,
         observationId,
+        outputSummary,
         ...(runnerResult.exitCode !== undefined ? { exitCode: runnerResult.exitCode } : {}),
         ...(sanitizedErrorName !== undefined ? { errorName: sanitizedErrorName } : {})
       };
@@ -791,10 +796,7 @@ export class DemoWorkbenchService {
           argCount: args.length,
           envNames: Object.keys(env).sort()
         },
-        outputSummary: summarizeSkillCommandOutput({
-          runnerResult,
-          secretValues
-        }),
+        outputSummary,
         state: finalState,
         ...(runnerResult.exitCode !== undefined ? { exitCode: runnerResult.exitCode } : {}),
         ...(sanitizedErrorName !== undefined ? { errorName: sanitizedErrorName } : {}),

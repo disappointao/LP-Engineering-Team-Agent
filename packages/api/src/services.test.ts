@@ -721,6 +721,7 @@ describe("demo workbench service", () => {
     const events = await repositories.runEvents.listForRun(result.run.id);
     const serializedEvents = JSON.stringify(events);
     const serializedObservation = JSON.stringify(result.observation);
+    const completedToolEvent = events.find((event) => event.type === "tool.completed");
 
     expect(result.run).toMatchObject({
       id: "run_skill_command_1",
@@ -762,6 +763,13 @@ describe("demo workbench service", () => {
       "tool.completed",
       "run.completed"
     ]);
+    expect(completedToolEvent?.payload).toMatchObject({
+      outputSummary: "stdout: 30 chars\nstderr: 0 chars"
+    });
+    expect(serializedEvents).toContain("stdout: 30 chars");
+    expect(serializedEvents).toContain("stderr: 0 chars");
+    expect(serializedEvents).not.toContain("published secret-token");
+    expect(serializedEvents).not.toContain(artifactFragment);
     expect(serializedEvents).not.toContain("secret-token");
     expect(serializedEvents).not.toContain(artifactFragment);
     expect(serializedObservation).not.toContain("secret-token");
@@ -773,9 +781,9 @@ describe("demo workbench service", () => {
     const runner = new RecordingToolCommandRunner({
       state: "failed",
       exitCode: 2,
-      stdout: "echoed project_1 argument",
-      stderr: "permission denied secret-token",
-      errorName: "command_failed"
+      stdout: "",
+      stderr: "",
+      errorName: "deploy_failed"
     });
     const service = new DemoWorkbenchService({
       repositories,
@@ -805,13 +813,18 @@ describe("demo workbench service", () => {
       approvedByUserId: "user_1"
     });
     const events = await repositories.runEvents.listForRun(result.run.id);
+    const failedToolEvent = events.find((event) => event.type === "tool.failed");
 
     expect(result.run.state).toBe("failed");
     expect(result.observation).toMatchObject({
       state: "failed",
       exitCode: 2,
-      errorName: "command_failed",
-      outputSummary: "stdout: 25 chars\nstderr: 30 chars"
+      errorName: "deploy_failed",
+      outputSummary: "stdout: 0 chars\nstderr: 0 chars"
+    });
+    expect(failedToolEvent?.payload).toMatchObject({
+      outputSummary: "stdout: 0 chars\nstderr: 0 chars",
+      errorName: "deploy_failed"
     });
     expect(JSON.stringify(result.observation)).not.toContain("permission denied");
     expect(JSON.stringify(result.observation)).not.toContain("secret-token");
