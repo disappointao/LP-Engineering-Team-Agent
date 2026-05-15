@@ -362,6 +362,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 下一步 Stage 4.1 Skill Command Web 模拟执行闭环设计：
 
 - [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
+- 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
 - 目标是把已经完成的 API/service command execution 边界接到 Web 工作台，让用户能看到项目已绑定 skills 的可执行 commands、进行一次性审批，并在对话 timeline 中看到 `tool.started`、`tool.completed` 或 `tool.failed`。
 - 第一版只做模拟执行，不跑真实 shell，不做自动部署，不做 worker 队列，不做流式日志，也不做 cancel/retry。
 - 这一步的学习重点是区分“产品流程可用”和“真实工具执行”：Web 可以先打通发现、审批、调用、observation、timeline 的完整体验，同时继续通过 `ToolCommandRunner` 保留以后切换真实 runner、MCP execution 和部署编排的边界。
@@ -413,6 +414,7 @@ pnpm --filter @lp-agent/model-gateway test
 下一步 Skill Command Web 模拟执行闭环：
 
 - [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
+- 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
 - 先把 Web 里的 command 发现、一次性审批、模拟执行、run event 展示打通。
 - 不在这个阶段引入真实 shell、真实部署、worker 队列、流式日志、cancel/retry 或 MCP execution。
 - 这能让工具执行从“后端能力”变成“用户可见的 Agent 工具过程”，同时保持后续切换真实 runner 的架构边界。
