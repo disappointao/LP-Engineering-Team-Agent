@@ -127,7 +127,7 @@ export interface ModelContextMemoryMessage {
 
 export interface ModelContextMemoryRun {
   id: string;
-  taskId: string;
+  taskId?: string;
   role: string;
   state: string;
   eventTypes: string[];
@@ -139,11 +139,12 @@ export interface ModelContextMemoryRun {
 export interface ModelContextMemoryTool {
   id: string;
   runId: string;
-  taskId: string;
+  taskId?: string;
   toolName: string;
   state: string;
   outputSummary: string;
   exitCode?: number;
+  errorName?: string;
   createdAt: string;
   completedAt?: string;
   score: number;

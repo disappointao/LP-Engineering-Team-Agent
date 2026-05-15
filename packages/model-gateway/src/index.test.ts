@@ -127,7 +127,6 @@ describe("model gateway", () => {
       runs: [
         {
           id: "run_builder_1",
-          taskId: "task_1",
           role: "builder",
           state: "completed",
           eventTypes: ["run.started", "artifact.created", "run.completed"],
@@ -140,11 +139,11 @@ describe("model gateway", () => {
         {
           id: "observation_1",
           runId: "run_skill_command_1",
-          taskId: "task_1",
           toolName: "static-deploy",
-          state: "completed",
+          state: "failed",
           outputSummary: "stdout: 47 chars\nstderr: 0 chars",
           exitCode: 0,
+          errorName: "StaticDeployError",
           createdAt: "2026-05-15T08:02:00.000Z",
           completedAt: "2026-05-15T08:02:01.000Z",
           score: 8
@@ -190,7 +189,10 @@ describe("model gateway", () => {
     });
 
     memory.messages[0]!.preview = "mutated";
+    memory.runs[0]!.eventTypes.push("run.mutated");
+    memory.artifacts[0]!.files.push({ name: "mutated.html", characterCount: 1 });
     memory.retrieval.selected.push("message:mutated");
+    memory.retrieval.omitted.push("memory:mutated");
 
     expect(gateway.getAuditLog()[0]?.context?.memory).toEqual({
       messages: [
@@ -209,7 +211,8 @@ describe("model gateway", () => {
         expect.objectContaining({
           id: "observation_1",
           outputSummary: "stdout: 47 chars\nstderr: 0 chars",
-          exitCode: 0
+          exitCode: 0,
+          errorName: "StaticDeployError"
         })
       ],
       artifacts: [

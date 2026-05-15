@@ -269,26 +269,50 @@ describe("local agent runtime adapter", () => {
             score: 12
           }
         ],
-        runs: [],
+        runs: [
+          {
+            id: "run_builder_1",
+            role: "builder",
+            state: "completed",
+            eventTypes: ["run.started", "artifact.created", "run.completed"],
+            startedAt: "2026-05-15T08:01:00.000Z",
+            completedAt: "2026-05-15T08:01:01.000Z",
+            score: 9
+          }
+        ],
         tools: [
           {
             id: "observation_1",
             runId: "run_skill_command_1",
-            taskId: "task_1",
             toolName: "static-deploy",
-            state: "completed",
+            state: "failed",
             outputSummary: "stdout: 47 chars\nstderr: 0 chars",
             exitCode: 0,
+            errorName: "StaticDeployError",
             createdAt: "2026-05-15T08:02:00.000Z",
             score: 8
           }
         ],
-        artifacts: [],
+        artifacts: [
+          {
+            pageVersionId: "page_version_1",
+            briefId: "brief_1",
+            title: "Spring Sale",
+            objective: "Convert paid traffic",
+            files: [
+              { name: "index.html", characterCount: 1200 },
+              { name: "styles.css", characterCount: 800 },
+              { name: "script.js", characterCount: 120 }
+            ],
+            createdAt: "2026-05-15T08:03:00.000Z",
+            score: 6
+          }
+        ],
         retrieval: {
           query: "spring sale",
           strategy: "deterministic-keyword-v0",
           selected: ["message:message_1", "tool:observation_1"],
-          omitted: []
+          omitted: ["memory:tools:budget_exceeded"]
         }
       }
     } satisfies RuntimeRunRequest["context"];
@@ -349,29 +373,69 @@ describe("local agent runtime adapter", () => {
             score: 12
           }
         ],
-        runs: [],
+        runs: [
+          {
+            id: "run_builder_1",
+            role: "builder",
+            state: "completed",
+            eventTypes: ["run.started", "artifact.created", "run.completed"],
+            startedAt: "2026-05-15T08:01:00.000Z",
+            completedAt: "2026-05-15T08:01:01.000Z",
+            score: 9
+          }
+        ],
         tools: [
           {
             id: "observation_1",
             runId: "run_skill_command_1",
-            taskId: "task_1",
             toolName: "static-deploy",
-            state: "completed",
+            state: "failed",
             outputSummary: "stdout: 47 chars\nstderr: 0 chars",
             exitCode: 0,
+            errorName: "StaticDeployError",
             createdAt: "2026-05-15T08:02:00.000Z",
             score: 8
           }
         ],
-        artifacts: [],
+        artifacts: [
+          {
+            pageVersionId: "page_version_1",
+            briefId: "brief_1",
+            title: "Spring Sale",
+            objective: "Convert paid traffic",
+            files: [
+              { name: "index.html", characterCount: 1200 },
+              { name: "styles.css", characterCount: 800 },
+              { name: "script.js", characterCount: 120 }
+            ],
+            createdAt: "2026-05-15T08:03:00.000Z",
+            score: 6
+          }
+        ],
         retrieval: {
           query: "spring sale",
           strategy: "deterministic-keyword-v0",
           selected: ["message:message_1", "tool:observation_1"],
-          omitted: []
+          omitted: ["memory:tools:budget_exceeded"]
         }
       }
     });
+    context.memory.runs[0]!.eventTypes.push("run.mutated");
+    context.memory.artifacts[0]!.files.push({ name: "mutated.html", characterCount: 1 });
+    context.memory.retrieval.omitted.push("memory:mutated");
+    expect(gateway.requests[0]?.context?.memory?.runs[0]?.eventTypes).toEqual([
+      "run.started",
+      "artifact.created",
+      "run.completed"
+    ]);
+    expect(gateway.requests[0]?.context?.memory?.artifacts[0]?.files).toEqual([
+      { name: "index.html", characterCount: 1200 },
+      { name: "styles.css", characterCount: 800 },
+      { name: "script.js", characterCount: 120 }
+    ]);
+    expect(gateway.requests[0]?.context?.memory?.retrieval.omitted).toEqual([
+      "memory:tools:budget_exceeded"
+    ]);
     expect(result.artifacts?.indexHtml).toContain("Spring essentials, ready today");
   });
 
