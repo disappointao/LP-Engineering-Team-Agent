@@ -107,6 +107,8 @@ Rules 是 Agent 必须遵守的约束，来源可能包括：
 
 - tool name。
 - input。
+- raw output。
+- metadata summary。
 - output summary。
 - error。
 - artifacts。
@@ -114,7 +116,9 @@ Rules 是 Agent 必须遵守的约束，来源可能包括：
 - approval state。
 - 是否可复用。
 
-当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但 MCP execution 仍未实现。Stage 4 已经先打通受控的 deployment skill command 执行，并以 `ToolObservationRecord`、脱敏 `tool.started/tool.completed/tool.failed` run event 形成第一版 durable observation/event 闭环；后续 MCP execution 应复用这个 observation 底座，而不是直接把输出拼到 message 里。
+当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但 MCP execution 仍未实现。Stage 4 已经先打通受控的 deployment skill command 执行，并以 `ToolObservationRecord`、脱敏 `tool.started/tool.completed/tool.failed` run event 形成第一版 durable observation/event 闭环；Stage 4.1 又把这个闭环接到 Web 工作台和 chat timeline。后续 MCP execution 应复用这个 observation 底座，而不是直接把输出拼到 message 里。
+
+重要学习点：agent 工具调用输出必须拆成 raw output 和 metadata summary。raw output 只留在受控 observation/日志边界内，不能直接喂给 UI 或聊天消息；UI 只展示 allowlist metadata，例如 command id、状态、退出码、耗时、截断摘要和脱敏错误。命令执行还必须同时绑定 approval、permission、secret redaction、scope、project id 和 pageVersion id，避免跨项目、跨版本或未授权执行。run event 本身要可检索、可过滤、可压缩，才能支撑刷新恢复、失败诊断、长历史摘要和后续流式 timeline。
 
 ### 2.7 文件系统和产物状态
 
@@ -202,6 +206,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 项目级 MCP connector registry、tool approval 和可见工具计算。
 - Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
+- Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
 - Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
@@ -211,7 +216,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
-- Controlled deployment skill command execution 已在 API/service 层实现，并建立了 `ToolObservationRecord` observation baseline 和脱敏 tool run events。
+- Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 provider/deploy 仍按 adapter/runner 方式迭代。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -359,13 +364,24 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 命令结果会保存为脱敏 `ToolObservationRecord`，并写入脱敏的 `tool.started`、`tool.completed` 或 `tool.failed` run event；事件和 observation 不保存 raw secret、完整 stdout/stderr 或 artifact 内容。
 - 这不是完整自动部署系统，也还没有部署 UI、worker 执行、MCP execution、流式日志、cancel/retry 或部署编排。
 
-下一步 Stage 4.1 Skill Command Web 模拟执行闭环设计：
+已实现的 Stage 4.1 Skill Command Web 模拟执行闭环：
 
 - [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
 - 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
-- 目标是把已经完成的 API/service command execution 边界接到 Web 工作台，让用户能看到项目已绑定 skills 的可执行 commands、进行一次性审批，并在对话 timeline 中看到 `tool.started`、`tool.completed` 或 `tool.failed`。
-- 第一版只做模拟执行，不跑真实 shell，不做自动部署，不做 worker 队列，不做流式日志，也不做 cancel/retry。
-- 这一步的学习重点是区分“产品流程可用”和“真实工具执行”：Web 可以先打通发现、审批、调用、observation、timeline 的完整体验，同时继续通过 `ToolCommandRunner` 保留以后切换真实 runner、MCP execution 和部署编排的边界。
+- 这一步把 API/service command execution 边界接到了 Web 工作台：用户可以从项目绑定 skills 发现可执行 commands，进行一次性审批，通过 server action 触发模拟 runner，并在对话 timeline 中看到 `tool.started`、`tool.completed` 或 `tool.failed`。
+- 这个闭环的意义是让 agent 工具过程从“后端能力”变成“可见、可审计、可恢复的产品流程”：skill command 发现、approval、server action、run events、observation 和 chat timeline 使用同一套受控边界。
+- 第一版仍然是模拟执行 loop，不跑真实 shell，不做真实部署，不做真实 provider/deploy，不做 worker 队列，不做流式日志，也不做 cancel/retry。
+- 后续真实 provider/deploy 应继续按 adapter/runner 方式迭代，把真实执行替换到 `ToolCommandRunner` 边界之后，而不是绕过 API 校验、approval、run events 或 observation。
+- UI 只展示 allowlist metadata 和安全输出摘要；raw stdout/stderr、secret、完整 artifact 内容和未脱敏错误都不应该进入 timeline。
+- 这一步的学习重点是区分“产品流程可用”和“真实工具执行”：Web 可以先打通发现、审批、调用、observation、timeline 的完整体验，同时继续保留以后切换真实 runner、MCP execution 和部署编排的边界。
+
+本轮 Stage 4.1 最终验证命令：
+
+```bash
+pnpm exec vitest run packages/api/src/services.test.ts apps/web/src/lib/workbench-store.test.ts apps/web/src/app/actions.test.ts apps/web/src/app/page.test.ts apps/web/src/lib/chat-workbench.test.ts apps/web/src/lib/i18n.test.ts
+pnpm typecheck
+pnpm build
+```
 
 真实 provider 集成测试默认跳过。需要本机临时导出环境变量后再跑：
 
@@ -411,13 +427,15 @@ pnpm --filter @lp-agent/model-gateway test
 - 实现时要把“能执行命令”和“安全边界”分开看：manifest 只声明允许执行什么，API 负责校验绑定、发布状态、审批、权限、secret reference、模板变量和 page version 归属，runner 只拿到已经解析好的 argv/env/workingDirectory。
 - 这一步已经形成 `ToolCommandRunner`、`ToolObservationRecord`、`tool.started/tool.completed/tool.failed` 的最小闭环，后续再逐步扩展到 MCP execution、worker 队列、流式日志、cancel/retry 和部署编排。
 
-下一步 Skill Command Web 模拟执行闭环：
+已实现的 Skill Command Web 模拟执行闭环：
 
 - [2026-05-15-skill-command-web-loop-design.md](./superpowers/specs/2026-05-15-skill-command-web-loop-design.md)
 - 当前实现计划：[2026-05-15-skill-command-web-loop.md](./superpowers/plans/2026-05-15-skill-command-web-loop.md)
-- 先把 Web 里的 command 发现、一次性审批、模拟执行、run event 展示打通。
-- 不在这个阶段引入真实 shell、真实部署、worker 队列、流式日志、cancel/retry 或 MCP execution。
+- Web 里的 command 发现、一次性审批、模拟执行、run event 展示已经打通。
+- 这个阶段没有引入真实 shell、真实部署、真实 provider/deploy、worker 队列、流式日志、cancel/retry 或 MCP execution。
 - 这能让工具执行从“后端能力”变成“用户可见的 Agent 工具过程”，同时保持后续切换真实 runner 的架构边界。
+- 工具输出必须拆分 raw output 和 metadata summary；UI 只展示 allowlist metadata 与安全摘要，raw stdout/stderr、secret 和完整 artifact 内容留在受控 observation/日志边界内。
+- 命令执行必须持续受 approval、permission、secret redaction、scope、project/pageVersion 绑定约束；run event 要设计成可检索、可过滤、可压缩的数据，而不是只给 UI 看的一段文本。
 
 ### 阶段 5：压缩和检索
 
