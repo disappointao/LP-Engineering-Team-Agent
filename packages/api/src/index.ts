@@ -1527,6 +1527,19 @@ export {
 } from "./context-assembler";
 
 export {
+  ContextMemorySchema,
+  ContextMemoryMessageSummarySchema,
+  ContextMemoryRunSummarySchema,
+  ContextMemoryToolSummarySchema,
+  ContextMemoryArtifactSummarySchema,
+  assembleContextMemory,
+  toContextMemoryQuery,
+  truncatePreview,
+  type AssembleContextMemoryInput,
+  type ContextMemory
+} from "./context-memory";
+
+export {
   RunEventRecordSchema,
   runAgentStep,
   type RunAgentStepInput,

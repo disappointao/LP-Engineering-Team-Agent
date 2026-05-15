@@ -6,6 +6,7 @@ import type {
   RuntimeRunContext,
   RuntimeRunInput
 } from "@lp-agent/runtime-adapters";
+import { ContextMemorySchema, assembleContextMemory } from "./context-memory";
 import type { DemoWorkbenchService } from "./index";
 
 export const RuntimeSkillContextSchema = z.object({
@@ -70,6 +71,7 @@ export const RuntimeRunContextSchema: z.ZodType<RuntimeRunContext> = z.object({
   mcpTools: z.array(RuntimeMCPToolContextSchema),
   approval: RuntimeApprovalContextSchema,
   artifactWorkspace: RuntimeArtifactWorkspaceSchema,
+  memory: ContextMemorySchema.optional(),
   modelRoutingPolicy: ModelRoutingPolicySchema.optional()
 });
 
@@ -110,12 +112,23 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
     projectId: input.projectId,
     role: input.role
   });
+  const memory = await assembleContextMemory({
+    repositories: input.repositories,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    role: input.role,
+    input: input.input
+  });
+  const runtimeContextWithMemory = {
+    ...runtimeContext,
+    memory
+  };
   const contextPack: ContextPack = {
     projectId: input.projectId,
     taskId: input.taskId,
     role: input.role,
     input: cloneRuntimeInput(input.input),
-    runtimeContext,
+    runtimeContext: runtimeContextWithMemory,
     trace: {
       injected: [
         `skills:${runtimeContext.skills.length}`,
@@ -124,9 +137,14 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
         runtimeContext.modelRoutingPolicy
           ? `modelProvider:${input.role}:${runtimeContext.modelRoutingPolicy[input.role].api ?? "legacy"}`
           : "modelProvider:0",
-        `artifactWorkspace:${runtimeContext.artifactWorkspace.mode}`
+        `artifactWorkspace:${runtimeContext.artifactWorkspace.mode}`,
+        `memory:messages:${memory.messages.length}`,
+        `memory:runs:${memory.runs.length}`,
+        `memory:tools:${memory.tools.length}`,
+        `memory:artifacts:${memory.artifacts.length}`,
+        `memory:strategy:${memory.retrieval.strategy}`
       ],
-      omitted: ["history:not_implemented", "toolObservations:not_implemented"]
+      omitted: [...memory.retrieval.omitted]
     },
     createdAt
   };

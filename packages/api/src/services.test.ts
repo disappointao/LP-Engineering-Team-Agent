@@ -21,6 +21,7 @@ import type { SkillManifest } from "@lp-agent/skills";
 import {
   DemoWorkbenchService,
   createDemoWorkbenchService,
+  runAgentStep,
   type BriefRecord,
   type MCPConnectorRecord,
   type PageVersionRecord,
@@ -2709,11 +2710,182 @@ describe("demo workbench service", () => {
           "skills:1",
           "mcpTools:0",
           "modelRoutingPolicy:1",
-          "modelProvider:builder:legacy"
+          "modelProvider:builder:legacy",
+          "memory:messages:0",
+          "memory:runs:1",
+          "memory:tools:0",
+          "memory:artifacts:0",
+          "memory:strategy:deterministic-keyword-v0"
         ]),
-        omitted: expect.arrayContaining(["history:not_implemented"])
+        omitted: expect.arrayContaining([
+          "memory:messages:none",
+          "memory:tools:none",
+          "memory:artifacts:none"
+        ])
       }
     });
+  });
+
+  it("injects deterministic context memory into context packs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    await repositories.tasks.save({
+      id: "task_memory_1",
+      title: "Spring sale build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-10T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_memory_1",
+      taskId: "task_memory_1",
+      role: "user",
+      content: "Spring sale memory: emphasize returning customer bundles.",
+      createdAt: "2026-05-10T00:01:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_memory_1",
+      projectId: project.id,
+      taskId: "task_memory_1",
+      role: "builder",
+      state: "completed",
+      startedAt: "2026-05-10T00:02:00.000Z",
+      completedAt: "2026-05-10T00:03:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    await repositories.runEvents.save({
+      id: "event_memory_1",
+      runId: "run_memory_1",
+      projectId: project.id,
+      taskId: "task_memory_1",
+      sequence: 1,
+      type: "run.completed",
+      message: "Builder run completed.",
+      payload: {
+        state: "completed"
+      },
+      createdAt: "2026-05-10T00:03:00.000Z"
+    });
+    await repositories.toolObservations.save({
+      id: "observation_memory_1",
+      runId: "run_memory_1",
+      projectId: project.id,
+      taskId: "task_memory_1",
+      toolName: "skill:deploy:publish",
+      input: {
+        rawOutput: "published secret-token"
+      },
+      outputSummary: "stdout: 22 chars\nstderr: 0 chars",
+      state: "completed",
+      exitCode: 0,
+      createdAt: "2026-05-10T00:02:30.000Z",
+      completedAt: "2026-05-10T00:03:00.000Z"
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      taskId: "task_memory_1",
+      input: {
+        prompt: "spring sale"
+      },
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.runtimeContext.memory).toMatchObject({
+      messages: [
+        expect.objectContaining({
+          id: "message_memory_1",
+          preview: "Spring sale memory: emphasize returning customer bundles."
+        })
+      ],
+      runs: [
+        expect.objectContaining({
+          id: "run_memory_1",
+          eventTypes: ["run.completed"]
+        })
+      ],
+      tools: [
+        expect.objectContaining({
+          id: "observation_memory_1",
+          outputSummary: "stdout: 22 chars\nstderr: 0 chars"
+        })
+      ]
+    });
+    expect(parsedContextPack.trace.injected).toEqual(
+      expect.arrayContaining([
+        "memory:messages:1",
+        "memory:runs:1",
+        "memory:tools:1",
+        "memory:artifacts:0",
+        "memory:strategy:deterministic-keyword-v0"
+      ])
+    );
+    expect(parsedContextPack.trace.omitted).not.toContain("history:not_implemented");
+    expect(parsedContextPack.trace.omitted).not.toContain("toolObservations:not_implemented");
+    expect(JSON.stringify(parsedContextPack)).not.toContain("secret-token");
+    expect(JSON.stringify(parsedContextPack)).not.toContain("published");
+  });
+
+  it("passes context memory through runAgentStep into runtime requests", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: runtime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    await repositories.tasks.save({
+      id: "task_memory_runtime",
+      title: "Spring sale runtime build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-10T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_memory_runtime",
+      taskId: "task_memory_runtime",
+      role: "user",
+      content: "Spring sale runtime memory for product bundles.",
+      createdAt: "2026-05-10T00:01:00.000Z"
+    });
+
+    await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_memory_runtime",
+      projectId: project.id,
+      taskId: "task_memory_runtime",
+      role: "builder",
+      input: {
+        prompt: "spring sale",
+        brief: sampleBrief
+      },
+      now: fixedClock()
+    });
+
+    expect(runtime.requests[0]?.context?.memory?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "message_memory_runtime",
+          preview: "Spring sale runtime memory for product bundles."
+        })
+      ])
+    );
+    expect(runtime.requests[0]?.context?.memory?.retrieval.selected).toContain(
+      "message:message_memory_runtime"
+    );
   });
 
   it("rejects invalid brief values in context packs", () => {
