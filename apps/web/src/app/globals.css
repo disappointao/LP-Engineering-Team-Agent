@@ -621,6 +621,7 @@ button {
 .mcpToolCard button,
 .skillEditor button,
 .skillActions button,
+.skillCommandCard button,
 .modelEditor button,
 .modelRow button,
 .modelRouteForm button {
@@ -739,6 +740,88 @@ button {
 
 .skillActions form {
   display: contents;
+}
+
+.skillCommandsHeader {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skillCommandsHeader p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.skillCommandsHeader span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 9px;
+  font-size: 0.74rem;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.skillCommandGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.skillCommandCard {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 12px;
+}
+
+.skillCommandCard strong,
+.skillCommandCard span,
+.skillCommandCard p,
+.skillCommandCard small {
+  overflow-wrap: anywhere;
+}
+
+.skillCommandCard strong {
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.skillCommandCard span,
+.skillCommandCard small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.skillCommandCard p {
+  margin: 7px 0 0;
+  color: #42474d;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.skillCommandCard form {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .setupPanel .localNote {
@@ -1260,6 +1343,7 @@ button {
   .toolEventTop,
   .mcpHeader,
   .skillsHeader,
+  .skillCommandsHeader,
   .modelsHeader,
   .mcpConnectorRow,
   .mcpVisibleRole,
@@ -1279,6 +1363,14 @@ button {
   }
 
   .skillActions {
+    justify-content: flex-start;
+  }
+
+  .skillCommandCard {
+    grid-template-columns: 1fr;
+  }
+
+  .skillCommandCard form {
     justify-content: flex-start;
   }
 

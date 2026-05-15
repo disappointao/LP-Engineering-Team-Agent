@@ -1758,6 +1758,129 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("What can I help you build?");
   });
 
+  it("renders skill command output summaries without raw tool output", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Completed LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Create a no git spring ecommerce landing page.",
+          type: "lp_generation",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      skillCommands: [],
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Create a no git spring ecommerce landing page.",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        }
+      ],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_1",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "tool.completed",
+          message: "Deployment skill command completed.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            exitCode: 0,
+            outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+            rawOutput: "published secret-token <html>"
+          },
+          createdAt: "2026-05-15T08:00:01.000Z"
+        }
+      ],
+      snapshot: {
+        project: {
+          id: "project_1",
+          name: "Completed LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        brief: {
+          id: "brief_1",
+          projectId: "project_1",
+          prompt: "Create a no git spring ecommerce landing page.",
+          brief: {
+            objective: "Convert paid traffic into spring campaign purchases.",
+            audience: "Returning ecommerce shoppers",
+            offer: "Save 25% through Sunday.",
+            primaryCta: "Shop the sale"
+          },
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        currentPageVersion: {
+          id: "version_1",
+          projectId: "project_1",
+          briefId: "brief_1",
+          artifacts: {
+            indexHtml: [
+              "<!doctype html><html><head>",
+              "<link rel=\"stylesheet\" href=\"styles.css\">",
+              "</head><body>",
+              "<main><h1>Spring essentials</h1></main>",
+              "  <script src=\"script.js\"></script>",
+              "</body></html>"
+            ].join(""),
+            stylesCss: "body { color: #111827; }",
+            scriptJs: "window.lpAgent = true;"
+          },
+          reviewStatus: "passed",
+          findings: [],
+          createdAt: "2026-05-12T08:01:00.000Z"
+        },
+        deployment: undefined
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({})
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("stdout: 47 chars\nstderr: 0 chars");
+    expect(text).not.toContain("published secret-token");
+    expect(text).not.toContain("secret-token");
+    expect(text).not.toContain("<html>");
+  });
+
   it("renders completed static artifacts without deployment UI", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
