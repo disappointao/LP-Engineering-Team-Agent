@@ -6,6 +6,10 @@ import type {
   RuntimeRunContext,
   RuntimeRunInput
 } from "@lp-agent/runtime-adapters";
+import {
+  RuntimeHandoffSummarySchema,
+  assembleRuntimeHandoffs
+} from "./agent-handoffs";
 import { ContextMemorySchema, assembleContextMemory } from "./context-memory";
 import type { DemoWorkbenchService } from "./index";
 
@@ -72,6 +76,7 @@ export const RuntimeRunContextSchema: z.ZodType<RuntimeRunContext> = z.object({
   approval: RuntimeApprovalContextSchema,
   artifactWorkspace: RuntimeArtifactWorkspaceSchema,
   memory: ContextMemorySchema.optional(),
+  handoffs: z.array(RuntimeHandoffSummarySchema).optional(),
   modelRoutingPolicy: ModelRoutingPolicySchema.optional()
 });
 
@@ -119,9 +124,16 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
     role: input.role,
     input: input.input
   });
+  const handoffContext = await assembleRuntimeHandoffs({
+    repositories: input.repositories,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    role: input.role
+  });
   const runtimeContextWithMemory = {
     ...runtimeContext,
-    memory
+    memory,
+    handoffs: handoffContext.handoffs
   };
   const contextPack: ContextPack = {
     projectId: input.projectId,
@@ -142,9 +154,10 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
         `memory:runs:${memory.runs.length}`,
         `memory:tools:${memory.tools.length}`,
         `memory:artifacts:${memory.artifacts.length}`,
-        `memory:strategy:${memory.retrieval.strategy}`
+        `memory:strategy:${memory.retrieval.strategy}`,
+        ...handoffContext.trace.injected
       ],
-      omitted: [...memory.retrieval.omitted]
+      omitted: [...memory.retrieval.omitted, ...handoffContext.trace.omitted]
     },
     createdAt
   };

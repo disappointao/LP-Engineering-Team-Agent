@@ -2833,6 +2833,56 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(parsedContextPack)).not.toContain("published");
   });
 
+  it("injects role-relevant handoff summaries into context packs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    await repositories.agentHandoffs.save({
+      id: "handoff_builder_reviewer",
+      projectId: project.id,
+      taskId: "task_1",
+      fromRunId: "run_builder_1",
+      fromRole: "builder",
+      toRole: "reviewer",
+      state: "ready",
+      summary: "Builder produced static LP artifacts",
+      artifactRefs: {
+        pageVersionId: "version_1"
+      },
+      createdAt: "2026-05-15T08:00:00.000Z",
+      updatedAt: "2026-05-15T08:00:00.000Z"
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      taskId: "task_1",
+      role: "reviewer",
+      input: {
+        prompt: "Review"
+      },
+      now: fixedClock()
+    });
+
+    expect(ContextPackSchema.parse(contextPack).runtimeContext.handoffs).toEqual([
+      {
+        id: "handoff_builder_reviewer",
+        fromRunId: "run_builder_1",
+        fromRole: "builder",
+        toRole: "reviewer",
+        state: "ready",
+        summary: "Builder produced static LP artifacts",
+        artifactRefs: {
+          pageVersionId: "version_1"
+        },
+        updatedAt: "2026-05-15T08:00:00.000Z"
+      }
+    ]);
+    expect(contextPack.trace.injected).toContain("handoffs:1");
+    expect(contextPack.trace.omitted).not.toContain("handoffs:none");
+  });
+
   it("passes context memory through runAgentStep into runtime requests", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const runtime = new RecordingRuntime({ state: "completed" });

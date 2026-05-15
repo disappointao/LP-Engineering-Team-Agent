@@ -95,6 +95,20 @@ import {
   type ToolCommandRunResult
 } from "./tool-command-runner";
 
+export {
+  AgentHandoffArtifactRefsSchema,
+  AgentHandoffRecordSchema,
+  RuntimeHandoffSummarySchema,
+  assembleRuntimeHandoffs,
+  createAgentHandoffRecord,
+  markInboundHandoffsConsumed,
+  sanitizeHandoffText,
+  toHandoffRunEventDraft,
+  toRuntimeHandoffSummary,
+  type AssembleRuntimeHandoffsResult,
+  type RunEventDraft
+} from "./agent-handoffs";
+
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
 
