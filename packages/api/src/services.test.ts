@@ -2651,10 +2651,7 @@ describe("demo workbench service", () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
     const project = await service.createProject({ name: "Project" });
-    const brief = await service.createBriefFromPrompt({
-      projectId: project.id,
-      prompt: "Create a sale LP"
-    });
+    const prompt = "Create a sale LP";
     const draft = await service.createSkillDraft({
       manifestJson: JSON.stringify(brandSkillManifest()),
       content: "# Brand LP",
@@ -2674,8 +2671,8 @@ describe("demo workbench service", () => {
       role: "builder",
       taskId: "task_1",
       input: {
-        prompt: brief.prompt,
-        brief: brief.brief
+        prompt,
+        brief: sampleBrief
       },
       now: fixedClock()
     });
@@ -2712,13 +2709,14 @@ describe("demo workbench service", () => {
           "modelRoutingPolicy:1",
           "modelProvider:builder:legacy",
           "memory:messages:0",
-          "memory:runs:1",
+          "memory:runs:0",
           "memory:tools:0",
           "memory:artifacts:0",
           "memory:strategy:deterministic-keyword-v0"
         ]),
         omitted: expect.arrayContaining([
           "memory:messages:none",
+          "memory:runs:none",
           "memory:tools:none",
           "memory:artifacts:none"
         ])
