@@ -164,6 +164,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 6 structured agent handoff state design.
    - Read this after the context memory plan when adding fixed LP-chain Planner, Builder, Reviewer, and Deployer handoff records, safe handoff run events, blocked deployment behavior, and role-relevant Context Pack handoff summaries.
 
+41. `plans/2026-05-15-agent-handoff-state.md`
+   - Stage 6 structured agent handoff state implementation plan.
+   - Read this after the handoff state design when implementing repository-backed handoffs, runtime/model context contracts, API handoff helpers, Context Pack injection, LP service flow wiring, and verification.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
