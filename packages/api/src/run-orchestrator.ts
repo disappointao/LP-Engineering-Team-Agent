@@ -226,7 +226,7 @@ function toThrownRunFailedEvent(input: {
   };
 }
 
-function nextRepositoryTimestamp(
+export function nextRepositoryTimestamp(
   repositories: WorkbenchRepositories,
   now: () => Date
 ): string {

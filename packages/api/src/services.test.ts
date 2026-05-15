@@ -156,13 +156,7 @@ describe("demo workbench service", () => {
     });
 
     const runs = await repositories.runs.listForProject(project.id);
-    const runEvents = await Promise.all([
-      repositories.runEvents.listForRun("run_planner_brief_1"),
-      repositories.runEvents.listForRun("run_builder_version_1"),
-      repositories.runEvents.listForRun("run_reviewer_version_1"),
-      repositories.runEvents.listForRun("run_deployer_version_1")
-    ]);
-    const events = runEvents.flat();
+    const events = await repositories.runEvents.listForProject(project.id);
 
     expect(runs.map((run: RunRecord) => run.role)).toEqual([
       "planner",

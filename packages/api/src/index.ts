@@ -59,7 +59,10 @@ import {
   canUseSkill,
   type SkillManifest
 } from "@lp-agent/skills";
-import { runAgentStep } from "./run-orchestrator";
+import {
+  nextRepositoryTimestamp,
+  runAgentStep
+} from "./run-orchestrator";
 import {
   assertCommandTemplateVariablesKnown,
   assertWorkingDirectoryAllowed,
@@ -1562,7 +1565,7 @@ export class DemoWorkbenchService {
         type: event.type,
         message: event.message,
         payload: event.payload,
-        createdAt: this.timestamp()
+        createdAt: nextRepositoryTimestamp(this.repositories, this.now)
       });
     } finally {
       reservation.release();
