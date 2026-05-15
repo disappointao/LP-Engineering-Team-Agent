@@ -448,6 +448,17 @@ describe("demo workbench service", () => {
       pageVersionId: pageVersion.id,
       status: "pr_opened"
     });
+
+    await expect(
+      service.approveAndCreateDeployment({
+        projectId: project.id,
+        pageVersionId: pageVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).resolves.toMatchObject({
+      pageVersionId: pageVersion.id,
+      status: "pr_opened"
+    });
   });
 
   it("persists failed run events before surfacing generation failure", async () => {

@@ -1608,7 +1608,7 @@ export class DemoWorkbenchService {
       taskId: input.taskId,
       role: input.role,
       artifactRefs: input.artifactRefs,
-      now: this.now
+      consumedAt: nextRepositoryTimestamp(this.repositories, this.now)
     });
   }
 

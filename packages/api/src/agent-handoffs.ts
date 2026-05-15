@@ -174,7 +174,7 @@ export async function markInboundHandoffsConsumed(input: {
   taskId?: string;
   role: AgentRole;
   artifactRefs?: AgentHandoffRecord["artifactRefs"];
-  now: () => Date;
+  consumedAt: string;
 }): Promise<RunEventDraft[]> {
   const inbound = await input.repositories.agentHandoffs.listInbound({
     projectId: input.projectId,
@@ -187,7 +187,7 @@ export async function markInboundHandoffsConsumed(input: {
       matchesTaskScope(handoff, input.taskId) &&
       matchesArtifactRefs(handoff, input.artifactRefs)
   );
-  const timestamp = input.now().toISOString();
+  const timestamp = z.string().datetime().parse(input.consumedAt);
   const events: RunEventDraft[] = [];
   for (const handoff of ready) {
     const consumed = AgentHandoffRecordSchema.parse({

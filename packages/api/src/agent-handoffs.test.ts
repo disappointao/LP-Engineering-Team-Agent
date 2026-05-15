@@ -179,7 +179,7 @@ describe("agent handoffs", () => {
       projectId: "project_1",
       taskId: "task_1",
       role: "builder",
-      now: () => new Date("2026-05-15T08:01:00.000Z")
+      consumedAt: "2026-05-15T08:01:00.000Z"
     });
 
     await expect(repositories.agentHandoffs.getById("handoff_1")).resolves.toEqual(
@@ -246,7 +246,7 @@ describe("agent handoffs", () => {
       artifactRefs: {
         briefId: "brief_2"
       },
-      now: () => new Date("2026-05-15T08:02:00.000Z")
+      consumedAt: "2026-05-15T08:02:00.000Z"
     });
     await Promise.all(events.map((event) => event.beforePersist?.()));
 
@@ -302,7 +302,7 @@ describe("agent handoffs", () => {
       repositories,
       projectId: "project_1",
       role: "builder",
-      now: () => new Date("2026-05-15T08:02:00.000Z")
+      consumedAt: "2026-05-15T08:02:00.000Z"
     });
     await Promise.all(events.map((event) => event.beforePersist?.()));
 
