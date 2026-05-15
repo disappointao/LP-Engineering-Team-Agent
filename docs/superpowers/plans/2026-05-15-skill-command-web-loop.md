@@ -70,9 +70,9 @@ Add these assertions:
 ```ts
 const completedToolEvent = events.find((event) => event.type === "tool.completed");
 expect(completedToolEvent?.payload).toMatchObject({
-  outputSummary: "stdout: 27 chars\nstderr: 0 chars"
+  outputSummary: "stdout: 30 chars\nstderr: 0 chars"
 });
-expect(serializedEvents).toContain("stdout: 27 chars");
+expect(serializedEvents).toContain("stdout: 30 chars");
 expect(serializedEvents).toContain("stderr: 0 chars");
 expect(serializedEvents).not.toContain("published secret-token");
 expect(serializedEvents).not.toContain(artifactFragment);
@@ -280,7 +280,7 @@ it("executes skill commands with the simulated Web runner", async () => {
       },
       observation: {
         state: "completed",
-        outputSummary: "stdout: 53 chars\nstderr: 0 chars"
+        outputSummary: "stdout: 47 chars\nstderr: 0 chars"
       }
     }
   });
@@ -291,7 +291,7 @@ it("executes skill commands with the simulated Web runner", async () => {
     "tool.completed",
     "run.completed"
   ]);
-  expect(JSON.stringify(events)).toContain("stdout: 53 chars");
+  expect(JSON.stringify(events)).toContain("stdout: 47 chars");
 });
 ```
 
@@ -1098,7 +1098,7 @@ it("renders deployment skill command events with sanitized metadata", () => {
         role: "deployer",
         commandId: "publish_static",
         exitCode: 0,
-        outputSummary: "stdout: 53 chars\nstderr: 0 chars"
+        outputSummary: "stdout: 47 chars\nstderr: 0 chars"
       },
       createdAt: "2026-05-15T08:00:01.000Z"
     }
@@ -1117,7 +1117,7 @@ it("renders deployment skill command events with sanitized metadata", () => {
   expect(thread.toolEvents[1]?.meta).toContain("tool.completed");
   expect(thread.toolEvents[1]?.meta).toContain("publish_static");
   expect(thread.toolEvents[1]?.meta).toContain("exit 0");
-  expect(thread.toolEvents[1]?.meta).toContain("stdout: 53 chars");
+  expect(thread.toolEvents[1]?.meta).toContain("stdout: 47 chars");
   expect(thread.toolEvents[1]?.meta).not.toContain("secret-token");
 });
 ```
@@ -1292,7 +1292,7 @@ In `apps/web/src/app/page.test.ts`, add a workbench test with `pageState.kind ==
     role: "deployer",
     commandId: "publish_static",
     exitCode: 0,
-    outputSummary: "stdout: 53 chars\nstderr: 0 chars"
+    outputSummary: "stdout: 47 chars\nstderr: 0 chars"
   },
   createdAt: "2026-05-15T08:00:01.000Z"
 }
@@ -1301,7 +1301,7 @@ In `apps/web/src/app/page.test.ts`, add a workbench test with `pageState.kind ==
 Assert:
 
 ```ts
-expect(text).toContain("stdout: 53 chars");
+expect(text).toContain("stdout: 47 chars");
 expect(text).not.toContain("published secret-token");
 expect(text).not.toContain("<html>");
 ```
