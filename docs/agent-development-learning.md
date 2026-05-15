@@ -142,7 +142,7 @@ Planner、Builder、Reviewer、Deployer 不是四个名字而已。真正难点�
 - Deployer 必须拿到哪些 approval 和权限。
 - 某一步失败后是重试、回滚、继续还是询问用户。
 
-当前项目已经有 role 概念和 deterministic planner、builder、reviewer、deployer run records。Milestone 6 之后要把 handoff、dependency、blocking question、cancel/retry 逐步显式化。
+当前项目已经有 role 概念、deterministic planner/builder/reviewer/deployer run records，以及 Agent Handoff State v0。Milestone 6 之后还要把 retry/resume、blocking question、cancel 和更通用的 dependency 语义逐步显式化。
 
 ### 2.9 压缩、检索、组合、注入
 
@@ -227,7 +227,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
 - 文件系统 workspace 和 diff 注入。
-- 多 agent handoff 和恢复。
+- 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 团队成员、角色和审批 UI。
 - 实时流式输出和真正的 interrupt/cancel。
 
@@ -465,11 +465,12 @@ pnpm --filter @lp-agent/model-gateway test
 
 ### 阶段 6：多 Agent 协作
 
-下一步 Agent Handoff State v0 设计：
+已实现的 Agent Handoff State v0：
 
 - [2026-05-15-agent-handoff-state-design.md](./superpowers/specs/2026-05-15-agent-handoff-state-design.md)
+- 当前实现计划：[2026-05-15-agent-handoff-state.md](./superpowers/plans/2026-05-15-agent-handoff-state.md)
 - 第一版只覆盖 LP 固定链路：Planner -> Builder -> Reviewer -> Deployer，不做开放式 agent swarm 或通用 DAG。
-- handoff 会成为 repository 里的结构化状态，同时写入 `handoff.created`、`handoff.blocked`、`handoff.consumed` run event，供 timeline 和后续 Context Pack 使用。
+- handoff 是 repository 里的结构化状态，同时写入 `handoff.created`、`handoff.blocked`、`handoff.consumed` run event，供 timeline 和 Context Pack 使用。
 - Reviewer 不通过时会写 `blocked` handoff，并阻止 Deployer run 创建；retry/resume、团队审批和 UI handoff 卡片后续再做。
 - 学习重点是把“角色之间怎么交接”从隐含顺序变成可查询、可审计、可恢复的运行状态。
 
