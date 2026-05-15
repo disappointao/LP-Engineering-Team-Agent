@@ -189,8 +189,10 @@ export interface ToolObservationRecord {
   input: Record<string, unknown>;
   outputSummary: string;
   state: ToolObservationState;
+  exitCode?: number;
   errorName?: string;
   createdAt: string;
+  completedAt?: string;
 }
 
 export interface ProjectRepository {

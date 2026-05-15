@@ -271,7 +271,9 @@ describe("in-memory workbench repositories", () => {
       },
       outputSummary: "Found three candidate hero images.",
       state: "completed",
-      createdAt
+      exitCode: 0,
+      createdAt,
+      completedAt: "2026-05-12T00:00:45.000Z"
     };
 
     await repositories.runs.save(run);
@@ -340,7 +342,10 @@ describe("in-memory workbench repositories", () => {
         id: "tool_observation_1",
         input: {
           query: "hero"
-        }
+        },
+        state: "completed",
+        exitCode: 0,
+        completedAt: "2026-05-12T00:00:45.000Z"
       })
     ]);
   });

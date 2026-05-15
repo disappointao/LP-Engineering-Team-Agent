@@ -375,7 +375,9 @@ describe("json-file workbench repositories", () => {
       },
       outputSummary: "Found three candidate hero images.",
       state: "completed",
-      createdAt
+      exitCode: 0,
+      createdAt,
+      completedAt: "2026-05-12T00:00:45.000Z"
     };
 
     await first.runs.save(run);
@@ -407,6 +409,9 @@ describe("json-file workbench repositories", () => {
     await expect(second.toolObservations.listForRun(run.id)).resolves.toEqual([
       expect.objectContaining({
         id: "tool_observation_1",
+        state: "completed",
+        exitCode: 0,
+        completedAt: "2026-05-12T00:00:45.000Z",
         input: {
           query: "hero"
         }

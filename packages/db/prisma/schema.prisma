@@ -105,6 +105,7 @@ model Project {
   briefs      LPBrief[]
   versions    PageVersion[]
   runs        Run[]
+  toolObservations ToolObservation[]
   deployments Deployment[]
   skillBindings SkillBinding[]
   createdAt   DateTime        @default(now())
@@ -292,6 +293,7 @@ model Run {
   state     RunState
   project   Project    @relation(fields: [projectId], references: [id])
   events    RunEvent[]
+  toolObservations ToolObservation[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -310,6 +312,29 @@ model RunEvent {
 
   @@unique([runId, sequence])
   @@index([runId, type])
+  @@index([createdAt])
+}
+
+model ToolObservation {
+  id            String   @id
+  runId         String
+  projectId     String
+  taskId        String?
+  toolName      String
+  input         Json
+  outputSummary String
+  state         String
+  exitCode      Int?
+  errorName     String?
+  project       Project  @relation(fields: [projectId], references: [id])
+  run           Run      @relation(fields: [runId], references: [id])
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  @@index([runId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([state])
   @@index([createdAt])
 }
 
