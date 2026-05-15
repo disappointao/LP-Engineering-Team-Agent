@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import {
   createDefaultRuntimeContext,
-  type AgentRuntimeAdapter
+  type AgentRuntimeAdapter,
+  type RuntimeRunRequest,
+  type RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import { runAgentStep } from "./run-orchestrator";
 
@@ -159,4 +161,122 @@ describe("run agent step finalization", () => {
     expect(event?.message).toBe("Planner finalizer crashed.");
     expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
   });
+
+  it("saves pre-runtime run events before invoking the runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = createTestService();
+
+    await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_builder_1",
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build"
+      },
+      beforeRuntime: async () => [
+        {
+          type: "handoff.consumed",
+          message: "Agent handoff consumed.",
+          payload: {
+            handoffId: "handoff_1",
+            fromRunId: "run_planner_1",
+            fromRole: "planner",
+            toRole: "builder",
+            state: "consumed",
+            summary: "Planner produced LP brief"
+          }
+        }
+      ],
+      now: () => new Date("2026-05-15T08:00:00.000Z")
+    });
+
+    expect(runtime.requests).toHaveLength(1);
+    await expect(repositories.runEvents.listForRun("run_builder_1")).resolves.toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        type: "handoff.consumed"
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        type: "run.started"
+      }),
+      expect.objectContaining({
+        sequence: 3,
+        type: "run.completed"
+      })
+    ]);
+  });
+
+  it("fails before runtime invocation when pre-runtime event creation fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = createTestService();
+
+    await expect(
+      runAgentStep({
+        repositories,
+        service,
+        runtime,
+        runId: "run_builder_1",
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Build"
+        },
+        beforeRuntime: async () => {
+          throw new Error("handoff_consume_failed");
+        },
+        now: () => new Date("2026-05-15T08:00:00.000Z")
+      })
+    ).rejects.toThrow("handoff_consume_failed");
+
+    expect(runtime.requests).toEqual([]);
+    await expect(repositories.runs.getById("run_builder_1")).resolves.toEqual(
+      expect.objectContaining({
+        state: "failed"
+      })
+    );
+  });
 });
+
+class RecordingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(private readonly result: Pick<RuntimeRunResult, "state">) {}
+
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    this.requests.push(structuredClone(request));
+    return {
+      runId: request.runId,
+      projectId: request.projectId,
+      role: request.role,
+      state: this.result.state,
+      events: [
+        {
+          type: "run.started",
+          message: `${request.role} run started`,
+          runId: request.runId,
+          role: request.role
+        },
+        {
+          type: "run.completed",
+          message: `${request.role} run completed`,
+          runId: request.runId,
+          state: "completed"
+        }
+      ]
+    };
+  }
+}
+
+function createTestService() {
+  return {
+    async createRuntimeContextForRole() {
+      return createDefaultRuntimeContext();
+    }
+  };
+}

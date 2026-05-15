@@ -37,6 +37,7 @@ export interface RunAgentStepInput {
   input: ContextPack["input"];
   now?: () => Date;
   finalizeResult?: RunAgentStepFinalizer;
+  beforeRuntime?: RunAgentStepBeforeRuntime;
 }
 
 export interface RunAgentStepResult {
@@ -44,6 +45,12 @@ export interface RunAgentStepResult {
   events: RunEventRecord[];
   contextPack: ContextPack;
   result: RuntimeRunResult;
+}
+
+export interface RunEventDraft {
+  type: string;
+  message: string;
+  payload: Record<string, unknown>;
 }
 
 export interface RunAgentStepFinalizeInput {
@@ -54,6 +61,15 @@ export interface RunAgentStepFinalizeInput {
 export type RunAgentStepFinalizer = (
   input: RunAgentStepFinalizeInput
 ) => RuntimeRunResult | Promise<RuntimeRunResult>;
+
+export interface RunAgentStepBeforeRuntimeInput {
+  run: RunRecord;
+  contextPack: ContextPack;
+}
+
+export type RunAgentStepBeforeRuntime = (
+  input: RunAgentStepBeforeRuntimeInput
+) => RunEventDraft[] | Promise<RunEventDraft[]>;
 
 export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentStepResult> {
   const now = input.now ?? (() => new Date());
@@ -82,8 +98,27 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
   };
   await input.repositories.runs.save(startedRun);
 
+  const preRuntimeEvents: RunEventRecord[] = [];
   let result: RuntimeRunResult;
   try {
+    if (input.beforeRuntime) {
+      const drafts = await input.beforeRuntime({
+        run: startedRun,
+        contextPack
+      });
+      for (const draft of drafts) {
+        const event = toRunEventRecordFromDraft({
+          draft,
+          runId: input.runId,
+          projectId: input.projectId,
+          taskId: input.taskId,
+          sequence: preRuntimeEvents.length + 1,
+          createdAt: nextRepositoryTimestamp(input.repositories, now)
+        });
+        await input.repositories.runEvents.save(event);
+        preRuntimeEvents.push(event);
+      }
+    }
     result = await input.runtime.run({
       runId: input.runId,
       projectId: input.projectId,
@@ -112,7 +147,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
         runId: input.runId,
         projectId: input.projectId,
         taskId: input.taskId,
-        sequence: 1,
+        sequence: preRuntimeEvents.length + 1,
         createdAt: completedAt
       })
     );
@@ -139,7 +174,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       runId: input.runId,
       projectId: input.projectId,
       taskId: input.taskId,
-      sequence: index + 1,
+      sequence: preRuntimeEvents.length + index + 1,
       createdAt: completedAt
     })
   );
@@ -149,7 +184,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
 
   return {
     run,
-    events,
+    events: [...preRuntimeEvents, ...events],
     contextPack,
     result
   };
@@ -235,4 +270,25 @@ function toRunEventRecord(input: {
     createdAt: input.createdAt
   };
   return RunEventRecordSchema.parse(record);
+}
+
+function toRunEventRecordFromDraft(input: {
+  draft: RunEventDraft;
+  runId: string;
+  projectId: string;
+  taskId?: string;
+  sequence: number;
+  createdAt: string;
+}): RunEventRecord {
+  return RunEventRecordSchema.parse({
+    id: `${input.runId}_event_${input.sequence}`,
+    runId: input.runId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    sequence: input.sequence,
+    type: input.draft.type,
+    message: input.draft.message,
+    payload: structuredClone(input.draft.payload),
+    createdAt: input.createdAt
+  });
 }
