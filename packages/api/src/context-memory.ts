@@ -78,8 +78,8 @@ export const ContextMemoryToolSummarySchema = z.object({
 export const ContextMemoryArtifactSummarySchema = z.object({
   pageVersionId: z.string().min(1),
   briefId: z.string().min(1),
-  title: z.string(),
-  objective: z.string(),
+  title: z.string().min(1).optional(),
+  objective: z.string().min(1).optional(),
   files: z.array(ContextMemoryFileSchema),
   createdAt: z.string().datetime(),
   score: z.number().finite()
@@ -367,12 +367,14 @@ function summarizeArtifacts(input: {
   return input.pageVersions
     .map((pageVersion) => {
       const brief = briefsById.get(`${pageVersion.projectId}:${pageVersion.briefId}`);
+      const title = toOptionalNonEmptyString(brief?.brief.title);
+      const objective = toOptionalNonEmptyString(brief?.brief.objective);
 
       return {
         pageVersionId: pageVersion.id,
         briefId: pageVersion.briefId,
-        title: brief?.brief.title ?? "",
-        objective: brief?.brief.objective ?? "",
+        ...(title ? { title } : {}),
+        ...(objective ? { objective } : {}),
         files: [
           {
             name: "index.html" as const,
@@ -430,6 +432,11 @@ function getPrimaryCta(brief: RuntimeRunInput["brief"]): string | undefined {
   const primaryCta = (brief as ({ primaryCta?: unknown } & NonNullable<typeof brief>) | undefined)
     ?.primaryCta;
   return typeof primaryCta === "string" ? primaryCta : brief?.cta.label;
+}
+
+function toOptionalNonEmptyString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
 function selectWithBudget<T>(input: {

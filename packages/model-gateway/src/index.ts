@@ -158,8 +158,8 @@ export interface ModelContextMemoryArtifactFile {
 export interface ModelContextMemoryArtifact {
   pageVersionId: string;
   briefId: string;
-  title: string;
-  objective: string;
+  title?: string;
+  objective?: string;
   files: ModelContextMemoryArtifactFile[];
   createdAt: string;
   score: number;

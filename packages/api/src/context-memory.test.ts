@@ -379,6 +379,54 @@ describe("context memory", () => {
     expect(serialized).not.toContain("secret-token");
   });
 
+  it("does not emit empty artifact title or objective when the linked brief is missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.pageVersions.save({
+      id: "page_version_missing_brief",
+      projectId: "project_1",
+      briefId: "brief_missing",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>secret-token</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('secret-token');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page",
+        brief: sampleBrief
+      }
+    });
+
+    expect(memory.artifacts).toEqual([
+      {
+        pageVersionId: "page_version_missing_brief",
+        briefId: "brief_missing",
+        files: [
+          { name: "index.html", characterCount: 53 },
+          { name: "styles.css", characterCount: 20 },
+          { name: "script.js", characterCount: 28 }
+        ],
+        createdAt: "2026-05-14T00:03:00.000Z",
+        score: expect.any(Number)
+      }
+    ]);
+    expect(memory.artifacts[0]).not.toHaveProperty("title");
+    expect(memory.artifacts[0]).not.toHaveProperty("objective");
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("<!doctype html>");
+    expect(serialized).not.toContain("color: red");
+    expect(serialized).not.toContain("console.log");
+    expect(serialized).not.toContain("secret-token");
+  });
+
   it("records budget omissions when source records exceed limits", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.tasks.save({
