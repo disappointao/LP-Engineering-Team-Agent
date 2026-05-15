@@ -94,6 +94,12 @@ import {
   type ToolCommandRunInput,
   type ToolCommandRunResult
 } from "./tool-command-runner";
+import {
+  createAgentHandoffRecord,
+  markInboundHandoffsConsumed,
+  toHandoffRunEventDraft,
+  type RunEventDraft
+} from "./agent-handoffs";
 
 export {
   AgentHandoffArtifactRefsSchema,
@@ -359,7 +365,7 @@ export class DemoWorkbenchService {
       : input.prompt;
 
     try {
-      const { result } = await runAgentStep({
+      const { result, run, events } = await runAgentStep({
         repositories: this.repositories,
         service: this,
         runtime: this.plannerRuntime,
@@ -404,7 +410,7 @@ export class DemoWorkbenchService {
         throw new Error("Planner run did not complete.");
       }
 
-      return await withRepositoryIdLock(this.repositories, async () => {
+      const brief = await withRepositoryIdLock(this.repositories, async () => {
         const brief: BriefRecord = {
           id: briefId,
           projectId: input.projectId,
@@ -413,8 +419,21 @@ export class DemoWorkbenchService {
           createdAt: this.timestamp()
         };
         await this.repositories.briefs.save(brief);
-        return copyBriefRecord(brief);
+        return brief;
       });
+      await this.saveHandoffForRun({
+        runId: run.id,
+        projectId: input.projectId,
+        sequence: events.length + 1,
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Planner produced LP brief",
+        artifactRefs: {
+          briefId: brief.id
+        }
+      });
+      return copyBriefRecord(brief);
     } finally {
       releaseRepositoryId(this.repositories, briefId);
     }
@@ -433,7 +452,7 @@ export class DemoWorkbenchService {
       : brief.prompt;
 
     try {
-      const { result } = await runAgentStep({
+      const { result, run, events } = await runAgentStep({
         repositories: this.repositories,
         service: this,
         runtime: this.builderRuntime,
@@ -444,6 +463,11 @@ export class DemoWorkbenchService {
           brief: copyBrief(brief.brief),
           prompt: builderPrompt
         },
+        beforeRuntime: () =>
+          this.consumeReadyHandoffsForRun({
+            projectId: input.projectId,
+            role: "builder"
+          }),
         now: this.now,
         finalizeResult: this.structuredBuilderOutputEnabled
           ? ({ result }) => {
@@ -491,7 +515,7 @@ export class DemoWorkbenchService {
         throw new Error("Builder run returned incomplete artifacts.");
       }
 
-      return await withRepositoryIdLock(this.repositories, async () => {
+      const pageVersion = await withRepositoryIdLock(this.repositories, async () => {
         const pageVersion: PageVersionRecord = {
           id: pageVersionId,
           projectId: input.projectId,
@@ -502,8 +526,22 @@ export class DemoWorkbenchService {
           createdAt: this.timestamp()
         };
         await this.repositories.pageVersions.save(pageVersion);
-        return copyPageVersion(pageVersion);
+        return pageVersion;
       });
+      await this.saveHandoffForRun({
+        runId: run.id,
+        projectId: input.projectId,
+        sequence: events.length + 1,
+        fromRole: "builder",
+        toRole: "reviewer",
+        state: "ready",
+        summary: "Builder produced static LP artifacts",
+        artifactRefs: {
+          briefId: brief.id,
+          pageVersionId: pageVersion.id
+        }
+      });
+      return copyPageVersion(pageVersion);
     } finally {
       releaseRepositoryId(this.repositories, pageVersionId);
     }
@@ -518,7 +556,7 @@ export class DemoWorkbenchService {
 
     const brief = await this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
 
-    const { result } = await runAgentStep({
+    const { result, run, events } = await runAgentStep({
       repositories: this.repositories,
       service: this,
       runtime: this.reviewerRuntime,
@@ -529,6 +567,11 @@ export class DemoWorkbenchService {
         brief: copyBrief(brief.brief),
         prompt: "Review for launch blockers."
       },
+      beforeRuntime: () =>
+        this.consumeReadyHandoffsForRun({
+          projectId: input.projectId,
+          role: "reviewer"
+        }),
       now: this.now
     });
 
@@ -545,6 +588,30 @@ export class DemoWorkbenchService {
       ? "failed"
       : "passed";
     await this.repositories.pageVersions.save(pageVersion);
+    const blockingFindings = findings.filter(
+      (finding) => finding.blocksDeployment || finding.severity === "blocking"
+    );
+    await this.saveHandoffForRun({
+      runId: run.id,
+      projectId: input.projectId,
+      sequence: events.length + 1,
+      fromRole: "reviewer",
+      toRole: "deployer",
+      state: pageVersion.reviewStatus === "passed" ? "ready" : "blocked",
+      summary: pageVersion.reviewStatus === "passed"
+        ? "Reviewer passed page version"
+        : "Reviewer blocked deployment",
+      ...(blockingFindings.length > 0
+        ? {
+            blockingReason: blockingFindings
+              .map((finding) => `${finding.target}: ${finding.explanation}`)
+              .join("; ")
+          }
+        : {}),
+      artifactRefs: {
+        pageVersionId: pageVersion.id
+      }
+    });
 
     return copyPageVersion(pageVersion);
   }
@@ -555,6 +622,10 @@ export class DemoWorkbenchService {
     if (input.reviewerUserId.trim().length === 0) {
       throw new Error("Reviewer user ID is required.");
     }
+    await this.assertDeploymentHandoffReady({
+      projectId: input.projectId,
+      pageVersionId: pageVersion.id
+    });
     if (pageVersion.reviewStatus !== "passed") {
       throw new Error("Page version must pass review before deployment.");
     }
@@ -574,6 +645,11 @@ export class DemoWorkbenchService {
       input: {
         prompt: "Prepare deployment handoff."
       },
+      beforeRuntime: () =>
+        this.consumeReadyHandoffsForRun({
+          projectId: input.projectId,
+          role: "deployer"
+        }),
       now: this.now
     });
 
@@ -1443,6 +1519,100 @@ export class DemoWorkbenchService {
 
   private timestamp(): string {
     return this.now().toISOString();
+  }
+
+  private async saveHandoffForRun(input: {
+    runId: string;
+    projectId: string;
+    taskId?: string;
+    sequence: number;
+    fromRole: AgentRole;
+    toRole: AgentRole;
+    state: "ready" | "blocked";
+    summary: string;
+    blockingReason?: string;
+    artifactRefs?: {
+      briefId?: string;
+      pageVersionId?: string;
+    };
+  }): Promise<void> {
+    const reservation = await this.reserveHandoffId();
+    const handoff = createAgentHandoffRecord({
+      id: reservation.id,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      fromRunId: input.runId,
+      fromRole: input.fromRole,
+      toRole: input.toRole,
+      state: input.state,
+      summary: input.summary,
+      blockingReason: input.blockingReason,
+      artifactRefs: input.artifactRefs,
+      now: this.now
+    });
+    try {
+      await this.repositories.agentHandoffs.save(handoff);
+      const event = toHandoffRunEventDraft(handoff);
+      await this.repositories.runEvents.save({
+        id: `${input.runId}_event_${input.sequence}`,
+        runId: input.runId,
+        projectId: input.projectId,
+        taskId: input.taskId,
+        sequence: input.sequence,
+        type: event.type,
+        message: event.message,
+        payload: event.payload,
+        createdAt: this.timestamp()
+      });
+    } finally {
+      reservation.release();
+    }
+  }
+
+  private async reserveHandoffId(): Promise<{ id: string; release: () => void }> {
+    const id = await reserveRepositoryId(this.repositories, "handoff", async () => {
+      const handoffs = await this.repositories.agentHandoffs.listAll();
+      return handoffs.map((record) => record.id);
+    });
+    return {
+      id,
+      release: () => releaseRepositoryId(this.repositories, id)
+    };
+  }
+
+  private async consumeReadyHandoffsForRun(input: {
+    projectId: string;
+    taskId?: string;
+    role: AgentRole;
+  }): Promise<RunEventDraft[]> {
+    return markInboundHandoffsConsumed({
+      repositories: this.repositories,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      role: input.role,
+      now: this.now
+    });
+  }
+
+  private async assertDeploymentHandoffReady(input: {
+    projectId: string;
+    pageVersionId: string;
+  }): Promise<void> {
+    const inbound = await this.repositories.agentHandoffs.listInbound({
+      projectId: input.projectId,
+      toRole: "deployer"
+    });
+    const matching = inbound
+      .filter((handoff) => handoff.artifactRefs?.pageVersionId === input.pageVersionId)
+      .sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt) ||
+        right.createdAt.localeCompare(left.createdAt) ||
+        left.id.localeCompare(right.id)
+      );
+    const latest = matching[0];
+    if (latest?.state === "blocked") {
+      throw new Error("agent_handoff_blocked");
+    }
   }
 
   private async createRuntimeContext(

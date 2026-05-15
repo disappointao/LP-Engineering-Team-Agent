@@ -156,7 +156,13 @@ describe("demo workbench service", () => {
     });
 
     const runs = await repositories.runs.listForProject(project.id);
-    const events = await repositories.runEvents.listForProject(project.id);
+    const runEvents = await Promise.all([
+      repositories.runEvents.listForRun("run_planner_brief_1"),
+      repositories.runEvents.listForRun("run_builder_version_1"),
+      repositories.runEvents.listForRun("run_reviewer_version_1"),
+      repositories.runEvents.listForRun("run_deployer_version_1")
+    ]);
+    const events = runEvents.flat();
 
     expect(runs.map((run: RunRecord) => run.role)).toEqual([
       "planner",
@@ -170,24 +176,186 @@ describe("demo workbench service", () => {
       "run_planner_brief_1:2:runtime.context.loaded",
       "run_planner_brief_1:3:model.completed",
       "run_planner_brief_1:4:run.completed",
-      "run_builder_version_1:1:run.started",
-      "run_builder_version_1:2:runtime.context.loaded",
-      "run_builder_version_1:3:model.completed",
-      "run_builder_version_1:4:artifact.created",
-      "run_builder_version_1:5:run.completed",
-      "run_reviewer_version_1:1:run.started",
-      "run_reviewer_version_1:2:runtime.context.loaded",
-      "run_reviewer_version_1:3:model.completed",
-      "run_reviewer_version_1:4:review.completed",
-      "run_reviewer_version_1:5:run.completed",
-      "run_deployer_version_1:1:run.started",
-      "run_deployer_version_1:2:runtime.context.loaded",
-      "run_deployer_version_1:3:model.completed",
-      "run_deployer_version_1:4:run.completed"
+      "run_planner_brief_1:5:handoff.created",
+      "run_builder_version_1:1:handoff.consumed",
+      "run_builder_version_1:2:run.started",
+      "run_builder_version_1:3:runtime.context.loaded",
+      "run_builder_version_1:4:model.completed",
+      "run_builder_version_1:5:artifact.created",
+      "run_builder_version_1:6:run.completed",
+      "run_builder_version_1:7:handoff.created",
+      "run_reviewer_version_1:1:handoff.consumed",
+      "run_reviewer_version_1:2:run.started",
+      "run_reviewer_version_1:3:runtime.context.loaded",
+      "run_reviewer_version_1:4:model.completed",
+      "run_reviewer_version_1:5:review.completed",
+      "run_reviewer_version_1:6:run.completed",
+      "run_reviewer_version_1:7:handoff.created",
+      "run_deployer_version_1:1:handoff.consumed",
+      "run_deployer_version_1:2:run.started",
+      "run_deployer_version_1:3:runtime.context.loaded",
+      "run_deployer_version_1:4:model.completed",
+      "run_deployer_version_1:5:run.completed"
     ]);
     expect(runs[1]?.contextSummary.injected).toEqual(
       expect.arrayContaining(["artifactWorkspace:memory"])
     );
+  });
+
+  it("creates ready handoffs for planner and builder outputs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    await expect(repositories.agentHandoffs.listForProject(project.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fromRunId: `run_planner_${brief.id}`,
+          fromRole: "planner",
+          toRole: "builder",
+          state: "consumed",
+          artifactRefs: {
+            briefId: brief.id
+          }
+        }),
+        expect.objectContaining({
+          fromRunId: `run_builder_${pageVersion.id}`,
+          fromRole: "builder",
+          toRole: "reviewer",
+          state: "ready",
+          artifactRefs: {
+            briefId: brief.id,
+            pageVersionId: pageVersion.id
+          }
+        })
+      ])
+    );
+    await expect(repositories.runEvents.listForProject(project.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "handoff.created" }),
+        expect.objectContaining({ type: "handoff.consumed" })
+      ])
+    );
+  });
+
+  it("creates ready reviewer handoff before deployer and consumes it during deployment", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const reviewed = await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: pageVersion.id
+    });
+
+    expect(reviewed.reviewStatus).toBe("passed");
+    await expect(
+      repositories.agentHandoffs.listInbound({
+        projectId: project.id,
+        toRole: "deployer"
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "ready",
+        artifactRefs: {
+          pageVersionId: pageVersion.id
+        }
+      })
+    ]);
+
+    await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: pageVersion.id,
+      reviewerUserId: "reviewer_1"
+    });
+
+    await expect(
+      repositories.agentHandoffs.listInbound({
+        projectId: project.id,
+        toRole: "deployer"
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        state: "consumed"
+      })
+    ]);
+  });
+
+  it("blocks deployer creation when reviewer creates a blocked handoff", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const reviewerRuntime = new StaticRuntime({
+      state: "completed",
+      findings: [
+        {
+          severity: "blocking",
+          target: "section:hero",
+          explanation: "Hero section is missing a CTA secret-token",
+          suggestedFix: "Add a primary CTA.",
+          blocksDeployment: true
+        }
+      ]
+    });
+    const deployerRuntime = new RecordingRuntime({ state: "completed" });
+    const service = new DemoWorkbenchService({
+      repositories,
+      reviewerRuntime,
+      deployerRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a sale LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    const reviewed = await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: pageVersion.id
+    });
+
+    expect(reviewed.reviewStatus).toBe("failed");
+    const handoffs = await repositories.agentHandoffs.listInbound({
+      projectId: project.id,
+      toRole: "deployer"
+    });
+    expect(handoffs).toEqual([
+      expect.objectContaining({
+        state: "blocked",
+        blockingReason: expect.stringContaining("[REDACTED]")
+      })
+    ]);
+    expect(JSON.stringify(handoffs)).not.toContain("secret-token");
+
+    await expect(
+      service.approveAndCreateDeployment({
+        projectId: project.id,
+        pageVersionId: pageVersion.id,
+        reviewerUserId: "reviewer_1"
+      })
+    ).rejects.toThrow("agent_handoff_blocked");
+    expect(deployerRuntime.requests).toEqual([]);
   });
 
   it("persists failed run events before surfacing generation failure", async () => {
@@ -1741,15 +1909,16 @@ describe("demo workbench service", () => {
     expect(builderRequestBody.messages[0].content).toContain("Do not include React, Vue, Angular, Svelte");
     expect(builderRequestBody.messages[0].content).toContain("Model Planned Landing Page");
 
-    const events = await repositories.runEvents.listForProject(project.id);
-    const builderEvents = events.filter((event) => event.runId === "run_builder_version_1");
+    const builderEvents = await repositories.runEvents.listForRun("run_builder_version_1");
     expect(builderEvents.map((event) => event.type)).toEqual([
+      "handoff.consumed",
       "run.started",
       "runtime.context.loaded",
       "model.completed",
       "artifact.created",
       "model.output.parsed",
-      "run.completed"
+      "run.completed",
+      "handoff.created"
     ]);
     expect(builderEvents.find((event) => event.type === "model.output.parsed")).toMatchObject({
       runId: "run_builder_version_1",
@@ -1878,9 +2047,9 @@ describe("demo workbench service", () => {
         completedAt: expect.any(String)
       })
     ]);
-    const events = await repositories.runEvents.listForProject(project.id);
-    const builderEvents = events.filter((event) => event.runId === "run_builder_version_1");
+    const builderEvents = await repositories.runEvents.listForRun("run_builder_version_1");
     expect(builderEvents.map((event) => event.type)).toEqual([
+      "handoff.consumed",
       "run.started",
       "runtime.context.loaded",
       "model.completed",
@@ -3723,7 +3892,7 @@ describe("demo workbench service", () => {
         pageVersionId: version.id,
         reviewerUserId: "reviewer_1"
       })
-    ).rejects.toThrow("Page version must pass review before deployment.");
+    ).rejects.toThrow("agent_handoff_blocked");
   });
 
   it("does not treat a failed reviewer runtime as a passed review", async () => {
