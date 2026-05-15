@@ -42,7 +42,8 @@ export interface RunEventDraft {
   type: string;
   message: string;
   payload: Record<string, unknown>;
-  afterPersist?: () => Promise<void>;
+  beforePersist?: () => Promise<void>;
+  rollbackPersist?: () => Promise<void>;
 }
 
 export interface AssembleRuntimeHandoffsResult {
@@ -197,7 +198,8 @@ export async function markInboundHandoffsConsumed(input: {
     });
     events.push({
       ...toHandoffRunEventDraft(consumed),
-      afterPersist: () => input.repositories.agentHandoffs.save(consumed)
+      beforePersist: () => input.repositories.agentHandoffs.save(consumed),
+      rollbackPersist: () => input.repositories.agentHandoffs.save(handoff)
     });
   }
   return events;

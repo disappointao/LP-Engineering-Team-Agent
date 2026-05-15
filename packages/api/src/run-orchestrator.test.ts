@@ -242,11 +242,11 @@ describe("run agent step finalization", () => {
     );
   });
 
-  it("does not run pre-runtime afterPersist when draft validation fails", async () => {
+  it("does not run pre-runtime persistence when draft validation fails", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const runtime = new RecordingRuntime({ state: "completed" });
     const service = createTestService();
-    const afterPersist = vi.fn(async () => undefined);
+    const beforePersist = vi.fn(async () => undefined);
 
     await expect(
       runAgentStep({
@@ -264,14 +264,65 @@ describe("run agent step finalization", () => {
             type: "",
             message: "",
             payload: {},
-            afterPersist
+            beforePersist
           }
         ],
         now: () => new Date("2026-05-15T08:00:00.000Z")
       })
     ).rejects.toThrow();
 
-    expect(afterPersist).not.toHaveBeenCalled();
+    expect(beforePersist).not.toHaveBeenCalled();
+    expect(runtime.requests).toEqual([]);
+    await expect(repositories.runEvents.listForRun("run_builder_1")).resolves.toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        type: "run.failed"
+      })
+    ]);
+  });
+
+  it("rolls back pre-runtime state when event persistence fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = createTestService();
+    const beforePersist = vi.fn(async () => undefined);
+    const rollbackPersist = vi.fn(async () => undefined);
+    const saveRunEvent = repositories.runEvents.save.bind(repositories.runEvents);
+    repositories.runEvents.save = vi.fn(async (event) => {
+      if (event.type === "handoff.consumed") {
+        throw new Error("event_save_failed");
+      }
+      await saveRunEvent(event);
+    });
+
+    await expect(
+      runAgentStep({
+        repositories,
+        service,
+        runtime,
+        runId: "run_builder_1",
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Build"
+        },
+        beforeRuntime: async () => [
+          {
+            type: "handoff.consumed",
+            message: "Agent handoff consumed.",
+            payload: {
+              handoffId: "handoff_1"
+            },
+            beforePersist,
+            rollbackPersist
+          }
+        ],
+        now: () => new Date("2026-05-15T08:00:00.000Z")
+      })
+    ).rejects.toThrow("event_save_failed");
+
+    expect(beforePersist).toHaveBeenCalledTimes(1);
+    expect(rollbackPersist).toHaveBeenCalledTimes(1);
     expect(runtime.requests).toEqual([]);
     await expect(repositories.runEvents.listForRun("run_builder_1")).resolves.toEqual([
       expect.objectContaining({

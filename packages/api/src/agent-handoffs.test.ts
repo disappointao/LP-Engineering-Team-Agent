@@ -187,7 +187,7 @@ describe("agent handoffs", () => {
         state: "ready"
       })
     );
-    await events[0]?.afterPersist?.();
+    await events[0]?.beforePersist?.();
 
     expect(events).toEqual([
       expect.objectContaining({
@@ -245,7 +245,7 @@ describe("agent handoffs", () => {
       role: "builder",
       now: () => new Date("2026-05-15T08:02:00.000Z")
     });
-    await Promise.all(events.map((event) => event.afterPersist?.()));
+    await Promise.all(events.map((event) => event.beforePersist?.()));
 
     expect(context.handoffs.map((handoff) => handoff.id)).toEqual(["handoff_project_level"]);
     await expect(repositories.agentHandoffs.getById("handoff_project_level")).resolves.toEqual(
