@@ -314,19 +314,23 @@ function summarizeTools(input: {
   currentTaskId: string | undefined;
 }): ContextMemoryToolSummary[] {
   return input.observations
-    .map((observation) => ({
-      id: observation.id,
-      runId: observation.runId,
-      ...(observation.taskId ? { taskId: observation.taskId } : {}),
-      toolName: observation.toolName,
-      state: observation.state,
-      outputSummary: sanitizeContextMemoryText(observation.outputSummary),
-      ...(observation.exitCode !== undefined ? { exitCode: observation.exitCode } : {}),
-      ...(observation.errorName ? { errorName: observation.errorName } : {}),
-      createdAt: observation.createdAt,
-      ...(observation.completedAt ? { completedAt: observation.completedAt } : {}),
-      score: scoreTool(observation, input.currentTaskId)
-    }))
+    .map((observation) => {
+      const errorName = toOptionalNonEmptyString(observation.errorName);
+
+      return {
+        id: observation.id,
+        runId: observation.runId,
+        ...(observation.taskId ? { taskId: observation.taskId } : {}),
+        toolName: observation.toolName,
+        state: observation.state,
+        outputSummary: sanitizeContextMemoryText(observation.outputSummary),
+        ...(observation.exitCode !== undefined ? { exitCode: observation.exitCode } : {}),
+        ...(errorName ? { errorName } : {}),
+        createdAt: observation.createdAt,
+        ...(observation.completedAt ? { completedAt: observation.completedAt } : {}),
+        score: scoreTool(observation, input.currentTaskId)
+      };
+    })
     .sort(compareScoredTools);
 }
 
@@ -456,7 +460,7 @@ function toOptionalNonEmptyString(value: string | undefined): string | undefined
 function sanitizeContextMemoryText(value: string): string {
   return value
     .replace(
-      /\b((?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      /\b((?:(?:[a-z][a-z0-9]*[_-])*(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|secret))\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
       `$1${CONTEXT_MEMORY_REDACTION}`
     )
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}\b/giu, `$1${CONTEXT_MEMORY_REDACTION}`)

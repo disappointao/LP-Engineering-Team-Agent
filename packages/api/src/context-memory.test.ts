@@ -141,7 +141,8 @@ describe("context memory", () => {
       id: "message_1",
       taskId: "task_1",
       role: "user",
-      content: "Build loyalty recovery page with secret-token token=secret-token for winback buyers.",
+      content:
+        "Build loyalty recovery page with secret-token token=secret-token OPENAI_API_KEY=plain-openai-value STATIC_DEPLOY_TOKEN=plain-static-value ZHIPU_API_KEY: plain-zhipu-value for winback buyers.",
       createdAt: "2026-05-14T00:01:00.000Z"
     });
 
@@ -151,10 +152,11 @@ describe("context memory", () => {
       taskId: "task_1",
       role: "builder",
       input: {
-        prompt: "Build loyalty recovery page using Bearer sk-test-secret and api_key=secret-token",
+        prompt:
+          "Build loyalty recovery page using Bearer sk-test-secret and api_key=secret-token OPENAI_API_KEY=sk-test-secret STATIC_DEPLOY_TOKEN=query-static-value",
         brief: {
           ...sampleBrief,
-          objective: "Win back buyers without password=secret-token",
+          objective: "Win back buyers without password=secret-token ZHIPU_API_KEY: query-zhipu-value",
           audience: "Dormant loyalty shoppers"
         }
       },
@@ -166,6 +168,14 @@ describe("context memory", () => {
     const serialized = JSON.stringify(memory);
     expect(serialized).not.toContain("secret-token");
     expect(serialized).not.toContain("sk-test-secret");
+    expect(serialized).not.toContain("OPENAI_API_KEY=sk-test-secret");
+    expect(serialized).not.toContain("STATIC_DEPLOY_TOKEN=query-static-value");
+    expect(serialized).not.toContain("ZHIPU_API_KEY: query-zhipu-value");
+    expect(serialized).not.toContain("plain-openai-value");
+    expect(serialized).not.toContain("plain-static-value");
+    expect(serialized).not.toContain("plain-zhipu-value");
+    expect(serialized).not.toContain("query-static-value");
+    expect(serialized).not.toContain("query-zhipu-value");
     expect(memory.messages[0]?.preview).toContain("[REDACTED]");
     expect(memory.messages[0]?.preview).toContain("loyalty");
     expect(memory.retrieval.query).toContain("[REDACTED]");
@@ -365,6 +375,60 @@ describe("context memory", () => {
     expect(serialized).not.toContain("secret-token");
     expect(serialized).not.toContain("<html>");
     expect(serialized).not.toContain("published");
+  });
+
+  it("redacts secret-like values from tool error names", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Deploy landing page",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      state: "failed",
+      startedAt: "2026-05-14T00:01:00.000Z",
+      completedAt: "2026-05-14T00:02:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    await repositories.toolObservations.save({
+      id: "tool_1",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      toolName: "skill:deploy:publish",
+      input: {},
+      outputSummary: "stdout: 0 chars\nstderr: 0 chars",
+      state: "failed",
+      exitCode: 1,
+      errorName: "OPENAI_API_KEY=sk-test-secret",
+      createdAt: "2026-05-14T00:01:30.000Z",
+      completedAt: "2026-05-14T00:02:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      input: {
+        prompt: "Deploy the spring sale landing page"
+      }
+    });
+
+    expect(memory.tools[0]?.errorName).toContain("[REDACTED]");
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("sk-test-secret");
+    expect(serialized).not.toContain("OPENAI_API_KEY=sk-test-secret");
   });
 
   it("summarizes artifacts as metadata without full source", async () => {
