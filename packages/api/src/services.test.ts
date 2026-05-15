@@ -773,8 +773,8 @@ describe("demo workbench service", () => {
     const runner = new RecordingToolCommandRunner({
       state: "failed",
       exitCode: 2,
-      stdout: "",
-      stderr: "permission denied",
+      stdout: "echoed project_1 argument",
+      stderr: "permission denied secret-token",
       errorName: "command_failed"
     });
     const service = new DemoWorkbenchService({
@@ -811,8 +811,10 @@ describe("demo workbench service", () => {
       state: "failed",
       exitCode: 2,
       errorName: "command_failed",
-      outputSummary: "permission denied"
+      outputSummary: "stdout: 25 chars\nstderr: 30 chars"
     });
+    expect(JSON.stringify(result.observation)).not.toContain("permission denied");
+    expect(JSON.stringify(result.observation)).not.toContain("secret-token");
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
       "tool.started",

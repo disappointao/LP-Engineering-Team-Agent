@@ -23,13 +23,17 @@ export function resolveCommandTemplate(
   value: string,
   variables: CommandTemplateVariables
 ): string {
-  return value.replace(TEMPLATE_PATTERN, (_, variableName: string) => {
+  const resolvedValue = value.replace(TEMPLATE_PATTERN, (_, variableName: string) => {
     const resolved = variables[variableName];
     if (resolved === undefined) {
       throw new Error("skill_command_unknown_template_variable");
     }
     return resolved;
   });
+  if (resolvedValue.includes("{{") || resolvedValue.includes("}}")) {
+    throw new Error("skill_command_unknown_template_variable");
+  }
+  return resolvedValue;
 }
 
 export function resolveSkillCommandEnvironment(input: {

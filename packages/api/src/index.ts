@@ -787,7 +787,6 @@ export class DemoWorkbenchService {
         },
         outputSummary: summarizeSkillCommandOutput({
           runnerResult,
-          pageVersion,
           secretValues
         }),
         state: finalState,
@@ -2070,16 +2069,8 @@ function sanitizeRunnerErrorName(
 
 function summarizeSkillCommandOutput(input: {
   runnerResult: ToolCommandRunResult;
-  pageVersion?: PageVersionRecord;
   secretValues: string[];
 }): string {
-  if (!input.pageVersion) {
-    return summarizeCommandOutput(
-      input.runnerResult.stdout,
-      input.runnerResult.stderr,
-      input.secretValues
-    );
-  }
   return summarizeCommandOutput(
     `stdout: ${input.runnerResult.stdout.length} chars`,
     `stderr: ${input.runnerResult.stderr.length} chars`,

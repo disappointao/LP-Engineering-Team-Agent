@@ -27,6 +27,9 @@ describe("skill command execution helpers", () => {
     expect(() => resolveCommandTemplate("{{missing}}", variables)).toThrow(
       "skill_command_unknown_template_variable"
     );
+    expect(() => resolveCommandTemplate("{{artifact-path}}", variables)).toThrow(
+      "skill_command_unknown_template_variable"
+    );
   });
 
   it("resolves static and secret-backed env bindings without persisting secret values", () => {
