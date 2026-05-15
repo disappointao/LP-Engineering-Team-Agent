@@ -5,6 +5,7 @@ import {
   createDefaultModelPolicy,
   type AgentRole,
   type ModelGateway,
+  type ModelContextMemory,
   type ModelRequestContext,
   type ModelRoutingPolicy,
   type ModelResponse
@@ -52,6 +53,7 @@ export interface RuntimeRunContext {
   mcpTools: RuntimeMCPToolContext[];
   approval: RuntimeApprovalContext;
   artifactWorkspace: RuntimeArtifactWorkspace;
+  memory?: ModelContextMemory;
   modelRoutingPolicy?: ModelRoutingPolicy;
 }
 
@@ -336,7 +338,8 @@ function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext 
     artifactWorkspace: {
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
-    }
+    },
+    ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {})
   };
 }
 
@@ -376,9 +379,30 @@ function cloneRuntimeContext(context: RuntimeRunContext): RuntimeRunContext {
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
     },
+    ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {}),
     ...(context.modelRoutingPolicy
       ? { modelRoutingPolicy: cloneModelRoutingPolicy(context.modelRoutingPolicy) }
       : {})
+  };
+}
+
+function cloneRuntimeMemory(memory: ModelContextMemory): ModelContextMemory {
+  return {
+    messages: memory.messages.map((message) => ({ ...message })),
+    runs: memory.runs.map((run) => ({
+      ...run,
+      eventTypes: [...run.eventTypes]
+    })),
+    tools: memory.tools.map((tool) => ({ ...tool })),
+    artifacts: memory.artifacts.map((artifact) => ({
+      ...artifact,
+      files: artifact.files.map((file) => ({ ...file }))
+    })),
+    retrieval: {
+      ...memory.retrieval,
+      selected: [...memory.retrieval.selected],
+      omitted: [...memory.retrieval.omitted]
+    }
   };
 }
 

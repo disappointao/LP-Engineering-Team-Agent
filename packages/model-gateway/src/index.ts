@@ -116,11 +116,75 @@ export interface ModelArtifactWorkspaceContext {
   writableFiles: string[];
 }
 
+export interface ModelContextMemoryMessage {
+  id: string;
+  taskId: string;
+  role: string;
+  preview: string;
+  createdAt: string;
+  score: number;
+}
+
+export interface ModelContextMemoryRun {
+  id: string;
+  taskId: string;
+  role: string;
+  state: string;
+  eventTypes: string[];
+  startedAt: string;
+  completedAt?: string;
+  score: number;
+}
+
+export interface ModelContextMemoryTool {
+  id: string;
+  runId: string;
+  taskId: string;
+  toolName: string;
+  state: string;
+  outputSummary: string;
+  exitCode?: number;
+  createdAt: string;
+  completedAt?: string;
+  score: number;
+}
+
+export interface ModelContextMemoryArtifactFile {
+  name: string;
+  characterCount: number;
+}
+
+export interface ModelContextMemoryArtifact {
+  pageVersionId: string;
+  briefId: string;
+  title: string;
+  objective: string;
+  files: ModelContextMemoryArtifactFile[];
+  createdAt: string;
+  score: number;
+}
+
+export interface ModelContextMemoryRetrieval {
+  query: string;
+  strategy: string;
+  selected: string[];
+  omitted: string[];
+}
+
+export interface ModelContextMemory {
+  messages: ModelContextMemoryMessage[];
+  runs: ModelContextMemoryRun[];
+  tools: ModelContextMemoryTool[];
+  artifacts: ModelContextMemoryArtifact[];
+  retrieval: ModelContextMemoryRetrieval;
+}
+
 export interface ModelRequestContext {
   skills: ModelSkillContext[];
   mcpTools: ModelMCPToolContext[];
   approval: ModelApprovalContext;
   artifactWorkspace: ModelArtifactWorkspaceContext;
+  memory?: ModelContextMemory;
 }
 
 export interface ModelRequest {
@@ -375,6 +439,27 @@ function cloneModelRequestContext(context: ModelRequestContext): ModelRequestCon
     artifactWorkspace: {
       ...context.artifactWorkspace,
       writableFiles: [...context.artifactWorkspace.writableFiles]
+    },
+    ...(context.memory ? { memory: cloneModelContextMemory(context.memory) } : {})
+  };
+}
+
+function cloneModelContextMemory(memory: ModelContextMemory): ModelContextMemory {
+  return {
+    messages: memory.messages.map((message) => ({ ...message })),
+    runs: memory.runs.map((run) => ({
+      ...run,
+      eventTypes: [...run.eventTypes]
+    })),
+    tools: memory.tools.map((tool) => ({ ...tool })),
+    artifacts: memory.artifacts.map((artifact) => ({
+      ...artifact,
+      files: artifact.files.map((file) => ({ ...file }))
+    })),
+    retrieval: {
+      ...memory.retrieval,
+      selected: [...memory.retrieval.selected],
+      omitted: [...memory.retrieval.omitted]
     }
   };
 }

@@ -257,6 +257,39 @@ describe("local agent runtime adapter", () => {
         mode: "filesystem",
         basePath: "/tmp/lp-agent/project_1",
         writableFiles: ["index.html", "styles.css", "script.js"]
+      },
+      memory: {
+        messages: [
+          {
+            id: "message_1",
+            taskId: "task_1",
+            role: "user",
+            preview: "Create a spring sale landing page",
+            createdAt: "2026-05-15T08:00:00.000Z",
+            score: 12
+          }
+        ],
+        runs: [],
+        tools: [
+          {
+            id: "observation_1",
+            runId: "run_skill_command_1",
+            taskId: "task_1",
+            toolName: "static-deploy",
+            state: "completed",
+            outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+            exitCode: 0,
+            createdAt: "2026-05-15T08:02:00.000Z",
+            score: 8
+          }
+        ],
+        artifacts: [],
+        retrieval: {
+          query: "spring sale",
+          strategy: "deterministic-keyword-v0",
+          selected: ["message:message_1", "tool:observation_1"],
+          omitted: []
+        }
       }
     } satisfies RuntimeRunRequest["context"];
 
@@ -304,8 +337,42 @@ describe("local agent runtime adapter", () => {
         mode: "filesystem",
         basePath: "/tmp/lp-agent/project_1",
         writableFiles: ["index.html", "styles.css", "script.js"]
+      },
+      memory: {
+        messages: [
+          {
+            id: "message_1",
+            taskId: "task_1",
+            role: "user",
+            preview: "Create a spring sale landing page",
+            createdAt: "2026-05-15T08:00:00.000Z",
+            score: 12
+          }
+        ],
+        runs: [],
+        tools: [
+          {
+            id: "observation_1",
+            runId: "run_skill_command_1",
+            taskId: "task_1",
+            toolName: "static-deploy",
+            state: "completed",
+            outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+            exitCode: 0,
+            createdAt: "2026-05-15T08:02:00.000Z",
+            score: 8
+          }
+        ],
+        artifacts: [],
+        retrieval: {
+          query: "spring sale",
+          strategy: "deterministic-keyword-v0",
+          selected: ["message:message_1", "tool:observation_1"],
+          omitted: []
+        }
       }
     });
+    expect(result.artifacts?.indexHtml).toContain("Spring essentials, ready today");
   });
 
   it("passes runtime model routing policy into model calls", async () => {

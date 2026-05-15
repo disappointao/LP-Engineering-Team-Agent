@@ -111,6 +111,126 @@ describe("model gateway", () => {
     });
   });
 
+  it("clones context memory into model audit entries defensively", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const memory = {
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          preview: "Create a spring sale landing page",
+          createdAt: "2026-05-15T08:00:00.000Z",
+          score: 12
+        }
+      ],
+      runs: [
+        {
+          id: "run_builder_1",
+          taskId: "task_1",
+          role: "builder",
+          state: "completed",
+          eventTypes: ["run.started", "artifact.created", "run.completed"],
+          startedAt: "2026-05-15T08:01:00.000Z",
+          completedAt: "2026-05-15T08:01:01.000Z",
+          score: 9
+        }
+      ],
+      tools: [
+        {
+          id: "observation_1",
+          runId: "run_skill_command_1",
+          taskId: "task_1",
+          toolName: "static-deploy",
+          state: "completed",
+          outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+          exitCode: 0,
+          createdAt: "2026-05-15T08:02:00.000Z",
+          completedAt: "2026-05-15T08:02:01.000Z",
+          score: 8
+        }
+      ],
+      artifacts: [
+        {
+          pageVersionId: "page_version_1",
+          briefId: "brief_1",
+          title: "Spring Sale",
+          objective: "Convert paid traffic",
+          files: [
+            { name: "index.html", characterCount: 1200 },
+            { name: "styles.css", characterCount: 800 },
+            { name: "script.js", characterCount: 120 }
+          ],
+          createdAt: "2026-05-15T08:03:00.000Z",
+          score: 6
+        }
+      ],
+      retrieval: {
+        query: "spring sale builder",
+        strategy: "deterministic-keyword-v0",
+        selected: ["message:message_1", "run:run_builder_1"],
+        omitted: ["memory:artifacts:budget_exceeded"]
+      }
+    };
+
+    await gateway.complete({
+      role: "builder",
+      prompt: "Build",
+      projectId: "project_1",
+      context: {
+        skills: [],
+        mcpTools: [],
+        approval: { state: "not_required" },
+        artifactWorkspace: {
+          mode: "memory",
+          writableFiles: ["index.html", "styles.css", "script.js"]
+        },
+        memory
+      }
+    });
+
+    memory.messages[0]!.preview = "mutated";
+    memory.retrieval.selected.push("message:mutated");
+
+    expect(gateway.getAuditLog()[0]?.context?.memory).toEqual({
+      messages: [
+        expect.objectContaining({
+          id: "message_1",
+          preview: "Create a spring sale landing page"
+        })
+      ],
+      runs: [
+        expect.objectContaining({
+          id: "run_builder_1",
+          eventTypes: ["run.started", "artifact.created", "run.completed"]
+        })
+      ],
+      tools: [
+        expect.objectContaining({
+          id: "observation_1",
+          outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+          exitCode: 0
+        })
+      ],
+      artifacts: [
+        expect.objectContaining({
+          pageVersionId: "page_version_1",
+          files: [
+            { name: "index.html", characterCount: 1200 },
+            { name: "styles.css", characterCount: 800 },
+            { name: "script.js", characterCount: 120 }
+          ]
+        })
+      ],
+      retrieval: {
+        query: "spring sale builder",
+        strategy: "deterministic-keyword-v0",
+        selected: ["message:message_1", "run:run_builder_1"],
+        omitted: ["memory:artifacts:budget_exceeded"]
+      }
+    });
+  });
+
   it("can be replaced by a provider-neutral gateway implementation", async () => {
     const gateway: ModelGateway = {
       async complete(request) {
