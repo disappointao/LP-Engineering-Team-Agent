@@ -227,4 +227,240 @@ describe("context memory", () => {
     expect(memory.messages[0]?.id).toBe("message_keyword");
     expect(memory.messages[0]?.score).toBeGreaterThan(memory.messages[1]?.score ?? 0);
   });
+
+  it("summarizes failed runs and tool observations without raw output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Deploy landing page",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      state: "failed",
+      startedAt: "2026-05-14T00:01:00.000Z",
+      completedAt: "2026-05-14T00:02:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    await repositories.runEvents.save({
+      id: "event_1",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 1,
+      type: "run.failed",
+      message: "Deployment failed.",
+      payload: {
+        rawOutput: "published secret-token <html>full artifact</html>"
+      },
+      createdAt: "2026-05-14T00:02:00.000Z"
+    });
+    await repositories.toolObservations.save({
+      id: "tool_1",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      toolName: "skill:deploy:publish",
+      input: {
+        rawOutput: "published secret-token <html>full artifact</html>"
+      },
+      outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+      state: "failed",
+      exitCode: 1,
+      errorName: "deploy_failed",
+      createdAt: "2026-05-14T00:01:30.000Z",
+      completedAt: "2026-05-14T00:02:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      input: {
+        prompt: "Deploy the spring sale landing page"
+      }
+    });
+
+    expect(memory.runs).toEqual([
+      expect.objectContaining({
+        id: "run_1",
+        taskId: "task_1",
+        role: "deployer",
+        state: "failed",
+        eventTypes: ["run.failed"]
+      })
+    ]);
+    expect(memory.tools).toEqual([
+      {
+        id: "tool_1",
+        runId: "run_1",
+        taskId: "task_1",
+        toolName: "skill:deploy:publish",
+        state: "failed",
+        outputSummary: "stdout: 47 chars\nstderr: 0 chars",
+        exitCode: 1,
+        errorName: "deploy_failed",
+        createdAt: "2026-05-14T00:01:30.000Z",
+        completedAt: "2026-05-14T00:02:00.000Z",
+        score: expect.any(Number)
+      }
+    ]);
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("secret-token");
+    expect(serialized).not.toContain("<html>");
+    expect(serialized).not.toContain("published");
+  });
+
+  it("summarizes artifacts as metadata without full source", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.briefs.save({
+      id: "brief_1",
+      projectId: "project_1",
+      prompt: "Build a spring sale landing page",
+      brief: {
+        ...sampleBrief,
+        title: "Spring Sale Landing Page",
+        objective: "Convert paid traffic"
+      },
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.pageVersions.save({
+      id: "page_version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>secret-token</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('secret-token');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page",
+        brief: sampleBrief
+      }
+    });
+
+    expect(memory.artifacts).toEqual([
+      {
+        pageVersionId: "page_version_1",
+        briefId: "brief_1",
+        title: "Spring Sale Landing Page",
+        objective: "Convert paid traffic",
+        files: [
+          { name: "index.html", characterCount: 53 },
+          { name: "styles.css", characterCount: 20 },
+          { name: "script.js", characterCount: 28 }
+        ],
+        createdAt: "2026-05-14T00:03:00.000Z",
+        score: expect.any(Number)
+      }
+    ]);
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("<!doctype html>");
+    expect(serialized).not.toContain("console.log");
+    expect(serialized).not.toContain("secret-token");
+  });
+
+  it("records budget omissions when source records exceed limits", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Current build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    for (const id of ["message_1", "message_2", "message_3"]) {
+      await repositories.messages.save({
+        id,
+        taskId: "task_1",
+        role: "assistant",
+        content: `Relevant spring sale note ${id}`,
+        createdAt: `2026-05-14T00:0${id.at(-1)}:00.000Z`
+      });
+    }
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page"
+      },
+      limits: {
+        messages: 1,
+        runs: 0,
+        tools: 0,
+        artifacts: 0
+      }
+    });
+
+    expect(memory.messages).toHaveLength(1);
+    expect(memory.retrieval.omitted).toEqual(
+      expect.arrayContaining([
+        "memory:messages:budget_exceeded",
+        "memory:runs:none",
+        "memory:tools:none",
+        "memory:artifacts:none"
+      ])
+    );
+  });
+
+  it("applies the total memory character budget after source selection", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Current build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    for (const id of ["message_1", "message_2", "message_3"]) {
+      await repositories.messages.save({
+        id,
+        taskId: "task_1",
+        role: "assistant",
+        content: `Spring sale detail ${id} ${"x".repeat(240)}`,
+        createdAt: `2026-05-14T00:0${id.at(-1)}:00.000Z`
+      });
+    }
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page"
+      },
+      limits: {
+        messages: 3,
+        totalCharacters: 520
+      }
+    });
+
+    expect(memory.messages.length).toBeLessThan(3);
+    expect(memory.retrieval.omitted).toContain("memory:total:budget_exceeded");
+  });
 });
