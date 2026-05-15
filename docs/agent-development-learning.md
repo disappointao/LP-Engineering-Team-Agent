@@ -439,13 +439,24 @@ pnpm --filter @lp-agent/model-gateway test
 
 ### 阶段 5：压缩和检索
 
-当历史和工具输出变多后再做：
+当前设计：
+
+- [2026-05-15-context-memory-retrieval-design.md](./superpowers/specs/2026-05-15-context-memory-retrieval-design.md)
+- Stage 5 v0 先做 deterministic summary + keyword retrieval，不做向量数据库、embedding、模型生成摘要或跨项目长期记忆。
+- 目标是把当前 `ContextPack` 里的 `history:not_implemented` 和 `toolObservations:not_implemented` 变成可验证的 `ContextMemory` 注入。
+- `ContextMemory` 会从已有 repository 即时生成 message、run、tool observation 和 artifact metadata 摘要；v0 不新增 summary repository，避免提前处理缓存失效。
+- 检索只在同 project 内发生，当前 task、关键词命中、失败 run/tool 和较新记录会得到更高优先级。
+- memory 注入必须有预算和 trace：例如 `memory:messages:N`、`memory:tools:N`、`memory:tools:budget_exceeded`。
+- 工具 observation 只能注入 `outputSummary`、状态、退出码、错误名和 source id；不能注入 raw stdout/stderr、secret 或完整 artifact 内容。
+
+后续实现时重点关注：
 
 - message summary。
 - run summary。
 - tool output summary。
 - project-scoped retrieval。
-- selected file snippets。
+- artifact metadata summary。
+- selected file snippets 仍后置，必须等文件片段策略、安全预算和源码脱敏规则明确后再做。
 
 学习重点：
 

@@ -152,6 +152,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 4.1 skill command Web loop implementation plan.
    - Read this after the skill command Web loop design when implementing the safe Web command discovery, one-shot approval action, simulated runner injection, sanitized event rendering, and verification flow.
 
+38. `specs/2026-05-15-context-memory-retrieval-design.md`
+   - Stage 5 context memory and deterministic retrieval design.
+   - Read this after the skill command Web loop plan when adding bounded project-scoped message, run, tool observation, and artifact summaries to Context Pack without vector search or model-generated summaries.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
