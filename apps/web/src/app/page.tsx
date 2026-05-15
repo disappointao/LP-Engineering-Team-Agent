@@ -4,6 +4,7 @@ import {
   bindSkillVersionAction,
   createMCPConnectorAction,
   createProjectAction,
+  executeSkillCommandAction,
   createModelProviderAction,
   createSkillDraftAction,
   publishSkillVersionAction,
@@ -98,6 +99,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     pageState.skills.boundSkills.map((boundSkill) => boundSkill.version.id)
   );
   const activeSkillLabel = copy.skillsView.activeCount(activeSkillCount);
+  const currentPageVersionId =
+    pageState.kind === "task_ready"
+      ? pageState.snapshot?.currentPageVersion?.id
+      : undefined;
+  const skillCommands = pageState.skillCommands ?? [];
   const completedSnapshot =
     pageState.kind === "task_ready" &&
     activeTask?.type === "lp_generation" &&
@@ -378,6 +384,63 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         ))
                       ) : (
                         <p>{copy.skillsView.emptyBound}</p>
+                      )}
+                    </section>
+
+                    <section className="skillsList skillCommandsList" aria-labelledby="skill-commands-title">
+                      <div className="skillCommandsHeader">
+                        <div>
+                          <h2 id="skill-commands-title">{copy.skillsView.commandsTitle}</h2>
+                          <p>{copy.skillsView.commandsSubtitle}</p>
+                        </div>
+                        <span>{copy.skillsView.commandSimulationLabel}</span>
+                      </div>
+                      {skillCommands.length > 0 ? (
+                        <div className="skillCommandGrid">
+                          {skillCommands.map((command) => (
+                            <div
+                              className="skillCommandCard"
+                              key={`${command.skillVersionId}:${command.commandId}`}
+                            >
+                              <div>
+                                <strong>{command.commandName}</strong>
+                                <span>{command.skillName}</span>
+                                {command.description ? <p>{command.description}</p> : null}
+                                <small>
+                                  {copy.skillsView.commandPermissionLabel}: {command.permission}
+                                </small>
+                                <small>
+                                  {command.requiresApproval
+                                    ? copy.skillsView.commandApprovalRequired
+                                    : copy.skillsView.commandApprovalNotRequired}
+                                </small>
+                              </div>
+                              <form action={executeSkillCommandAction}>
+                                <input name="projectId" type="hidden" value={activeProject.id} />
+                                <input
+                                  name="skillVersionId"
+                                  type="hidden"
+                                  value={command.skillVersionId}
+                                />
+                                <input
+                                  name="commandId"
+                                  type="hidden"
+                                  value={command.commandId}
+                                />
+                                <input
+                                  name="pageVersionId"
+                                  type="hidden"
+                                  value={currentPageVersionId ?? ""}
+                                />
+                                <button type="submit">
+                                  {copy.skillsView.approveAndSimulate}
+                                </button>
+                              </form>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>{copy.skillsView.emptyCommands}</p>
                       )}
                     </section>
                   </>

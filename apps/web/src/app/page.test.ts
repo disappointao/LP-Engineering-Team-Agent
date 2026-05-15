@@ -12,6 +12,7 @@ const pageMocks = vi.hoisted(() => ({
       boundSkills: [],
       availableVersions: []
     },
+    skillCommands: [],
     models: {
       providers: [],
       routes: [],
@@ -59,6 +60,7 @@ vi.mock("../lib/workbench-store", () => ({
 }));
 
 import HomePage from "./page";
+import { executeSkillCommandAction } from "./actions";
 
 async function renderHomePage({
   searchParams,
@@ -153,6 +155,41 @@ function projectSkillState(reviewState: "draft" | "validated" | "published", ena
   };
 }
 
+const publishedProjectSkill = projectSkillState("published");
+const deploymentBoundSkill = {
+  ...publishedProjectSkill,
+  skill: {
+    ...publishedProjectSkill.skill,
+    id: "skill_static_deploy",
+    name: "Static deploy",
+    type: "deployment"
+  },
+  version: {
+    ...publishedProjectSkill.version,
+    id: "skill_version_deploy",
+    skillId: "skill_static_deploy",
+    manifest: {
+      ...publishedProjectSkill.version.manifest,
+      id: "skill_static_deploy",
+      name: "Static deploy",
+      type: "deployment",
+      permissions: ["deploy:simulate"],
+      commands: [
+        {
+          id: "publish_static",
+          name: "Publish static",
+          description: "Simulate publishing generated static files.",
+          permission: "deploy:simulate",
+          requiresApproval: true,
+          command: "static-deploy",
+          args: ["--project", "{{projectId}}"]
+        }
+      ],
+      reviewState: "published"
+    }
+  }
+};
+
 function setActiveEmptyProjectState() {
   pageMocks.currentProjectId = "project_1";
   pageMocks.pageState = {
@@ -169,6 +206,7 @@ function setActiveEmptyProjectState() {
       boundSkills: [],
       availableVersions: []
     },
+    skillCommands: [],
     models: {
       providers: [],
       routes: [],
@@ -204,6 +242,7 @@ beforeEach(() => {
       boundSkills: [],
       availableVersions: []
     },
+    skillCommands: [],
     models: {
       providers: [],
       routes: [],
@@ -1073,6 +1112,96 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Acme Brand Landing Page Sections");
     expect(text).toContain("Published");
     expect(text).toContain("1 active skill");
+  });
+
+  it("renders project skill command cards with simulated approval forms", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [deploymentBoundSkill],
+        availableVersions: []
+      },
+      skillCommands: [
+        {
+          skillId: "skill_static_deploy",
+          skillName: "Static deploy",
+          skillVersionId: "skill_version_deploy",
+          commandId: "publish_static",
+          commandName: "Publish static",
+          description: "Simulate publishing generated static files.",
+          permission: "deploy:simulate",
+          requiresApproval: true
+        }
+      ]
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+    const forms = collectElements(page, "form");
+    const inputs = collectElements(page, "input");
+
+    expect(text).toContain("Skill Commands");
+    expect(text).toContain("Approve and simulate");
+    expect(text).toContain("Simulation only");
+    expect(text).toContain("Publish static");
+    expect(text).toContain("deploy:simulate");
+    expect(forms.some((form) => form.props?.action === executeSkillCommandAction)).toBe(true);
+    expect(
+      inputs.some(
+        (input) => input.props?.name === "commandId" && input.props?.value === "publish_static"
+      )
+    ).toBe(true);
+  });
+
+  it("renders localized Chinese skill command copy", async () => {
+    pageMocks.acceptLanguage = "zh-CN,zh;q=0.9";
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "春季活动",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [deploymentBoundSkill],
+        availableVersions: []
+      },
+      skillCommands: [
+        {
+          skillId: "skill_static_deploy",
+          skillName: "Static deploy",
+          skillVersionId: "skill_version_deploy",
+          commandId: "publish_static",
+          commandName: "Publish static",
+          permission: "deploy:simulate",
+          requiresApproval: true
+        }
+      ]
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+
+    expect(text).toContain("技能命令");
+    expect(text).toContain("批准并模拟执行");
+    expect(text).toContain("仅模拟执行");
   });
 
   it("shows the active bound skill count in the workbench shell", async () => {

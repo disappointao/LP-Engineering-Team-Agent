@@ -92,6 +92,14 @@ export interface WorkbenchCopy {
     disable: string;
     emptyVersions: string;
     emptyBound: string;
+    commandsTitle: string;
+    commandsSubtitle: string;
+    commandPermissionLabel: string;
+    commandApprovalRequired: string;
+    commandApprovalNotRequired: string;
+    commandSimulationLabel: string;
+    approveAndSimulate: string;
+    emptyCommands: string;
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
   };
@@ -370,6 +378,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       disable: "Disable",
       emptyVersions: "No skill versions yet.",
       emptyBound: "No project skills bound yet.",
+      commandsTitle: "Skill Commands",
+      commandsSubtitle: "Run published deployment skill commands through a simulated Web runner.",
+      commandPermissionLabel: "Permission",
+      commandApprovalRequired: "One-shot approval required",
+      commandApprovalNotRequired: "Approval still required in this Web version",
+      commandSimulationLabel: "Simulation only",
+      approveAndSimulate: "Approve and simulate",
+      emptyCommands: "No executable deployment skill commands are bound to this project.",
       statusLabels: {
         draft: "Draft",
         validated: "Validated",
@@ -723,6 +739,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       disable: "停用",
       emptyVersions: "暂无技能版本。",
       emptyBound: "暂无已绑定项目技能。",
+      commandsTitle: "技能命令",
+      commandsSubtitle: "通过 Web 模拟运行器执行已发布部署技能声明的命令。",
+      commandPermissionLabel: "权限",
+      commandApprovalRequired: "需要一次性批准",
+      commandApprovalNotRequired: "当前 Web 版本仍需要批准",
+      commandSimulationLabel: "仅模拟执行",
+      approveAndSimulate: "批准并模拟执行",
+      emptyCommands: "当前项目暂无已绑定的可执行部署技能命令。",
       statusLabels: {
         draft: "草稿",
         validated: "已校验",
