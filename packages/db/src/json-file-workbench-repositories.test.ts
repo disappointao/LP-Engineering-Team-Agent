@@ -419,6 +419,58 @@ describe("json-file workbench repositories", () => {
     ]);
   });
 
+  it("reopens agent handoffs from disk", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempRoot);
+    const filePath = join(tempRoot, "handoffs.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    await first.agentHandoffs.save({
+      id: "handoff_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      fromRunId: "run_builder_1",
+      fromRole: "builder",
+      toRole: "reviewer",
+      state: "ready",
+      summary: "Builder produced static LP artifacts",
+      artifactRefs: {
+        briefId: "brief_1",
+        pageVersionId: "version_1"
+      },
+      createdAt: "2026-05-15T08:00:00.000Z",
+      updatedAt: "2026-05-15T08:00:00.000Z"
+    });
+
+    const second = createJsonFileWorkbenchRepositories({
+      filePath: join(tempRoot, ".", "handoffs.json")
+    });
+
+    await expect(
+      second.agentHandoffs.listInbound({
+        projectId: "project_1",
+        taskId: "task_1",
+        toRole: "reviewer"
+      })
+    ).resolves.toEqual([
+      {
+        id: "handoff_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_builder_1",
+        fromRole: "builder",
+        toRole: "reviewer",
+        state: "ready",
+        summary: "Builder produced static LP artifacts",
+        artifactRefs: {
+          briefId: "brief_1",
+          pageVersionId: "version_1"
+        },
+        createdAt: "2026-05-15T08:00:00.000Z",
+        updatedAt: "2026-05-15T08:00:00.000Z"
+      }
+    ]);
+  });
+
   it("creates parent directories and writes readable JSON", async () => {
     const root = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(root);

@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
+import type { AgentRole } from "@lp-agent/model-gateway";
 import type {
+  AgentHandoffRecord,
+  AgentHandoffRepository,
   BriefRecord,
   BriefRepository,
   DeploymentRepository,
@@ -61,6 +64,7 @@ interface JsonFileWorkbenchState {
   runs: RunRecord[];
   runEvents: RunEventRecord[];
   toolObservations: ToolObservationRecord[];
+  agentHandoffs: AgentHandoffRecord[];
 }
 
 const writeQueuesByFilePath = new Map<string, Promise<void>>();
@@ -98,6 +102,7 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly runs: RunRepository;
   readonly runEvents: RunEventRepository;
   readonly toolObservations: ToolObservationRepository;
+  readonly agentHandoffs: AgentHandoffRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -117,6 +122,7 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.runs = new JsonFileRunRepository(filePath);
     this.runEvents = new JsonFileRunEventRepository(filePath);
     this.toolObservations = new JsonFileToolObservationRepository(filePath);
+    this.agentHandoffs = new JsonFileAgentHandoffRepository(filePath);
   }
 }
 
@@ -222,6 +228,73 @@ class JsonFileToolObservationRepository implements ToolObservationRepository {
     return state.toolObservations
       .filter(matches)
       .sort(compareToolObservationsByTimeline)
+      .map(copy);
+  }
+}
+
+class JsonFileAgentHandoffRepository implements AgentHandoffRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(handoff: AgentHandoffRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.agentHandoffs = upsertBy(
+        state.agentHandoffs,
+        copy(handoff),
+        (record) => record.id === handoff.id
+      );
+    });
+  }
+
+  async getById(handoffId: string): Promise<AgentHandoffRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.agentHandoffs.find((handoff) => handoff.id === handoffId));
+  }
+
+  async listForProject(projectId: string): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs((handoff) => handoff.projectId === projectId);
+  }
+
+  async listForTask(taskId: string): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs((handoff) => handoff.taskId === taskId);
+  }
+
+  async listInbound(input: {
+    projectId: string;
+    taskId?: string;
+    toRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(
+      (handoff) =>
+        handoff.projectId === input.projectId &&
+        handoff.toRole === input.toRole &&
+        (input.taskId === undefined || handoff.taskId === input.taskId)
+    );
+  }
+
+  async listOutbound(input: {
+    projectId: string;
+    taskId?: string;
+    fromRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(
+      (handoff) =>
+        handoff.projectId === input.projectId &&
+        handoff.fromRole === input.fromRole &&
+        (input.taskId === undefined || handoff.taskId === input.taskId)
+    );
+  }
+
+  async listAll(): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(() => true);
+  }
+
+  private async sortedHandoffs(
+    matches: (handoff: AgentHandoffRecord) => boolean
+  ): Promise<AgentHandoffRecord[]> {
+    const state = await readState(this.filePath);
+    return state.agentHandoffs
+      .filter(matches)
+      .sort(compareAgentHandoffsByTimeline)
       .map(copy);
   }
 }
@@ -677,7 +750,8 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       mcpToolApprovals: parsed.mcpToolApprovals ?? [],
       runs: parsed.runs ?? [],
       runEvents: parsed.runEvents ?? [],
-      toolObservations: parsed.toolObservations ?? []
+      toolObservations: parsed.toolObservations ?? [],
+      agentHandoffs: parsed.agentHandoffs ?? []
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -713,7 +787,8 @@ function emptyState(): JsonFileWorkbenchState {
     mcpToolApprovals: [],
     runs: [],
     runEvents: [],
-    toolObservations: []
+    toolObservations: [],
+    agentHandoffs: []
   };
 }
 
@@ -760,6 +835,17 @@ function compareToolObservationsByTimeline(
   return (
     a.createdAt.localeCompare(b.createdAt) ||
     a.runId.localeCompare(b.runId) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareAgentHandoffsByTimeline(
+  a: AgentHandoffRecord,
+  b: AgentHandoffRecord
+): number {
+  return (
+    a.updatedAt.localeCompare(b.updatedAt) ||
+    a.createdAt.localeCompare(b.createdAt) ||
     a.id.localeCompare(b.id)
   );
 }

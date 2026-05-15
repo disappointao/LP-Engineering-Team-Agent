@@ -153,6 +153,7 @@ export type RunRecordState =
   | "completed"
   | "cancelled";
 export type ToolObservationState = "completed" | "failed";
+export type AgentHandoffState = "ready" | "blocked" | "consumed";
 
 export interface RunRecord {
   id: string;
@@ -193,6 +194,26 @@ export interface ToolObservationRecord {
   errorName?: string;
   createdAt: string;
   completedAt?: string;
+}
+
+export interface AgentHandoffArtifactRefs {
+  briefId?: string;
+  pageVersionId?: string;
+}
+
+export interface AgentHandoffRecord {
+  id: string;
+  projectId: string;
+  taskId?: string;
+  fromRunId: string;
+  fromRole: AgentRole;
+  toRole: AgentRole;
+  state: AgentHandoffState;
+  summary: string;
+  blockingReason?: string;
+  artifactRefs?: AgentHandoffArtifactRefs;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProjectRepository {
@@ -321,6 +342,24 @@ export interface ToolObservationRepository {
   listAll(): Promise<ToolObservationRecord[]>;
 }
 
+export interface AgentHandoffRepository {
+  save(handoff: AgentHandoffRecord): Promise<void>;
+  getById(handoffId: string): Promise<AgentHandoffRecord | undefined>;
+  listForProject(projectId: string): Promise<AgentHandoffRecord[]>;
+  listForTask(taskId: string): Promise<AgentHandoffRecord[]>;
+  listInbound(input: {
+    projectId: string;
+    taskId?: string;
+    toRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]>;
+  listOutbound(input: {
+    projectId: string;
+    taskId?: string;
+    fromRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]>;
+  listAll(): Promise<AgentHandoffRecord[]>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   briefs: BriefRepository;
@@ -339,6 +378,7 @@ export interface WorkbenchRepositories {
   runs: RunRepository;
   runEvents: RunEventRepository;
   toolObservations: ToolObservationRepository;
+  agentHandoffs: AgentHandoffRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -363,6 +403,7 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly runs = new InMemoryRunRepository();
   readonly runEvents = new InMemoryRunEventRepository();
   readonly toolObservations = new InMemoryToolObservationRepository();
+  readonly agentHandoffs = new InMemoryAgentHandoffRepository();
 }
 
 class InMemoryRunRepository implements RunRepository {
@@ -458,6 +499,64 @@ class InMemoryToolObservationRepository implements ToolObservationRepository {
       .filter(matches)
       .sort(compareToolObservationsByTimeline)
       .map(copyToolObservation);
+  }
+}
+
+class InMemoryAgentHandoffRepository implements AgentHandoffRepository {
+  private readonly handoffs = new Map<string, AgentHandoffRecord>();
+
+  async save(handoff: AgentHandoffRecord): Promise<void> {
+    this.handoffs.set(handoff.id, copyAgentHandoff(handoff));
+  }
+
+  async getById(handoffId: string): Promise<AgentHandoffRecord | undefined> {
+    const handoff = this.handoffs.get(handoffId);
+    return handoff ? copyAgentHandoff(handoff) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs((handoff) => handoff.projectId === projectId);
+  }
+
+  async listForTask(taskId: string): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs((handoff) => handoff.taskId === taskId);
+  }
+
+  async listInbound(input: {
+    projectId: string;
+    taskId?: string;
+    toRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(
+      (handoff) =>
+        handoff.projectId === input.projectId &&
+        handoff.toRole === input.toRole &&
+        (input.taskId === undefined || handoff.taskId === input.taskId)
+    );
+  }
+
+  async listOutbound(input: {
+    projectId: string;
+    taskId?: string;
+    fromRole: AgentRole;
+  }): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(
+      (handoff) =>
+        handoff.projectId === input.projectId &&
+        handoff.fromRole === input.fromRole &&
+        (input.taskId === undefined || handoff.taskId === input.taskId)
+    );
+  }
+
+  async listAll(): Promise<AgentHandoffRecord[]> {
+    return this.sortedHandoffs(() => true);
+  }
+
+  private sortedHandoffs(matches: (handoff: AgentHandoffRecord) => boolean): AgentHandoffRecord[] {
+    return [...this.handoffs.values()]
+      .filter(matches)
+      .sort(compareAgentHandoffsByTimeline)
+      .map(copyAgentHandoff);
   }
 }
 
@@ -863,6 +962,17 @@ function compareToolObservationsByTimeline(
   );
 }
 
+function compareAgentHandoffsByTimeline(
+  a: AgentHandoffRecord,
+  b: AgentHandoffRecord
+): number {
+  return (
+    a.updatedAt.localeCompare(b.updatedAt) ||
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
 function copyRun(run: RunRecord): RunRecord {
   return {
     ...run,
@@ -884,6 +994,13 @@ function copyToolObservation(observation: ToolObservationRecord): ToolObservatio
   return {
     ...observation,
     input: structuredClone(observation.input)
+  };
+}
+
+function copyAgentHandoff(handoff: AgentHandoffRecord): AgentHandoffRecord {
+  return {
+    ...handoff,
+    ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {})
   };
 }
 

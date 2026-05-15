@@ -350,6 +350,87 @@ describe("in-memory workbench repositories", () => {
     ]);
   });
 
+  it("persists agent handoffs with defensive copies and role-aware filters", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const handoff = {
+      id: "handoff_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      fromRunId: "run_planner_1",
+      fromRole: "planner" as const,
+      toRole: "builder" as const,
+      state: "ready" as const,
+      summary: "Planner produced LP brief",
+      artifactRefs: {
+        briefId: "brief_1"
+      },
+      createdAt: "2026-05-15T08:00:00.000Z",
+      updatedAt: "2026-05-15T08:00:00.000Z"
+    };
+    const otherProject = {
+      ...handoff,
+      id: "handoff_other",
+      projectId: "project_2",
+      fromRunId: "run_planner_2",
+      updatedAt: "2026-05-15T08:01:00.000Z"
+    };
+
+    await repositories.agentHandoffs.save(handoff);
+    await repositories.agentHandoffs.save(otherProject);
+    handoff.summary = "mutated";
+    handoff.artifactRefs!.briefId = "mutated";
+
+    const saved = await repositories.agentHandoffs.getById("handoff_1");
+    expect(saved).toEqual({
+      id: "handoff_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      fromRunId: "run_planner_1",
+      fromRole: "planner",
+      toRole: "builder",
+      state: "ready",
+      summary: "Planner produced LP brief",
+      artifactRefs: {
+        briefId: "brief_1"
+      },
+      createdAt: "2026-05-15T08:00:00.000Z",
+      updatedAt: "2026-05-15T08:00:00.000Z"
+    });
+    saved!.artifactRefs!.briefId = "mutated-again";
+
+    await expect(
+      repositories.agentHandoffs.listInbound({
+        projectId: "project_1",
+        taskId: "task_1",
+        toRole: "builder"
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "handoff_1",
+        artifactRefs: {
+          briefId: "brief_1"
+        }
+      })
+    ]);
+    await expect(
+      repositories.agentHandoffs.listOutbound({
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRole: "planner"
+      })
+    ).resolves.toEqual([expect.objectContaining({ id: "handoff_1" })]);
+    await expect(repositories.agentHandoffs.listForProject("project_1")).resolves.toEqual([
+      expect.objectContaining({ id: "handoff_1" })
+    ]);
+    await expect(repositories.agentHandoffs.getById("handoff_1")).resolves.toEqual(
+      expect.objectContaining({
+        artifactRefs: {
+          briefId: "brief_1"
+        }
+      })
+    );
+  });
+
   it("persists skills, versions, and bindings with defensive copies", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const skill: SkillRecord = {
