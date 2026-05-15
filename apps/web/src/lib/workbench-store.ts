@@ -60,7 +60,8 @@ export type SkillFlowErrorCode =
   | "skill_version_not_published"
   | "skill_binding_not_found"
   | "publish_not_allowed"
-  | "skill_operation_failed";
+  | "skill_operation_failed"
+  | SkillCommandFlowErrorCode;
 
 export type SkillCommandFlowErrorCode =
   | "project_not_found"

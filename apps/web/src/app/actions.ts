@@ -42,6 +42,7 @@ function parseAgentRole(
 }
 
 const maxSkillContentBytes = 200000;
+const localWebApprovalUserId = "local-web-user";
 const binarySignatures = [
   [0x50, 0x4b, 0x03, 0x04],
   [0x50, 0x4b, 0x05, 0x06],
@@ -260,6 +261,29 @@ export async function setSkillBindingEnabledAction(formData: FormData): Promise<
   if (projectId) {
     await setCurrentProjectId(projectId);
   }
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function executeSkillCommandAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  if (!projectId) {
+    redirectToSkillsWithError("project_not_found");
+  }
+
+  const pageVersionId = String(formData.get("pageVersionId") ?? "").trim();
+  const result = await getWebWorkbenchStore().executeSkillCommand({
+    projectId,
+    skillVersionId: String(formData.get("skillVersionId") ?? ""),
+    commandId: String(formData.get("commandId") ?? ""),
+    ...(pageVersionId ? { pageVersionId } : {}),
+    approvedByUserId: localWebApprovalUserId
+  });
+  if (!result.ok) {
+    redirectToSkillsWithError(result.error);
+  }
+
+  await setCurrentProjectId(projectId);
   revalidatePath("/");
   redirect("/?view=skills");
 }

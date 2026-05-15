@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   publishSkillVersion: vi.fn(),
   bindSkillVersionToProject: vi.fn(),
   setProjectSkillBindingEnabled: vi.fn(),
+  executeSkillCommand: vi.fn(),
   createModelProvider: vi.fn(),
   setModelProviderEnabled: vi.fn(),
   upsertProjectModelRoute: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock("../lib/workbench-store", () => ({
     publishSkillVersion: mocks.publishSkillVersion,
     bindSkillVersionToProject: mocks.bindSkillVersionToProject,
     setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
+    executeSkillCommand: mocks.executeSkillCommand,
     createModelProvider: mocks.createModelProvider,
     setModelProviderEnabled: mocks.setModelProviderEnabled,
     upsertProjectModelRoute: mocks.upsertProjectModelRoute,
@@ -61,6 +63,7 @@ import {
   createModelProviderAction,
   createProjectAction,
   createSkillDraftAction,
+  executeSkillCommandAction,
   publishSkillVersionAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
@@ -114,6 +117,15 @@ function buildSkillForm(input: Record<string, string> = {}): FormData {
   return formData;
 }
 
+function buildSkillCommandForm(input: Record<string, string> = {}): FormData {
+  const formData = new FormData();
+  formData.set("projectId", input.projectId ?? "project_2");
+  formData.set("skillVersionId", input.skillVersionId ?? "skill_version_1");
+  formData.set("commandId", input.commandId ?? "publish_static");
+  formData.set("pageVersionId", input.pageVersionId ?? "version_1");
+  return formData;
+}
+
 async function expectRedirect(promise: Promise<void>, url: string) {
   await expect(promise).rejects.toThrow(`NEXT_REDIRECT:${url}`);
   expect(mocks.redirect).toHaveBeenCalledWith(url);
@@ -149,6 +161,14 @@ describe("submitPromptAction", () => {
     mocks.setProjectSkillBindingEnabled.mockResolvedValue({
       ok: true,
       value: { id: "skill_binding_1" }
+    });
+    mocks.executeSkillCommand.mockReset();
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_skill_command_1" },
+        observation: { id: "tool_observation_1" }
+      }
     });
     mocks.createModelProvider.mockReset();
     mocks.createModelProvider.mockResolvedValue({
@@ -475,6 +495,62 @@ describe("submitPromptAction", () => {
 
     expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("executes a skill command with local one-shot approval", async () => {
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_skill_command_1" },
+        observation: { id: "tool_observation_1" }
+      }
+    });
+
+    await expectRedirect(executeSkillCommandAction(buildSkillCommandForm()), "/?view=skills");
+
+    expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
+      projectId: "project_2",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      pageVersionId: "version_1",
+      approvedByUserId: "local-web-user"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_2");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("omits blank page version ids when executing skill commands", async () => {
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_skill_command_1" },
+        observation: { id: "tool_observation_1" }
+      }
+    });
+
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm({ pageVersionId: "" })),
+      "/?view=skills"
+    );
+
+    expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
+      projectId: "project_2",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      approvedByUserId: "local-web-user"
+    });
+  });
+
+  it("redirects skill command actions with stable command errors", async () => {
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: false,
+      error: "skill_command_not_bound"
+    });
+
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm()),
+      "/?view=skills&skillError=skill_command_not_bound"
+    );
   });
 
   it("creates a model provider and redirects to the models view", async () => {
