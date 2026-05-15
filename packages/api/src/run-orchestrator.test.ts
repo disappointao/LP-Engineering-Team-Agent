@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import {
   createDefaultRuntimeContext,
@@ -240,6 +240,45 @@ describe("run agent step finalization", () => {
         state: "failed"
       })
     );
+  });
+
+  it("does not run pre-runtime afterPersist when draft validation fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = createTestService();
+    const afterPersist = vi.fn(async () => undefined);
+
+    await expect(
+      runAgentStep({
+        repositories,
+        service,
+        runtime,
+        runId: "run_builder_1",
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Build"
+        },
+        beforeRuntime: async () => [
+          {
+            type: "",
+            message: "",
+            payload: {},
+            afterPersist
+          }
+        ],
+        now: () => new Date("2026-05-15T08:00:00.000Z")
+      })
+    ).rejects.toThrow();
+
+    expect(afterPersist).not.toHaveBeenCalled();
+    expect(runtime.requests).toEqual([]);
+    await expect(repositories.runEvents.listForRun("run_builder_1")).resolves.toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        type: "run.failed"
+      })
+    ]);
   });
 });
 

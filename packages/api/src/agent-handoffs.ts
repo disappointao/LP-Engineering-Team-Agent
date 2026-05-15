@@ -42,6 +42,7 @@ export interface RunEventDraft {
   type: string;
   message: string;
   payload: Record<string, unknown>;
+  afterPersist?: () => Promise<void>;
 }
 
 export interface AssembleRuntimeHandoffsResult {
@@ -149,7 +150,9 @@ export async function assembleRuntimeHandoffs(input: {
       fromRole: input.role
     })
   ]);
-  const deduped = dedupeHandoffs([...inbound, ...outbound]);
+  const deduped = dedupeHandoffs([...inbound, ...outbound]).filter((handoff) =>
+    matchesTaskScope(handoff, input.taskId)
+  );
   const selected = deduped.slice(0, limit).map(toRuntimeHandoffSummary);
   return {
     handoffs: selected.map((handoff) => RuntimeHandoffSummarySchema.parse(handoff)),
@@ -176,17 +179,26 @@ export async function markInboundHandoffsConsumed(input: {
     taskId: input.taskId,
     toRole: input.role
   });
-  const ready = inbound.filter((handoff) => handoff.state === "ready");
+  const ready = inbound.filter(
+    (handoff) => handoff.state === "ready" && matchesTaskScope(handoff, input.taskId)
+  );
   const timestamp = input.now().toISOString();
   const events: RunEventDraft[] = [];
   for (const handoff of ready) {
     const consumed = AgentHandoffRecordSchema.parse({
       ...handoff,
       state: "consumed",
+      summary: sanitizeAndBoundHandoffText(handoff.summary),
+      ...(handoff.blockingReason
+        ? { blockingReason: sanitizeAndBoundHandoffText(handoff.blockingReason) }
+        : {}),
+      ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {}),
       updatedAt: timestamp
     });
-    await input.repositories.agentHandoffs.save(consumed);
-    events.push(toHandoffRunEventDraft(consumed));
+    events.push({
+      ...toHandoffRunEventDraft(consumed),
+      afterPersist: () => input.repositories.agentHandoffs.save(consumed)
+    });
   }
   return events;
 }
@@ -200,8 +212,10 @@ export function toRuntimeHandoffSummary(
     fromRole: handoff.fromRole,
     toRole: handoff.toRole,
     state: handoff.state,
-    summary: handoff.summary,
-    ...(handoff.blockingReason ? { blockingReason: handoff.blockingReason } : {}),
+    summary: sanitizeAndBoundHandoffText(handoff.summary),
+    ...(handoff.blockingReason
+      ? { blockingReason: sanitizeAndBoundHandoffText(handoff.blockingReason) }
+      : {}),
     ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {}),
     updatedAt: handoff.updatedAt
   });
@@ -221,10 +235,16 @@ function toHandoffEventPayload(handoff: AgentHandoffRecord): Record<string, unkn
     fromRole: handoff.fromRole,
     toRole: handoff.toRole,
     state: handoff.state,
-    summary: handoff.summary,
-    ...(handoff.blockingReason ? { blockingReason: handoff.blockingReason } : {}),
+    summary: sanitizeAndBoundHandoffText(handoff.summary),
+    ...(handoff.blockingReason
+      ? { blockingReason: sanitizeAndBoundHandoffText(handoff.blockingReason) }
+      : {}),
     ...(handoff.artifactRefs ? { artifactRefs: { ...handoff.artifactRefs } } : {})
   };
+}
+
+function matchesTaskScope(handoff: AgentHandoffRecord, taskId: string | undefined): boolean {
+  return taskId === undefined ? handoff.taskId === undefined : handoff.taskId === taskId;
 }
 
 function dedupeHandoffs(handoffs: AgentHandoffRecord[]): AgentHandoffRecord[] {

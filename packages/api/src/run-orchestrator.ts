@@ -51,6 +51,7 @@ export interface RunEventDraft {
   type: string;
   message: string;
   payload: Record<string, unknown>;
+  afterPersist?: () => Promise<void>;
 }
 
 export interface RunAgentStepFinalizeInput {
@@ -117,6 +118,9 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
         });
         await input.repositories.runEvents.save(event);
         preRuntimeEvents.push(event);
+        if (draft.afterPersist) {
+          await draft.afterPersist();
+        }
       }
     }
     result = await input.runtime.run({

@@ -6,7 +6,8 @@ import {
   createAgentHandoffRecord,
   markInboundHandoffsConsumed,
   sanitizeHandoffText,
-  toHandoffRunEventDraft
+  toHandoffRunEventDraft,
+  toRuntimeHandoffSummary
 } from "./agent-handoffs";
 
 describe("agent handoffs", () => {
@@ -70,6 +71,37 @@ describe("agent handoffs", () => {
         }
       }
     });
+  });
+
+  it("sanitizes unsafe stored handoffs before runtime summaries and events", () => {
+    const unsafe = {
+      id: "handoff_unsafe",
+      projectId: "project_1",
+      fromRunId: "run_reviewer_1",
+      fromRole: "reviewer" as const,
+      toRole: "deployer" as const,
+      state: "blocked" as const,
+      summary: "Reviewer saw OPENAI_API_KEY=sk-test-secret",
+      blockingReason: "<html>secret-token</html>",
+      createdAt: "2026-05-15T08:00:00.000Z",
+      updatedAt: "2026-05-15T08:00:00.000Z"
+    };
+
+    const event = toHandoffRunEventDraft(unsafe);
+    const runtimeSummary = toRuntimeHandoffSummary(unsafe);
+    const serialized = JSON.stringify({ event, runtimeSummary });
+
+    expect(event.payload).toMatchObject({
+      summary: "Reviewer saw OPENAI_API_KEY=[REDACTED]",
+      blockingReason: "[artifact omitted]"
+    });
+    expect(runtimeSummary).toMatchObject({
+      summary: "Reviewer saw OPENAI_API_KEY=[REDACTED]",
+      blockingReason: "[artifact omitted]"
+    });
+    expect(serialized).not.toContain("sk-test-secret");
+    expect(serialized).not.toContain("secret-token");
+    expect(serialized).not.toContain("<html>");
   });
 
   it("selects role-relevant handoffs for runtime context", async () => {
@@ -150,6 +182,13 @@ describe("agent handoffs", () => {
       now: () => new Date("2026-05-15T08:01:00.000Z")
     });
 
+    await expect(repositories.agentHandoffs.getById("handoff_1")).resolves.toEqual(
+      expect.objectContaining({
+        state: "ready"
+      })
+    );
+    await events[0]?.afterPersist?.();
+
     expect(events).toEqual([
       expect.objectContaining({
         type: "handoff.consumed",
@@ -164,6 +203,56 @@ describe("agent handoffs", () => {
         state: "consumed",
         updatedAt: "2026-05-15T08:01:00.000Z"
       })
+    );
+  });
+
+  it("keeps omitted task scope limited to project-level handoffs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_project_level",
+        projectId: "project_1",
+        fromRunId: "run_planner_1",
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Project-level handoff",
+        now: () => new Date("2026-05-15T08:00:00.000Z")
+      })
+    );
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_task_level",
+        projectId: "project_1",
+        taskId: "task_2",
+        fromRunId: "run_planner_2",
+        fromRole: "planner",
+        toRole: "builder",
+        state: "ready",
+        summary: "Task-level handoff",
+        now: () => new Date("2026-05-15T08:01:00.000Z")
+      })
+    );
+
+    const context = await assembleRuntimeHandoffs({
+      repositories,
+      projectId: "project_1",
+      role: "builder"
+    });
+    const events = await markInboundHandoffsConsumed({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      now: () => new Date("2026-05-15T08:02:00.000Z")
+    });
+    await Promise.all(events.map((event) => event.afterPersist?.()));
+
+    expect(context.handoffs.map((handoff) => handoff.id)).toEqual(["handoff_project_level"]);
+    await expect(repositories.agentHandoffs.getById("handoff_project_level")).resolves.toEqual(
+      expect.objectContaining({ state: "consumed" })
+    );
+    await expect(repositories.agentHandoffs.getById("handoff_task_level")).resolves.toEqual(
+      expect.objectContaining({ state: "ready" })
     );
   });
 
