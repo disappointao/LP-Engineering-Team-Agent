@@ -25,7 +25,6 @@ export const DEFAULT_CONTEXT_MEMORY_LIMITS: ContextMemoryLimits = {
 
 const CURRENT_TASK_SCORE = 100;
 const KEYWORD_MATCH_SCORE = 10;
-const FAILED_RECORD_SCORE = 20;
 const RECENCY_SCORE_DIVISOR = 1_000_000_000_000_000;
 
 const ContextMemoryFileSchema = z.object({
@@ -188,10 +187,9 @@ function scoreMessage(
   );
   const currentTaskScore =
     currentTaskId !== undefined && message.taskId === currentTaskId ? CURRENT_TASK_SCORE : 0;
-  const failedBoostPlaceholder = 0 * FAILED_RECORD_SCORE;
   const recencyTieBreak = Date.parse(message.createdAt) / RECENCY_SCORE_DIVISOR;
 
-  return currentTaskScore + keywordScore + failedBoostPlaceholder + recencyTieBreak;
+  return currentTaskScore + keywordScore + recencyTieBreak;
 }
 
 function compareScoredMessages(

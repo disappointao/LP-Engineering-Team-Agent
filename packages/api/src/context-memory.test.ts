@@ -127,7 +127,7 @@ describe("context memory", () => {
     );
   });
 
-  it("ranks current task and keyword matched messages before older non-matches", async () => {
+  it("ranks current task non-matches before non-current non-matches", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.tasks.save({
       id: "task_current",
@@ -138,26 +138,74 @@ describe("context memory", () => {
       createdAt: "2026-05-14T00:00:00.000Z"
     });
     await repositories.tasks.save({
-      id: "task_old",
-      title: "Old build",
+      id: "task_other",
+      title: "Other build",
       type: "lp_generation",
       status: "complete",
       projectId: "project_1",
-      createdAt: "2026-05-01T00:00:00.000Z"
+      createdAt: "2026-05-14T00:00:00.000Z"
     });
     await repositories.messages.save({
-      id: "message_match",
+      id: "message_current",
       taskId: "task_current",
       role: "assistant",
-      content: "Use a spring sale offer with a strong returning customers CTA.",
+      content: "Draft a neutral page about winter inventory.",
       createdAt: "2026-05-14T00:01:00.000Z"
     });
     await repositories.messages.save({
-      id: "message_old",
-      taskId: "task_old",
+      id: "message_other",
+      taskId: "task_other",
       role: "assistant",
       content: "Draft a neutral page about winter inventory.",
-      createdAt: "2026-05-01T00:01:00.000Z"
+      createdAt: "2026-05-14T00:01:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      taskId: "task_current",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page"
+      },
+      now: () => new Date("2026-05-15T00:00:00.000Z")
+    });
+
+    expect(memory.messages[0]?.id).toBe("message_current");
+    expect(memory.messages[0]?.score).toBeGreaterThan(memory.messages[1]?.score ?? 0);
+  });
+
+  it("ranks non-current keyword matches before non-current non-matches", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.tasks.save({
+      id: "task_keyword",
+      title: "Keyword build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_neutral",
+      title: "Neutral build",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_keyword",
+      taskId: "task_keyword",
+      role: "assistant",
+      content: "Use a spring sale offer with a strong CTA.",
+      createdAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_neutral",
+      taskId: "task_neutral",
+      role: "assistant",
+      content: "Draft a neutral page about winter inventory.",
+      createdAt: "2026-05-14T00:01:00.000Z"
     });
 
     const memory = await assembleContextMemory({
@@ -169,14 +217,14 @@ describe("context memory", () => {
         prompt: "Build a spring sale page",
         brief: {
           ...sampleBrief,
-          audience: "Returning customers",
-          offer: "Spring sale offer"
+          objective: "Convert paid shoppers",
+          audience: "Returning customers"
         }
       },
       now: () => new Date("2026-05-15T00:00:00.000Z")
     });
 
-    expect(memory.messages[0]?.id).toBe("message_match");
+    expect(memory.messages[0]?.id).toBe("message_keyword");
     expect(memory.messages[0]?.score).toBeGreaterThan(memory.messages[1]?.score ?? 0);
   });
 });
