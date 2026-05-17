@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,6 +10,7 @@ import {
   RejectingExecutionAdapter,
   SimulatedExecutionAdapter,
   createRejectSandboxPolicy,
+  createJsonFileWorkerJobRepository,
   createSimulatedSandboxPolicy,
   type ExecutionAdapter,
   type ExecutionInput,
@@ -65,6 +70,74 @@ function deferred<T>(): {
 }
 
 describe("InMemoryWorkerRuntime", () => {
+  it("persists completed runtime records through a JSON-file repository", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+    const filePath = join(directory, "worker-jobs.json");
+
+    try {
+      const repository = createJsonFileWorkerJobRepository({ filePath });
+      const runtime = new InMemoryWorkerRuntime({
+        repository,
+        adapter: new SimulatedExecutionAdapter()
+      });
+
+      const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+      await runtime.runNext();
+
+      const reopenedRepository = createJsonFileWorkerJobRepository({ filePath });
+      const persisted = await reopenedRepository.getById(queued.id);
+
+      expect(persisted).toMatchObject({
+        id: queued.id,
+        state: "completed",
+        resultSummary: {
+          state: "completed",
+          stdout: "Simulated build for project project_a."
+        }
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not resume JSON-persisted queued jobs without process-local payload", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+    const filePath = join(directory, "worker-jobs.json");
+
+    try {
+      const firstRepository = createJsonFileWorkerJobRepository({ filePath });
+      const firstRuntime = new InMemoryWorkerRuntime({
+        repository: firstRepository,
+        adapter: new SimulatedExecutionAdapter()
+      });
+      const queued = await firstRuntime.enqueue(baseInput(), simulatedPolicy());
+      const adapter: ExecutionAdapter = {
+        execute: vi.fn(async () => ({
+          state: "completed" as const,
+          exitCode: 0,
+          stdout: "should not run",
+          stderr: ""
+        }))
+      };
+      const secondRepository = createJsonFileWorkerJobRepository({ filePath });
+      const secondRuntime = new InMemoryWorkerRuntime({
+        repository: secondRepository,
+        adapter
+      });
+
+      const failed = await secondRuntime.runNext();
+
+      expect(failed).toMatchObject({
+        id: queued.id,
+        state: "failed",
+        errorName: "worker_job_payload_unavailable"
+      });
+      expect(adapter.execute).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("persists worker records through an injected repository", async () => {
     const repository = new InMemoryWorkerJobRepository();
     const runtime = new InMemoryWorkerRuntime({

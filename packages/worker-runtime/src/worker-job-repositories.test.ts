@@ -204,6 +204,40 @@ describe("JsonFileWorkerJobRepository", () => {
     ]);
   });
 
+  it("json-file repository serializes concurrent saves for one file", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+
+    await Promise.all([
+      repository.save(
+        workerJobRecord({
+          id: "worker_job_1",
+          createdAt: "2026-05-17T12:00:00.000Z"
+        })
+      ),
+      repository.save(
+        workerJobRecord({
+          id: "worker_job_2",
+          createdAt: "2026-05-17T12:01:00.000Z"
+        })
+      ),
+      repository.save(
+        workerJobRecord({
+          id: "worker_job_3",
+          createdAt: "2026-05-17T12:02:00.000Z"
+        })
+      )
+    ]);
+
+    const records = await repository.listAll();
+
+    expect(records.map((record) => record.id)).toEqual([
+      "worker_job_1",
+      "worker_job_2",
+      "worker_job_3"
+    ]);
+  });
+
   it("treats a missing file, old shape, or null JSON as empty state", async () => {
     const filePath = await createTempFilePath();
     const repository = createJsonFileWorkerJobRepository({ filePath });
