@@ -23,6 +23,9 @@ importers:
       '@lp-agent/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@lp-agent/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
       tsx:
         specifier: ^4.19.0
         version: 4.21.0
