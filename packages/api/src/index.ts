@@ -375,6 +375,8 @@ export class DemoWorkbenchService {
         name: input.name,
         createdAt: this.timestamp()
       };
+      // v0 recovery path: if owner membership persistence fails after project save,
+      // createProject rejects and idempotent ensureProjectOwnerMembership can repair it.
       await this.repositories.projects.save(project);
       await this.ensureProjectOwnerMembership(project.id);
       return copyProject(project);
@@ -430,7 +432,11 @@ export class DemoWorkbenchService {
       projectId: input.projectId,
       userId,
       role: input.role,
-      ...(input.displayName?.trim() ? { displayName: input.displayName.trim() } : {}),
+      ...(input.displayName?.trim()
+        ? { displayName: input.displayName.trim() }
+        : existing?.displayName
+          ? { displayName: existing.displayName }
+          : {}),
       createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp
     };

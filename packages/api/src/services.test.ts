@@ -203,6 +203,71 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("keeps distinct project member ids for realistic user id variants", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const project = await service.createProject({ name: "Spring sale" });
+
+    await service.addProjectMember({
+      projectId: project.id,
+      userId: "reviewer/a",
+      role: "reviewer",
+      displayName: "Slash Reviewer"
+    });
+    await service.addProjectMember({
+      projectId: project.id,
+      userId: "reviewer_a",
+      role: "reviewer",
+      displayName: "Underscore Reviewer"
+    });
+
+    await expect(service.listProjectMembers(project.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: "local-web-user", role: "owner" }),
+      expect.objectContaining({ userId: "reviewer/a", role: "reviewer" }),
+      expect.objectContaining({ userId: "reviewer_a", role: "reviewer" })
+    ]));
+    await expect(service.listProjectMembers(project.id)).resolves.toHaveLength(3);
+    await expect(repositories.projectMembers.listForProject(project.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: expect.stringMatching(/^project_member_project_1_b64_/),
+        userId: "reviewer/a"
+      }),
+      expect.objectContaining({
+        id: "project_member_project_1_local-web-user",
+        userId: "local-web-user"
+      }),
+      expect.objectContaining({
+        id: "project_member_project_1_reviewer_a",
+        userId: "reviewer_a"
+      })
+    ]));
+  });
+
+  it("preserves project member display name when updating role without a replacement", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const project = await service.createProject({ name: "Spring sale" });
+
+    await service.addProjectMember({
+      projectId: project.id,
+      userId: "reviewer_1",
+      role: "reviewer",
+      displayName: "Review User"
+    });
+
+    await expect(
+      service.addProjectMember({
+        projectId: project.id,
+        userId: "reviewer_1",
+        role: "admin"
+      })
+    ).resolves.toMatchObject({
+      userId: "reviewer_1",
+      role: "admin",
+      displayName: "Review User"
+    });
+  });
+
   it("persists planner, builder, reviewer, and deployer run events in order", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({

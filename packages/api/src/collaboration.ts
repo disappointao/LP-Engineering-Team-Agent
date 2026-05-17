@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import type { ProjectMemberRecord, ProjectRole } from "@lp-agent/db";
 
 export interface WorkbenchUserIdentity {
@@ -58,6 +59,12 @@ export function toProjectMemberView(member: ProjectMemberRecord): ProjectMemberV
 }
 
 function toMembershipIdSegment(value: string): string {
-  const normalized = value.trim().replace(/[^A-Za-z0-9_-]/g, "_");
-  return normalized.length > 0 ? normalized : "unknown";
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+  if (/^[A-Za-z0-9_-]+$/.test(normalized)) {
+    return normalized;
+  }
+  return `b64_${Buffer.from(normalized, "utf8").toString("base64url")}`;
 }
