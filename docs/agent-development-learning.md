@@ -589,7 +589,7 @@ pnpm --filter @lp-agent/model-gateway test
 - Stage 10 v0 已实现 `WorkerRuntime.cancelJob()`。
 - queued worker job 可立即落到 `cancelled`，并持久化 `cancelRequestedAt`、`cancelledAt`、`completedAt` 和 bounded `cancelReason`。
 - running worker job 采用协作式取消：runtime 记录 `cancelRequestedAt`，adapter 通过 `ExecutionContext.isCancellationRequested()` 感知取消请求。
-- queued-to-running 竞态通过 execution token 校验处理，避免过期执行完成覆盖已取消状态。
+- queued-to-running 竞态通过 per-job mutation lock 处理，避免取消请求被长时间运行的 adapter 阻塞。
 - `WorkerBackedToolCommandRunner` 已能把 cancelled worker job 映射为 `ToolCommandRunResult.state === "cancelled"`；现有 skill command service 仍把非 completed 命令结果落为 failed run/tool observation。
 
 学习重点：
@@ -598,6 +598,22 @@ pnpm --filter @lp-agent/model-gateway test
 - queued cancellation 和 running cooperative cancellation 是两种不同状态转换。
 - 取消原因是用户输入，需要 bounded persistence，不能保存 secret、raw args/env 或 artifact 内容。
 - API runner 可以返回 `cancelled`，但产品级 run timeline 的取消事件和 Web interrupt 按钮应作为后续阶段单独设计。
+
+### 阶段 11：Worker Queue Handoff v0
+
+当前设计：
+
+- [2026-05-17-worker-queue-handoff-design.md](./superpowers/specs/2026-05-17-worker-queue-handoff-design.md)
+- 这一阶段把 worker job 从 API 进程内同步执行推进到跨进程 handoff：API 或测试可以入队安全 worker job，`apps/agent-worker` 可以从共享 repository 领取并执行一个 job。
+- 第一版只支持 `simulate` / `reject` 安全 payload；不持久化 raw env value、secret、artifact 内容，也不开放真实 shell。
+- Stage 11 会引入 claim metadata 和 claim token，避免多个 worker 或过期 worker 重复完成同一个 job。
+
+学习重点：
+
+- worker queue handoff 和真实执行是两个阶段。先解决 claim、payload、complete、cancel 的状态机，再讨论 shell、MCP 或部署。
+- 跨进程执行必须有可持久的 payload，但 payload 不能为了“能跑”而保存 secret 或完整 artifact。
+- running job 的取消在跨进程场景里仍应是协作式的：runtime 记录取消请求，worker adapter 主动检查 cancellation context。
+- claim token 是防止 stale worker 覆盖状态的并发边界，不是用户身份或授权信息。
 
 ## 5. 写代码时的维护原则
 

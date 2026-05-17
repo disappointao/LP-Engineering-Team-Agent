@@ -200,6 +200,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 10 worker job cancel and interrupt foundation implementation plan.
    - Read this after the worker job cancel design when implementing or auditing runtime cancellation state, cooperative adapter cancellation context, repository persistence of cancellation metadata, and API cancelled-result mapping.
 
+50. `specs/2026-05-17-worker-queue-handoff-design.md`
+   - Stage 11 worker queue handoff v0 design.
+   - Read this after the worker job cancel implementation plan when adding safe persisted worker payloads, cross-process worker claim semantics, and an `apps/agent-worker` one-job execution path without enabling real shell execution, MCP execution, or Web interrupt wiring.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
