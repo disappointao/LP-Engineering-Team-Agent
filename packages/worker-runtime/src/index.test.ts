@@ -225,6 +225,89 @@ describe("InMemoryWorkerRuntime", () => {
     });
   });
 
+  it("bounds multibyte stdout without exceeding max bytes", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter({
+        stdoutByCommand: {
+          build: "你好a"
+        }
+      })
+    });
+    await runtime.enqueue(
+      baseInput(),
+      simulatedPolicy({
+        maxStdoutBytes: 5
+      })
+    );
+
+    const job = await runtime.runNext();
+    const stdout = job?.resultSummary?.stdout ?? "";
+
+    expect(job?.state).toBe("completed");
+    expect(stdout).toBe("你");
+    expect(Buffer.byteLength(stdout, "utf8")).toBeLessThanOrEqual(5);
+    expect(stdout).not.toContain("�");
+    expect(job?.resultSummary?.stdoutBytes).toBe(Buffer.byteLength("你好a", "utf8"));
+  });
+
+  it("stores empty output summaries when output limits are zero", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter({
+        stdoutByCommand: {
+          build: "abcdef"
+        },
+        stderrByCommand: {
+          build: "stderr"
+        }
+      })
+    });
+    await runtime.enqueue(
+      baseInput(),
+      simulatedPolicy({
+        maxStdoutBytes: 0,
+        maxStderrBytes: 0
+      })
+    );
+
+    const job = await runtime.runNext();
+
+    expect(job?.state).toBe("completed");
+    expect(job?.resultSummary).toMatchObject({
+      stdout: "",
+      stderr: "",
+      stdoutBytes: 6,
+      stderrBytes: 6
+    });
+  });
+
+  it.each([
+    ["negative", { maxStdoutBytes: -1 }],
+    ["non-integer", { maxStderrBytes: 1.5 }]
+  ] as const)(
+    "policy rejects %s output limits before adapter execution",
+    async (_caseName, policyOverrides) => {
+      const adapter: ExecutionAdapter = {
+        execute: vi.fn(async () => ({
+          state: "completed" as const,
+          exitCode: 0,
+          stdout: "should not run",
+          stderr: ""
+        }))
+      };
+      const runtime = new InMemoryWorkerRuntime({ adapter });
+      await runtime.enqueue(baseInput(), simulatedPolicy(policyOverrides));
+
+      const job = await runtime.runNext();
+
+      expect(job?.state).toBe("rejected");
+      expect(job?.errorName).toBe("sandbox_policy_output_limit_invalid");
+      expect(job?.resultSummary?.errorName).toBe(
+        "sandbox_policy_output_limit_invalid"
+      );
+      expect(adapter.execute).not.toHaveBeenCalled();
+    }
+  );
+
   it("SimulatedExecutionAdapter can fail configured commands with stable defaults", async () => {
     const runtime = new InMemoryWorkerRuntime({
       adapter: new SimulatedExecutionAdapter({

@@ -309,6 +309,19 @@ export function validateSandboxPolicy(
   input: WorkerJobInput | WorkerJobInputSummary,
   policy: SandboxPolicy
 ): SandboxPolicyValidation {
+  if (
+    !Number.isInteger(policy.maxStdoutBytes) ||
+    policy.maxStdoutBytes < 0 ||
+    !Number.isInteger(policy.maxStderrBytes) ||
+    policy.maxStderrBytes < 0
+  ) {
+    return {
+      valid: false,
+      reason: "output limits must be non-negative integers",
+      errorName: "sandbox_policy_output_limit_invalid"
+    };
+  }
+
   if (policy.network !== "disabled") {
     return {
       valid: false,
@@ -430,11 +443,28 @@ function summarizeResult(
 }
 
 function truncateUtf8(value: string, maxBytes: number): string {
+  if (maxBytes === 0) {
+    return "";
+  }
+
   if (byteLength(value) <= maxBytes) {
     return value;
   }
 
-  return Buffer.from(value, "utf8").subarray(0, maxBytes).toString("utf8");
+  let byteCount = 0;
+  let output = "";
+
+  for (const char of value) {
+    const charBytes = byteLength(char);
+    if (byteCount + charBytes > maxBytes) {
+      break;
+    }
+
+    output += char;
+    byteCount += charBytes;
+  }
+
+  return output;
 }
 
 function byteLength(value: string): number {
@@ -442,6 +472,7 @@ function byteLength(value: string): number {
 }
 
 function isPathWithinRoot(path: string, root: string): boolean {
+  // V0 lexical precheck only; any real execution adapter must use canonical paths or stronger isolation.
   const resolvedPath = resolve(path);
   const resolvedRoot = resolve(root);
 
