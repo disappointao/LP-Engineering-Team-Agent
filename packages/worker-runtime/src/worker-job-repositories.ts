@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import type {
   SandboxPolicy,
+  WorkerJobCompleteClaimedInput,
   WorkerJobClaimOldestQueuedInput,
   WorkerJobRecord,
   WorkerJobRepository
@@ -68,6 +69,24 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     this.recordsById.set(record.id, copyRecord(runningRecord));
 
     return copyRecord(runningRecord);
+  }
+
+  async completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    const record = this.recordsById.get(input.jobId);
+    if (
+      !record ||
+      record.state !== "running" ||
+      record.claimToken !== input.claimToken
+    ) {
+      return undefined;
+    }
+
+    const completedRecord = createClaimedCompletionRecord(record, input);
+    this.recordsById.set(record.id, copyRecord(completedRecord));
+
+    return copyRecord(completedRecord);
   }
 
   private sortedRecords(): WorkerJobRecord[] {
@@ -153,6 +172,35 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
     });
   }
 
+  async completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const recordIndex = records.findIndex(
+        (stored) => stored.id === input.jobId
+      );
+      if (recordIndex === -1) {
+        return undefined;
+      }
+
+      const record = records[recordIndex];
+      if (
+        !record ||
+        record.state !== "running" ||
+        record.claimToken !== input.claimToken
+      ) {
+        return undefined;
+      }
+
+      const completedRecord = createClaimedCompletionRecord(record, input);
+      records[recordIndex] = copyRecord(completedRecord);
+
+      await this.writeRecords(records);
+      return copyRecord(completedRecord);
+    });
+  }
+
   private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
     const previousSave = jsonFileSaveQueues.get(this.filePath) ?? Promise.resolve();
     const nextSave = previousSave.catch(() => undefined).then(operation);
@@ -228,6 +276,26 @@ function getPayloadSource(record: WorkerJobRecord): string {
   return record.payloadSource ?? "process_memory";
 }
 
+function createClaimedCompletionRecord(
+  record: WorkerJobRecord,
+  input: WorkerJobCompleteClaimedInput
+): WorkerJobRecord {
+  return {
+    ...copyRecord(record),
+    state: input.state,
+    resultSummary: { ...input.resultSummary },
+    errorName: input.errorName,
+    completedAt: input.completedAt,
+    ...(input.state === "cancelled"
+      ? {
+          cancelRequestedAt: record.cancelRequestedAt ?? input.completedAt,
+          cancelledAt: input.completedAt,
+          cancelReason: record.cancelReason
+        }
+      : {})
+  };
+}
+
 function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
   return {
     ...policy,
@@ -250,6 +318,7 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
       commandId: record.inputSummary.commandId,
       command: record.inputSummary.command,
       argCount: record.inputSummary.argCount,
+      argsDigest: record.inputSummary.argsDigest,
       envNames: [...record.inputSummary.envNames],
       workingDirectory: record.inputSummary.workingDirectory,
       timeoutMs: record.inputSummary.timeoutMs

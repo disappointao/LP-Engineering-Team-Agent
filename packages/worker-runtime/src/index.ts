@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { resolve, sep } from "node:path";
 
 import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
@@ -58,6 +58,7 @@ export interface WorkerJobInputSummary {
   commandId?: string;
   command: string;
   argCount: number;
+  argsDigest?: string;
   envNames: string[];
   workingDirectory?: string;
   timeoutMs: number;
@@ -173,6 +174,9 @@ export interface WorkerJobRepository {
   claimOldestQueued(
     input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined>;
+  completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined>;
 }
 
 export interface WorkerJobClaimOldestQueuedInput {
@@ -180,6 +184,15 @@ export interface WorkerJobClaimOldestQueuedInput {
   startedAt: string;
   claimedByWorkerId?: string;
   claimToken?: string;
+}
+
+export interface WorkerJobCompleteClaimedInput {
+  jobId: string;
+  claimToken: string;
+  state: WorkerJobResultSummary["state"];
+  resultSummary: WorkerJobResultSummary;
+  errorName?: string;
+  completedAt: string;
 }
 
 export type SandboxPolicyValidation =
@@ -286,7 +299,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         commandId: input.commandId,
         command: input.command,
         args: [...input.args],
-        envNames: [...input.envNames].sort(),
+        envNames: canonicalEnvNames(input.envNames),
         workingDirectory: input.workingDirectory,
         timeoutMs: input.timeoutMs,
         createdAt
@@ -648,8 +661,9 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       }
 
       const completedAt = this.nowIso();
-      const completedRecord: WorkerJobRecord = {
-        ...copyRecord(latest),
+      const completedRecord = await this.repository.completeClaimed({
+        jobId: input.jobId,
+        claimToken: input.claimToken,
         state: input.result.state,
         resultSummary: summarizeResult(
           input.result,
@@ -657,17 +671,12 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
           input.sensitiveValues
         ),
         errorName: input.result.errorName,
-        completedAt,
-        ...(input.result.state === "cancelled"
-          ? {
-              cancelRequestedAt: latest.cancelRequestedAt ?? completedAt,
-              cancelledAt: completedAt,
-              cancelReason: latest.cancelReason
-            }
-          : {})
-      };
+        completedAt
+      });
+      if (!completedRecord) {
+        throw new Error("worker_job_claim_conflict");
+      }
 
-      await this.repository.save(completedRecord);
       await this.deletePersistedPayloadBestEffort(input.jobId);
 
       return copyRecord(completedRecord);
@@ -984,6 +993,7 @@ function summarizeInput(input: WorkerJobInput): WorkerJobInputSummary {
     commandId: input.commandId,
     command: input.command,
     argCount: input.args.length,
+    argsDigest: digestArgs(input.args),
     envNames: Object.keys(input.env).sort(),
     workingDirectory: input.workingDirectory,
     timeoutMs: input.timeoutMs
@@ -997,7 +1007,8 @@ function summarizeSafeInput(input: SafeWorkerJobInput): WorkerJobInputSummary {
     commandId: input.commandId,
     command: input.command,
     argCount: input.args.length,
-    envNames: [...input.envNames].sort(),
+    argsDigest: digestArgs(input.args),
+    envNames: canonicalEnvNames(input.envNames),
     workingDirectory: input.workingDirectory,
     timeoutMs: input.timeoutMs
   };
@@ -1021,7 +1032,7 @@ function normalizeWorkerId(workerId: string): string | undefined {
 
 function getEnvNames(input: WorkerJobInput | WorkerJobInputSummary): string[] {
   if ("envNames" in input) {
-    return [...input.envNames].sort();
+    return canonicalEnvNames(input.envNames);
   }
 
   return Object.keys(input.env).sort();
@@ -1072,13 +1083,23 @@ function doesPayloadMatchRecord(
     payload.commandId === record.inputSummary.commandId &&
     payload.command === record.inputSummary.command &&
     payload.args.length === record.inputSummary.argCount &&
+    record.inputSummary.argsDigest !== undefined &&
+    digestArgs(payload.args) === record.inputSummary.argsDigest &&
     arraysEqual(
-      [...payload.envNames].sort(),
-      [...record.inputSummary.envNames].sort()
+      canonicalEnvNames(payload.envNames),
+      canonicalEnvNames(record.inputSummary.envNames)
     ) &&
     payload.workingDirectory === record.inputSummary.workingDirectory &&
     payload.timeoutMs === record.inputSummary.timeoutMs
   );
+}
+
+function canonicalEnvNames(envNames: string[]): string[] {
+  return [...new Set(envNames)].sort();
+}
+
+function digestArgs(args: string[]): string {
+  return createHash("sha256").update(JSON.stringify(args)).digest("hex");
 }
 
 function arraysEqual(left: string[], right: string[]): boolean {

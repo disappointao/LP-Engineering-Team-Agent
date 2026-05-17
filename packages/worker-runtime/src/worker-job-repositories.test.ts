@@ -8,6 +8,7 @@ import {
   InMemoryWorkerJobRepository,
   createJsonFileWorkerJobRepository,
   createSimulatedSandboxPolicy,
+  type WorkerJobCompleteClaimedInput,
   type WorkerJobRecord
 } from "./index";
 
@@ -50,9 +51,27 @@ function workerJobRecord(
     createdAt: overrides.createdAt ?? "2026-05-17T12:00:00.000Z",
     startedAt: overrides.startedAt,
     completedAt: overrides.completedAt,
+    cancelRequestedAt: overrides.cancelRequestedAt,
+    cancelledAt: overrides.cancelledAt,
+    cancelReason: overrides.cancelReason,
+    claimedByWorkerId: overrides.claimedByWorkerId,
+    claimToken: overrides.claimToken,
     resultSummary: overrides.resultSummary,
     errorName: overrides.errorName
   };
+}
+
+async function completeClaimed(
+  repository: unknown,
+  input: WorkerJobCompleteClaimedInput
+): Promise<WorkerJobRecord | undefined> {
+  return (
+    repository as {
+      completeClaimed(
+        input: WorkerJobCompleteClaimedInput
+      ): Promise<WorkerJobRecord | undefined>;
+    }
+  ).completeClaimed(input);
 }
 
 async function createTempFilePath(): Promise<string> {
@@ -259,6 +278,87 @@ describe("InMemoryWorkerJobRepository", () => {
         envNames: ["STATIC_DEPLOY_TOKEN"]
       }
     });
+  });
+
+  it("completes claimed running jobs without dropping latest cancellation metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(
+      workerJobRecord({
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1",
+        cancelRequestedAt: "2026-05-18T00:01:30.000Z",
+        cancelReason: "External stop"
+      })
+    );
+
+    const completed = await completeClaimed(repository, {
+      jobId: "worker_job_1",
+      claimToken: "claim_token_1",
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        exitCode: 0,
+        stdout: "ok",
+        stderr: "",
+        stdoutBytes: 2,
+        stderrBytes: 0
+      },
+      completedAt: "2026-05-18T00:02:00.000Z"
+    });
+    const stored = await repository.getById("worker_job_1");
+
+    expect(completed).toMatchObject({
+      id: "worker_job_1",
+      state: "completed",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      cancelRequestedAt: "2026-05-18T00:01:30.000Z",
+      cancelReason: "External stop",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(completed?.cancelledAt).toBeUndefined();
+    expect(stored).toEqual(completed);
+  });
+
+  it("does not complete running jobs when the claim token does not match", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(
+      workerJobRecord({
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      })
+    );
+
+    const completed = await completeClaimed(repository, {
+      jobId: "worker_job_1",
+      claimToken: "stale_claim_token",
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        exitCode: 0,
+        stdout: "ok",
+        stderr: "",
+        stdoutBytes: 2,
+        stderrBytes: 0
+      },
+      completedAt: "2026-05-18T00:02:00.000Z"
+    });
+    const stored = await repository.getById("worker_job_1");
+
+    expect(completed).toBeUndefined();
+    expect(stored).toMatchObject({
+      id: "worker_job_1",
+      state: "running",
+      claimToken: "claim_token_1"
+    });
+    expect(stored?.completedAt).toBeUndefined();
+    expect(stored?.resultSummary).toBeUndefined();
   });
 });
 
@@ -526,6 +626,56 @@ describe("JsonFileWorkerJobRepository", () => {
       id: "worker_job_legacy",
       state: "queued",
       payloadSource: "process_memory"
+    });
+  });
+
+  it("json-file repository completes claimed jobs and reloads terminal metadata", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_claimed",
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      })
+    );
+
+    const completed = await completeClaimed(repository, {
+      jobId: "worker_job_claimed",
+      claimToken: "claim_token_1",
+      state: "cancelled",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled.",
+        stdoutBytes: 0,
+        stderrBytes: 21,
+        errorName: "worker_job_cancelled"
+      },
+      errorName: "worker_job_cancelled",
+      completedAt: "2026-05-18T00:02:00.000Z"
+    });
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    await expect(reopened.getById("worker_job_claimed")).resolves.toMatchObject({
+      id: "worker_job_claimed",
+      state: "cancelled",
+      errorName: "worker_job_cancelled",
+      cancelRequestedAt: "2026-05-18T00:02:00.000Z",
+      cancelledAt: "2026-05-18T00:02:00.000Z",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      resultSummary: {
+        state: "cancelled",
+        stderr: "Worker job cancelled.",
+        errorName: "worker_job_cancelled"
+      }
+    });
+    expect(completed).toMatchObject({
+      id: "worker_job_claimed",
+      state: "cancelled",
+      cancelRequestedAt: "2026-05-18T00:02:00.000Z"
     });
   });
 });

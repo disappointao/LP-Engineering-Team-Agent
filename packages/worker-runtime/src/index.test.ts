@@ -18,6 +18,7 @@ import {
   type ExecutionInput,
   type SandboxPolicy,
   type SafeWorkerJobInput,
+  type WorkerJobCompleteClaimedInput,
   type WorkerJobClaimOldestQueuedInput,
   type WorkerJobPayloadRecord,
   type WorkerJobPayloadRepository,
@@ -147,6 +148,12 @@ class BlockingRunningSaveRepository implements WorkerJobRepository {
       return record;
     });
   }
+
+  completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.completeClaimed(input);
+  }
 }
 
 class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
@@ -174,6 +181,12 @@ class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
     _input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined> {
     return undefined;
+  }
+
+  async completeClaimed(
+    _input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    throw new Error("injected job save failure");
   }
 }
 
@@ -229,6 +242,78 @@ class FailOnceCancelledSaveRepository implements WorkerJobRepository {
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.claimOldestQueued(input);
   }
+
+  completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.completeClaimed(input);
+  }
+}
+
+class ExternalCancellationBeforeClaimedCompletionRepository
+  implements WorkerJobRepository
+{
+  private readonly repository = new InMemoryWorkerJobRepository();
+  private hasInjectedCancellation = false;
+
+  async save(record: WorkerJobRecord): Promise<void> {
+    if (
+      record.state !== "queued" &&
+      record.state !== "running" &&
+      !this.hasInjectedCancellation
+    ) {
+      await this.injectExternalCancellation(record.id);
+    }
+
+    return this.repository.save(record);
+  }
+
+  getById(id: string): Promise<WorkerJobRecord | undefined> {
+    return this.repository.getById(id);
+  }
+
+  listForProject(projectId: string): Promise<WorkerJobRecord[]> {
+    return this.repository.listForProject(projectId);
+  }
+
+  listAll(): Promise<WorkerJobRecord[]> {
+    return this.repository.listAll();
+  }
+
+  findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return this.repository.findOldestQueued();
+  }
+
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.claimOldestQueued(input);
+  }
+
+  async completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    await this.injectExternalCancellation(input.jobId);
+    return this.repository.completeClaimed(input);
+  }
+
+  private async injectExternalCancellation(jobId: string): Promise<void> {
+    if (this.hasInjectedCancellation) {
+      return;
+    }
+
+    this.hasInjectedCancellation = true;
+    const latest = await this.repository.getById(jobId);
+    if (!latest || latest.state !== "running") {
+      return;
+    }
+
+    await this.repository.save({
+      ...latest,
+      cancelRequestedAt: "2026-05-18T00:00:02.500Z",
+      cancelReason: "External stop"
+    });
+  }
 }
 
 describe("InMemoryWorkerRuntime", () => {
@@ -264,6 +349,38 @@ describe("InMemoryWorkerRuntime", () => {
       createdAt: "2026-05-18T00:00:00.000Z"
     });
     expect(JSON.stringify(payload)).not.toContain("secret-value");
+  });
+
+  it("canonicalizes duplicate safe env names so claimed jobs still match their payload", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter: new SimulatedExecutionAdapter(),
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(
+      baseSafeInput({ envNames: ["PUBLIC_FLAG", "PUBLIC_FLAG"] }),
+      simulatedPolicy()
+    );
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+
+    const completed = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      inputSummary: {
+        envNames: ["PUBLIC_FLAG"]
+      },
+      resultSummary: {
+        state: "completed",
+        stdout: "Simulated build for project project_a."
+      }
+    });
+    expect(stored).toEqual(completed);
   });
 
   it("claims the oldest safe queued job with worker metadata", async () => {
@@ -431,6 +548,49 @@ describe("InMemoryWorkerRuntime", () => {
     expect(adapter.execute).not.toHaveBeenCalled();
   });
 
+  it("rejects claimed jobs when persisted payload args differ without exposing raw args", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const payload = await payloadRepository.getByJobId(queued.id);
+    await payloadRepository.save({
+      ...payload!,
+      args: ["--slow"]
+    });
+
+    const rejected = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(rejected).toMatchObject({
+      id: queued.id,
+      state: "rejected",
+      errorName: "worker_job_payload_record_mismatch",
+      resultSummary: {
+        state: "rejected",
+        stderr: "Worker job payload does not match the queued job record.",
+        errorName: "worker_job_payload_record_mismatch"
+      }
+    });
+    expect("args" in rejected.inputSummary).toBe(false);
+    expect(stored).toEqual(rejected);
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
   it("rejects stale claim completion attempts without overwriting the job", async () => {
     const runtime = new InMemoryWorkerRuntime({
       payloadRepository: new InMemoryWorkerJobPayloadRepository(),
@@ -552,6 +712,49 @@ describe("InMemoryWorkerRuntime", () => {
       }
     });
     expect(completed.cancelledAt).toBeUndefined();
+  });
+
+  it("preserves external cancellation metadata injected before claimed completion is persisted", async () => {
+    const repository = new ExternalCancellationBeforeClaimedCompletionRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "completed despite external stop",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1",
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:01.000Z",
+        "2026-05-18T00:00:03.000Z"
+      ])
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+
+    const completed = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      completedAt: "2026-05-18T00:00:03.000Z",
+      cancelRequestedAt: "2026-05-18T00:00:02.500Z",
+      cancelReason: "External stop",
+      resultSummary: {
+        state: "completed",
+        stdout: "completed despite external stop"
+      }
+    });
+    expect(completed.cancelledAt).toBeUndefined();
+    expect(stored).toEqual(completed);
   });
 
   it("returns completed claimed jobs when persisted payload cleanup fails", async () => {
