@@ -348,8 +348,8 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       cancelReason: normalizeCancelReason(reason) ?? record.cancelReason
     };
 
-    this.payloadsByJobId.delete(record.id);
     await this.repository.save(cancelledRecord);
+    this.payloadsByJobId.delete(record.id);
     return copyRecord(cancelledRecord);
   }
 

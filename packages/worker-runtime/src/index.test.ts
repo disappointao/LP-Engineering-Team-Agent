@@ -113,6 +113,36 @@ class BlockingRunningSaveRepository implements WorkerJobRepository {
   }
 }
 
+class FailOnceCancelledSaveRepository implements WorkerJobRepository {
+  private readonly repository = new InMemoryWorkerJobRepository();
+  private hasFailedCancelledSave = false;
+
+  async save(record: WorkerJobRecord): Promise<void> {
+    if (record.state === "cancelled" && !this.hasFailedCancelledSave) {
+      this.hasFailedCancelledSave = true;
+      throw new Error("injected cancelled save failure");
+    }
+
+    return this.repository.save(record);
+  }
+
+  getById(id: string): Promise<WorkerJobRecord | undefined> {
+    return this.repository.getById(id);
+  }
+
+  listForProject(projectId: string): Promise<WorkerJobRecord[]> {
+    return this.repository.listForProject(projectId);
+  }
+
+  listAll(): Promise<WorkerJobRecord[]> {
+    return this.repository.listAll();
+  }
+
+  findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return this.repository.findOldestQueued();
+  }
+}
+
 describe("InMemoryWorkerRuntime", () => {
   it("persists completed runtime records through a JSON-file repository", async () => {
     const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
@@ -598,6 +628,48 @@ describe("InMemoryWorkerRuntime", () => {
     expect(stored).toEqual(cancelled);
     expect(runResult).toBeUndefined();
     expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
+  it("preserves queued execution payload when cancellation persistence fails", async () => {
+    const repository = new FailOnceCancelledSaveRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async (input: ExecutionInput) => {
+        expect(input.args).toEqual(["--target", "preview"]);
+        expect(input.env).toEqual({ BUILD_MODE: "preview" });
+        return {
+          state: "completed" as const,
+          exitCode: 0,
+          stdout: "payload available",
+          stderr: ""
+        };
+      })
+    };
+    const runtime = new InMemoryWorkerRuntime({ repository, adapter });
+    const queued = await runtime.enqueue(
+      baseInput({
+        args: ["--target", "preview"],
+        env: { BUILD_MODE: "preview" }
+      }),
+      simulatedPolicy({ allowedEnvNames: ["BUILD_MODE"] })
+    );
+
+    await expect(runtime.cancelJob(queued.id, "stop")).rejects.toThrow(
+      "injected cancelled save failure"
+    );
+    const completed = await runtime.runNext();
+    const stored = await repository.getById(queued.id);
+
+    expect(adapter.execute).toHaveBeenCalledTimes(1);
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        stdout: "payload available"
+      }
+    });
+    expect(completed?.errorName).not.toBe("worker_job_payload_unavailable");
+    expect(stored).toEqual(completed);
   });
 
   it("bounds persisted cancel reasons", async () => {
