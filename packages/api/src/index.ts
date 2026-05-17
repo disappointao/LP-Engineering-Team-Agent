@@ -136,6 +136,11 @@ export {
   type ProjectMemberView,
   type WorkbenchUserIdentity
 } from "./collaboration";
+export {
+  WorkerBackedToolCommandRunner,
+  createSandboxPolicyForToolCommand,
+  type SandboxPolicyResolver
+} from "./worker-backed-tool-command-runner";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
