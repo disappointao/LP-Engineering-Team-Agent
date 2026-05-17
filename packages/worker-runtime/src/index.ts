@@ -2,6 +2,11 @@ import { resolve, sep } from "node:path";
 
 import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
 
+const CANCEL_REASON_MAX_LENGTH = 200;
+const WORKER_JOB_CANCELLED_ERROR = "worker_job_cancelled";
+const WORKER_JOB_CANCELLED_BEFORE_EXECUTION_MESSAGE =
+  "Worker job cancelled before execution.";
+
 export type WorkerJobKind = "tool_command";
 export type WorkerJobState =
   | "queued"
@@ -99,6 +104,7 @@ export interface ExecutionAdapter {
 export interface WorkerRuntime {
   enqueue(input: WorkerJobInput, policy?: SandboxPolicy): Promise<WorkerJobRecord>;
   runNext(): Promise<WorkerJobRecord | undefined>;
+  cancelJob(id: string, reason?: string): Promise<WorkerJobRecord | undefined>;
   getJob(id: string): Promise<WorkerJobRecord | undefined>;
   listJobsForProject(projectId: string): Promise<WorkerJobRecord[]>;
 }
@@ -254,12 +260,86 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     });
   }
 
+  async cancelJob(
+    id: string,
+    reason?: string
+  ): Promise<WorkerJobRecord | undefined> {
+    const current = await this.repository.getById(id);
+    if (!current) {
+      return undefined;
+    }
+
+    if (current.state === "running") {
+      return this.requestRunningCancellation(current, reason);
+    }
+
+    if (current.state !== "queued") {
+      return copyRecord(current);
+    }
+
+    return this.withRunLock(async () => {
+      const latest = await this.repository.getById(id);
+      if (!latest) {
+        return undefined;
+      }
+      if (latest.state === "running") {
+        return this.requestRunningCancellation(latest, reason);
+      }
+      if (latest.state !== "queued") {
+        return copyRecord(latest);
+      }
+      return this.cancelQueuedJob(latest, reason);
+    });
+  }
+
   async getJob(id: string): Promise<WorkerJobRecord | undefined> {
     return this.repository.getById(id);
   }
 
   async listJobsForProject(projectId: string): Promise<WorkerJobRecord[]> {
     return this.repository.listForProject(projectId);
+  }
+
+  private async cancelQueuedJob(
+    record: WorkerJobRecord,
+    reason?: string
+  ): Promise<WorkerJobRecord> {
+    const now = this.nowIso();
+    const stderr = WORKER_JOB_CANCELLED_BEFORE_EXECUTION_MESSAGE;
+    const cancelledRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      state: "cancelled",
+      errorName: WORKER_JOB_CANCELLED_ERROR,
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr,
+        stdoutBytes: 0,
+        stderrBytes: byteLength(stderr),
+        errorName: WORKER_JOB_CANCELLED_ERROR
+      },
+      cancelRequestedAt: record.cancelRequestedAt ?? now,
+      cancelledAt: now,
+      completedAt: now,
+      cancelReason: normalizeCancelReason(reason) ?? record.cancelReason
+    };
+
+    this.payloadsByJobId.delete(record.id);
+    await this.repository.save(cancelledRecord);
+    return copyRecord(cancelledRecord);
+  }
+
+  private async requestRunningCancellation(
+    record: WorkerJobRecord,
+    reason?: string
+  ): Promise<WorkerJobRecord> {
+    const updatedRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      cancelRequestedAt: record.cancelRequestedAt ?? this.nowIso(),
+      cancelReason: record.cancelReason ?? normalizeCancelReason(reason)
+    };
+    await this.repository.save(updatedRecord);
+    return copyRecord(updatedRecord);
   }
 
   private async completeJob(
@@ -527,6 +607,14 @@ function summarizeInput(input: WorkerJobInput): WorkerJobInputSummary {
     workingDirectory: input.workingDirectory,
     timeoutMs: input.timeoutMs
   };
+}
+
+function normalizeCancelReason(reason: string | undefined): string | undefined {
+  const trimmed = reason?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return [...trimmed].slice(0, CANCEL_REASON_MAX_LENGTH).join("");
 }
 
 function getEnvNames(input: WorkerJobInput | WorkerJobInputSummary): string[] {

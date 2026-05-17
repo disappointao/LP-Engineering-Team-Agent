@@ -381,6 +381,84 @@ describe("InMemoryWorkerRuntime", () => {
     await expect(runtime.runNext()).resolves.toBeUndefined();
   });
 
+  it("returns undefined when cancelling an unknown job", async () => {
+    const runtime = new InMemoryWorkerRuntime();
+
+    await expect(
+      runtime.cancelJob("worker_job_missing", "interrupt")
+    ).resolves.toBeUndefined();
+  });
+
+  it("cancels queued jobs without invoking the adapter", async () => {
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      adapter,
+      now: () => new Date("2026-05-17T12:00:00.000Z")
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const cancelled = await runtime.cancelJob(queued.id, "User pressed stop");
+    const runResult = await runtime.runNext();
+    const stored = await runtime.getJob(queued.id);
+
+    expect(cancelled).toMatchObject({
+      id: queued.id,
+      state: "cancelled",
+      errorName: "worker_job_cancelled",
+      cancelRequestedAt: "2026-05-17T12:00:00.000Z",
+      cancelledAt: "2026-05-17T12:00:00.000Z",
+      completedAt: "2026-05-17T12:00:00.000Z",
+      cancelReason: "User pressed stop",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled before execution.",
+        errorName: "worker_job_cancelled"
+      }
+    });
+    expect(stored).toEqual(cancelled);
+    expect(runResult).toBeUndefined();
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
+  it("bounds persisted cancel reasons", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      now: () => new Date("2026-05-17T12:00:00.000Z")
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+    const reason = "a".repeat(250);
+
+    const cancelled = await runtime.cancelJob(queued.id, reason);
+
+    expect(cancelled?.cancelReason).toBe("a".repeat(200));
+  });
+
+  it("does not mutate completed jobs when cancellation is requested after settlement", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter(),
+      now: () => new Date("2026-05-17T12:00:00.000Z")
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+    const completed = await runtime.runNext();
+
+    const afterCancel = await runtime.cancelJob(queued.id, "late stop");
+
+    expect(afterCancel).toEqual(completed);
+    expect(afterCancel).toMatchObject({
+      state: "completed",
+      cancelRequestedAt: undefined,
+      cancelledAt: undefined,
+      cancelReason: undefined
+    });
+  });
+
   it("policy rejects disallowed command before adapter execution", async () => {
     const adapter: ExecutionAdapter = {
       execute: vi.fn(async () => ({
