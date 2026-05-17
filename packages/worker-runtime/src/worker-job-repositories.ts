@@ -189,7 +189,10 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     errorName: record.errorName,
     createdAt: record.createdAt,
     startedAt: record.startedAt,
-    completedAt: record.completedAt
+    completedAt: record.completedAt,
+    cancelRequestedAt: record.cancelRequestedAt,
+    cancelledAt: record.cancelledAt,
+    cancelReason: record.cancelReason
   };
 }
 

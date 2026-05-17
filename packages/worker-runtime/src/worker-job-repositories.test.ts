@@ -141,6 +141,45 @@ describe("InMemoryWorkerJobRepository", () => {
       }
     });
   });
+
+  it("returns defensive copies of cancel metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const record = {
+      ...workerJobRecord({
+        id: "worker_job_cancelled",
+        state: "cancelled",
+        completedAt: "2026-05-17T12:01:00.000Z",
+        errorName: "worker_job_cancelled",
+        resultSummary: {
+          state: "cancelled",
+          stdout: "",
+          stderr: "Worker job cancelled before execution.",
+          stdoutBytes: 0,
+          stderrBytes: 38,
+          errorName: "worker_job_cancelled"
+        }
+      }),
+      cancelRequestedAt: "2026-05-17T12:00:30.000Z",
+      cancelledAt: "2026-05-17T12:01:00.000Z",
+      cancelReason: "User interrupted the job."
+    };
+
+    await repository.save(record);
+    const saved = await repository.getById(record.id);
+    if (saved) {
+      saved.cancelReason = "mutated";
+    }
+
+    await expect(repository.getById(record.id)).resolves.toMatchObject({
+      cancelRequestedAt: "2026-05-17T12:00:30.000Z",
+      cancelledAt: "2026-05-17T12:01:00.000Z",
+      cancelReason: "User interrupted the job.",
+      resultSummary: {
+        state: "cancelled",
+        errorName: "worker_job_cancelled"
+      }
+    });
+  });
 });
 
 describe("JsonFileWorkerJobRepository", () => {
@@ -300,5 +339,44 @@ describe("JsonFileWorkerJobRepository", () => {
     });
     expect(persisted).toContain("STATIC_DEPLOY_TOKEN");
     expect(persisted).not.toContain("secret-value");
+  });
+
+  it("json-file repository persists and reloads cancel metadata", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+    const record = {
+      ...workerJobRecord({
+        id: "worker_job_cancelled",
+        state: "cancelled",
+        completedAt: "2026-05-17T12:01:00.000Z",
+        errorName: "worker_job_cancelled",
+        resultSummary: {
+          state: "cancelled",
+          stdout: "",
+          stderr: "Worker job cancelled before execution.",
+          stdoutBytes: 0,
+          stderrBytes: 38,
+          errorName: "worker_job_cancelled"
+        }
+      }),
+      cancelRequestedAt: "2026-05-17T12:00:30.000Z",
+      cancelledAt: "2026-05-17T12:01:00.000Z",
+      cancelReason: "User interrupted the job."
+    };
+
+    await repository.save(record);
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    await expect(reopened.getById(record.id)).resolves.toMatchObject({
+      id: "worker_job_cancelled",
+      state: "cancelled",
+      cancelRequestedAt: "2026-05-17T12:00:30.000Z",
+      cancelledAt: "2026-05-17T12:01:00.000Z",
+      cancelReason: "User interrupted the job.",
+      resultSummary: {
+        state: "cancelled",
+        stderr: "Worker job cancelled before execution."
+      }
+    });
   });
 });

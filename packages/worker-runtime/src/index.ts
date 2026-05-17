@@ -45,7 +45,7 @@ export interface WorkerJobInputSummary {
 }
 
 export interface WorkerJobResultSummary {
-  state: "completed" | "failed" | "rejected";
+  state: "completed" | "failed" | "rejected" | "cancelled";
   exitCode?: number;
   stdout: string;
   stderr: string;
@@ -66,6 +66,9 @@ export interface WorkerJobRecord {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  cancelRequestedAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 }
 
 export interface ExecutionInput {
@@ -82,7 +85,7 @@ export interface ExecutionInput {
 }
 
 export interface ExecutionResult {
-  state: "completed" | "failed" | "rejected";
+  state: "completed" | "failed" | "rejected" | "cancelled";
   exitCode?: number;
   stdout: string;
   stderr: string;
