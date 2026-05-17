@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  InMemoryWorkerJobPayloadRepository,
   InMemoryWorkerJobRepository,
   InMemoryWorkerRuntime,
   RejectingExecutionAdapter,
@@ -16,6 +17,7 @@ import {
   type ExecutionContext,
   type ExecutionInput,
   type SandboxPolicy,
+  type SafeWorkerJobInput,
   type WorkerJobRepository,
   type WorkerJobRecord,
   type WorkerJobInput
@@ -27,6 +29,18 @@ const baseInput = (overrides: Partial<WorkerJobInput> = {}): WorkerJobInput => (
   command: "build",
   args: ["--fast"],
   env: {},
+  timeoutMs: 1000,
+  ...overrides
+});
+
+const baseSafeInput = (
+  overrides: Partial<SafeWorkerJobInput> = {}
+): SafeWorkerJobInput => ({
+  projectId: "project_a",
+  kind: "tool_command",
+  command: "build",
+  args: ["--fast"],
+  envNames: ["PUBLIC_FLAG"],
   timeoutMs: 1000,
   ...overrides
 });
@@ -149,6 +163,87 @@ class FailOnceCancelledSaveRepository implements WorkerJobRepository {
 }
 
 describe("InMemoryWorkerRuntime", () => {
+  it("enqueues safe simulated jobs with persisted payloads and no raw env values", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      now: () => new Date("2026-05-18T00:00:00.000Z")
+    });
+
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const payload = await payloadRepository.getByJobId(queued.id);
+
+    expect(queued).toMatchObject({
+      id: "worker_job_1",
+      state: "queued",
+      inputSummary: {
+        command: "build",
+        argCount: 1,
+        envNames: ["PUBLIC_FLAG"]
+      }
+    });
+    expect(payload).toEqual({
+      jobId: queued.id,
+      kind: "safe_simulated_tool_command",
+      projectId: "project_a",
+      command: "build",
+      args: ["--fast"],
+      envNames: ["PUBLIC_FLAG"],
+      timeoutMs: 1000,
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    expect(JSON.stringify(payload)).not.toContain("secret-value");
+  });
+
+  it("claims the oldest safe queued job with worker metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      claimTokenFactory: () => "claim_token_1",
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:01.000Z"
+      ])
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const claim = await runtime.claimOldestQueued({
+      workerId: "worker_a"
+    });
+    const stored = await repository.getById(queued.id);
+
+    expect(claim).toEqual({
+      record: expect.objectContaining({
+        id: queued.id,
+        state: "running",
+        startedAt: "2026-05-18T00:00:01.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      }),
+      claimToken: "claim_token_1"
+    });
+    expect(stored).toEqual(claim?.record);
+  });
+
+  it("does not claim the same queued job twice", async () => {
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      payloadRepository,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const firstClaim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const secondClaim = await runtime.claimOldestQueued({ workerId: "worker_b" });
+
+    expect(firstClaim?.record.state).toBe("running");
+    expect(secondClaim).toBeUndefined();
+  });
+
   it("persists completed runtime records through a JSON-file repository", async () => {
     const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
     const filePath = join(directory, "worker-jobs.json");

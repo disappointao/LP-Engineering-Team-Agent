@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { resolve, sep } from "node:path";
 
 import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
 
 const CANCEL_REASON_MAX_LENGTH = 200;
+const WORKER_ID_MAX_LENGTH = 120;
 const WORKER_JOB_CANCELLED_ERROR = "worker_job_cancelled";
 const WORKER_JOB_CANCELLED_BEFORE_EXECUTION_MESSAGE =
   "Worker job cancelled before execution.";
@@ -34,6 +36,17 @@ export interface WorkerJobInput {
   command: string;
   args: string[];
   env: Record<string, string>;
+  workingDirectory?: string;
+  timeoutMs: number;
+}
+
+export interface SafeWorkerJobInput {
+  projectId: string;
+  kind: WorkerJobKind;
+  commandId?: string;
+  command: string;
+  args: string[];
+  envNames: string[];
   workingDirectory?: string;
   timeoutMs: number;
 }
@@ -74,6 +87,13 @@ export interface WorkerJobRecord {
   cancelRequestedAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  claimedByWorkerId?: string;
+  claimToken?: string;
+}
+
+export interface WorkerJobClaim {
+  record: WorkerJobRecord;
+  claimToken: string;
 }
 
 export const SAFE_WORKER_PAYLOAD_MAX_ARGS = 100;
@@ -164,6 +184,8 @@ export interface InMemoryWorkerRuntimeOptions {
   now?: () => Date;
   idPrefix?: string;
   repository?: WorkerJobRepository;
+  payloadRepository?: WorkerJobPayloadRepository;
+  claimTokenFactory?: () => string;
 }
 
 export class InMemoryWorkerRuntime implements WorkerRuntime {
@@ -171,6 +193,8 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   private readonly now: () => Date;
   private readonly idPrefix: string;
   private readonly repository: WorkerJobRepository;
+  private readonly payloadRepository?: WorkerJobPayloadRepository;
+  private readonly claimTokenFactory: () => string;
   private readonly payloadsByJobId = new Map<string, WorkerJobExecutionPayload>();
   private nextJobNumber = 1;
   private nextJobNumberInitialized = false;
@@ -183,6 +207,8 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     this.now = options.now ?? (() => new Date());
     this.idPrefix = options.idPrefix ?? "worker_job";
     this.repository = options.repository ?? new InMemoryWorkerJobRepository();
+    this.payloadRepository = options.payloadRepository;
+    this.claimTokenFactory = options.claimTokenFactory ?? (() => randomUUID());
   }
 
   async enqueue(
@@ -210,6 +236,53 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         await this.repository.save(record);
       } catch (error) {
         this.payloadsByJobId.delete(id);
+        throw error;
+      }
+
+      return copyRecord(record);
+    });
+  }
+
+  async enqueueSafe(
+    input: SafeWorkerJobInput,
+    policy: SandboxPolicy = createRejectSandboxPolicy()
+  ): Promise<WorkerJobRecord> {
+    if (!this.payloadRepository) {
+      throw new Error("worker_job_payload_repository_required");
+    }
+    const payloadRepository = this.payloadRepository;
+
+    return this.withEnqueueLock(async () => {
+      const copiedPolicy = copyPolicy(policy);
+      const id = await this.allocateJobId();
+      const createdAt = this.nowIso();
+      const record: WorkerJobRecord = {
+        id,
+        projectId: input.projectId,
+        kind: input.kind,
+        state: "queued",
+        policy: copyPolicy(copiedPolicy),
+        inputSummary: summarizeSafeInput(input),
+        createdAt
+      };
+      const payload: WorkerJobPayloadRecord = {
+        jobId: id,
+        kind: "safe_simulated_tool_command",
+        projectId: input.projectId,
+        commandId: input.commandId,
+        command: input.command,
+        args: [...input.args],
+        envNames: [...input.envNames].sort(),
+        workingDirectory: input.workingDirectory,
+        timeoutMs: input.timeoutMs,
+        createdAt
+      };
+
+      await payloadRepository.save(payload);
+      try {
+        await this.repository.save(record);
+      } catch (error) {
+        await payloadRepository.deleteByJobId(id);
         throw error;
       }
 
@@ -320,12 +393,61 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     });
   }
 
+  async claimOldestQueued(input: {
+    workerId: string;
+  }): Promise<WorkerJobClaim | undefined> {
+    const workerId = normalizeWorkerId(input.workerId);
+    if (!workerId) {
+      throw new Error("worker_id_required");
+    }
+
+    return this.withRunLock(async () => this.claimOldestQueuedForWorker(workerId));
+  }
+
   async getJob(id: string): Promise<WorkerJobRecord | undefined> {
     return this.repository.getById(id);
   }
 
   async listJobsForProject(projectId: string): Promise<WorkerJobRecord[]> {
     return this.repository.listForProject(projectId);
+  }
+
+  private async claimOldestQueuedForWorker(
+    workerId: string
+  ): Promise<WorkerJobClaim | undefined> {
+    while (true) {
+      const queuedRecord = await this.repository.findOldestQueued();
+      if (!queuedRecord) {
+        return undefined;
+      }
+
+      const claimed = await this.withJobMutationLock(
+        queuedRecord.id,
+        async () => {
+          const latest = await this.repository.getById(queuedRecord.id);
+          if (!latest || latest.state !== "queued") {
+            return undefined;
+          }
+
+          const claimToken = this.claimTokenFactory();
+          const runningRecord: WorkerJobRecord = {
+            ...copyRecord(latest),
+            state: "running",
+            startedAt: this.nowIso(),
+            claimedByWorkerId: workerId,
+            claimToken
+          };
+          await this.repository.save(runningRecord);
+          return {
+            record: copyRecord(runningRecord),
+            claimToken
+          };
+        }
+      );
+      if (claimed) {
+        return claimed;
+      }
+    }
   }
 
   private async claimOldestQueuedJob(): Promise<WorkerJobRecord | undefined> {
@@ -746,12 +868,33 @@ function summarizeInput(input: WorkerJobInput): WorkerJobInputSummary {
   };
 }
 
+function summarizeSafeInput(input: SafeWorkerJobInput): WorkerJobInputSummary {
+  return {
+    projectId: input.projectId,
+    kind: input.kind,
+    commandId: input.commandId,
+    command: input.command,
+    argCount: input.args.length,
+    envNames: [...input.envNames].sort(),
+    workingDirectory: input.workingDirectory,
+    timeoutMs: input.timeoutMs
+  };
+}
+
 function normalizeCancelReason(reason: string | undefined): string | undefined {
   const trimmed = reason?.trim();
   if (!trimmed) {
     return undefined;
   }
   return [...trimmed].slice(0, CANCEL_REASON_MAX_LENGTH).join("");
+}
+
+function normalizeWorkerId(workerId: string): string | undefined {
+  const trimmed = workerId.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return [...trimmed].slice(0, WORKER_ID_MAX_LENGTH).join("");
 }
 
 function getEnvNames(input: WorkerJobInput | WorkerJobInputSummary): string[] {

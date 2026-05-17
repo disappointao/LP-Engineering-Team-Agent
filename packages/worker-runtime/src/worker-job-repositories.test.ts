@@ -180,6 +180,31 @@ describe("InMemoryWorkerJobRepository", () => {
       }
     });
   });
+
+  it("returns defensive copies of claim metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const record = workerJobRecord({
+      state: "running",
+      startedAt: "2026-05-18T00:01:00.000Z"
+    });
+    const runningRecord = {
+      ...record,
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    };
+
+    await repository.save(runningRecord);
+    const saved = await repository.getById(record.id);
+    if (saved) {
+      saved.claimedByWorkerId = "mutated";
+      saved.claimToken = "mutated";
+    }
+
+    await expect(repository.getById(record.id)).resolves.toMatchObject({
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+  });
 });
 
 describe("JsonFileWorkerJobRepository", () => {
@@ -377,6 +402,28 @@ describe("JsonFileWorkerJobRepository", () => {
         state: "cancelled",
         stderr: "Worker job cancelled before execution."
       }
+    });
+  });
+
+  it("json-file repository persists and reloads claim metadata", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+
+    await repository.save({
+      ...workerJobRecord({
+        id: "worker_job_claimed",
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z"
+      }),
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    await expect(reopened.getById("worker_job_claimed")).resolves.toMatchObject({
+      state: "running",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
     });
   });
 });

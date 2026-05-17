@@ -192,7 +192,9 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     completedAt: record.completedAt,
     cancelRequestedAt: record.cancelRequestedAt,
     cancelledAt: record.cancelledAt,
-    cancelReason: record.cancelReason
+    cancelReason: record.cancelReason,
+    claimedByWorkerId: record.claimedByWorkerId,
+    claimToken: record.claimToken
   };
 }
 
