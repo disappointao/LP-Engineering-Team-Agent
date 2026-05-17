@@ -527,6 +527,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-17-worker-sandbox-runtime.md](./superpowers/plans/2026-05-17-worker-sandbox-runtime.md)
 
+当前实现状态：
+
+- Stage 8 v0 已实现 `@lp-agent/worker-runtime`。
+- API 已提供显式注入的 `WorkerBackedToolCommandRunner`。
+- 默认 API runner 仍 reject，Web 仍走原模拟 runner。
+- 当前仍无真实 shell/MCP execution/OS 级 sandbox。
+- 输出 summary 已做 byte bound，路径检查只是 v0 lexical precheck。
+
 学习重点：
 
 - worker job 是执行状态，不是聊天消息。
