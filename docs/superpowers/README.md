@@ -184,6 +184,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 8 worker sandbox runtime foundation implementation plan.
    - Read this after the worker sandbox runtime design when implementing or auditing `packages/worker-runtime`, sandbox policy validation, deterministic execution adapters, and the worker-backed `ToolCommandRunner`.
 
+46. `specs/2026-05-17-worker-job-persistence-design.md`
+   - Stage 9 worker job persistence foundation design.
+   - Read this after the worker sandbox runtime plan when adding worker job repositories, JSON-file worker job persistence, repository-backed runtime internals, and safe restart behavior without real execution.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

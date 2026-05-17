@@ -543,6 +543,23 @@ pnpm --filter @lp-agent/model-gateway test
 - 不要把 shell 执行藏在 API service 里；真实执行必须挂在 adapter 后面。
 - 真实执行能力不应该和 job 状态机同时上线；先让 adapter 形状、policy 拒绝路径和 observation 映射稳定下来。
 
+### 阶段 9：Worker Job Persistence Foundation
+
+当前设计：
+
+- [2026-05-17-worker-job-persistence-design.md](./superpowers/specs/2026-05-17-worker-job-persistence-design.md)
+- 这一阶段把 worker job record 从 runtime 内部数组抽象成 `WorkerJobRepository`，并提供 in-memory 与 JSON-file 两种实现。
+- 持久化的是安全的 `WorkerJobRecord`：状态、policy、input summary、bounded/redacted result summary 和时间戳；不持久化 raw args、raw env、secret、artifact content 或足够恢复执行的 payload。
+- 重启后可以查看历史 worker job；但 queued job 因为缺少进程内 execution payload，不会被自动恢复执行，而是显式 fail-closed。
+- 这一阶段仍不做真实 shell、MCP execution、agent-worker queue、Web UI 或 OS 级 sandbox。
+
+学习重点：
+
+- job persistence 和 execution replay 是两个不同问题。
+- 先持久化安全 record，再讨论队列和真实执行，能避免把 secret 和危险 payload 过早写进本地文件。
+- repository 边界应属于 `worker-runtime`，不要把 worker 执行状态强绑到 Web workbench 的 `packages/db`。
+- 重启恢复要 fail-closed；看得见状态比静默重跑更重要。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
