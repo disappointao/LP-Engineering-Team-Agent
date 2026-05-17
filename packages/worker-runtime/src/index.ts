@@ -177,6 +177,9 @@ export interface WorkerJobRepository {
   completeClaimed(
     input: WorkerJobCompleteClaimedInput
   ): Promise<WorkerJobRecord | undefined>;
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined>;
 }
 
 export interface WorkerJobClaimOldestQueuedInput {
@@ -193,6 +196,12 @@ export interface WorkerJobCompleteClaimedInput {
   resultSummary: WorkerJobResultSummary;
   errorName?: string;
   completedAt: string;
+}
+
+export interface WorkerJobRequestRunningCancellationInput {
+  jobId: string;
+  cancelRequestedAt: string;
+  cancelReason?: string;
 }
 
 export type SandboxPolicyValidation =
@@ -614,13 +623,13 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     record: WorkerJobRecord,
     reason?: string
   ): Promise<WorkerJobRecord> {
-    const updatedRecord: WorkerJobRecord = {
-      ...copyRecord(record),
-      cancelRequestedAt: record.cancelRequestedAt ?? this.nowIso(),
-      cancelReason: record.cancelReason ?? normalizeCancelReason(reason)
-    };
-    await this.repository.save(updatedRecord);
-    return copyRecord(updatedRecord);
+    const updatedRecord = await this.repository.requestRunningCancellation({
+      jobId: record.id,
+      cancelRequestedAt: this.nowIso(),
+      cancelReason: normalizeCancelReason(reason)
+    });
+
+    return updatedRecord ? copyRecord(updatedRecord) : copyRecord(record);
   }
 
   private createExecutionContext(jobId: string): ExecutionContext {

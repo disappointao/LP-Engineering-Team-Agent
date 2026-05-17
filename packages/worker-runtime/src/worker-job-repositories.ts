@@ -7,6 +7,7 @@ import type {
   WorkerJobCompleteClaimedInput,
   WorkerJobClaimOldestQueuedInput,
   WorkerJobRecord,
+  WorkerJobRequestRunningCancellationInput,
   WorkerJobRepository
 } from "./index";
 
@@ -87,6 +88,23 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     this.recordsById.set(record.id, copyRecord(completedRecord));
 
     return copyRecord(completedRecord);
+  }
+
+  async requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    const record = this.recordsById.get(input.jobId);
+    if (!record) {
+      return undefined;
+    }
+    if (record.state !== "running") {
+      return copyRecord(record);
+    }
+
+    const updatedRecord = createRunningCancellationRecord(record, input);
+    this.recordsById.set(record.id, copyRecord(updatedRecord));
+
+    return copyRecord(updatedRecord);
   }
 
   private sortedRecords(): WorkerJobRecord[] {
@@ -201,6 +219,34 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
     });
   }
 
+  async requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const recordIndex = records.findIndex(
+        (stored) => stored.id === input.jobId
+      );
+      if (recordIndex === -1) {
+        return undefined;
+      }
+
+      const record = records[recordIndex];
+      if (!record) {
+        return undefined;
+      }
+      if (record.state !== "running") {
+        return copyRecord(record);
+      }
+
+      const updatedRecord = createRunningCancellationRecord(record, input);
+      records[recordIndex] = copyRecord(updatedRecord);
+
+      await this.writeRecords(records);
+      return copyRecord(updatedRecord);
+    });
+  }
+
   private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
     const previousSave = jsonFileSaveQueues.get(this.filePath) ?? Promise.resolve();
     const nextSave = previousSave.catch(() => undefined).then(operation);
@@ -293,6 +339,17 @@ function createClaimedCompletionRecord(
           cancelReason: record.cancelReason
         }
       : {})
+  };
+}
+
+function createRunningCancellationRecord(
+  record: WorkerJobRecord,
+  input: WorkerJobRequestRunningCancellationInput
+): WorkerJobRecord {
+  return {
+    ...copyRecord(record),
+    cancelRequestedAt: record.cancelRequestedAt ?? input.cancelRequestedAt,
+    cancelReason: record.cancelReason ?? input.cancelReason
   };
 }
 

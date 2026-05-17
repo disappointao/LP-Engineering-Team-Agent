@@ -74,6 +74,25 @@ async function completeClaimed(
   ).completeClaimed(input);
 }
 
+async function requestRunningCancellation(
+  repository: unknown,
+  input: {
+    jobId: string;
+    cancelRequestedAt: string;
+    cancelReason?: string;
+  }
+): Promise<WorkerJobRecord | undefined> {
+  return (
+    repository as {
+      requestRunningCancellation(input: {
+        jobId: string;
+        cancelRequestedAt: string;
+        cancelReason?: string;
+      }): Promise<WorkerJobRecord | undefined>;
+    }
+  ).requestRunningCancellation(input);
+}
+
 async function createTempFilePath(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "worker-job-repositories-"));
   tempDirs.push(dir);
@@ -321,6 +340,80 @@ describe("InMemoryWorkerJobRepository", () => {
       }
     });
     expect(completed?.cancelledAt).toBeUndefined();
+    expect(stored).toEqual(completed);
+  });
+
+  it("requests cancellation for running jobs without replacing existing metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(
+      workerJobRecord({
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      })
+    );
+
+    const cancelled = await requestRunningCancellation(repository, {
+      jobId: "worker_job_1",
+      cancelRequestedAt: "2026-05-18T00:01:30.000Z",
+      cancelReason: "External stop"
+    });
+    await requestRunningCancellation(repository, {
+      jobId: "worker_job_1",
+      cancelRequestedAt: "2026-05-18T00:01:31.000Z",
+      cancelReason: "Different stop"
+    });
+    const stored = await repository.getById("worker_job_1");
+
+    expect(cancelled).toMatchObject({
+      id: "worker_job_1",
+      state: "running",
+      cancelRequestedAt: "2026-05-18T00:01:30.000Z",
+      cancelReason: "External stop"
+    });
+    expect(stored).toMatchObject({
+      id: "worker_job_1",
+      state: "running",
+      cancelRequestedAt: "2026-05-18T00:01:30.000Z",
+      cancelReason: "External stop"
+    });
+  });
+
+  it("returns completed jobs from running cancellation without reviving them", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(
+      workerJobRecord({
+        state: "completed",
+        completedAt: "2026-05-18T00:02:00.000Z",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "ok",
+          stderr: "",
+          stdoutBytes: 2,
+          stderrBytes: 0
+        }
+      })
+    );
+
+    const completed = await requestRunningCancellation(repository, {
+      jobId: "worker_job_1",
+      cancelRequestedAt: "2026-05-18T00:02:30.000Z",
+      cancelReason: "Too late"
+    });
+    const stored = await repository.getById("worker_job_1");
+
+    expect(completed).toMatchObject({
+      id: "worker_job_1",
+      state: "completed",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(completed?.cancelRequestedAt).toBeUndefined();
     expect(stored).toEqual(completed);
   });
 
@@ -677,5 +770,46 @@ describe("JsonFileWorkerJobRepository", () => {
       state: "cancelled",
       cancelRequestedAt: "2026-05-18T00:02:00.000Z"
     });
+  });
+
+  it("json-file repository does not revive completed jobs during running cancellation", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_completed",
+        state: "completed",
+        completedAt: "2026-05-18T00:02:00.000Z",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "ok",
+          stderr: "",
+          stdoutBytes: 2,
+          stderrBytes: 0
+        }
+      })
+    );
+
+    const completed = await requestRunningCancellation(repository, {
+      jobId: "worker_job_completed",
+      cancelRequestedAt: "2026-05-18T00:02:30.000Z",
+      cancelReason: "Too late"
+    });
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    const reloaded = await reopened.getById("worker_job_completed");
+
+    expect(completed).toMatchObject({
+      id: "worker_job_completed",
+      state: "completed",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(reloaded).toEqual(completed);
+    expect(reloaded?.cancelRequestedAt).toBeUndefined();
   });
 });

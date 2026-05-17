@@ -23,6 +23,7 @@ import {
   type WorkerJobPayloadRecord,
   type WorkerJobPayloadRepository,
   type WorkerJobRepository,
+  type WorkerJobRequestRunningCancellationInput,
   type WorkerJobRecord,
   type WorkerJobInput
 } from "./index";
@@ -154,6 +155,12 @@ class BlockingRunningSaveRepository implements WorkerJobRepository {
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.completeClaimed(input);
   }
+
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.requestRunningCancellation(input);
+  }
 }
 
 class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
@@ -185,6 +192,12 @@ class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
 
   async completeClaimed(
     _input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    throw new Error("injected job save failure");
+  }
+
+  async requestRunningCancellation(
+    _input: WorkerJobRequestRunningCancellationInput
   ): Promise<WorkerJobRecord | undefined> {
     throw new Error("injected job save failure");
   }
@@ -248,6 +261,12 @@ class FailOnceCancelledSaveRepository implements WorkerJobRepository {
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.completeClaimed(input);
   }
+
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.requestRunningCancellation(input);
+  }
 }
 
 class ExternalCancellationBeforeClaimedCompletionRepository
@@ -297,6 +316,12 @@ class ExternalCancellationBeforeClaimedCompletionRepository
     return this.repository.completeClaimed(input);
   }
 
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.requestRunningCancellation(input);
+  }
+
   private async injectExternalCancellation(jobId: string): Promise<void> {
     if (this.hasInjectedCancellation) {
       return;
@@ -313,6 +338,91 @@ class ExternalCancellationBeforeClaimedCompletionRepository
       cancelRequestedAt: "2026-05-18T00:00:02.500Z",
       cancelReason: "External stop"
     });
+  }
+}
+
+class CompleteBeforeStaleRunningCancellationRepository
+  implements WorkerJobRepository
+{
+  private readonly repository = new InMemoryWorkerJobRepository();
+  private targetJobId: string | undefined;
+  private claimToken: string | undefined;
+  private hasReturnedInitialRunningRead = false;
+  private hasInjectedCompletion = false;
+
+  armCompletion(input: { jobId: string; claimToken: string }): void {
+    this.targetJobId = input.jobId;
+    this.claimToken = input.claimToken;
+  }
+
+  save(record: WorkerJobRecord): Promise<void> {
+    return this.repository.save(record);
+  }
+
+  async getById(id: string): Promise<WorkerJobRecord | undefined> {
+    if (id !== this.targetJobId || !this.claimToken) {
+      return this.repository.getById(id);
+    }
+
+    const latest = await this.repository.getById(id);
+    if (!latest || latest.state !== "running") {
+      return latest;
+    }
+
+    if (!this.hasReturnedInitialRunningRead) {
+      this.hasReturnedInitialRunningRead = true;
+      return latest;
+    }
+
+    if (!this.hasInjectedCompletion) {
+      this.hasInjectedCompletion = true;
+      await this.repository.completeClaimed({
+        jobId: id,
+        claimToken: this.claimToken,
+        state: "completed",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "completed by another runtime",
+          stderr: "",
+          stdoutBytes: 28,
+          stderrBytes: 0
+        },
+        completedAt: "2026-05-18T00:00:03.000Z"
+      });
+    }
+
+    return latest;
+  }
+
+  listForProject(projectId: string): Promise<WorkerJobRecord[]> {
+    return this.repository.listForProject(projectId);
+  }
+
+  listAll(): Promise<WorkerJobRecord[]> {
+    return this.repository.listAll();
+  }
+
+  findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return this.repository.findOldestQueued();
+  }
+
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.claimOldestQueued(input);
+  }
+
+  completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.completeClaimed(input);
+  }
+
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.requestRunningCancellation(input);
   }
 }
 
@@ -1227,6 +1337,41 @@ describe("InMemoryWorkerRuntime", () => {
     });
     expect(completed?.cancelledAt).toBeUndefined();
     expect(stored).toEqual(completed);
+  });
+
+  it("does not let stale running cancellation overwrite completed claimed jobs", async () => {
+    const repository = new CompleteBeforeStaleRunningCancellationRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      claimTokenFactory: () => "claim_token_1",
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:01.000Z",
+        "2026-05-18T00:00:04.000Z"
+      ])
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    repository.armCompletion({
+      jobId: queued.id,
+      claimToken: claim!.claimToken
+    });
+
+    const cancelled = await runtime.cancelJob(queued.id, "Stop after completion");
+    const stored = await repository.getById(queued.id);
+
+    expect(cancelled).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      completedAt: "2026-05-18T00:00:03.000Z",
+      resultSummary: {
+        state: "completed",
+        stdout: "completed by another runtime"
+      }
+    });
+    expect(cancelled?.cancelRequestedAt).toBeUndefined();
+    expect(stored).toEqual(cancelled);
   });
 
   it("lets running adapters observe cooperative cancellation requests", async () => {
