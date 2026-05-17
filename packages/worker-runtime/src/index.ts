@@ -170,12 +170,12 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       storedJob.policy
     );
     if (!validation.valid) {
-      this.completeJob(storedJob.record, {
+      this.completeJob(storedJob, {
         state: "rejected",
         stdout: "",
         stderr: validation.reason,
         errorName: validation.errorName
-      }, storedJob.policy);
+      });
       return copyRecord(storedJob.record);
     }
 
@@ -185,14 +185,14 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         copyPolicy(storedJob.policy)
       );
 
-      this.completeJob(storedJob.record, result, storedJob.policy);
+      this.completeJob(storedJob, result);
     } catch (error) {
-      this.completeJob(storedJob.record, {
+      this.completeJob(storedJob, {
         state: "failed",
         stdout: "",
         stderr: error instanceof Error ? error.message : String(error),
         errorName: error instanceof Error && error.name ? error.name : "execution_adapter_failed"
-      }, storedJob.policy);
+      });
     }
 
     return copyRecord(storedJob.record);
@@ -210,12 +210,13 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   }
 
   private completeJob(
-    record: WorkerJobRecord,
-    result: ExecutionResult,
-    policy: SandboxPolicy
+    storedJob: StoredJob,
+    result: ExecutionResult
   ): void {
+    const { record, policy } = storedJob;
+
     record.state = result.state;
-    record.resultSummary = summarizeResult(result, policy);
+    record.resultSummary = summarizeResult(result, policy, getSensitiveValues(storedJob.env));
     record.errorName = result.errorName;
     record.completedAt = this.nowIso();
   }
@@ -330,11 +331,20 @@ export function validateSandboxPolicy(
     };
   }
 
-  if (policy.mode === "reject") {
+  const mode = policy.mode as string;
+  if (mode === "reject") {
     return {
       valid: false,
       reason: "sandbox policy rejects execution",
       errorName: "sandbox_policy_reject_mode"
+    };
+  }
+
+  if (mode !== "simulate") {
+    return {
+      valid: false,
+      reason: `sandbox policy mode not supported: ${mode}`,
+      errorName: "sandbox_policy_mode_not_supported"
     };
   }
 
@@ -426,20 +436,36 @@ function toExecutionInput(storedJob: StoredJob): ExecutionInput {
 
 function summarizeResult(
   result: ExecutionResult,
-  policy: SandboxPolicy
+  policy: SandboxPolicy,
+  sensitiveValues: string[] = []
 ): WorkerJobResultSummary {
   const stdoutBytes = byteLength(result.stdout);
   const stderrBytes = byteLength(result.stderr);
+  const redactedStdout = redactSensitiveValues(result.stdout, sensitiveValues);
+  const redactedStderr = redactSensitiveValues(result.stderr, sensitiveValues);
 
   return {
     state: result.state,
     exitCode: result.exitCode,
-    stdout: truncateUtf8(result.stdout, policy.maxStdoutBytes),
-    stderr: truncateUtf8(result.stderr, policy.maxStderrBytes),
+    stdout: truncateUtf8(redactedStdout, policy.maxStdoutBytes),
+    stderr: truncateUtf8(redactedStderr, policy.maxStderrBytes),
     stdoutBytes,
     stderrBytes,
     errorName: result.errorName
   };
+}
+
+function getSensitiveValues(env: Record<string, string>): string[] {
+  return [...new Set(Object.values(env).filter((value) => value.length > 0))].sort(
+    (a, b) => b.length - a.length
+  );
+}
+
+function redactSensitiveValues(value: string, sensitiveValues: string[]): string {
+  return sensitiveValues.reduce(
+    (redacted, sensitiveValue) => redacted.split(sensitiveValue).join("[redacted]"),
+    value
+  );
 }
 
 function truncateUtf8(value: string, maxBytes: number): string {

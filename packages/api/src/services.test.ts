@@ -1349,7 +1349,7 @@ describe("demo workbench service", () => {
       commandId: "publish_static",
       approvedByUserId: "user_1"
     });
-    const expectedStdout = `Simulated static-deploy for project ${project.id}.`;
+    const expectedStdout = "Simulated static-deploy for project [redacted].";
     const jobs = await workerRuntime.listJobsForProject(project.id);
     const serialized = JSON.stringify({ run: result.run, observation: result.observation, jobs });
 

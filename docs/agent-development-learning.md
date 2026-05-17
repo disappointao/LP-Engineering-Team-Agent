@@ -533,7 +533,7 @@ pnpm --filter @lp-agent/model-gateway test
 - API 已提供显式注入的 `WorkerBackedToolCommandRunner`。
 - 默认 API runner 仍 reject，Web 仍走原模拟 runner。
 - 当前仍无真实 shell/MCP execution/OS 级 sandbox。
-- 输出 summary 已做 byte bound，路径检查只是 v0 lexical precheck。
+- 输出 summary 已做 byte bound 和已知 env value redaction，路径检查只是 v0 lexical precheck。
 
 学习重点：
 

@@ -134,6 +134,32 @@ describe("InMemoryWorkerRuntime", () => {
     expect(adapter.execute).not.toHaveBeenCalled();
   });
 
+  it("policy rejects unsupported runtime sandbox modes before adapter execution", async () => {
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({ adapter });
+    await runtime.enqueue(
+      baseInput(),
+      { ...simulatedPolicy(), mode: "real" as SandboxPolicy["mode"] }
+    );
+
+    const job = await runtime.runNext();
+
+    expect(job?.state).toBe("rejected");
+    expect(job?.errorName).toBe("sandbox_policy_mode_not_supported");
+    expect(job?.resultSummary).toMatchObject({
+      state: "rejected",
+      errorName: "sandbox_policy_mode_not_supported"
+    });
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
   it("policy rejects unexpected env names without storing secret values", async () => {
     const runtime = new InMemoryWorkerRuntime({
       adapter: new SimulatedExecutionAdapter({
@@ -160,6 +186,54 @@ describe("InMemoryWorkerRuntime", () => {
     expect(serialized).toContain("SECRET_TOKEN");
     expect(serialized).not.toContain("super-secret");
     expect(serialized).not.toContain("allowed-value");
+  });
+
+  it("redacts known env values from stored output summaries", async () => {
+    const adapterResult = {
+      state: "completed" as const,
+      exitCode: 0,
+      stdout: "token secret-token and artifact <style>secret</style>",
+      stderr: "stderr secret-token <style>secret</style>"
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: {
+        execute: vi.fn(async () => adapterResult)
+      }
+    });
+    const queued = await runtime.enqueue(
+      baseInput({
+        env: {
+          TOKEN: "secret-token",
+          ARTIFACT_FRAGMENT: "<style>secret</style>"
+        }
+      }),
+      simulatedPolicy({
+        allowedEnvNames: ["TOKEN", "ARTIFACT_FRAGMENT"],
+        maxStdoutBytes: 200,
+        maxStderrBytes: 200
+      })
+    );
+
+    const job = await runtime.runNext();
+    const serialized = JSON.stringify(await runtime.getJob(queued.id));
+
+    expect(job?.state).toBe("completed");
+    expect(job?.resultSummary?.stdout).toBe(
+      "token [redacted] and artifact [redacted]"
+    );
+    expect(job?.resultSummary?.stderr).toBe("stderr [redacted] [redacted]");
+    expect(job?.resultSummary?.stdoutBytes).toBe(
+      Buffer.byteLength(adapterResult.stdout, "utf8")
+    );
+    expect(job?.resultSummary?.stderrBytes).toBe(
+      Buffer.byteLength(adapterResult.stderr, "utf8")
+    );
+    expect(adapterResult.stdout).toContain("secret-token");
+    expect(adapterResult.stderr).toContain("<style>secret</style>");
+    expect(serialized).toContain("TOKEN");
+    expect(serialized).toContain("ARTIFACT_FRAGMENT");
+    expect(serialized).not.toContain("secret-token");
+    expect(serialized).not.toContain("<style>secret</style>");
   });
 
   it("policy rejects workingDirectory when the policy has no workingDirectoryRoot", async () => {

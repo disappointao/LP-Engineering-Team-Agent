@@ -31,7 +31,7 @@ describe("WorkerBackedToolCommandRunner", () => {
     expect(result).toEqual({
       state: "completed",
       exitCode: 0,
-      stdout: "Simulated static-deploy for project project_1.",
+      stdout: "Simulated static-deploy for project [redacted].",
       stderr: ""
     });
     expect(jobs).toHaveLength(1);
@@ -148,7 +148,7 @@ describe("WorkerBackedToolCommandRunner", () => {
 
     expect(result).toMatchObject({
       state: "completed",
-      stdout: "Simulated static-deploy for project project_1."
+      stdout: "Simulated static-deploy for project [redacted]."
     });
     expect(jobs.map((job) => job.inputSummary.command)).toEqual([
       "queued-build",
