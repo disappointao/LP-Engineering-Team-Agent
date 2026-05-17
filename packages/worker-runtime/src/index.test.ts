@@ -555,6 +555,81 @@ class CompleteBeforeStaleQueuedCancellationRepository
   }
 }
 
+class ClaimBeforeQueuedCancellationRepository implements WorkerJobRepository {
+  private readonly repository = new InMemoryWorkerJobRepository();
+  private targetJobId: string | undefined;
+  private hasInjectedClaim = false;
+
+  armClaim(jobId: string): void {
+    this.targetJobId = jobId;
+  }
+
+  save(record: WorkerJobRecord): Promise<void> {
+    return this.repository.save(record);
+  }
+
+  getById(id: string): Promise<WorkerJobRecord | undefined> {
+    return this.repository.getById(id);
+  }
+
+  listForProject(projectId: string): Promise<WorkerJobRecord[]> {
+    return this.repository.listForProject(projectId);
+  }
+
+  listAll(): Promise<WorkerJobRecord[]> {
+    return this.repository.listAll();
+  }
+
+  findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return this.repository.findOldestQueued();
+  }
+
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.claimOldestQueued(input);
+  }
+
+  completeClaimed(
+    input: WorkerJobCompleteClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.completeClaimed(input);
+  }
+
+  requestRunningCancellation(
+    input: WorkerJobRequestRunningCancellationInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.requestRunningCancellation(input);
+  }
+
+  async cancelQueued(
+    input: WorkerJobCancelQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    await this.injectClaim(input.jobId);
+    return this.repository.cancelQueued(input);
+  }
+
+  private async injectClaim(jobId: string): Promise<void> {
+    if (this.hasInjectedClaim || jobId !== this.targetJobId) {
+      return;
+    }
+
+    this.hasInjectedClaim = true;
+    const latest = await this.repository.getById(jobId);
+    if (!latest || latest.state !== "queued") {
+      return;
+    }
+
+    await this.repository.save({
+      ...latest,
+      state: "running",
+      startedAt: "2026-05-18T00:00:03.000Z",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+  }
+}
+
 describe("InMemoryWorkerRuntime", () => {
   it("enqueues safe simulated jobs with persisted payloads and no raw env values", async () => {
     const repository = new InMemoryWorkerJobRepository();
@@ -1532,6 +1607,46 @@ describe("InMemoryWorkerRuntime", () => {
     });
     expect(cancelled?.cancelRequestedAt).toBeUndefined();
     expect(stored).toEqual(cancelled);
+    expect(payload).toBeDefined();
+  });
+
+  it("does not relock when stale queued cancellation finds a running job", async () => {
+    const repository = new ClaimBeforeQueuedCancellationRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:04.000Z",
+        "2026-05-18T00:00:05.000Z"
+      ])
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    repository.armClaim(queued.id);
+
+    const timeout = Symbol("timeout");
+    const cancelPromise = runtime.cancelJob(queued.id, "Stop after claim");
+    const result = await Promise.race([
+      cancelPromise,
+      new Promise<typeof timeout>((resolve) => {
+        setTimeout(() => resolve(timeout), 20);
+      })
+    ]);
+    const stored = await repository.getById(queued.id);
+    const payload = await payloadRepository.getByJobId(queued.id);
+
+    expect(result).not.toBe(timeout);
+    expect(result).toMatchObject({
+      id: queued.id,
+      state: "running",
+      startedAt: "2026-05-18T00:00:03.000Z",
+      cancelRequestedAt: "2026-05-18T00:00:05.000Z",
+      cancelReason: "Stop after claim"
+    });
+    expect(stored).toEqual(result);
+    expect(stored?.completedAt).toBeUndefined();
+    expect(stored?.resultSummary).toBeUndefined();
     expect(payload).toBeDefined();
   });
 

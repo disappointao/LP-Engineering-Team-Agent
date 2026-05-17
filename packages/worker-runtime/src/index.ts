@@ -613,7 +613,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       return undefined;
     }
     if (updatedRecord.state === "running") {
-      return this.requestRunningCancellation(updatedRecord, reason);
+      return this.requestRunningCancellationInCurrentLock(updatedRecord, reason);
     }
     if (updatedRecord.state !== "cancelled") {
       return copyRecord(updatedRecord);
