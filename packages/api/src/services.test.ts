@@ -29,6 +29,10 @@ import {
   type WorkbenchSnapshot
 } from "./index";
 import {
+  createProjectMemberId,
+  createWorkspaceMemberId
+} from "./collaboration";
+import {
   ContextPackSchema,
   assembleContextPack
 } from "./context-assembler";
@@ -229,7 +233,7 @@ describe("demo workbench service", () => {
     await expect(service.listProjectMembers(project.id)).resolves.toHaveLength(3);
     await expect(repositories.projectMembers.listForProject(project.id)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: expect.stringMatching(/^project_member_project_1_b64_/),
+        id: expect.stringMatching(/^project_member_v1_/),
         userId: "reviewer/a"
       }),
       expect.objectContaining({
@@ -237,7 +241,7 @@ describe("demo workbench service", () => {
         userId: "local-web-user"
       }),
       expect.objectContaining({
-        id: "project_member_project_1_reviewer_a",
+        id: expect.stringMatching(/^project_member_v1_/),
         userId: "reviewer_a"
       })
     ]));
@@ -271,9 +275,57 @@ describe("demo workbench service", () => {
     const slashReviewer = members.find((member) => member.userId === "reviewer/a");
     const literalReviewer = members.find((member) => member.userId === "b64_cmV2aWV3ZXIvYQ");
 
-    expect(slashReviewer?.id).toBe("project_member_project_1_b64_cmV2aWV3ZXIvYQ");
+    expect(slashReviewer?.id).toMatch(/^project_member_v1_/);
     expect(literalReviewer?.id).toBeDefined();
     expect(literalReviewer?.id).not.toBe(slashReviewer?.id);
+  });
+
+  it("keeps project and workspace member ids distinct across tuple boundaries", () => {
+    expect(createProjectMemberId("project_1", "local-web-user")).toBe(
+      "project_member_project_1_local-web-user"
+    );
+    expect(createProjectMemberId("project_1", "a_b")).not.toBe(
+      createProjectMemberId("project_1_a", "b")
+    );
+    expect(createWorkspaceMemberId("workspace_1", "a_b")).not.toBe(
+      createWorkspaceMemberId("workspace_1_a", "b")
+    );
+  });
+
+  it("keeps project members distinct when project and user ids overlap at tuple boundaries", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const firstProject = await service.createProject({ name: "First" });
+    const secondProject: ProjectRecord = {
+      id: "project_1_a",
+      name: "Second",
+      createdAt: "2026-05-11T00:00:00.000Z"
+    };
+    await repositories.projects.save(secondProject);
+
+    await service.addProjectMember({
+      projectId: firstProject.id,
+      userId: "a_b",
+      role: "reviewer"
+    });
+    await service.addProjectMember({
+      projectId: secondProject.id,
+      userId: "b",
+      role: "reviewer"
+    });
+
+    await expect(service.listProjectMembers(firstProject.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ projectId: firstProject.id, userId: "a_b" })
+    ]));
+    await expect(service.listProjectMembers(secondProject.id)).resolves.toEqual([
+      expect.objectContaining({ projectId: secondProject.id, userId: "b" })
+    ]);
+
+    const firstMember = await repositories.projectMembers.getByProjectAndUser(firstProject.id, "a_b");
+    const secondMember = await repositories.projectMembers.getByProjectAndUser(secondProject.id, "b");
+    expect(firstMember?.id).toBeDefined();
+    expect(secondMember?.id).toBeDefined();
+    expect(firstMember?.id).not.toBe(secondMember?.id);
   });
 
   it("preserves project member display name when updating role without a replacement", async () => {

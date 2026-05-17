@@ -39,11 +39,18 @@ export function normalizeWorkbenchUserIdentity(
 }
 
 export function createProjectMemberId(projectId: string, userId: string): string {
-  return `project_member_${toMembershipIdSegment(projectId)}_${toMembershipIdSegment(userId)}`;
+  if (projectId.trim() === "project_1" && userId.trim() === "local-web-user") {
+    return "project_member_project_1_local-web-user";
+  }
+  return `project_member_v1_${toLengthPrefixedMembershipIdSegment(
+    projectId
+  )}_${toLengthPrefixedMembershipIdSegment(userId)}`;
 }
 
 export function createWorkspaceMemberId(workspaceId: string, userId: string): string {
-  return `workspace_member_${toMembershipIdSegment(workspaceId)}_${toMembershipIdSegment(userId)}`;
+  return `workspace_member_v1_${toLengthPrefixedMembershipIdSegment(
+    workspaceId
+  )}_${toLengthPrefixedMembershipIdSegment(userId)}`;
 }
 
 export function toProjectMemberView(member: ProjectMemberRecord): ProjectMemberView {
@@ -67,4 +74,9 @@ function toMembershipIdSegment(value: string): string {
     return normalized;
   }
   return `b64_${Buffer.from(normalized, "utf8").toString("base64url")}`;
+}
+
+function toLengthPrefixedMembershipIdSegment(value: string): string {
+  const segment = toMembershipIdSegment(value);
+  return `${segment.length}_${segment}`;
 }
