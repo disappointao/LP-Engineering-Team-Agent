@@ -8,6 +8,8 @@ import {
   type ModelProviderType,
   type ModelRoutingPolicyRecord,
   type PageVersionRecord,
+  type ProjectMemberRecord,
+  type ProjectRole,
   type ProjectRecord,
   type ReviewStatus,
   type RunEventRecord,
@@ -103,6 +105,14 @@ import {
   toHandoffRunEventDraft,
   type RunEventDraft
 } from "./agent-handoffs";
+import {
+  createProjectMemberId,
+  defaultLocalWorkbenchUser,
+  normalizeWorkbenchUserIdentity,
+  toProjectMemberView,
+  type ProjectMemberView,
+  type WorkbenchUserIdentity
+} from "./collaboration";
 
 export {
   AgentHandoffArtifactRefsSchema,
@@ -117,6 +127,15 @@ export {
   type AssembleRuntimeHandoffsResult,
   type RunEventDraft
 } from "./agent-handoffs";
+export {
+  createProjectMemberId,
+  createWorkspaceMemberId,
+  defaultLocalWorkbenchUser,
+  normalizeWorkbenchUserIdentity,
+  toProjectMemberView,
+  type ProjectMemberView,
+  type WorkbenchUserIdentity
+} from "./collaboration";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
@@ -129,6 +148,8 @@ export type {
   ModelProviderType,
   ModelRoutingPolicyRecord,
   PageVersionRecord,
+  ProjectMemberRecord,
+  ProjectRole,
   ProjectRecord,
   ReviewStatus,
   RunEventRecord,
@@ -307,6 +328,7 @@ export interface DemoWorkbenchServiceOptions {
   toolCommandRunner?: ToolCommandRunner;
   env?: RuntimeEnvironment;
   modelFetch?: ModelFetch;
+  currentUser?: WorkbenchUserIdentity;
   now?: () => Date;
 }
 
@@ -319,6 +341,7 @@ export class DemoWorkbenchService {
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly toolCommandRunner: ToolCommandRunner;
   private readonly env: RuntimeEnvironment;
+  private readonly currentUser: WorkbenchUserIdentity;
   private readonly now: () => Date;
   private readonly structuredPlannerOutputEnabled: boolean;
   private readonly structuredBuilderOutputEnabled: boolean;
@@ -340,6 +363,7 @@ export class DemoWorkbenchService {
     this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
     this.toolCommandRunner = options.toolCommandRunner ?? new RejectingToolCommandRunner();
+    this.currentUser = normalizeWorkbenchUserIdentity(options.currentUser);
     this.now = options.now ?? (() => new Date());
   }
 
@@ -352,8 +376,73 @@ export class DemoWorkbenchService {
         createdAt: this.timestamp()
       };
       await this.repositories.projects.save(project);
+      await this.ensureProjectOwnerMembership(project.id);
       return copyProject(project);
     });
+  }
+
+  async ensureProjectOwnerMembership(
+    projectId: string,
+    user: WorkbenchUserIdentity = this.currentUser
+  ): Promise<ProjectMemberView> {
+    await this.getProjectOrThrow(projectId);
+    const normalizedUser = normalizeWorkbenchUserIdentity(user);
+    const existing = await this.repositories.projectMembers.getByProjectAndUser(
+      projectId,
+      normalizedUser.id
+    );
+    if (existing) {
+      return toProjectMemberView(existing);
+    }
+
+    const timestamp = this.timestamp();
+    const member: ProjectMemberRecord = {
+      id: createProjectMemberId(projectId, normalizedUser.id),
+      projectId,
+      userId: normalizedUser.id,
+      role: "owner",
+      displayName: normalizedUser.displayName,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    await this.repositories.projectMembers.save(member);
+    return toProjectMemberView(member);
+  }
+
+  async addProjectMember(input: {
+    projectId: string;
+    userId: string;
+    role: ProjectRole;
+    displayName?: string;
+  }): Promise<ProjectMemberView> {
+    await this.getProjectOrThrow(input.projectId);
+    const userId = input.userId.trim();
+    if (userId.length === 0) {
+      throw new Error("project_member_user_id_required");
+    }
+    const existing = await this.repositories.projectMembers.getByProjectAndUser(
+      input.projectId,
+      userId
+    );
+    const timestamp = this.timestamp();
+    const member: ProjectMemberRecord = {
+      id: existing?.id ?? createProjectMemberId(input.projectId, userId),
+      projectId: input.projectId,
+      userId,
+      role: input.role,
+      ...(input.displayName?.trim() ? { displayName: input.displayName.trim() } : {}),
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp
+    };
+    await this.repositories.projectMembers.save(member);
+    return toProjectMemberView(member);
+  }
+
+  async listProjectMembers(projectId: string): Promise<ProjectMemberView[]> {
+    await this.getProjectOrThrow(projectId);
+    return (await this.repositories.projectMembers.listForProject(projectId)).map(
+      toProjectMemberView
+    );
   }
 
   async createBriefFromPrompt(input: CreateBriefFromPromptInput): Promise<BriefRecord> {

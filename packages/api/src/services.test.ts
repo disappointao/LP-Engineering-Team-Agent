@@ -130,6 +130,79 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("creates an owner project member for the current local user", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+
+    const project = await service.createProject({ name: "Spring sale" });
+
+    await expect(service.listProjectMembers(project.id)).resolves.toEqual([
+      {
+        id: "project_member_project_1_local-web-user",
+        projectId: "project_1",
+        userId: "local-web-user",
+        role: "owner",
+        displayName: "Local user",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String)
+      }
+    ]);
+  });
+
+  it("uses the configured current user when creating project ownership", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      currentUser: {
+        id: "user_ada",
+        displayName: "Ada Lovelace"
+      }
+    });
+
+    const project = await service.createProject({ name: "Ada project" });
+
+    await expect(repositories.projectMembers.getByProjectAndUser(project.id, "user_ada"))
+      .resolves.toMatchObject({
+        projectId: project.id,
+        userId: "user_ada",
+        role: "owner",
+        displayName: "Ada Lovelace"
+      });
+  });
+
+  it("keeps owner membership creation idempotent for the same project and user", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const project = await service.createProject({ name: "Spring sale" });
+
+    await service.ensureProjectOwnerMembership(project.id);
+    await service.ensureProjectOwnerMembership(project.id);
+
+    await expect(repositories.projectMembers.listForProject(project.id)).resolves.toHaveLength(1);
+  });
+
+  it("lists project members only for the requested project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const first = await service.createProject({ name: "First" });
+    const second = await service.createProject({ name: "Second" });
+
+    await service.addProjectMember({
+      projectId: first.id,
+      userId: "reviewer_1",
+      role: "reviewer",
+      displayName: "Review User"
+    });
+
+    await expect(service.listProjectMembers(first.id)).resolves.toEqual([
+      expect.objectContaining({ userId: "local-web-user", role: "owner" }),
+      expect.objectContaining({ userId: "reviewer_1", role: "reviewer" })
+    ]);
+    await expect(service.listProjectMembers(second.id)).resolves.toEqual([
+      expect.objectContaining({ userId: "local-web-user", role: "owner" })
+    ]);
+  });
+
   it("persists planner, builder, reviewer, and deployer run events in order", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
@@ -459,6 +532,28 @@ describe("demo workbench service", () => {
       pageVersionId: pageVersion.id,
       status: "pr_opened"
     });
+  });
+
+  it("rejects deployment approval with a blank reviewer user id", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({ projectId: project.id, prompt: "Prompt" });
+    const reviewedPageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: reviewedPageVersion.id
+    });
+
+    await expect(
+      service.approveAndCreateDeployment({
+        projectId: project.id,
+        pageVersionId: reviewedPageVersion.id,
+        reviewerUserId: "   "
+      })
+    ).rejects.toThrow("Reviewer user ID is required.");
   });
 
   it("persists failed run events before surfacing generation failure", async () => {
