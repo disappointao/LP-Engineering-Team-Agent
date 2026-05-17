@@ -125,6 +125,36 @@ describe("WorkerBackedToolCommandRunner", () => {
     });
   });
 
+  it("maps cancelled worker jobs to cancelled tool command results", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: {
+        execute: vi.fn(async () => ({
+          state: "cancelled" as const,
+          stdout: "",
+          stderr: "Worker job cancelled.",
+          errorName: "worker_job_cancelled"
+        }))
+      }
+    });
+    const runner = new WorkerBackedToolCommandRunner(runtime, (input) =>
+      createSimulatedSandboxPolicy({
+        allowedCommands: [input.command],
+        allowedEnvNames: Object.keys(input.env),
+        timeoutMs: input.timeoutMs
+      })
+    );
+
+    const result = await runner.run(baseInput());
+
+    expect(result).toEqual({
+      state: "cancelled",
+      exitCode: undefined,
+      stdout: "",
+      stderr: "Worker job cancelled.",
+      errorName: "worker_job_cancelled"
+    });
+  });
+
   it("rejects command execution by default without invoking the adapter", async () => {
     const adapter: ExecutionAdapter = {
       execute: vi.fn()

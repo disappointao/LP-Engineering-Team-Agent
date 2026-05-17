@@ -16,7 +16,7 @@ export interface ToolCommandRunInput {
 }
 
 export interface ToolCommandRunResult {
-  state: "completed" | "failed";
+  state: "completed" | "failed" | "cancelled";
   exitCode?: number;
   stdout: string;
   stderr: string;

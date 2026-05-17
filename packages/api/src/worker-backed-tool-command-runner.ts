@@ -114,6 +114,16 @@ function toToolCommandRunResult(record: WorkerJobRecord): ToolCommandRunResult {
     };
   }
 
+  if (record.state === "cancelled") {
+    return {
+      state: "cancelled",
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      errorName: record.errorName ?? "worker_job_cancelled"
+    };
+  }
+
   return {
     state: "failed",
     exitCode: result.exitCode,

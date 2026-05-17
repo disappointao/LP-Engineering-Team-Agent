@@ -1446,6 +1446,76 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("persists cancelled deployment skill command results as failed service runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "cancelled",
+      exitCode: undefined,
+      stdout: "",
+      stderr: "Worker job cancelled.",
+      errorName: "worker_job_cancelled"
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        deploymentSkillManifest({ commands: [commandWithoutArtifacts()] })
+      ),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      approvedByUserId: "user_1"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+
+    expect(result.run.state).toBe("failed");
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      errorName: "worker_job_cancelled",
+      outputSummary: "stdout: 0 chars\nstderr: 21 chars"
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "tool.failed",
+          payload: expect.objectContaining({
+            errorName: "worker_job_cancelled",
+            outputSummary: "stdout: 0 chars\nstderr: 21 chars"
+          })
+        }),
+        expect.objectContaining({
+          type: "run.failed",
+          payload: expect.objectContaining({
+            errorName: "worker_job_cancelled",
+            outputSummary: "stdout: 0 chars\nstderr: 21 chars"
+          })
+        })
+      ])
+    );
+  });
+
   it("persists failed deployment skill command observations when runner throws", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     let artifactFragment = "";
