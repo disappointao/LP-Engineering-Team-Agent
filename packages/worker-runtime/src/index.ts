@@ -186,17 +186,10 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
 
   async runNext(): Promise<WorkerJobRecord | undefined> {
     return this.withRunLock(async () => {
-      const queuedRecord = await this.repository.findOldestQueued();
-      if (!queuedRecord) {
+      const runningRecord = await this.claimOldestQueuedJob();
+      if (!runningRecord) {
         return undefined;
       }
-
-      const runningRecord: WorkerJobRecord = {
-        ...copyRecord(queuedRecord),
-        state: "running",
-        startedAt: this.nowIso()
-      };
-      await this.repository.save(runningRecord);
 
       const validation = validateSandboxPolicy(
         runningRecord.inputSummary,
@@ -278,13 +271,13 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       return copyRecord(current);
     }
 
-    return this.withRunLock(async () => {
+    return this.withJobMutationLock(id, async () => {
       const latest = await this.repository.getById(id);
       if (!latest) {
         return undefined;
       }
       if (latest.state === "running") {
-        return this.requestRunningCancellation(latest, reason);
+        return this.requestRunningCancellationInCurrentLock(latest, reason);
       }
       if (latest.state !== "queued") {
         return copyRecord(latest);
@@ -299,6 +292,36 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
 
   async listJobsForProject(projectId: string): Promise<WorkerJobRecord[]> {
     return this.repository.listForProject(projectId);
+  }
+
+  private async claimOldestQueuedJob(): Promise<WorkerJobRecord | undefined> {
+    while (true) {
+      const queuedRecord = await this.repository.findOldestQueued();
+      if (!queuedRecord) {
+        return undefined;
+      }
+
+      const claimed = await this.withJobMutationLock(
+        queuedRecord.id,
+        async () => {
+          const latest = await this.repository.getById(queuedRecord.id);
+          if (!latest || latest.state !== "queued") {
+            return undefined;
+          }
+
+          const runningRecord: WorkerJobRecord = {
+            ...copyRecord(latest),
+            state: "running",
+            startedAt: this.nowIso()
+          };
+          await this.repository.save(runningRecord);
+          return copyRecord(runningRecord);
+        }
+      );
+      if (claimed) {
+        return claimed;
+      }
+    }
   }
 
   private async cancelQueuedJob(
@@ -343,14 +366,21 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         return copyRecord(latest);
       }
 
-      const updatedRecord: WorkerJobRecord = {
-        ...copyRecord(latest),
-        cancelRequestedAt: latest.cancelRequestedAt ?? this.nowIso(),
-        cancelReason: latest.cancelReason ?? normalizeCancelReason(reason)
-      };
-      await this.repository.save(updatedRecord);
-      return copyRecord(updatedRecord);
+      return this.requestRunningCancellationInCurrentLock(latest, reason);
     });
+  }
+
+  private async requestRunningCancellationInCurrentLock(
+    record: WorkerJobRecord,
+    reason?: string
+  ): Promise<WorkerJobRecord> {
+    const updatedRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      cancelRequestedAt: record.cancelRequestedAt ?? this.nowIso(),
+      cancelReason: record.cancelReason ?? normalizeCancelReason(reason)
+    };
+    await this.repository.save(updatedRecord);
+    return copyRecord(updatedRecord);
   }
 
   private async completeJob(

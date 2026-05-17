@@ -15,6 +15,7 @@ import {
   type ExecutionAdapter,
   type ExecutionInput,
   type SandboxPolicy,
+  type WorkerJobRepository,
   type WorkerJobRecord,
   type WorkerJobInput
 } from "./index";
@@ -77,6 +78,39 @@ function createClock(values: string[]): () => Date {
   let index = 0;
   const lastValue = values[values.length - 1] as string;
   return () => new Date(values[index++] ?? lastValue);
+}
+
+class BlockingRunningSaveRepository implements WorkerJobRepository {
+  private readonly repository = new InMemoryWorkerJobRepository();
+  private blockedFirstRunningSave = false;
+  readonly firstRunningSaveStarted = deferred<void>();
+  readonly releaseFirstRunningSave = deferred<void>();
+
+  async save(record: WorkerJobRecord): Promise<void> {
+    if (record.state === "running" && !this.blockedFirstRunningSave) {
+      this.blockedFirstRunningSave = true;
+      this.firstRunningSaveStarted.resolve();
+      await this.releaseFirstRunningSave.promise;
+    }
+
+    return this.repository.save(record);
+  }
+
+  getById(id: string): Promise<WorkerJobRecord | undefined> {
+    return this.repository.getById(id);
+  }
+
+  listForProject(projectId: string): Promise<WorkerJobRecord[]> {
+    return this.repository.listForProject(projectId);
+  }
+
+  listAll(): Promise<WorkerJobRecord[]> {
+    return this.repository.listAll();
+  }
+
+  findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return this.repository.findOldestQueued();
+  }
 }
 
 describe("InMemoryWorkerRuntime", () => {
@@ -329,6 +363,81 @@ describe("InMemoryWorkerRuntime", () => {
     });
     expect(completed?.cancelledAt).toBeUndefined();
     expect(stored).toEqual(completed);
+  });
+
+  it("records cancellation while a queued job is being claimed for execution", async () => {
+    const repository = new BlockingRunningSaveRepository();
+    const execution = deferred<Awaited<ReturnType<ExecutionAdapter["execute"]>>>();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(() => execution.promise)
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter,
+      now: createClock([
+        "2026-05-17T12:00:00.000Z",
+        "2026-05-17T12:00:01.000Z",
+        "2026-05-17T12:00:02.000Z",
+        "2026-05-17T12:00:03.000Z"
+      ])
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const runPromise = runtime.runNext();
+    await repository.firstRunningSaveStarted.promise;
+    const cancelPromise = runtime.cancelJob(queued.id, "Stop this job");
+    repository.releaseFirstRunningSave.resolve();
+
+    try {
+      await vi.waitFor(() => {
+        expect(adapter.execute).toHaveBeenCalled();
+      });
+      const runningCancel = await vi.waitFor(async () => {
+        const result = await Promise.race([
+          cancelPromise,
+          Promise.resolve(undefined)
+        ]);
+        expect(result).toBeDefined();
+        return result;
+      });
+
+      execution.resolve({
+        state: "completed",
+        exitCode: 0,
+        stdout: "ok",
+        stderr: ""
+      });
+      const completed = await runPromise;
+      const stored = await repository.getById(queued.id);
+
+      expect(runningCancel).toMatchObject({
+        id: queued.id,
+        state: "running",
+        cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+        cancelReason: "Stop this job"
+      });
+      expect(completed).toMatchObject({
+        id: queued.id,
+        state: "completed",
+        completedAt: "2026-05-17T12:00:03.000Z",
+        cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+        cancelReason: "Stop this job",
+        resultSummary: {
+          state: "completed",
+          stdout: "ok"
+        }
+      });
+      expect(completed?.cancelledAt).toBeUndefined();
+      expect(stored).toEqual(completed);
+    } finally {
+      execution.resolve({
+        state: "completed",
+        exitCode: 0,
+        stdout: "ok",
+        stderr: ""
+      });
+      await Promise.allSettled([runPromise, cancelPromise]);
+    }
   });
 
   it("fails persisted queued jobs when process-local payload is unavailable", async () => {
