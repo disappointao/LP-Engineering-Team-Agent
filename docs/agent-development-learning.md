@@ -557,6 +557,13 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-17-worker-job-persistence.md](./superpowers/plans/2026-05-17-worker-job-persistence.md)
 
+当前实现状态：
+
+- Stage 9 v0 已实现 `WorkerJobRepository`、`InMemoryWorkerJobRepository` 和 `JsonFileWorkerJobRepository`。
+- `InMemoryWorkerRuntime` 已改为通过 repository 持久化安全 job record，raw args/env 仍只保留在进程内 payload map。
+- JSON-file worker job persistence 只保存 bounded/redacted record，不保存执行 payload；重启后 queued job 会以 `worker_job_payload_unavailable` fail-closed。
+- 同一 runtime 内 enqueue 和 runNext 已串行化，避免并发 id 分配冲突和重复 claim 同一个 queued job。
+
 学习重点：
 
 - job persistence 和 execution replay 是两个不同问题。
