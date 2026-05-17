@@ -30,7 +30,8 @@ import {
   type ProjectMCPState,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode,
-  type WebProjectModelState
+  type WebProjectModelState,
+  type WorkbenchPageState
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 
@@ -199,6 +200,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </form>
           </div>
         </div>
+
+        {ProjectMembersBlock({
+          members: pageState.projectMembers ?? [],
+          copy: copy.collaboration
+        })}
 
         <div className="sidebarSection sidebarTasks">
           <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
@@ -945,6 +951,36 @@ function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState 
       deployer: []
     }
   };
+}
+
+function ProjectMembersBlock({
+  members,
+  copy
+}: {
+  members: WorkbenchPageState["projectMembers"];
+  copy: ReturnType<typeof getWorkbenchCopy>["collaboration"];
+}) {
+  return (
+    <section className="sidebarSection projectMembers" aria-label={copy.title}>
+      <div className="sidebarSectionTitle">{copy.title}</div>
+      {members.length === 0 ? (
+        <p className="mutedText">{copy.empty}</p>
+      ) : (
+        <ul className="projectMemberList">
+          {members.map((member) => (
+            <li className="projectMemberItem" key={member.id}>
+              <span>
+                {member.userId === "local-web-user"
+                  ? copy.localUser
+                  : member.displayName ?? member.userId}
+              </span>
+              <strong>{copy.roleLabels[member.role]}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 interface RenderableMCPTool {

@@ -200,6 +200,7 @@ export interface SetMCPToolApprovalFormInput {
   connectorId: string;
   toolName: string;
   approved: boolean;
+  approvedByUserId?: string;
 }
 
 export type TaskType = WorkbenchTaskType;

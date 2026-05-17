@@ -14,6 +14,7 @@ import {
   setCurrentProjectId,
   setCurrentTaskId
 } from "../lib/workbench-session";
+import { getLocalWorkbenchUser } from "../lib/local-identity";
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
@@ -395,7 +396,8 @@ export async function setMCPToolApprovalAction(formData: FormData): Promise<void
     projectId,
     connectorId: String(formData.get("connectorId") ?? ""),
     toolName: String(formData.get("toolName") ?? ""),
-    approved: String(formData.get("approved") ?? "false") === "true"
+    approved: String(formData.get("approved") ?? "false") === "true",
+    approvedByUserId: getLocalWorkbenchUser().id
   });
   if (!result.ok) {
     redirectToMCPWithError(result.error);

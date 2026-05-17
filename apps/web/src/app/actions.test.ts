@@ -1044,24 +1044,22 @@ describe("submitPromptAction", () => {
 
   it("sets an mcp tool approval and redirects to the mcp view", async () => {
     mocks.currentProjectId = "project_1";
+    const formData = buildSkillForm({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      approved: "true"
+    });
+    formData.set("approvedByUserId", "attacker");
 
-    await expectRedirect(
-      setMCPToolApprovalAction(
-        buildSkillForm({
-          projectId: "project_1",
-          connectorId: "connector_assets",
-          toolName: "searchAssets",
-          approved: "true"
-        })
-      ),
-      "/?view=mcp"
-    );
+    await expectRedirect(setMCPToolApprovalAction(formData), "/?view=mcp");
 
     expect(mocks.setMCPToolApproval).toHaveBeenCalledWith({
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true
+      approved: true,
+      approvedByUserId: "local-web-user"
     });
   });
 
@@ -1103,7 +1101,8 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true
+      approved: true,
+      approvedByUserId: "local-web-user"
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
@@ -1127,7 +1126,8 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true
+      approved: true,
+      approvedByUserId: "local-web-user"
     });
     expect(mocks.setMCPToolApproval).not.toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "project_2" })

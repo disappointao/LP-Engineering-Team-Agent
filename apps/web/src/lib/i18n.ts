@@ -67,6 +67,13 @@ export interface WorkbenchCopy {
     promptLabel: string;
     errors: Record<ProjectFlowErrorCode, string>;
   };
+  collaboration: {
+    title: string;
+    localIdentity: string;
+    localUser: string;
+    empty: string;
+    roleLabels: Record<"owner" | "admin" | "member" | "reviewer", string>;
+  };
   skillsView: {
     title: string;
     subtitle: string;
@@ -336,6 +343,18 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         prompt_required: "Enter an LP request.",
         project_not_found: "The selected project is no longer available.",
         generation_failed: "The LP generation flow failed. Try again with a shorter request."
+      }
+    },
+    collaboration: {
+      title: "Project members",
+      localIdentity: "Local identity",
+      localUser: "Local user",
+      empty: "No members recorded for this project yet.",
+      roleLabels: {
+        owner: "Owner",
+        admin: "Admin",
+        member: "Member",
+        reviewer: "Reviewer"
       }
     },
     skillsView: {
@@ -697,6 +716,18 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         prompt_required: "请输入 LP 需求。",
         project_not_found: "当前项目已经不可用。",
         generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
+      }
+    },
+    collaboration: {
+      title: "项目成员",
+      localIdentity: "本地身份",
+      localUser: "本地用户",
+      empty: "当前项目还没有成员记录。",
+      roleLabels: {
+        owner: "负责人",
+        admin: "管理员",
+        member: "成员",
+        reviewer: "审核员"
       }
     },
     skillsView: {

@@ -45,6 +45,10 @@ describe("web i18n", () => {
     expect(zh.projectFlow.errors.prompt_required).toBe("请输入 LP 需求。");
     expect(zh.projectFlow.createDescription).not.toContain("仓库");
     expect(zh.chat.suggestions.join(" ")).not.toContain("部署");
+    expect(zh.collaboration.title).toBe("项目成员");
+    expect(zh.collaboration.localIdentity).toBe("本地身份");
+    expect(zh.collaboration.localUser).toBe("本地用户");
+    expect(zh.collaboration.roleLabels.owner).toBe("负责人");
     expect(en.hero.title).toBe("What LP should we build?");
     expect(en.entry.title).toBe("What can I help you build?");
     expect(en.entry.implicitProjectName).toBe("Untitled LP Project");
@@ -59,6 +63,10 @@ describe("web i18n", () => {
     expect(en.projectFlow.errors.prompt_required).toBe("Enter an LP request.");
     expect(en.projectFlow.createDescription).not.toContain("repository");
     expect(en.chat.suggestions.join(" ")).not.toContain("deployment");
+    expect(en.collaboration.title).toBe("Project members");
+    expect(en.collaboration.localIdentity).toBe("Local identity");
+    expect(en.collaboration.localUser).toBe("Local user");
+    expect(en.collaboration.roleLabels.owner).toBe("Owner");
   });
 
   it("has localized model provider protocol copy", () => {

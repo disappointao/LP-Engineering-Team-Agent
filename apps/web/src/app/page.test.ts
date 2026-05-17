@@ -7,6 +7,7 @@ const pageMocks = vi.hoisted(() => ({
   pageState: {
     kind: "empty",
     projects: [],
+    projectMembers: [],
     tasks: [],
     skills: {
       boundSkills: [],
@@ -164,6 +165,16 @@ function projectSkillState(reviewState: "draft" | "validated" | "published", ena
   };
 }
 
+const localOwnerMember = {
+  id: "project_member_project_1_local-web-user",
+  projectId: "project_1",
+  userId: "local-web-user",
+  role: "owner",
+  displayName: "Local user",
+  createdAt: "2026-05-17T00:00:00.000Z",
+  updatedAt: "2026-05-17T00:00:00.000Z"
+};
+
 const publishedProjectSkill = projectSkillState("published");
 const deploymentBoundSkill = {
   ...publishedProjectSkill,
@@ -210,6 +221,7 @@ function setActiveEmptyProjectState() {
         createdAt: "2026-05-12T08:00:00.000Z"
       }
     ],
+    projectMembers: [localOwnerMember],
     tasks: [],
     skills: {
       boundSkills: [],
@@ -246,6 +258,7 @@ beforeEach(() => {
   pageMocks.pageState = {
     kind: "empty",
     projects: [],
+    projectMembers: [],
     tasks: [],
     skills: {
       boundSkills: [],
@@ -358,6 +371,32 @@ describe("HomePage project flow errors", () => {
     });
 
     expect(html).toContain("该技能命令未绑定到当前项目。");
+  });
+
+  it("renders project members in the sidebar", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({}),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Project members");
+    expect(html).toContain("Local user");
+    expect(html).toContain("Owner");
+  });
+
+  it("renders localized Chinese project members in the sidebar", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({}),
+      acceptLanguage: "zh-CN"
+    });
+
+    expect(html).toContain("项目成员");
+    expect(html).toContain("本地用户");
+    expect(html).toContain("负责人");
   });
 
   it("renders the models management view from the models route", async () => {
