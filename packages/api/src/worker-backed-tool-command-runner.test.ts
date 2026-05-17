@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  type ExecutionAdapter,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createSimulatedSandboxPolicy
@@ -86,6 +87,31 @@ describe("WorkerBackedToolCommandRunner", () => {
       stdout: "",
       stderr: "Simulated command failure.",
       errorName: "simulated_command_failed"
+    });
+  });
+
+  it("rejects command execution by default without invoking the adapter", async () => {
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn()
+    };
+    const runtime = new InMemoryWorkerRuntime({ adapter });
+    const runner = new WorkerBackedToolCommandRunner(runtime);
+
+    const result = await runner.run(baseInput());
+    const jobs = await runtime.listJobsForProject("project_1");
+
+    expect(result).toMatchObject({
+      state: "failed",
+      exitCode: undefined,
+      stdout: "",
+      errorName: "sandbox_policy_reject_mode"
+    });
+    expect(result.stderr).toContain("sandbox policy rejects execution");
+    expect(adapter.execute).not.toHaveBeenCalled();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      state: "rejected",
+      errorName: "sandbox_policy_reject_mode"
     });
   });
 
