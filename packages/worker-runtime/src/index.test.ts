@@ -22,60 +22,83 @@ const baseInput = (overrides: Partial<WorkerJobInput> = {}): WorkerJobInput => (
   ...overrides
 });
 
+const simulatedPolicy = (overrides: Partial<SandboxPolicy> = {}): SandboxPolicy =>
+  createSimulatedSandboxPolicy({
+    allowedCommands: ["build", "test"],
+    allowedEnvNames: [],
+    ...overrides
+  });
+
 describe("InMemoryWorkerRuntime", () => {
-  it("enqueue creates deterministic worker job ids", () => {
-    const runtime = new InMemoryWorkerRuntime();
+  it("enqueue creates deterministic worker job ids with an injectable prefix and clock", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      idPrefix: "worker_job",
+      now: () => new Date("2026-05-17T12:00:00.000Z")
+    });
 
-    const first = runtime.enqueue(baseInput());
-    const second = runtime.enqueue(baseInput({ command: "test" }));
+    const first = await runtime.enqueue(baseInput());
+    const second = await runtime.enqueue(baseInput({ command: "test" }));
 
-    expect(first.id).toBe("worker_job_1");
+    expect(first).toMatchObject({
+      id: "worker_job_1",
+      createdAt: "2026-05-17T12:00:00.000Z",
+      inputSummary: {
+        command: "build",
+        argCount: 1
+      }
+    });
     expect(second.id).toBe("worker_job_2");
   });
 
-  it("listJobsForProject is project scoped and ordered", () => {
+  it("listJobsForProject is project scoped and ordered", async () => {
     const runtime = new InMemoryWorkerRuntime();
-    runtime.enqueue(baseInput({ projectId: "project_a", command: "first" }));
-    runtime.enqueue(baseInput({ projectId: "project_b", command: "other" }));
-    runtime.enqueue(baseInput({ projectId: "project_a", command: "second" }));
+    await runtime.enqueue(baseInput({ projectId: "project_a", command: "build" }));
+    await runtime.enqueue(baseInput({ projectId: "project_b", command: "test" }));
+    await runtime.enqueue(baseInput({ projectId: "project_a", command: "test" }));
 
-    const jobs = runtime.listJobsForProject("project_a");
+    const jobs = await runtime.listJobsForProject("project_a");
 
     expect(jobs.map((job) => job.id)).toEqual(["worker_job_1", "worker_job_3"]);
-    expect(jobs.map((job) => job.input.command)).toEqual(["first", "second"]);
+    expect(jobs.map((job) => job.inputSummary.command)).toEqual(["build", "test"]);
   });
 
-  it("returned records are defensive copies", async () => {
-    const runtime = new InMemoryWorkerRuntime(
-      new SimulatedExecutionAdapter({
+  it("returned records are defensive copies and do not expose raw args", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter({
         stdoutByCommand: { build: "ok" }
       })
-    );
-    const queued = runtime.enqueue(
+    });
+    const queued = await runtime.enqueue(
       baseInput({
         args: ["original"],
         env: { TOKEN: "secret-value" }
       }),
-      createSimulatedSandboxPolicy({
-        allowedCommands: ["build"],
-        allowedEnvNames: ["TOKEN"]
-      })
+      simulatedPolicy({ allowedEnvNames: ["TOKEN"] })
     );
 
-    queued.input.args.push("mutated");
-    queued.input.envNames.push("MUTATED");
-    const beforeRun = runtime.getJob(queued.id);
-    beforeRun?.input.args.push("mutated-again");
+    queued.inputSummary.envNames.push("MUTATED");
+    queued.policy.allowedCommands.push("mutated");
+    const beforeRun = await runtime.getJob(queued.id);
+    beforeRun?.inputSummary.envNames.push("MUTATED_AGAIN");
+    beforeRun?.policy.allowedEnvNames.push("MUTATED_POLICY");
 
     const completed = await runtime.runNext();
-    completed?.input.args.push("after-run");
-    completed!.result!.stdout = "mutated output";
+    completed?.inputSummary.envNames.push("AFTER_RUN");
+    completed?.policy.allowedCommands.push("after-run");
+    if (completed?.resultSummary) {
+      completed.resultSummary.stdout = "mutated output";
+    }
 
-    const stored = runtime.getJob(queued.id);
+    const stored = await runtime.getJob(queued.id);
 
-    expect(stored?.input.args).toEqual(["original"]);
-    expect(stored?.input.envNames).toEqual(["TOKEN"]);
-    expect(stored?.result?.stdout).toBe("ok");
+    expect(stored?.inputSummary).toMatchObject({
+      argCount: 1,
+      envNames: ["TOKEN"]
+    });
+    expect("args" in (stored?.inputSummary ?? {})).toBe(false);
+    expect(stored?.policy.allowedCommands).toEqual(["build", "test"]);
+    expect(stored?.policy.allowedEnvNames).toEqual(["TOKEN"]);
+    expect(stored?.resultSummary?.stdout).toBe("ok");
   });
 
   it("runNext returns undefined when no queued job exists", async () => {
@@ -93,62 +116,79 @@ describe("InMemoryWorkerRuntime", () => {
         stderr: ""
       }))
     };
-    const runtime = new InMemoryWorkerRuntime(adapter);
-    runtime.enqueue(
+    const runtime = new InMemoryWorkerRuntime({ adapter });
+    await runtime.enqueue(
       baseInput({ command: "deploy" }),
-      createSimulatedSandboxPolicy({ allowedCommands: ["build"] })
+      simulatedPolicy({ allowedCommands: ["build"] })
     );
 
     const job = await runtime.runNext();
 
     expect(job?.state).toBe("rejected");
-    expect(job?.result?.state).toBe("rejected");
-    expect(job?.result?.stderr).toContain("command not allowed");
+    expect(job?.errorName).toBe("sandbox_policy_command_not_allowed");
+    expect(job?.resultSummary).toMatchObject({
+      state: "rejected",
+      errorName: "sandbox_policy_command_not_allowed"
+    });
+    expect(job?.resultSummary?.stderr).toContain("command not allowed");
     expect(adapter.execute).not.toHaveBeenCalled();
   });
 
   it("policy rejects unexpected env names without storing secret values", async () => {
-    const runtime = new InMemoryWorkerRuntime(
-      new SimulatedExecutionAdapter({
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter({
         stdoutByCommand: { build: "should not run" }
       })
-    );
-    const queued = runtime.enqueue(
+    });
+    const queued = await runtime.enqueue(
       baseInput({
         env: {
           ALLOWED: "allowed-value",
           SECRET_TOKEN: "super-secret"
         }
       }),
-      createSimulatedSandboxPolicy({
-        allowedCommands: ["build"],
-        allowedEnvNames: ["ALLOWED"]
-      })
+      simulatedPolicy({ allowedEnvNames: ["ALLOWED"] })
     );
 
     const job = await runtime.runNext();
-    const serialized = JSON.stringify(runtime.getJob(queued.id));
+    const serialized = JSON.stringify(await runtime.getJob(queued.id));
 
     expect(job?.state).toBe("rejected");
-    expect(job?.input.envNames).toEqual(["ALLOWED", "SECRET_TOKEN"]);
-    expect(job?.result?.stderr).toContain("env name not allowed");
+    expect(job?.errorName).toBe("sandbox_policy_env_not_allowed");
+    expect(job?.inputSummary.envNames).toEqual(["ALLOWED", "SECRET_TOKEN"]);
+    expect(job?.resultSummary?.stderr).toContain("env name not allowed");
     expect(serialized).toContain("SECRET_TOKEN");
     expect(serialized).not.toContain("super-secret");
     expect(serialized).not.toContain("allowed-value");
   });
 
-  it("policy rejects workingDirectory outside workingDirectoryRoot", async () => {
-    const runtime = new InMemoryWorkerRuntime(
-      new SimulatedExecutionAdapter({
-        stdoutByCommand: { build: "should not run" }
-      })
+  it("policy rejects workingDirectory when the policy has no workingDirectoryRoot", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter()
+    });
+    await runtime.enqueue(
+      baseInput({
+        workingDirectory: "/tmp/project"
+      }),
+      simulatedPolicy()
     );
-    runtime.enqueue(
+
+    const job = await runtime.runNext();
+
+    expect(job?.state).toBe("rejected");
+    expect(job?.errorName).toBe("sandbox_policy_working_directory_forbidden");
+    expect(job?.resultSummary?.stderr).toContain("workingDirectory forbidden");
+  });
+
+  it("policy rejects workingDirectory outside workingDirectoryRoot", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter()
+    });
+    await runtime.enqueue(
       baseInput({
         workingDirectory: "/tmp/project-other"
       }),
-      createSimulatedSandboxPolicy({
-        allowedCommands: ["build"],
+      simulatedPolicy({
         workingDirectoryRoot: "/tmp/project"
       })
     );
@@ -156,57 +196,52 @@ describe("InMemoryWorkerRuntime", () => {
     const job = await runtime.runNext();
 
     expect(job?.state).toBe("rejected");
-    expect(job?.result?.stderr).toContain("workingDirectory outside root");
+    expect(job?.errorName).toBe("sandbox_policy_working_directory_forbidden");
+    expect(job?.resultSummary?.stderr).toContain("workingDirectory outside root");
   });
 
-  it("SimulatedExecutionAdapter completes and bounded stdout summary is truncated to policy max bytes", async () => {
-    const runtime = new InMemoryWorkerRuntime(
-      new SimulatedExecutionAdapter({
-        stdoutByCommand: {
-          build: "abcdef"
-        }
-      })
-    );
-    runtime.enqueue(
+  it("SimulatedExecutionAdapter completes with default stdout and bounded summaries", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter()
+    });
+    await runtime.enqueue(
       baseInput(),
-      createSimulatedSandboxPolicy({
-        allowedCommands: ["build"],
-        maxStdoutBytes: 4
+      simulatedPolicy({
+        maxStdoutBytes: 10
       })
     );
 
     const job = await runtime.runNext();
 
     expect(job?.state).toBe("completed");
-    expect(job?.result).toMatchObject({
+    expect(job?.errorName).toBeUndefined();
+    expect(job?.resultSummary).toMatchObject({
       state: "completed",
       exitCode: 0,
-      stdout: "abcd",
+      stdout: "Simulated ",
       stderr: "",
-      stdoutBytes: 6,
+      stdoutBytes: "Simulated build for project project_a.".length,
       stderrBytes: 0
     });
   });
 
-  it("SimulatedExecutionAdapter can fail configured commands", async () => {
-    const runtime = new InMemoryWorkerRuntime(
-      new SimulatedExecutionAdapter({
+  it("SimulatedExecutionAdapter can fail configured commands with stable defaults", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter({
         failCommands: ["build"]
       })
-    );
-    runtime.enqueue(
-      baseInput(),
-      createSimulatedSandboxPolicy({
-        allowedCommands: ["build"]
-      })
-    );
+    });
+    await runtime.enqueue(baseInput(), simulatedPolicy());
 
     const job = await runtime.runNext();
 
     expect(job?.state).toBe("failed");
-    expect(job?.result).toMatchObject({
+    expect(job?.errorName).toBe("simulated_command_failed");
+    expect(job?.resultSummary).toMatchObject({
       state: "failed",
-      exitCode: 1
+      exitCode: 1,
+      stderr: "Simulated command failure.",
+      errorName: "simulated_command_failed"
     });
   });
 
@@ -226,6 +261,7 @@ describe("InMemoryWorkerRuntime", () => {
 
     await expect(adapter.execute(input, policy)).resolves.toMatchObject({
       state: "rejected",
+      errorName: "execution_adapter_rejected",
       stderr: expect.stringContaining("real command execution is disabled")
     });
   });

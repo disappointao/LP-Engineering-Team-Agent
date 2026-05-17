@@ -36,7 +36,7 @@ export interface WorkerJobInputSummary {
   kind: WorkerJobKind;
   commandId?: string;
   command: string;
-  args: string[];
+  argCount: number;
   envNames: string[];
   workingDirectory?: string;
   timeoutMs: number;
@@ -57,8 +57,10 @@ export interface WorkerJobRecord {
   projectId: string;
   kind: WorkerJobKind;
   state: WorkerJobState;
-  input: WorkerJobInputSummary;
-  result?: WorkerJobResultSummary;
+  policy: SandboxPolicy;
+  inputSummary: WorkerJobInputSummary;
+  resultSummary?: WorkerJobResultSummary;
+  errorName?: string;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -90,10 +92,10 @@ export interface ExecutionAdapter {
 }
 
 export interface WorkerRuntime {
-  enqueue(input: WorkerJobInput, policy?: SandboxPolicy): WorkerJobRecord;
+  enqueue(input: WorkerJobInput, policy?: SandboxPolicy): Promise<WorkerJobRecord>;
   runNext(): Promise<WorkerJobRecord | undefined>;
-  getJob(id: string): WorkerJobRecord | undefined;
-  listJobsForProject(projectId: string): WorkerJobRecord[];
+  getJob(id: string): Promise<WorkerJobRecord | undefined>;
+  listJobsForProject(projectId: string): Promise<WorkerJobRecord[]>;
 }
 
 export type SandboxPolicyValidation =
@@ -102,23 +104,36 @@ export type SandboxPolicyValidation =
 
 interface StoredJob {
   record: WorkerJobRecord;
+  args: string[];
   env: Record<string, string>;
   policy: SandboxPolicy;
 }
 
+export interface InMemoryWorkerRuntimeOptions {
+  adapter?: ExecutionAdapter;
+  now?: () => Date;
+  idPrefix?: string;
+}
+
 export class InMemoryWorkerRuntime implements WorkerRuntime {
   private readonly jobs: StoredJob[] = [];
+  private readonly adapter: ExecutionAdapter;
+  private readonly now: () => Date;
+  private readonly idPrefix: string;
   private nextJobNumber = 1;
 
-  constructor(
-    private readonly adapter: ExecutionAdapter = new RejectingExecutionAdapter()
-  ) {}
+  constructor(options: InMemoryWorkerRuntimeOptions = {}) {
+    this.adapter = options.adapter ?? new RejectingExecutionAdapter();
+    this.now = options.now ?? (() => new Date());
+    this.idPrefix = options.idPrefix ?? "worker_job";
+  }
 
-  enqueue(
+  async enqueue(
     input: WorkerJobInput,
     policy: SandboxPolicy = createRejectSandboxPolicy()
-  ): WorkerJobRecord {
-    const id = `worker_job_${this.nextJobNumber}`;
+  ): Promise<WorkerJobRecord> {
+    const copiedPolicy = copyPolicy(policy);
+    const id = `${this.idPrefix}_${this.nextJobNumber}`;
     this.nextJobNumber += 1;
 
     const record: WorkerJobRecord = {
@@ -126,14 +141,16 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       projectId: input.projectId,
       kind: input.kind,
       state: "queued",
-      input: summarizeInput(input),
-      createdAt: nowIso()
+      policy: copyPolicy(copiedPolicy),
+      inputSummary: summarizeInput(input),
+      createdAt: this.nowIso()
     };
 
     this.jobs.push({
       record,
+      args: [...input.args],
       env: { ...input.env },
-      policy: copyPolicy(policy)
+      policy: copiedPolicy
     });
 
     return copyRecord(record);
@@ -146,11 +163,14 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     }
 
     storedJob.record.state = "running";
-    storedJob.record.startedAt = nowIso();
+    storedJob.record.startedAt = this.nowIso();
 
-    const validation = validateSandboxPolicy(storedJob.record.input, storedJob.policy);
+    const validation = validateSandboxPolicy(
+      storedJob.record.inputSummary,
+      storedJob.policy
+    );
     if (!validation.valid) {
-      completeJob(storedJob.record, {
+      this.completeJob(storedJob.record, {
         state: "rejected",
         stdout: "",
         stderr: validation.reason,
@@ -165,9 +185,9 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         copyPolicy(storedJob.policy)
       );
 
-      completeJob(storedJob.record, result, storedJob.policy);
+      this.completeJob(storedJob.record, result, storedJob.policy);
     } catch (error) {
-      completeJob(storedJob.record, {
+      this.completeJob(storedJob.record, {
         state: "failed",
         stdout: "",
         stderr: error instanceof Error ? error.message : String(error),
@@ -178,15 +198,30 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return copyRecord(storedJob.record);
   }
 
-  getJob(id: string): WorkerJobRecord | undefined {
+  async getJob(id: string): Promise<WorkerJobRecord | undefined> {
     const storedJob = this.jobs.find((job) => job.record.id === id);
     return storedJob ? copyRecord(storedJob.record) : undefined;
   }
 
-  listJobsForProject(projectId: string): WorkerJobRecord[] {
+  async listJobsForProject(projectId: string): Promise<WorkerJobRecord[]> {
     return this.jobs
       .filter((job) => job.record.projectId === projectId)
       .map((job) => copyRecord(job.record));
+  }
+
+  private completeJob(
+    record: WorkerJobRecord,
+    result: ExecutionResult,
+    policy: SandboxPolicy
+  ): void {
+    record.state = result.state;
+    record.resultSummary = summarizeResult(result, policy);
+    record.errorName = result.errorName;
+    record.completedAt = this.nowIso();
+  }
+
+  private nowIso(): string {
+    return this.now().toISOString();
   }
 }
 
@@ -198,7 +233,8 @@ export class RejectingExecutionAdapter implements ExecutionAdapter {
     return {
       state: "rejected",
       stdout: "",
-      stderr: "real command execution is disabled"
+      stderr: "real command execution is disabled",
+      errorName: "execution_adapter_rejected"
     };
   }
 }
@@ -221,23 +257,23 @@ export class SimulatedExecutionAdapter implements ExecutionAdapter {
   }
 
   async execute(input: ExecutionInput): Promise<ExecutionResult> {
-    const stdout = this.stdoutByCommand[input.command] ?? "";
-    const stderr = this.stderrByCommand[input.command] ?? "";
-
     if (this.failCommands.has(input.command)) {
       return {
         state: "failed",
         exitCode: 1,
-        stdout,
-        stderr
+        stdout: this.stdoutByCommand[input.command] ?? "",
+        stderr: this.stderrByCommand[input.command] ?? "Simulated command failure.",
+        errorName: "simulated_command_failed"
       };
     }
 
     return {
       state: "completed",
       exitCode: 0,
-      stdout,
-      stderr
+      stdout:
+        this.stdoutByCommand[input.command] ??
+        `Simulated ${input.command} for project ${input.projectId}.`,
+      stderr: this.stderrByCommand[input.command] ?? ""
     };
   }
 }
@@ -277,7 +313,7 @@ export function validateSandboxPolicy(
     return {
       valid: false,
       reason: "network must be disabled",
-      errorName: "network_not_disabled"
+      errorName: "sandbox_policy_network_not_supported"
     };
   }
 
@@ -285,7 +321,7 @@ export function validateSandboxPolicy(
     return {
       valid: false,
       reason: "sandbox policy rejects execution",
-      errorName: "sandbox_policy_rejected"
+      errorName: "sandbox_policy_reject_mode"
     };
   }
 
@@ -293,7 +329,7 @@ export function validateSandboxPolicy(
     return {
       valid: false,
       reason: `command not allowed: ${input.command}`,
-      errorName: "command_not_allowed"
+      errorName: "sandbox_policy_command_not_allowed"
     };
   }
 
@@ -305,7 +341,7 @@ export function validateSandboxPolicy(
     return {
       valid: false,
       reason: `env name not allowed: ${unexpectedEnvName}`,
-      errorName: "env_name_not_allowed"
+      errorName: "sandbox_policy_env_not_allowed"
     };
   }
 
@@ -313,19 +349,26 @@ export function validateSandboxPolicy(
     return {
       valid: false,
       reason: "timeout exceeds sandbox policy",
-      errorName: "timeout_exceeds_policy"
+      errorName: "sandbox_policy_timeout_exceeded"
     };
   }
 
-  if (
-    input.workingDirectory &&
-    policy.workingDirectoryRoot &&
-    !isPathWithinRoot(input.workingDirectory, policy.workingDirectoryRoot)
-  ) {
+  if (input.workingDirectory && !policy.workingDirectoryRoot) {
+    return {
+      valid: false,
+      reason: "workingDirectory forbidden without workingDirectoryRoot",
+      errorName: "sandbox_policy_working_directory_forbidden"
+    };
+  }
+
+  if (input.workingDirectory && policy.workingDirectoryRoot && !isPathWithinRoot(
+    input.workingDirectory,
+    policy.workingDirectoryRoot
+  )) {
     return {
       valid: false,
       reason: "workingDirectory outside root",
-      errorName: "working_directory_outside_root"
+      errorName: "sandbox_policy_working_directory_forbidden"
     };
   }
 
@@ -338,7 +381,7 @@ function summarizeInput(input: WorkerJobInput): WorkerJobInputSummary {
     kind: input.kind,
     commandId: input.commandId,
     command: input.command,
-    args: [...input.args],
+    argCount: input.args.length,
     envNames: Object.keys(input.env).sort(),
     workingDirectory: input.workingDirectory,
     timeoutMs: input.timeoutMs
@@ -358,24 +401,14 @@ function toExecutionInput(storedJob: StoredJob): ExecutionInput {
     jobId: storedJob.record.id,
     projectId: storedJob.record.projectId,
     kind: storedJob.record.kind,
-    commandId: storedJob.record.input.commandId,
-    command: storedJob.record.input.command,
-    args: [...storedJob.record.input.args],
+    commandId: storedJob.record.inputSummary.commandId,
+    command: storedJob.record.inputSummary.command,
+    args: [...storedJob.args],
     env: { ...storedJob.env },
-    envNames: [...storedJob.record.input.envNames],
-    workingDirectory: storedJob.record.input.workingDirectory,
-    timeoutMs: storedJob.record.input.timeoutMs
+    envNames: [...storedJob.record.inputSummary.envNames],
+    workingDirectory: storedJob.record.inputSummary.workingDirectory,
+    timeoutMs: storedJob.record.inputSummary.timeoutMs
   };
-}
-
-function completeJob(
-  record: WorkerJobRecord,
-  result: ExecutionResult,
-  policy: SandboxPolicy
-): void {
-  record.state = result.state;
-  record.result = summarizeResult(result, policy);
-  record.completedAt = nowIso();
 }
 
 function summarizeResult(
@@ -429,15 +462,11 @@ function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
 function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
   return {
     ...record,
-    input: {
-      ...record.input,
-      args: [...record.input.args],
-      envNames: [...record.input.envNames]
+    policy: copyPolicy(record.policy),
+    inputSummary: {
+      ...record.inputSummary,
+      envNames: [...record.inputSummary.envNames]
     },
-    result: record.result ? { ...record.result } : undefined
+    resultSummary: record.resultSummary ? { ...record.resultSummary } : undefined
   };
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
 }
