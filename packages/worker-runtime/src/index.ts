@@ -1,5 +1,7 @@
 import { resolve, sep } from "node:path";
 
+import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
+
 export type WorkerJobKind = "tool_command";
 export type WorkerJobState =
   | "queued"
@@ -96,6 +98,14 @@ export interface WorkerRuntime {
   runNext(): Promise<WorkerJobRecord | undefined>;
   getJob(id: string): Promise<WorkerJobRecord | undefined>;
   listJobsForProject(projectId: string): Promise<WorkerJobRecord[]>;
+}
+
+export interface WorkerJobRepository {
+  save(record: WorkerJobRecord): Promise<void>;
+  getById(id: string): Promise<WorkerJobRecord | undefined>;
+  listForProject(projectId: string): Promise<WorkerJobRecord[]>;
+  listAll(): Promise<WorkerJobRecord[]>;
+  findOldestQueued(): Promise<WorkerJobRecord | undefined>;
 }
 
 export type SandboxPolicyValidation =
@@ -527,3 +537,10 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     resultSummary: record.resultSummary ? { ...record.resultSummary } : undefined
   };
 }
+
+export {
+  InMemoryWorkerJobRepository,
+  JsonFileWorkerJobRepository,
+  createJsonFileWorkerJobRepository,
+  type JsonFileWorkerJobRepositoryOptions
+} from "./worker-job-repositories";
