@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   type ExecutionAdapter,
+  InMemoryWorkerJobRepository,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createSimulatedSandboxPolicy
@@ -40,6 +41,40 @@ describe("WorkerBackedToolCommandRunner", () => {
       envNames: ["LP_PROJECT_ID", "STATIC_DEPLOY_TOKEN"]
     });
     expect(JSON.stringify(jobs[0])).not.toContain("secret-token");
+  });
+
+  it("runs against a repository-backed worker runtime", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const runner = new WorkerBackedToolCommandRunner(runtime, (input) =>
+      createSandboxPolicyForToolCommand(input, {
+        mode: "simulate",
+        allowedCommands: [input.command],
+        allowedEnvNames: Object.keys(input.env)
+      })
+    );
+
+    const result = await runner.run(baseInput());
+    const savedJobs = await repository.listForProject("project_1");
+
+    expect(result).toEqual({
+      state: "completed",
+      exitCode: 0,
+      stdout: "Simulated static-deploy for project [redacted].",
+      stderr: ""
+    });
+    expect(savedJobs).toHaveLength(1);
+    expect(savedJobs[0]).toMatchObject({
+      state: "completed",
+      inputSummary: {
+        command: "static-deploy",
+        envNames: ["LP_PROJECT_ID", "STATIC_DEPLOY_TOKEN"]
+      }
+    });
+    expect(JSON.stringify(savedJobs)).not.toContain("secret-token");
   });
 
   it("maps rejected worker jobs to failed tool command results", async () => {
