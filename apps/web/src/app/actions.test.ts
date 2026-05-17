@@ -1058,8 +1058,7 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true,
-      approvedByUserId: "local-web-user"
+      approved: true
     });
   });
 
@@ -1101,8 +1100,7 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true,
-      approvedByUserId: "local-web-user"
+      approved: true
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
@@ -1126,8 +1124,7 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       connectorId: "connector_assets",
       toolName: "searchAssets",
-      approved: true,
-      approvedByUserId: "local-web-user"
+      approved: true
     });
     expect(mocks.setMCPToolApproval).not.toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "project_2" })

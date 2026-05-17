@@ -1008,7 +1008,11 @@ describe("web workbench store", () => {
 
   it("approves mcp tools through the Web store and hides them when disabled", async () => {
     const store = createWebWorkbenchStore({
-      repositories: createInMemoryWorkbenchRepositories()
+      repositories: createInMemoryWorkbenchRepositories(),
+      currentUser: {
+        id: " web-reviewer ",
+        displayName: " Web Reviewer "
+      }
     });
     const project = await store.createProject({ name: "MCP Approval" });
     const draft = await store.createSkillDraft({
@@ -1073,6 +1077,7 @@ describe("web workbench store", () => {
     if (!approval.ok) {
       throw new Error(`Expected approval to succeed, got ${approval.error}.`);
     }
+    expect(approval.value.approvedByUserId).toBe("web-reviewer");
     const approvedState = await store.getPageState({ projectId: project.id });
     expect(approvedState.mcp.visibleToolsByRole.deployer).toEqual([
       {

@@ -3612,6 +3612,45 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("uses the configured current user for mcp approval actor defaults", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Web Reviewer"
+      },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "MCP Approval" });
+    const connector = await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_git",
+        name: "Git",
+        tools: [
+          {
+            name: "createPullRequest",
+            permission: "git:write",
+            roles: ["deployer"],
+            requiresApproval: true
+          }
+        ]
+      })
+    });
+
+    await expect(
+      service.setProjectMCPToolApproval({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "createPullRequest",
+        approved: true
+      })
+    ).resolves.toMatchObject({
+      approvedByUserId: "web-reviewer"
+    });
+  });
+
   it("passes repository-backed mcp tools into runtime context", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const runtime = new RecordingRuntime({ state: "completed", artifacts: completeArtifacts() });

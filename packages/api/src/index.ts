@@ -1366,7 +1366,7 @@ export class DemoWorkbenchService {
         connectorId: connector.id,
         toolName: tool.name,
         state: input.approved ? "approved" : "pending",
-        approvedByUserId: input.approved ? input.approvedByUserId ?? "local-owner" : undefined,
+        approvedByUserId: input.approved ? input.approvedByUserId ?? this.currentUser.id : undefined,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp
       };

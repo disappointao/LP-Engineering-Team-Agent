@@ -200,7 +200,6 @@ export interface SetMCPToolApprovalFormInput {
   connectorId: string;
   toolName: string;
   approved: boolean;
-  approvedByUserId?: string;
 }
 
 export type TaskType = WorkbenchTaskType;
@@ -782,7 +781,10 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
     async setMCPToolApproval(input) {
       try {
-        const value = await service.setProjectMCPToolApproval(input);
+        const value = await service.setProjectMCPToolApproval({
+          ...input,
+          approvedByUserId: currentUser.id
+        });
         return { ok: true, value };
       } catch (error) {
         return { ok: false, error: toMCPFlowError(error) };
