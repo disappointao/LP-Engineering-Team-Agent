@@ -553,6 +553,10 @@ pnpm --filter @lp-agent/model-gateway test
 - 重启后可以查看历史 worker job；但 queued job 因为缺少进程内 execution payload，不会被自动恢复执行，而是显式 fail-closed。
 - 这一阶段仍不做真实 shell、MCP execution、agent-worker queue、Web UI 或 OS 级 sandbox。
 
+当前计划：
+
+- [2026-05-17-worker-job-persistence.md](./superpowers/plans/2026-05-17-worker-job-persistence.md)
+
 学习重点：
 
 - job persistence 和 execution replay 是两个不同问题。

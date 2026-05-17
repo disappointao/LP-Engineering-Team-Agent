@@ -188,6 +188,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 9 worker job persistence foundation design.
    - Read this after the worker sandbox runtime plan when adding worker job repositories, JSON-file worker job persistence, repository-backed runtime internals, and safe restart behavior without real execution.
 
+47. `plans/2026-05-17-worker-job-persistence.md`
+   - Stage 9 worker job persistence foundation implementation plan.
+   - Read this after the worker job persistence design when implementing or auditing worker job repositories, repository-backed runtime internals, JSON-file persistence, restart-safe missing-payload behavior, and API compatibility.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
