@@ -438,21 +438,6 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       throw new Error("worker_job_claim_conflict");
     }
 
-    const validation = validateSandboxPolicy(latest.inputSummary, latest.policy);
-    if (!validation.valid) {
-      return this.completeClaimedJob({
-        jobId: latest.id,
-        claimToken: claim.claimToken,
-        result: {
-          state: "rejected",
-          stdout: "",
-          stderr: validation.reason,
-          errorName: validation.errorName
-        },
-        sensitiveValues: []
-      });
-    }
-
     const payload = await this.payloadRepository.getByJobId(latest.id);
     if (!payload) {
       return this.completeClaimedJob({
@@ -468,9 +453,25 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       });
     }
 
+    const executionInput = toExecutionInputFromSafePayload(latest, payload);
+    const validation = validateSandboxPolicy(executionInput, latest.policy);
+    if (!validation.valid) {
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result: {
+          state: "rejected",
+          stdout: "",
+          stderr: validation.reason,
+          errorName: validation.errorName
+        },
+        sensitiveValues: []
+      });
+    }
+
     try {
       const result = await this.adapter.execute(
-        toExecutionInputFromSafePayload(latest, payload),
+        executionInput,
         copyPolicy(latest.policy),
         this.createExecutionContext(latest.id)
       );
@@ -560,7 +561,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     };
 
     await this.repository.save(cancelledRecord);
-    await this.payloadRepository?.deleteByJobId(record.id);
+    await this.deletePersistedPayloadBestEffort(record.id);
     this.payloadsByJobId.delete(record.id);
     return copyRecord(cancelledRecord);
   }
@@ -608,6 +609,14 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     };
   }
 
+  private async deletePersistedPayloadBestEffort(jobId: string): Promise<void> {
+    try {
+      await this.payloadRepository?.deleteByJobId(jobId);
+    } catch {
+      // Payload cleanup must not change the already-persisted terminal job state.
+    }
+  }
+
   private async completeClaimedJob(input: {
     jobId: string;
     claimToken: string;
@@ -645,7 +654,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       };
 
       await this.repository.save(completedRecord);
-      await this.payloadRepository?.deleteByJobId(input.jobId);
+      await this.deletePersistedPayloadBestEffort(input.jobId);
 
       return copyRecord(completedRecord);
     });

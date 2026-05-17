@@ -347,6 +347,48 @@ describe("InMemoryWorkerRuntime", () => {
     expect(stored).toEqual(completed);
   });
 
+  it("validates claimed execution against the persisted payload before executing", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const payload = await payloadRepository.getByJobId(queued.id);
+    await payloadRepository.save({
+      ...payload!,
+      command: "deploy"
+    });
+
+    const rejected = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(rejected).toMatchObject({
+      id: queued.id,
+      state: "rejected",
+      errorName: "sandbox_policy_command_not_allowed",
+      resultSummary: {
+        state: "rejected",
+        stderr: "command not allowed: deploy",
+        errorName: "sandbox_policy_command_not_allowed"
+      }
+    });
+    expect(stored).toEqual(rejected);
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
   it("rejects stale claim completion attempts without overwriting the job", async () => {
     const runtime = new InMemoryWorkerRuntime({
       payloadRepository: new InMemoryWorkerJobPayloadRepository(),
@@ -468,6 +510,55 @@ describe("InMemoryWorkerRuntime", () => {
       }
     });
     expect(completed.cancelledAt).toBeUndefined();
+  });
+
+  it("returns completed claimed jobs when persisted payload cleanup fails", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new FailDeleteWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter: new SimulatedExecutionAdapter(),
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+
+    const completed = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        stdout: "Simulated build for project project_a."
+      }
+    });
+    expect(stored).toEqual(completed);
+  });
+
+  it("returns cancelled queued safe jobs when persisted payload cleanup fails", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new FailDeleteWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      now: () => new Date("2026-05-18T00:00:00.000Z")
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const cancelled = await runtime.cancelJob(queued.id, "Stop this job");
+    const stored = await repository.getById(queued.id);
+
+    expect(cancelled).toMatchObject({
+      id: queued.id,
+      state: "cancelled",
+      cancelRequestedAt: "2026-05-18T00:00:00.000Z",
+      cancelledAt: "2026-05-18T00:00:00.000Z",
+      cancelReason: "Stop this job"
+    });
+    expect(stored).toEqual(cancelled);
   });
 
   it("runNext does not consume safe persisted queued jobs", async () => {
