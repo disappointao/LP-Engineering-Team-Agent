@@ -201,10 +201,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
 
-        {ProjectMembersBlock({
-          members: pageState.projectMembers ?? [],
-          copy: copy.collaboration
-        })}
+        {activeProject
+          ? ProjectMembersBlock({
+              members: pageState.projectMembers ?? [],
+              copy: copy.collaboration
+            })
+          : null}
 
         <div className="sidebarSection sidebarTasks">
           <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>

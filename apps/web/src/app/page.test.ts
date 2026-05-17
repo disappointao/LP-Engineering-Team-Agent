@@ -386,6 +386,51 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("Owner");
   });
 
+  it("does not render project members without a selected project", async () => {
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({}),
+      acceptLanguage: "en"
+    });
+
+    expect(html).not.toContain("Project members");
+    expect(html).not.toContain("No members recorded for this project yet.");
+  });
+
+  it("renders non-local project members by display name or user id", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      projectMembers: [
+        localOwnerMember,
+        {
+          id: "project_member_project_1_reviewer-user",
+          projectId: "project_1",
+          userId: "reviewer-user",
+          role: "reviewer",
+          displayName: "Rina Reviewer",
+          createdAt: "2026-05-17T00:00:00.000Z",
+          updatedAt: "2026-05-17T00:00:00.000Z"
+        },
+        {
+          id: "project_member_project_1_admin-user",
+          projectId: "project_1",
+          userId: "admin-user",
+          role: "admin",
+          createdAt: "2026-05-17T00:00:00.000Z",
+          updatedAt: "2026-05-17T00:00:00.000Z"
+        }
+      ]
+    };
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({}),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Rina Reviewer");
+    expect(html).toContain("admin-user");
+  });
+
   it("renders localized Chinese project members in the sidebar", async () => {
     setActiveEmptyProjectState();
 
