@@ -424,6 +424,81 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return this.withRunLock(async () => this.claimOldestQueuedForWorker(workerId));
   }
 
+  async runClaimedJob(claim: WorkerJobClaim): Promise<WorkerJobRecord> {
+    if (!this.payloadRepository) {
+      throw new Error("worker_job_payload_repository_required");
+    }
+
+    const latest = await this.repository.getById(claim.record.id);
+    if (
+      !latest ||
+      latest.state !== "running" ||
+      latest.claimToken !== claim.claimToken
+    ) {
+      throw new Error("worker_job_claim_conflict");
+    }
+
+    const validation = validateSandboxPolicy(latest.inputSummary, latest.policy);
+    if (!validation.valid) {
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result: {
+          state: "rejected",
+          stdout: "",
+          stderr: validation.reason,
+          errorName: validation.errorName
+        },
+        sensitiveValues: []
+      });
+    }
+
+    const payload = await this.payloadRepository.getByJobId(latest.id);
+    if (!payload) {
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result: {
+          state: "failed",
+          stdout: "",
+          stderr: "Worker job execution payload is unavailable after restart.",
+          errorName: "worker_job_payload_unavailable"
+        },
+        sensitiveValues: []
+      });
+    }
+
+    try {
+      const result = await this.adapter.execute(
+        toExecutionInputFromSafePayload(latest, payload),
+        copyPolicy(latest.policy),
+        this.createExecutionContext(latest.id)
+      );
+
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result,
+        sensitiveValues: []
+      });
+    } catch (error) {
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result: {
+          state: "failed",
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          errorName:
+            error instanceof Error && error.name
+              ? error.name
+              : "execution_adapter_failed"
+        },
+        sensitiveValues: []
+      });
+    }
+  }
+
   async getJob(id: string): Promise<WorkerJobRecord | undefined> {
     return this.repository.getById(id);
   }
@@ -485,6 +560,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     };
 
     await this.repository.save(cancelledRecord);
+    await this.payloadRepository?.deleteByJobId(record.id);
     this.payloadsByJobId.delete(record.id);
     return copyRecord(cancelledRecord);
   }
@@ -530,6 +606,49 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         );
       }
     };
+  }
+
+  private async completeClaimedJob(input: {
+    jobId: string;
+    claimToken: string;
+    result: ExecutionResult;
+    sensitiveValues: string[];
+  }): Promise<WorkerJobRecord> {
+    return this.withJobMutationLock(input.jobId, async () => {
+      const latest = await this.repository.getById(input.jobId);
+      if (
+        !latest ||
+        latest.state !== "running" ||
+        latest.claimToken !== input.claimToken
+      ) {
+        throw new Error("worker_job_claim_conflict");
+      }
+
+      const completedAt = this.nowIso();
+      const completedRecord: WorkerJobRecord = {
+        ...copyRecord(latest),
+        state: input.result.state,
+        resultSummary: summarizeResult(
+          input.result,
+          latest.policy,
+          input.sensitiveValues
+        ),
+        errorName: input.result.errorName,
+        completedAt,
+        ...(input.result.state === "cancelled"
+          ? {
+              cancelRequestedAt: latest.cancelRequestedAt ?? completedAt,
+              cancelledAt: completedAt,
+              cancelReason: latest.cancelReason
+            }
+          : {})
+      };
+
+      await this.repository.save(completedRecord);
+      await this.payloadRepository?.deleteByJobId(input.jobId);
+
+      return copyRecord(completedRecord);
+    });
   }
 
   private async completeJob(
@@ -900,6 +1019,24 @@ function toExecutionInput(
     envNames: [...record.inputSummary.envNames],
     workingDirectory: record.inputSummary.workingDirectory,
     timeoutMs: record.inputSummary.timeoutMs
+  };
+}
+
+function toExecutionInputFromSafePayload(
+  record: WorkerJobRecord,
+  payload: WorkerJobPayloadRecord
+): ExecutionInput {
+  return {
+    jobId: record.id,
+    projectId: record.projectId,
+    kind: record.kind,
+    commandId: record.inputSummary.commandId,
+    command: payload.command,
+    args: [...payload.args],
+    env: {},
+    envNames: [...payload.envNames],
+    workingDirectory: payload.workingDirectory,
+    timeoutMs: payload.timeoutMs
   };
 }
 
