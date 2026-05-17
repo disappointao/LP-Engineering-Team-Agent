@@ -69,6 +69,16 @@ function deferred<T>(): {
   return { promise, resolve };
 }
 
+function createClock(values: string[]): () => Date {
+  if (values.length === 0) {
+    throw new Error("createClock requires at least one value");
+  }
+
+  let index = 0;
+  const lastValue = values[values.length - 1] as string;
+  return () => new Date(values[index++] ?? lastValue);
+}
+
 describe("InMemoryWorkerRuntime", () => {
   it("persists completed runtime records through a JSON-file repository", async () => {
     const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
@@ -266,6 +276,59 @@ describe("InMemoryWorkerRuntime", () => {
     });
     expect(runResults).toContain(undefined);
     expect(persisted?.state).toBe("completed");
+  });
+
+  it("preserves running cancellation request metadata after adapter completion", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const execution = deferred<Awaited<ReturnType<ExecutionAdapter["execute"]>>>();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(() => execution.promise)
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter,
+      now: createClock([
+        "2026-05-17T12:00:00.000Z",
+        "2026-05-17T12:00:01.000Z",
+        "2026-05-17T12:00:02.000Z",
+        "2026-05-17T12:00:03.000Z"
+      ])
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const runPromise = runtime.runNext();
+    await vi.waitFor(() => {
+      expect(adapter.execute).toHaveBeenCalled();
+    });
+    const runningCancel = await runtime.cancelJob(queued.id, "Stop this job");
+    execution.resolve({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+    const completed = await runPromise;
+    const stored = await repository.getById(queued.id);
+
+    expect(runningCancel).toMatchObject({
+      id: queued.id,
+      state: "running",
+      cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+      cancelReason: "Stop this job"
+    });
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      completedAt: "2026-05-17T12:00:03.000Z",
+      cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+      cancelReason: "Stop this job",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(completed?.cancelledAt).toBeUndefined();
+    expect(stored).toEqual(completed);
   });
 
   it("fails persisted queued jobs when process-local payload is unavailable", async () => {

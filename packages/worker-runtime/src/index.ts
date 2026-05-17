@@ -143,6 +143,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   private nextJobNumberInitialized = false;
   private enqueueLock: Promise<void> = Promise.resolve();
   private runLock: Promise<void> = Promise.resolve();
+  private readonly jobMutationLocks = new Map<string, Promise<void>>();
 
   constructor(options: InMemoryWorkerRuntimeOptions = {}) {
     this.adapter = options.adapter ?? new RejectingExecutionAdapter();
@@ -333,13 +334,23 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     record: WorkerJobRecord,
     reason?: string
   ): Promise<WorkerJobRecord> {
-    const updatedRecord: WorkerJobRecord = {
-      ...copyRecord(record),
-      cancelRequestedAt: record.cancelRequestedAt ?? this.nowIso(),
-      cancelReason: record.cancelReason ?? normalizeCancelReason(reason)
-    };
-    await this.repository.save(updatedRecord);
-    return copyRecord(updatedRecord);
+    return this.withJobMutationLock(record.id, async () => {
+      const latest = await this.repository.getById(record.id);
+      if (!latest) {
+        return copyRecord(record);
+      }
+      if (latest.state !== "running") {
+        return copyRecord(latest);
+      }
+
+      const updatedRecord: WorkerJobRecord = {
+        ...copyRecord(latest),
+        cancelRequestedAt: latest.cancelRequestedAt ?? this.nowIso(),
+        cancelReason: latest.cancelReason ?? normalizeCancelReason(reason)
+      };
+      await this.repository.save(updatedRecord);
+      return copyRecord(updatedRecord);
+    });
   }
 
   private async completeJob(
@@ -347,17 +358,22 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     result: ExecutionResult,
     sensitiveValues: string[]
   ): Promise<WorkerJobRecord> {
-    const completedRecord: WorkerJobRecord = {
-      ...copyRecord(record),
-      state: result.state,
-      resultSummary: summarizeResult(result, record.policy, sensitiveValues),
-      errorName: result.errorName,
-      completedAt: this.nowIso()
-    };
+    return this.withJobMutationLock(record.id, async () => {
+      const latest = await this.repository.getById(record.id);
+      const baseRecord = latest ?? record;
 
-    await this.repository.save(completedRecord);
+      const completedRecord: WorkerJobRecord = {
+        ...copyRecord(baseRecord),
+        state: result.state,
+        resultSummary: summarizeResult(result, baseRecord.policy, sensitiveValues),
+        errorName: result.errorName,
+        completedAt: this.nowIso()
+      };
 
-    return copyRecord(completedRecord);
+      await this.repository.save(completedRecord);
+
+      return copyRecord(completedRecord);
+    });
   }
 
   private async allocateJobId(): Promise<string> {
@@ -416,6 +432,28 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       return await operation();
     } finally {
       releaseLock();
+    }
+  }
+
+  private async withJobMutationLock<T>(
+    id: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const previousLock = this.jobMutationLocks.get(id) ?? Promise.resolve();
+    let releaseLock: () => void = () => undefined;
+    const currentLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    this.jobMutationLocks.set(id, currentLock);
+
+    await previousLock;
+    try {
+      return await operation();
+    } finally {
+      releaseLock();
+      if (this.jobMutationLocks.get(id) === currentLock) {
+        this.jobMutationLocks.delete(id);
+      }
     }
   }
 
