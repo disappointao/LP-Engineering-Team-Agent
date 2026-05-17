@@ -493,6 +493,7 @@ pnpm --filter @lp-agent/model-gateway test
 当前设计：
 
 - [2026-05-17-collaboration-primitives-design.md](./superpowers/specs/2026-05-17-collaboration-primitives-design.md)
+- 当前实现计划：[2026-05-17-collaboration-primitives.md](./superpowers/plans/2026-05-17-collaboration-primitives.md)
 - 这一阶段先把本地用户身份、workspace/project member、项目 owner、审批 actor 和成员展示做成可持久、可审计的产品状态。
 - 这不是完整 auth 系统：不做登录注册、OAuth、SSO、邀请邮件、计费席位、实时协作或完整 RBAC。
 - Web V1 继续使用 `local-web-user` 这类确定性的本地身份，但身份要通过 helper/resolver 注入，后续才能替换成真实登录、桌面本地 profile 或公司 SSO。

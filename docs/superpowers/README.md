@@ -172,6 +172,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 7 collaboration primitives design.
    - Read this after the handoff state plan when adding local user identity, workspace/project member repositories, project owner creation, approval actor audit ownership, and minimal Web member visibility without real auth or realtime collaboration.
 
+43. `plans/2026-05-17-collaboration-primitives.md`
+   - Stage 7 collaboration primitives implementation plan.
+   - Read this after the collaboration primitives design when implementing local identity, member repositories, project owner creation, approval actor ownership, Web member state, and documentation updates.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
