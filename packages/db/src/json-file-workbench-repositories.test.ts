@@ -142,6 +142,15 @@ describe("json-file workbench repositories", () => {
       createdAt,
       updatedAt: createdAt
     });
+    await first.projectMembers.save({
+      id: "project_member_2",
+      projectId: "project_1",
+      userId: "user_2",
+      role: "member",
+      displayName: "Grace Member",
+      createdAt: "2026-05-13T00:01:00.000Z",
+      updatedAt: "2026-05-13T00:01:00.000Z"
+    });
 
     const aliasPath = join(tempRoot, "members-alias.json");
     await symlink(filePath, aliasPath);
@@ -167,6 +176,15 @@ describe("json-file workbench repositories", () => {
         displayName: "Ada Owner",
         createdAt,
         updatedAt: createdAt
+      },
+      {
+        id: "project_member_2",
+        projectId: "project_1",
+        userId: "user_2",
+        role: "member",
+        displayName: "Grace Member",
+        createdAt: "2026-05-13T00:01:00.000Z",
+        updatedAt: "2026-05-13T00:01:00.000Z"
       }
     ]);
   });
