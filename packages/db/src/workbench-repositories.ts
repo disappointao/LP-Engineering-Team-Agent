@@ -1,14 +1,36 @@
 import type { StaticArtifacts } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
-import type { LPBrief, ReviewFinding } from "@lp-agent/lp-schema";
+import type { LPBrief, ProjectRole, ReviewFinding } from "@lp-agent/lp-schema";
 import type { MCPToolDefinition } from "@lp-agent/mcp-gateway";
 import type { AgentRole, ModelProviderRuntimeConfig } from "@lp-agent/model-gateway";
 import type { SkillManifest, SkillScope, SkillType } from "@lp-agent/skills";
+
+export type { ProjectRole } from "@lp-agent/lp-schema";
 
 export interface ProjectRecord {
   id: string;
   name: string;
   createdAt: string;
+}
+
+export interface WorkspaceMemberRecord {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: ProjectRole;
+  displayName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectMemberRecord {
+  id: string;
+  projectId: string;
+  userId: string;
+  role: ProjectRole;
+  displayName?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BriefRecord {
@@ -222,6 +244,25 @@ export interface ProjectRepository {
   listAll(): Promise<ProjectRecord[]>;
 }
 
+export interface WorkspaceMemberRepository {
+  save(member: WorkspaceMemberRecord): Promise<void>;
+  getById(memberId: string): Promise<WorkspaceMemberRecord | undefined>;
+  getByWorkspaceAndUser(
+    workspaceId: string,
+    userId: string
+  ): Promise<WorkspaceMemberRecord | undefined>;
+  listForWorkspace(workspaceId: string): Promise<WorkspaceMemberRecord[]>;
+  listAll(): Promise<WorkspaceMemberRecord[]>;
+}
+
+export interface ProjectMemberRepository {
+  save(member: ProjectMemberRecord): Promise<void>;
+  getById(memberId: string): Promise<ProjectMemberRecord | undefined>;
+  getByProjectAndUser(projectId: string, userId: string): Promise<ProjectMemberRecord | undefined>;
+  listForProject(projectId: string): Promise<ProjectMemberRecord[]>;
+  listAll(): Promise<ProjectMemberRecord[]>;
+}
+
 export interface BriefRepository {
   save(brief: BriefRecord): Promise<void>;
   getById(briefId: string): Promise<BriefRecord | undefined>;
@@ -362,6 +403,8 @@ export interface AgentHandoffRepository {
 
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
+  workspaceMembers: WorkspaceMemberRepository;
+  projectMembers: ProjectMemberRepository;
   briefs: BriefRepository;
   pageVersions: PageVersionRepository;
   deployments: DeploymentRepository;
@@ -387,6 +430,8 @@ export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
 
 class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly projects = new InMemoryProjectRepository();
+  readonly workspaceMembers = new InMemoryWorkspaceMemberRepository();
+  readonly projectMembers = new InMemoryProjectMemberRepository();
   readonly briefs = new InMemoryBriefRepository();
   readonly pageVersions = new InMemoryPageVersionRepository();
   readonly deployments = new InMemoryDeploymentRepository();
@@ -764,6 +809,82 @@ class InMemoryProjectRepository implements ProjectRepository {
   }
 }
 
+class InMemoryWorkspaceMemberRepository implements WorkspaceMemberRepository {
+  private readonly members = new Map<string, WorkspaceMemberRecord>();
+
+  async save(member: WorkspaceMemberRecord): Promise<void> {
+    this.members.set(member.id, copyWorkspaceMember(member));
+  }
+
+  async getById(memberId: string): Promise<WorkspaceMemberRecord | undefined> {
+    const member = this.members.get(memberId);
+    return member ? copyWorkspaceMember(member) : undefined;
+  }
+
+  async getByWorkspaceAndUser(
+    workspaceId: string,
+    userId: string
+  ): Promise<WorkspaceMemberRecord | undefined> {
+    const member = [...this.members.values()].find(
+      (candidate) => candidate.workspaceId === workspaceId && candidate.userId === userId
+    );
+    return member ? copyWorkspaceMember(member) : undefined;
+  }
+
+  async listForWorkspace(workspaceId: string): Promise<WorkspaceMemberRecord[]> {
+    return this.sortedMembers((member) => member.workspaceId === workspaceId);
+  }
+
+  async listAll(): Promise<WorkspaceMemberRecord[]> {
+    return this.sortedMembers(() => true);
+  }
+
+  private sortedMembers(matches: (member: WorkspaceMemberRecord) => boolean) {
+    return [...this.members.values()]
+      .filter(matches)
+      .sort(compareWorkspaceMembers)
+      .map(copyWorkspaceMember);
+  }
+}
+
+class InMemoryProjectMemberRepository implements ProjectMemberRepository {
+  private readonly members = new Map<string, ProjectMemberRecord>();
+
+  async save(member: ProjectMemberRecord): Promise<void> {
+    this.members.set(member.id, copyProjectMember(member));
+  }
+
+  async getById(memberId: string): Promise<ProjectMemberRecord | undefined> {
+    const member = this.members.get(memberId);
+    return member ? copyProjectMember(member) : undefined;
+  }
+
+  async getByProjectAndUser(
+    projectId: string,
+    userId: string
+  ): Promise<ProjectMemberRecord | undefined> {
+    const member = [...this.members.values()].find(
+      (candidate) => candidate.projectId === projectId && candidate.userId === userId
+    );
+    return member ? copyProjectMember(member) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<ProjectMemberRecord[]> {
+    return this.sortedMembers((member) => member.projectId === projectId);
+  }
+
+  async listAll(): Promise<ProjectMemberRecord[]> {
+    return this.sortedMembers(() => true);
+  }
+
+  private sortedMembers(matches: (member: ProjectMemberRecord) => boolean) {
+    return [...this.members.values()]
+      .filter(matches)
+      .sort(compareProjectMembers)
+      .map(copyProjectMember);
+  }
+}
+
 class InMemoryBriefRepository implements BriefRepository {
   private readonly briefs = new Map<string, BriefRecord>();
 
@@ -884,6 +1005,14 @@ function copyProject(project: ProjectRecord): ProjectRecord {
   return { ...project };
 }
 
+function copyWorkspaceMember(member: WorkspaceMemberRecord): WorkspaceMemberRecord {
+  return { ...member };
+}
+
+function copyProjectMember(member: ProjectMemberRecord): ProjectMemberRecord {
+  return { ...member };
+}
+
 function copySkill(skill: SkillRecord): SkillRecord {
   return { ...skill };
 }
@@ -932,6 +1061,27 @@ function copyMCPConnector(connector: MCPConnectorRecord): MCPConnectorRecord {
 
 function copyMCPToolApproval(approval: MCPToolApprovalRecord): MCPToolApprovalRecord {
   return { ...approval };
+}
+
+function compareWorkspaceMembers(
+  a: WorkspaceMemberRecord,
+  b: WorkspaceMemberRecord
+): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.workspaceId.localeCompare(b.workspaceId) ||
+    a.userId.localeCompare(b.userId) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareProjectMembers(a: ProjectMemberRecord, b: ProjectMemberRecord): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.projectId.localeCompare(b.projectId) ||
+    a.userId.localeCompare(b.userId) ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {

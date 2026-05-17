@@ -5,13 +5,15 @@ import {
   type MCPConnectorRecord,
   type MCPToolApprovalRecord,
   type PageVersionRecord,
+  type ProjectMemberRecord,
   type ProjectRecord,
   type RunEventRecord,
   type RunRecord,
   type SkillBindingRecord,
   type SkillRecord,
   type SkillVersionRecord,
-  type ToolObservationRecord
+  type ToolObservationRecord,
+  type WorkspaceMemberRecord
 } from "./index";
 
 const createdAt = "2026-05-12T00:00:00.000Z";
@@ -138,6 +140,84 @@ describe("in-memory workbench repositories", () => {
         name: "Summer sale",
         createdAt: "2026-05-12T00:01:00.000Z"
       }
+    ]);
+  });
+
+  it("stores workspace and project members with scoped lookups and defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspaceMember: WorkspaceMemberRecord = {
+      id: "workspace_member_1",
+      workspaceId: "workspace_1",
+      userId: "user_1",
+      role: "admin",
+      displayName: "Ada Admin",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const projectMember: ProjectMemberRecord = {
+      id: "project_member_1",
+      projectId: "project_1",
+      userId: "user_1",
+      role: "owner",
+      displayName: "Ada Owner",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const otherProjectMember: ProjectMemberRecord = {
+      ...projectMember,
+      id: "project_member_2",
+      projectId: "project_2",
+      role: "reviewer",
+      displayName: "Ada Reviewer",
+      createdAt: "2026-05-12T00:01:00.000Z",
+      updatedAt: "2026-05-12T00:01:00.000Z"
+    };
+
+    await repositories.workspaceMembers.save(workspaceMember);
+    await repositories.projectMembers.save(projectMember);
+    await repositories.projectMembers.save(otherProjectMember);
+    workspaceMember.displayName = "mutated";
+    projectMember.displayName = "mutated";
+
+    await expect(
+      repositories.workspaceMembers.getByWorkspaceAndUser("workspace_1", "user_1")
+    ).resolves.toEqual({
+      id: "workspace_member_1",
+      workspaceId: "workspace_1",
+      userId: "user_1",
+      role: "admin",
+      displayName: "Ada Admin",
+      createdAt,
+      updatedAt: createdAt
+    });
+    await expect(repositories.projectMembers.getByProjectAndUser("project_1", "user_1"))
+      .resolves.toEqual({
+        id: "project_member_1",
+        projectId: "project_1",
+        userId: "user_1",
+        role: "owner",
+        displayName: "Ada Owner",
+        createdAt,
+        updatedAt: createdAt
+      });
+
+    const listed = await repositories.projectMembers.listForProject("project_1");
+    listed[0]!.displayName = "changed after read";
+
+    await expect(repositories.projectMembers.listForProject("project_1")).resolves.toEqual([
+      {
+        id: "project_member_1",
+        projectId: "project_1",
+        userId: "user_1",
+        role: "owner",
+        displayName: "Ada Owner",
+        createdAt,
+        updatedAt: createdAt
+      }
+    ]);
+    await expect(repositories.projectMembers.listAll()).resolves.toEqual([
+      expect.objectContaining({ id: "project_member_1", projectId: "project_1" }),
+      expect.objectContaining({ id: "project_member_2", projectId: "project_2" })
     ]);
   });
 

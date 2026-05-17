@@ -118,6 +118,92 @@ describe("json-file workbench repositories", () => {
     });
   });
 
+  it("reopens workspace and project members from disk", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempRoot);
+    const filePath = join(tempRoot, "members.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+
+    await first.workspaceMembers.save({
+      id: "workspace_member_1",
+      workspaceId: "workspace_1",
+      userId: "user_1",
+      role: "admin",
+      displayName: "Ada Admin",
+      createdAt,
+      updatedAt: createdAt
+    });
+    await first.projectMembers.save({
+      id: "project_member_1",
+      projectId: "project_1",
+      userId: "user_1",
+      role: "owner",
+      displayName: "Ada Owner",
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    const aliasPath = join(tempRoot, "members-alias.json");
+    await symlink(filePath, aliasPath);
+    const second = createJsonFileWorkbenchRepositories({ filePath: aliasPath });
+
+    await expect(second.workspaceMembers.listForWorkspace("workspace_1")).resolves.toEqual([
+      {
+        id: "workspace_member_1",
+        workspaceId: "workspace_1",
+        userId: "user_1",
+        role: "admin",
+        displayName: "Ada Admin",
+        createdAt,
+        updatedAt: createdAt
+      }
+    ]);
+    await expect(second.projectMembers.listForProject("project_1")).resolves.toEqual([
+      {
+        id: "project_member_1",
+        projectId: "project_1",
+        userId: "user_1",
+        role: "owner",
+        displayName: "Ada Owner",
+        createdAt,
+        updatedAt: createdAt
+      }
+    ]);
+  });
+
+  it("defaults missing member arrays when reopening old local state files", async () => {
+    const filePath = await tempStateFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        projects: [],
+        briefs: [],
+        pageVersions: [],
+        deployments: [],
+        tasks: [],
+        messages: [],
+        taskSnapshots: [],
+        skills: [],
+        skillVersions: [],
+        skillBindings: [],
+        modelProviders: [],
+        modelRoutingPolicies: [],
+        mcpConnectors: [],
+        mcpToolApprovals: [],
+        runs: [],
+        runEvents: [],
+        toolObservations: [],
+        agentHandoffs: []
+      }),
+      "utf8"
+    );
+
+    const repositories = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(repositories.workspaceMembers.listAll()).resolves.toEqual([]);
+    await expect(repositories.projectMembers.listAll()).resolves.toEqual([]);
+  });
+
   it("reopens skills, versions, and bindings from disk", async () => {
     const filePath = await tempStateFile();
     const first = createJsonFileWorkbenchRepositories({ filePath });

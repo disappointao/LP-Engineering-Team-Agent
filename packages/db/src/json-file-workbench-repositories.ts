@@ -19,6 +19,8 @@ import type {
   ModelRoutingPolicyRepository,
   PageVersionRecord,
   PageVersionRepository,
+  ProjectMemberRecord,
+  ProjectMemberRepository,
   ProjectRecord,
   ProjectRepository,
   RunEventRecord,
@@ -36,6 +38,8 @@ import type {
   WorkbenchMessageRecord,
   WorkbenchMessageRepository,
   WorkbenchRepositories,
+  WorkspaceMemberRecord,
+  WorkspaceMemberRepository,
   WorkbenchTaskRecord,
   WorkbenchTaskRepository,
   WorkbenchTaskSnapshotRecord,
@@ -48,6 +52,8 @@ export interface JsonFileWorkbenchRepositoriesOptions {
 
 interface JsonFileWorkbenchState {
   projects: ProjectRecord[];
+  workspaceMembers: WorkspaceMemberRecord[];
+  projectMembers: ProjectMemberRecord[];
   briefs: BriefRecord[];
   pageVersions: PageVersionRecord[];
   deployments: DeploymentHandoff[];
@@ -86,6 +92,8 @@ export function createJsonFileWorkbenchRepositories(
 
 class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly projects: ProjectRepository;
+  readonly workspaceMembers: WorkspaceMemberRepository;
+  readonly projectMembers: ProjectMemberRepository;
   readonly briefs: BriefRepository;
   readonly pageVersions: PageVersionRepository;
   readonly deployments: DeploymentRepository;
@@ -106,6 +114,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
+    this.workspaceMembers = new JsonFileWorkspaceMemberRepository(filePath);
+    this.projectMembers = new JsonFileProjectMemberRepository(filePath);
     this.briefs = new JsonFileBriefRepository(filePath);
     this.pageVersions = new JsonFilePageVersionRepository(filePath);
     this.deployments = new JsonFileDeploymentRepository(filePath);
@@ -557,6 +567,94 @@ class JsonFileProjectRepository implements ProjectRepository {
   }
 }
 
+class JsonFileWorkspaceMemberRepository implements WorkspaceMemberRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(member: WorkspaceMemberRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.workspaceMembers = upsertBy(
+        state.workspaceMembers,
+        copy(member),
+        (record) => record.id === member.id
+      );
+    });
+  }
+
+  async getById(memberId: string): Promise<WorkspaceMemberRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.workspaceMembers.find((member) => member.id === memberId));
+  }
+
+  async getByWorkspaceAndUser(
+    workspaceId: string,
+    userId: string
+  ): Promise<WorkspaceMemberRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(
+      state.workspaceMembers.find(
+        (member) => member.workspaceId === workspaceId && member.userId === userId
+      )
+    );
+  }
+
+  async listForWorkspace(workspaceId: string): Promise<WorkspaceMemberRecord[]> {
+    const state = await readState(this.filePath);
+    return state.workspaceMembers
+      .filter((member) => member.workspaceId === workspaceId)
+      .sort(compareWorkspaceMembers)
+      .map(copy);
+  }
+
+  async listAll(): Promise<WorkspaceMemberRecord[]> {
+    const state = await readState(this.filePath);
+    return state.workspaceMembers.sort(compareWorkspaceMembers).map(copy);
+  }
+}
+
+class JsonFileProjectMemberRepository implements ProjectMemberRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(member: ProjectMemberRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.projectMembers = upsertBy(
+        state.projectMembers,
+        copy(member),
+        (record) => record.id === member.id
+      );
+    });
+  }
+
+  async getById(memberId: string): Promise<ProjectMemberRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.projectMembers.find((member) => member.id === memberId));
+  }
+
+  async getByProjectAndUser(
+    projectId: string,
+    userId: string
+  ): Promise<ProjectMemberRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(
+      state.projectMembers.find(
+        (member) => member.projectId === projectId && member.userId === userId
+      )
+    );
+  }
+
+  async listForProject(projectId: string): Promise<ProjectMemberRecord[]> {
+    const state = await readState(this.filePath);
+    return state.projectMembers
+      .filter((member) => member.projectId === projectId)
+      .sort(compareProjectMembers)
+      .map(copy);
+  }
+
+  async listAll(): Promise<ProjectMemberRecord[]> {
+    const state = await readState(this.filePath);
+    return state.projectMembers.sort(compareProjectMembers).map(copy);
+  }
+}
+
 class JsonFileBriefRepository implements BriefRepository {
   constructor(private readonly filePath: string) {}
 
@@ -735,6 +833,8 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
     const parsed = JSON.parse(raw) as Partial<JsonFileWorkbenchState>;
     return {
       projects: parsed.projects ?? [],
+      workspaceMembers: parsed.workspaceMembers ?? [],
+      projectMembers: parsed.projectMembers ?? [],
       briefs: parsed.briefs ?? [],
       pageVersions: parsed.pageVersions ?? [],
       deployments: parsed.deployments ?? [],
@@ -772,6 +872,8 @@ async function writeState(filePath: string, state: JsonFileWorkbenchState): Prom
 function emptyState(): JsonFileWorkbenchState {
   return {
     projects: [],
+    workspaceMembers: [],
+    projectMembers: [],
     briefs: [],
     pageVersions: [],
     deployments: [],
@@ -809,6 +911,27 @@ function copy<T>(record: T): T {
 
 function copyOptional<T>(record: T | undefined): T | undefined {
   return record ? copy(record) : undefined;
+}
+
+function compareWorkspaceMembers(
+  a: WorkspaceMemberRecord,
+  b: WorkspaceMemberRecord
+): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.workspaceId.localeCompare(b.workspaceId) ||
+    a.userId.localeCompare(b.userId) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareProjectMembers(a: ProjectMemberRecord, b: ProjectMemberRecord): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.projectId.localeCompare(b.projectId) ||
+    a.userId.localeCompare(b.userId) ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {
