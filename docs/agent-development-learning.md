@@ -612,6 +612,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-18-worker-queue-handoff.md](./superpowers/plans/2026-05-18-worker-queue-handoff.md)
 
+当前实现状态：
+
+- Stage 11 v0 已实现安全 worker queue handoff：一个 runtime 可以入队 safe simulated worker job，另一个 runtime 或 `apps/agent-worker` 可以通过共享 repository claim 并完成该 job。
+- safe worker payload 只持久化 bounded args、env names 和 command metadata，不持久化 raw env value、secret 或 artifact 内容。
+- worker claim 会写入 `claimedByWorkerId` 和 `claimToken`；claimed job completion 必须匹配 claim token，避免 stale worker 覆盖状态。
+- claimed job completion、queued cancellation 和 running cancellation 都通过 repository 条件更新维护状态机，避免 stale snapshot 覆盖 running 或 terminal job。
+- `apps/agent-worker` 已提供 `runWorkerOnce()`，但仍不做 daemon polling、真实 shell、MCP execution、streaming logs 或 deployment skill worker execution。
+
 学习重点：
 
 - worker queue handoff 和真实执行是两个阶段。先解决 claim、payload、complete、cancel 的状态机，再讨论 shell、MCP 或部署。
