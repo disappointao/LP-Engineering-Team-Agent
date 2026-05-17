@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import type {
   SandboxPolicy,
@@ -54,7 +54,7 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
   private readonly filePath: string;
 
   constructor(options: JsonFileWorkerJobRepositoryOptions) {
-    this.filePath = options.filePath;
+    this.filePath = resolve(options.filePath);
   }
 
   async save(record: WorkerJobRecord): Promise<void> {
@@ -75,15 +75,15 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
         await this.writeRecords(records);
       });
 
-    jsonFileSaveQueues.set(
-      this.filePath,
-      nextSave.then(
-        () => undefined,
-        () => undefined
-      )
-    );
+    jsonFileSaveQueues.set(this.filePath, nextSave);
 
-    await nextSave;
+    try {
+      await nextSave;
+    } finally {
+      if (jsonFileSaveQueues.get(this.filePath) === nextSave) {
+        jsonFileSaveQueues.delete(this.filePath);
+      }
+    }
   }
 
   async getById(id: string): Promise<WorkerJobRecord | undefined> {
@@ -124,8 +124,8 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
       throw error;
     }
 
-    const parsed = JSON.parse(contents) as Partial<WorkerJobFileState>;
-    if (!Array.isArray(parsed.workerJobs)) {
+    const parsed = JSON.parse(contents) as Partial<WorkerJobFileState> | null;
+    if (!parsed || !Array.isArray(parsed.workerJobs)) {
       return [];
     }
 

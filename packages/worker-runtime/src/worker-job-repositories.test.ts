@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -176,13 +176,45 @@ describe("JsonFileWorkerJobRepository", () => {
     ]);
   });
 
-  it("treats a missing file or old shape as empty state", async () => {
+  it("serializes concurrent saves through absolute and relative paths to the same file", async () => {
+    const filePath = await createTempFilePath();
+    const absolutePathRepository = createJsonFileWorkerJobRepository({ filePath });
+    const relativePathRepository = createJsonFileWorkerJobRepository({
+      filePath: relative(process.cwd(), filePath)
+    });
+
+    await Promise.all([
+      absolutePathRepository.save(
+        workerJobRecord({
+          id: "worker_job_absolute",
+          createdAt: "2026-05-17T12:00:00.000Z"
+        })
+      ),
+      relativePathRepository.save(
+        workerJobRecord({
+          id: "worker_job_relative",
+          createdAt: "2026-05-17T12:01:00.000Z"
+        })
+      )
+    ]);
+
+    await expect(absolutePathRepository.listAll()).resolves.toEqual([
+      expect.objectContaining({ id: "worker_job_absolute" }),
+      expect.objectContaining({ id: "worker_job_relative" })
+    ]);
+  });
+
+  it("treats a missing file, old shape, or null JSON as empty state", async () => {
     const filePath = await createTempFilePath();
     const repository = createJsonFileWorkerJobRepository({ filePath });
 
     await expect(repository.listAll()).resolves.toEqual([]);
 
     await writeFile(filePath, JSON.stringify({ jobs: [workerJobRecord()] }), "utf8");
+
+    await expect(repository.listAll()).resolves.toEqual([]);
+
+    await writeFile(filePath, "null", "utf8");
 
     await expect(repository.listAll()).resolves.toEqual([]);
   });
