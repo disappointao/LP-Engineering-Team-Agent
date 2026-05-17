@@ -205,6 +205,61 @@ describe("InMemoryWorkerJobRepository", () => {
       claimToken: "claim_token_1"
     });
   });
+
+  it("atomically claims only queued jobs for the requested payload source", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const legacyRecord = workerJobRecord({
+      id: "worker_job_legacy",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    const safeRecord = {
+      ...workerJobRecord({
+        id: "worker_job_safe",
+        createdAt: "2026-05-18T00:00:01.000Z"
+      }),
+      payloadSource: "safe_persisted" as const
+    };
+
+    await repository.save(legacyRecord);
+    await repository.save(safeRecord);
+
+    const safeClaim = await repository.claimOldestQueued({
+      payloadSource: "safe_persisted",
+      startedAt: "2026-05-18T00:01:00.000Z",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+    const legacyClaim = await repository.claimOldestQueued({
+      payloadSource: "process_memory",
+      startedAt: "2026-05-18T00:01:01.000Z",
+      claimedByWorkerId: "worker_b",
+      claimToken: "claim_token_2"
+    });
+
+    safeClaim?.inputSummary.envNames.push("MUTATED_SAFE");
+    legacyClaim?.inputSummary.envNames.push("MUTATED_LEGACY");
+
+    await expect(repository.getById("worker_job_safe")).resolves.toMatchObject({
+      id: "worker_job_safe",
+      state: "running",
+      payloadSource: "safe_persisted",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1",
+      inputSummary: {
+        envNames: ["STATIC_DEPLOY_TOKEN"]
+      }
+    });
+    await expect(repository.getById("worker_job_legacy")).resolves.toMatchObject({
+      id: "worker_job_legacy",
+      state: "running",
+      payloadSource: "process_memory",
+      claimedByWorkerId: "worker_b",
+      claimToken: "claim_token_2",
+      inputSummary: {
+        envNames: ["STATIC_DEPLOY_TOKEN"]
+      }
+    });
+  });
 });
 
 describe("JsonFileWorkerJobRepository", () => {
@@ -424,6 +479,53 @@ describe("JsonFileWorkerJobRepository", () => {
       state: "running",
       claimedByWorkerId: "worker_a",
       claimToken: "claim_token_1"
+    });
+  });
+
+  it("json-file repository atomically claims and reloads source-scoped claim metadata", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_legacy",
+        createdAt: "2026-05-18T00:00:00.000Z"
+      })
+    );
+    await repository.save({
+      ...workerJobRecord({
+        id: "worker_job_safe",
+        createdAt: "2026-05-18T00:00:01.000Z"
+      }),
+      payloadSource: "safe_persisted" as const
+    });
+
+    const claim = await repository.claimOldestQueued({
+      payloadSource: "safe_persisted",
+      startedAt: "2026-05-18T00:01:00.000Z",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+    const legacy = await repository.getById("worker_job_legacy");
+
+    claim?.inputSummary.envNames.push("MUTATED");
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    await expect(reopened.getById("worker_job_safe")).resolves.toMatchObject({
+      id: "worker_job_safe",
+      state: "running",
+      payloadSource: "safe_persisted",
+      startedAt: "2026-05-18T00:01:00.000Z",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1",
+      inputSummary: {
+        envNames: ["STATIC_DEPLOY_TOKEN"]
+      }
+    });
+    expect(legacy).toMatchObject({
+      id: "worker_job_legacy",
+      state: "queued",
+      payloadSource: "process_memory"
     });
   });
 });

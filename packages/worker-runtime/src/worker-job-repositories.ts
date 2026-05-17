@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import type {
   SandboxPolicy,
+  WorkerJobClaimOldestQueuedInput,
   WorkerJobRecord,
   WorkerJobRepository
 } from "./index";
@@ -45,6 +46,30 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     return record ? copyRecord(record) : undefined;
   }
 
+  async claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    const record = this.sortedRecords().find(
+      (job) =>
+        job.state === "queued" &&
+        getPayloadSource(job) === input.payloadSource
+    );
+    if (!record) {
+      return undefined;
+    }
+
+    const runningRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      state: "running",
+      startedAt: input.startedAt,
+      claimedByWorkerId: input.claimedByWorkerId,
+      claimToken: input.claimToken
+    };
+    this.recordsById.set(record.id, copyRecord(runningRecord));
+
+    return copyRecord(runningRecord);
+  }
+
   private sortedRecords(): WorkerJobRecord[] {
     return [...this.recordsById.values()].sort(compareRecords);
   }
@@ -58,32 +83,19 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
   }
 
   async save(record: WorkerJobRecord): Promise<void> {
-    const previousSave = jsonFileSaveQueues.get(this.filePath) ?? Promise.resolve();
-    const nextSave = previousSave
-      .catch(() => undefined)
-      .then(async () => {
-        const records = await this.readRecords();
-        const recordIndex = records.findIndex((stored) => stored.id === record.id);
-        const copiedRecord = copyRecord(record);
+    await this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const recordIndex = records.findIndex((stored) => stored.id === record.id);
+      const copiedRecord = copyRecord(record);
 
-        if (recordIndex === -1) {
-          records.push(copiedRecord);
-        } else {
-          records[recordIndex] = copiedRecord;
-        }
-
-        await this.writeRecords(records);
-      });
-
-    jsonFileSaveQueues.set(this.filePath, nextSave);
-
-    try {
-      await nextSave;
-    } finally {
-      if (jsonFileSaveQueues.get(this.filePath) === nextSave) {
-        jsonFileSaveQueues.delete(this.filePath);
+      if (recordIndex === -1) {
+        records.push(copiedRecord);
+      } else {
+        records[recordIndex] = copiedRecord;
       }
-    }
+
+      await this.writeRecords(records);
+    });
   }
 
   async getById(id: string): Promise<WorkerJobRecord | undefined> {
@@ -106,6 +118,58 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
       (stored) => stored.state === "queued"
     );
     return record ? copyRecord(record) : undefined;
+  }
+
+  async claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const record = [...records].sort(compareRecords).find(
+        (stored) =>
+          stored.state === "queued" &&
+          getPayloadSource(stored) === input.payloadSource
+      );
+      if (!record) {
+        return undefined;
+      }
+
+      const recordIndex = records.findIndex((stored) => stored.id === record.id);
+      if (recordIndex === -1) {
+        return undefined;
+      }
+
+      const runningRecord: WorkerJobRecord = {
+        ...copyRecord(record),
+        state: "running",
+        startedAt: input.startedAt,
+        claimedByWorkerId: input.claimedByWorkerId,
+        claimToken: input.claimToken
+      };
+      records[recordIndex] = copyRecord(runningRecord);
+
+      await this.writeRecords(records);
+      return copyRecord(runningRecord);
+    });
+  }
+
+  private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previousSave = jsonFileSaveQueues.get(this.filePath) ?? Promise.resolve();
+    const nextSave = previousSave.catch(() => undefined).then(operation);
+    const trackedSave = nextSave.then(
+      () => undefined,
+      () => undefined
+    );
+
+    jsonFileSaveQueues.set(this.filePath, trackedSave);
+
+    try {
+      return await nextSave;
+    } finally {
+      if (jsonFileSaveQueues.get(this.filePath) === trackedSave) {
+        jsonFileSaveQueues.delete(this.filePath);
+      }
+    }
   }
 
   private async readSortedRecords(): Promise<WorkerJobRecord[]> {
@@ -160,6 +224,10 @@ function compareRecords(left: WorkerJobRecord, right: WorkerJobRecord): number {
   return left.id.localeCompare(right.id);
 }
 
+function getPayloadSource(record: WorkerJobRecord): string {
+  return record.payloadSource ?? "process_memory";
+}
+
 function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
   return {
     ...policy,
@@ -174,6 +242,7 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     projectId: record.projectId,
     kind: record.kind,
     state: record.state,
+    payloadSource: record.payloadSource ?? "process_memory",
     policy: copyPolicy(record.policy),
     inputSummary: {
       projectId: record.inputSummary.projectId,

@@ -10,6 +10,7 @@ const WORKER_JOB_CANCELLED_BEFORE_EXECUTION_MESSAGE =
   "Worker job cancelled before execution.";
 
 export type WorkerJobKind = "tool_command";
+export type WorkerJobPayloadSource = "process_memory" | "safe_persisted";
 export type WorkerJobState =
   | "queued"
   | "running"
@@ -87,6 +88,7 @@ export interface WorkerJobRecord {
   cancelRequestedAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  payloadSource?: WorkerJobPayloadSource;
   claimedByWorkerId?: string;
   claimToken?: string;
 }
@@ -168,6 +170,16 @@ export interface WorkerJobRepository {
   listForProject(projectId: string): Promise<WorkerJobRecord[]>;
   listAll(): Promise<WorkerJobRecord[]>;
   findOldestQueued(): Promise<WorkerJobRecord | undefined>;
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined>;
+}
+
+export interface WorkerJobClaimOldestQueuedInput {
+  payloadSource: WorkerJobPayloadSource;
+  startedAt: string;
+  claimedByWorkerId?: string;
+  claimToken?: string;
 }
 
 export type SandboxPolicyValidation =
@@ -223,6 +235,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         projectId: input.projectId,
         kind: input.kind,
         state: "queued",
+        payloadSource: "process_memory",
         policy: copyPolicy(copiedPolicy),
         inputSummary: summarizeInput(input),
         createdAt: this.nowIso()
@@ -261,6 +274,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         projectId: input.projectId,
         kind: input.kind,
         state: "queued",
+        payloadSource: "safe_persisted",
         policy: copyPolicy(copiedPolicy),
         inputSummary: summarizeSafeInput(input),
         createdAt
@@ -282,7 +296,13 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       try {
         await this.repository.save(record);
       } catch (error) {
-        await payloadRepository.deleteByJobId(id);
+        try {
+          await payloadRepository.deleteByJobId(id);
+        } catch (cleanupError) {
+          if (error instanceof Error) {
+            Object.assign(error, { cleanupError });
+          }
+        }
         throw error;
       }
 
@@ -415,69 +435,29 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   private async claimOldestQueuedForWorker(
     workerId: string
   ): Promise<WorkerJobClaim | undefined> {
-    while (true) {
-      const queuedRecord = await this.repository.findOldestQueued();
-      if (!queuedRecord) {
-        return undefined;
-      }
-
-      const claimed = await this.withJobMutationLock(
-        queuedRecord.id,
-        async () => {
-          const latest = await this.repository.getById(queuedRecord.id);
-          if (!latest || latest.state !== "queued") {
-            return undefined;
-          }
-
-          const claimToken = this.claimTokenFactory();
-          const runningRecord: WorkerJobRecord = {
-            ...copyRecord(latest),
-            state: "running",
-            startedAt: this.nowIso(),
-            claimedByWorkerId: workerId,
-            claimToken
-          };
-          await this.repository.save(runningRecord);
-          return {
-            record: copyRecord(runningRecord),
-            claimToken
-          };
-        }
-      );
-      if (claimed) {
-        return claimed;
-      }
+    const claimToken = this.claimTokenFactory();
+    const claimed = await this.repository.claimOldestQueued({
+      payloadSource: "safe_persisted",
+      startedAt: this.nowIso(),
+      claimedByWorkerId: workerId,
+      claimToken
+    });
+    if (!claimed) {
+      return undefined;
     }
+
+    return {
+      record: copyRecord(claimed),
+      claimToken
+    };
   }
 
   private async claimOldestQueuedJob(): Promise<WorkerJobRecord | undefined> {
-    while (true) {
-      const queuedRecord = await this.repository.findOldestQueued();
-      if (!queuedRecord) {
-        return undefined;
-      }
-
-      const claimed = await this.withJobMutationLock(
-        queuedRecord.id,
-        async () => {
-          const latest = await this.repository.getById(queuedRecord.id);
-          if (!latest || latest.state !== "queued") {
-            return undefined;
-          }
-
-          const runningRecord: WorkerJobRecord = {
-            ...copyRecord(latest),
-            state: "running",
-            startedAt: this.nowIso()
-          };
-          await this.repository.save(runningRecord);
-          return copyRecord(runningRecord);
-        }
-      );
-      if (claimed) {
-        return claimed;
-      }
-    }
+    const claimed = await this.repository.claimOldestQueued({
+      payloadSource: "process_memory",
+      startedAt: this.nowIso()
+    });
+    return claimed ? copyRecord(claimed) : undefined;
   }
 
   private async cancelQueuedJob(
@@ -1012,6 +992,7 @@ function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
 function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
   return {
     ...record,
+    payloadSource: record.payloadSource ?? "process_memory",
     policy: copyPolicy(record.policy),
     inputSummary: {
       ...record.inputSummary,

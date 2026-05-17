@@ -18,6 +18,9 @@ import {
   type ExecutionInput,
   type SandboxPolicy,
   type SafeWorkerJobInput,
+  type WorkerJobClaimOldestQueuedInput,
+  type WorkerJobPayloadRecord,
+  type WorkerJobPayloadRepository,
   type WorkerJobRepository,
   type WorkerJobRecord,
   type WorkerJobInput
@@ -130,6 +133,66 @@ class BlockingRunningSaveRepository implements WorkerJobRepository {
   findOldestQueued(): Promise<WorkerJobRecord | undefined> {
     return this.repository.findOldestQueued();
   }
+
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.claimOldestQueued(input).then(async (record) => {
+      if (record?.state === "running" && !this.blockedFirstRunningSave) {
+        this.blockedFirstRunningSave = true;
+        this.firstRunningSaveStarted.resolve();
+        await this.releaseFirstRunningSave.promise;
+      }
+
+      return record;
+    });
+  }
+}
+
+class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
+  async save(_record: WorkerJobRecord): Promise<void> {
+    throw new Error("injected job save failure");
+  }
+
+  async getById(_id: string): Promise<WorkerJobRecord | undefined> {
+    return undefined;
+  }
+
+  async listForProject(_projectId: string): Promise<WorkerJobRecord[]> {
+    return [];
+  }
+
+  async listAll(): Promise<WorkerJobRecord[]> {
+    return [];
+  }
+
+  async findOldestQueued(): Promise<WorkerJobRecord | undefined> {
+    return undefined;
+  }
+
+  async claimOldestQueued(
+    _input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return undefined;
+  }
+}
+
+class FailDeleteWorkerJobPayloadRepository
+  implements WorkerJobPayloadRepository
+{
+  private readonly repository = new InMemoryWorkerJobPayloadRepository();
+
+  save(record: WorkerJobPayloadRecord): Promise<void> {
+    return this.repository.save(record);
+  }
+
+  getByJobId(jobId: string): Promise<WorkerJobPayloadRecord | undefined> {
+    return this.repository.getByJobId(jobId);
+  }
+
+  async deleteByJobId(_jobId: string): Promise<void> {
+    throw new Error("injected payload cleanup failure");
+  }
 }
 
 class FailOnceCancelledSaveRepository implements WorkerJobRepository {
@@ -159,6 +222,12 @@ class FailOnceCancelledSaveRepository implements WorkerJobRepository {
 
   findOldestQueued(): Promise<WorkerJobRecord | undefined> {
     return this.repository.findOldestQueued();
+  }
+
+  claimOldestQueued(
+    input: WorkerJobClaimOldestQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.claimOldestQueued(input);
   }
 }
 
@@ -242,6 +311,143 @@ describe("InMemoryWorkerRuntime", () => {
 
     expect(firstClaim?.record.state).toBe("running");
     expect(secondClaim).toBeUndefined();
+  });
+
+  it("runNext does not consume safe persisted queued jobs", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const runResult = await runtime.runNext();
+    const stored = await repository.getById(queued.id);
+
+    expect(runResult).toBeUndefined();
+    expect(stored).toMatchObject({
+      id: queued.id,
+      state: "queued"
+    });
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
+  it("claimOldestQueued does not claim legacy process-local queued jobs", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const stored = await repository.getById(queued.id);
+
+    expect(claim).toBeUndefined();
+    expect(stored).toMatchObject({
+      id: queued.id,
+      state: "queued"
+    });
+  });
+
+  it("keeps safe persisted and process-local queues isolated in mixed queues", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "legacy completed",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1",
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:01.000Z",
+        "2026-05-18T00:00:02.000Z",
+        "2026-05-18T00:00:03.000Z"
+      ])
+    });
+    const legacy = await runtime.enqueue(baseInput(), simulatedPolicy());
+    const safe = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const completed = await runtime.runNext();
+    const storedLegacy = await repository.getById(legacy.id);
+    const storedSafe = await repository.getById(safe.id);
+
+    expect(claim?.record).toMatchObject({
+      id: safe.id,
+      state: "running",
+      claimedByWorkerId: "worker_a"
+    });
+    expect(completed).toMatchObject({
+      id: legacy.id,
+      state: "completed"
+    });
+    expect(storedLegacy).toEqual(completed);
+    expect(storedSafe).toEqual(claim?.record);
+    expect(adapter.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("claims a safe queued job once across runtime instances sharing a repository", async () => {
+    const repository = new BlockingRunningSaveRepository();
+    const firstRuntime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const secondRuntime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      claimTokenFactory: () => "claim_token_2"
+    });
+    await firstRuntime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+
+    const firstClaimPromise = firstRuntime.claimOldestQueued({
+      workerId: "worker_a"
+    });
+    await Promise.race([
+      repository.firstRunningSaveStarted.promise,
+      new Promise((resolve) => setTimeout(resolve, 10))
+    ]);
+    const secondClaimPromise = secondRuntime.claimOldestQueued({
+      workerId: "worker_b"
+    });
+    repository.releaseFirstRunningSave.resolve();
+
+    const claims = await Promise.all([firstClaimPromise, secondClaimPromise]);
+    const successfulClaims = claims.filter((claim) => claim !== undefined);
+
+    expect(successfulClaims).toHaveLength(1);
+  });
+
+  it("preserves the original job save error when safe enqueue payload cleanup fails", async () => {
+    const runtime = new InMemoryWorkerRuntime({
+      repository: new FailAllSavesWorkerJobRepository(),
+      payloadRepository: new FailDeleteWorkerJobPayloadRepository()
+    });
+
+    await expect(
+      runtime.enqueueSafe(baseSafeInput(), simulatedPolicy())
+    ).rejects.toThrow("injected job save failure");
   });
 
   it("persists completed runtime records through a JSON-file repository", async () => {
