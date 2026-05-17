@@ -469,6 +469,20 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       });
     }
 
+    if (!doesPayloadMatchRecord(latest, payload)) {
+      return this.completeClaimedJob({
+        jobId: latest.id,
+        claimToken: claim.claimToken,
+        result: {
+          state: "rejected",
+          stdout: "",
+          stderr: "Worker job payload does not match the queued job record.",
+          errorName: "worker_job_payload_record_mismatch"
+        },
+        sensitiveValues: []
+      });
+    }
+
     try {
       const result = await this.adapter.execute(
         executionInput,
@@ -1047,6 +1061,31 @@ function toExecutionInputFromSafePayload(
     workingDirectory: payload.workingDirectory,
     timeoutMs: payload.timeoutMs
   };
+}
+
+function doesPayloadMatchRecord(
+  record: WorkerJobRecord,
+  payload: WorkerJobPayloadRecord
+): boolean {
+  return (
+    payload.projectId === record.projectId &&
+    payload.commandId === record.inputSummary.commandId &&
+    payload.command === record.inputSummary.command &&
+    payload.args.length === record.inputSummary.argCount &&
+    arraysEqual(
+      [...payload.envNames].sort(),
+      [...record.inputSummary.envNames].sort()
+    ) &&
+    payload.workingDirectory === record.inputSummary.workingDirectory &&
+    payload.timeoutMs === record.inputSummary.timeoutMs
+  );
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function summarizeResult(

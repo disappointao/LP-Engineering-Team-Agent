@@ -389,6 +389,48 @@ describe("InMemoryWorkerRuntime", () => {
     expect(adapter.execute).not.toHaveBeenCalled();
   });
 
+  it("rejects claimed jobs when the persisted payload differs from the queued record", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+    const payload = await payloadRepository.getByJobId(queued.id);
+    await payloadRepository.save({
+      ...payload!,
+      command: "test"
+    });
+
+    const rejected = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(rejected).toMatchObject({
+      id: queued.id,
+      state: "rejected",
+      errorName: "worker_job_payload_record_mismatch",
+      resultSummary: {
+        state: "rejected",
+        stderr: "Worker job payload does not match the queued job record.",
+        errorName: "worker_job_payload_record_mismatch"
+      }
+    });
+    expect(stored).toEqual(rejected);
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
   it("rejects stale claim completion attempts without overwriting the job", async () => {
     const runtime = new InMemoryWorkerRuntime({
       payloadRepository: new InMemoryWorkerJobPayloadRepository(),
@@ -536,6 +578,41 @@ describe("InMemoryWorkerRuntime", () => {
       }
     });
     expect(stored).toEqual(completed);
+  });
+
+  it("fails claimed jobs when adapters throw named errors", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const adapterError = new Error("injected adapter failure");
+    adapterError.name = "InjectedAdapterError";
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => {
+        throw adapterError;
+      })
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      adapter,
+      claimTokenFactory: () => "claim_token_1"
+    });
+    const queued = await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+    const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+
+    const failed = await runtime.runClaimedJob(claim!);
+    const stored = await repository.getById(queued.id);
+
+    expect(failed).toMatchObject({
+      id: queued.id,
+      state: "failed",
+      errorName: "InjectedAdapterError",
+      resultSummary: {
+        state: "failed",
+        stderr: "injected adapter failure",
+        errorName: "InjectedAdapterError"
+      }
+    });
+    expect(stored).toEqual(failed);
   });
 
   it("returns cancelled queued safe jobs when persisted payload cleanup fails", async () => {
