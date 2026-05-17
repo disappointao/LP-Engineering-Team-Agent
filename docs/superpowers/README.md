@@ -192,6 +192,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 9 worker job persistence foundation implementation plan.
    - Read this after the worker job persistence design when implementing or auditing worker job repositories, repository-backed runtime internals, JSON-file persistence, restart-safe missing-payload behavior, and API compatibility.
 
+48. `specs/2026-05-17-worker-job-cancel-interrupt-design.md`
+   - Stage 10 worker job cancel and interrupt foundation design.
+   - Read this after the worker job persistence plan when adding queued cancellation, cooperative running-job cancellation, adapter cancellation context, cancellation metadata persistence, and API cancelled-result mapping without enabling real execution or Web interrupt wiring yet.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

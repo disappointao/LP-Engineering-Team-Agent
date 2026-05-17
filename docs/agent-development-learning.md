@@ -571,6 +571,22 @@ pnpm --filter @lp-agent/model-gateway test
 - repository 边界应属于 `worker-runtime`，不要把 worker 执行状态强绑到 Web workbench 的 `packages/db`。
 - 重启恢复要 fail-closed；看得见状态比静默重跑更重要。
 
+### 阶段 10：Worker Job Cancel / Interrupt Foundation
+
+当前设计：
+
+- [2026-05-17-worker-job-cancel-interrupt-design.md](./superpowers/specs/2026-05-17-worker-job-cancel-interrupt-design.md)
+- 这一阶段先做 worker-runtime 和 API 层的取消/中断底座，不改 Web UI，不接真实 shell，不做 MCP execution，也不做 agent-worker queue。
+- queued job 可以立即取消并落到 `cancelled`；running job 采用协作式取消，只记录 `cancelRequestedAt` 和可选 `cancelReason`，由 adapter 通过 cancellation context 感知后返回 cancelled。
+- worker record 只增加最小取消元数据：`cancelRequestedAt`、`cancelledAt`、`cancelReason?`，不写 actor，用户身份和团队审计后续留给 API run event / collaboration 层。
+
+学习重点：
+
+- interrupt 不是强杀进程；在真实执行能力上线前，先把“请求取消”和“确实取消完成”分开建模。
+- queued cancellation 和 running cooperative cancellation 是两种不同状态转换。
+- 取消原因是用户输入，需要 bounded persistence，不能保存 secret、raw args/env 或 artifact 内容。
+- API runner 可以返回 `cancelled`，但产品级 run timeline 的取消事件和 Web interrupt 按钮应作为后续阶段单独设计。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
