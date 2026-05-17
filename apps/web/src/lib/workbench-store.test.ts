@@ -87,12 +87,35 @@ describe("web workbench store", () => {
     expect(second.id).toBe("project_2");
   });
 
+  it("includes local owner project members in page state after creating a project", async () => {
+    const store = createWebWorkbenchStore();
+    const project = await store.createProject({
+      name: "Spring LP"
+    });
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.kind).toBe("empty");
+    expect(state.projectMembers).toEqual([
+      {
+        id: "project_member_project_1_local-web-user",
+        projectId: project.id,
+        userId: "local-web-user",
+        role: "owner",
+        displayName: "Local user",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String)
+      }
+    ]);
+  });
+
   it("returns empty page state when no current task id is present", async () => {
     const store = createWebWorkbenchStore();
 
     await expect(store.getPageState(undefined)).resolves.toEqual({
       kind: "empty",
       projects: [],
+      projectMembers: [],
       tasks: [],
       skills: {
         boundSkills: [],
@@ -126,6 +149,7 @@ describe("web workbench store", () => {
           name: "Spring LP"
         })
       ],
+      projectMembers: [],
       tasks: [],
       skills: {
         boundSkills: [],
@@ -307,8 +331,7 @@ describe("web workbench store", () => {
       projectId: project.id,
       skillVersionId: published.value.id,
       commandId: "publish_static",
-      pageVersionId: secondTaskStateBeforeCommand.snapshot.currentPageVersion.id,
-      approvedByUserId: "local-web-user"
+      pageVersionId: secondTaskStateBeforeCommand.snapshot.currentPageVersion.id
     });
     if (!command.ok) {
       throw new Error(`Expected command execution to succeed, got ${command.error}.`);
@@ -443,6 +466,14 @@ describe("web workbench store", () => {
         }),
         expect.objectContaining({
           id: secondProject.id
+        })
+      ],
+      projectMembers: [
+        expect.objectContaining({
+          projectId: secondProject.id,
+          userId: "local-web-user",
+          role: "owner",
+          displayName: "Local user"
         })
       ],
       tasks: [
@@ -645,8 +676,7 @@ describe("web workbench store", () => {
     const result = await store.executeSkillCommand({
       projectId: project.id,
       skillVersionId: published.value.id,
-      commandId: "publish_static",
-      approvedByUserId: "local-web-user"
+      commandId: "publish_static"
     });
 
     expect(result).toMatchObject({
@@ -670,6 +700,7 @@ describe("web workbench store", () => {
       "run.completed"
     ]);
     expect(JSON.stringify(events)).toContain("stdout: 47 chars");
+    expect(JSON.stringify(events)).toContain("local-web-user");
   });
 
   it("maps skill command execution validation errors to stable codes", async () => {
@@ -679,8 +710,7 @@ describe("web workbench store", () => {
       store.executeSkillCommand({
         projectId: "missing_project",
         skillVersionId: "missing_version",
-        commandId: "publish_static",
-        approvedByUserId: "local-web-user"
+        commandId: "publish_static"
       })
     ).resolves.toEqual({
       ok: false,
@@ -1108,6 +1138,7 @@ describe("web workbench store", () => {
       title: "Help me write a campaign plan."
     });
     expect(pageState.projects).toEqual([]);
+    expect(pageState.projectMembers).toEqual([]);
     expect(pageState.tasks.map((task) => task.id)).toEqual(["task_1"]);
     expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(pageState.messages[0]?.content).toBe("Help me write a campaign plan.");
@@ -1140,6 +1171,7 @@ describe("web workbench store", () => {
       throw new Error("Expected task-ready state.");
     }
     expect(pageState.projects).toEqual([]);
+    expect(pageState.projectMembers).toEqual([]);
     expect(pageState.task).toMatchObject({
       id: "task_1",
       type: "project_setup",
@@ -1218,5 +1250,37 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
     expect(pageState.snapshot.deployment).toBeUndefined();
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
+  });
+
+  it("uses configured current user as the owner for implicit LP projects", async () => {
+    const store = createWebWorkbenchStore({
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Web Reviewer"
+      }
+    });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a conference",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected implicit project creation.");
+    }
+
+    const pageState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    expect(pageState.projectMembers).toEqual([
+      expect.objectContaining({
+        projectId: result.projectId,
+        userId: "web-reviewer",
+        role: "owner",
+        displayName: "Web Reviewer"
+      })
+    ]);
   });
 });

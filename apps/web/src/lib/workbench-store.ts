@@ -7,6 +7,7 @@ import {
   type ModelProviderType,
   type ModelRoutingPolicyRecord,
   type ProjectMCPState,
+  type ProjectMemberView,
   type ProjectModelState,
   type ProjectRecord,
   type ProjectSkillState,
@@ -17,6 +18,7 @@ import {
   type SkillDraftResult,
   type SkillVersionRecord,
   type ToolCommandRunner,
+  type WorkbenchUserIdentity,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
 import {
@@ -31,6 +33,7 @@ import {
   type WorkbenchTaskType
 } from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import { getLocalWorkbenchUser } from "./local-identity";
 import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
 
 export type {
@@ -112,6 +115,8 @@ export interface WebProjectModelState extends ProjectModelState {
   resolutionError?: ModelFlowErrorCode;
 }
 
+export type ProjectMemberSummary = ProjectMemberView;
+
 export interface ProjectSkillCommandView {
   skillId: string;
   skillName: string;
@@ -163,7 +168,6 @@ export interface ExecuteSkillCommandFormInput {
   skillVersionId: string;
   commandId: string;
   pageVersionId?: string;
-  approvedByUserId: string;
 }
 
 export interface CreateModelProviderFormInput {
@@ -216,6 +220,7 @@ export type WorkbenchPageState =
   | {
       kind: "empty";
       projects: ProjectRecord[];
+      projectMembers: ProjectMemberSummary[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
       skillCommands: ProjectSkillCommandView[];
@@ -225,6 +230,7 @@ export type WorkbenchPageState =
   | {
       kind: "task_ready";
       projects: ProjectRecord[];
+      projectMembers: ProjectMemberSummary[];
       tasks: TaskRecord[];
       skills: ProjectSkillState;
       skillCommands: ProjectSkillCommandView[];
@@ -289,6 +295,7 @@ export interface WebWorkbenchStore {
 export interface WebWorkbenchStoreOptions {
   repositories?: WorkbenchRepositories;
   toolCommandRunner?: ToolCommandRunner;
+  currentUser?: WorkbenchUserIdentity;
 }
 
 export function validateProjectInput(input: CreateProjectFormInput): ValidationResult<CreateProjectFormInput> {
@@ -393,8 +400,10 @@ export function deriveProjectSkillCommands(
 
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+  const currentUser = options.currentUser ?? getLocalWorkbenchUser();
   const service = new DemoWorkbenchService({
     repositories,
+    currentUser,
     toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner()
   });
 
@@ -423,6 +432,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     approvals: [],
     visibleToolsByRole: createEmptyVisibleToolsByRole()
   });
+
+  const emptyProjectMembers = (): ProjectMemberSummary[] => [];
 
   function createEmptyVisibleToolsByRole(): ProjectMCPState["visibleToolsByRole"] {
     return {
@@ -487,6 +498,21 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     }
   };
 
+  const loadProjectMembers = async (projectId?: string | null): Promise<ProjectMemberSummary[]> => {
+    if (!projectId) {
+      return emptyProjectMembers();
+    }
+    try {
+      return await service.listProjectMembers(projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "project_not_found" || message === "Project not found.") {
+        return emptyProjectMembers();
+      }
+      throw error;
+    }
+  };
+
   return {
     async createProject(input) {
       const validation = validateProjectInput(input);
@@ -523,6 +549,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return {
           kind: "empty",
           projects: currentProjects,
+          projectMembers: await loadProjectMembers(requestedProject?.id),
           tasks: currentTasks,
           skills,
           skillCommands: deriveProjectSkillCommands(skills),
@@ -550,6 +577,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       return {
         kind: "task_ready",
         projects: currentProjects,
+        projectMembers: await loadProjectMembers(activeProjectId),
         tasks: currentTasks,
         skills,
         skillCommands: deriveProjectSkillCommands(skills),
@@ -687,7 +715,10 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
     async executeSkillCommand(input) {
       try {
-        const value = await service.executeProjectSkillCommand(input);
+        const value = await service.executeProjectSkillCommand({
+          ...input,
+          approvedByUserId: currentUser.id
+        });
         return { ok: true, value };
       } catch (error) {
         return { ok: false, error: toSkillCommandFlowError(error) };
