@@ -219,6 +219,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
+- Worker/Sandbox Runtime Foundation 已进入 Stage 8 设计：先定义 worker job、sandbox policy、execution adapter 和 worker-backed `ToolCommandRunner` 接缝，不开放真实 shell 执行。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -228,6 +229,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
 - 文件系统 workspace 和 diff 注入。
+- Worker job persistence、真实 worker queue、真实本地命令 runner、强 sandbox adapter 仍未做；Stage 8 第一版只计划 contract-first 底座。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
 - 实时流式输出和真正的 interrupt/cancel。
@@ -510,6 +512,23 @@ pnpm --filter @lp-agent/model-gateway test
 - membership 是产品状态，v0 还不是安全边界。
 - 审批和工具执行必须记录 actor，后续才能做团队审计、权限和恢复。
 - 团队协作应先做可见、可查、可测试的状态，不急着做实时多人编辑。
+
+### 阶段 8：Worker / Sandbox Runtime Foundation
+
+当前设计：
+
+- [2026-05-17-worker-sandbox-runtime-design.md](./superpowers/specs/2026-05-17-worker-sandbox-runtime-design.md)
+- 第一版采用 contract-first：新建 `packages/worker-runtime`，定义 `WorkerJob`、`SandboxPolicy`、`ExecutionAdapter`、内存 job runtime，并通过 worker-backed `ToolCommandRunner` 接入现有 API 边界。
+- 这一阶段不开放真实 shell，不使用 `child_process`，不做 Docker/Firecracker 等强沙箱，不做 MCP execution，也不做 Web UI。
+- 默认 policy 是 reject；simulate adapter 只用于 deterministic 测试和链路验证。
+- Stage 8 的价值是让后续真实 deployment runner、MCP execution、文件操作、队列 worker、cancel/retry 和强 sandbox 都复用同一套 job/policy/observation 思路。
+
+学习重点：
+
+- worker job 是执行状态，不是聊天消息。
+- sandbox policy 是产品和运行时约束，不等同于 OS 级安全隔离。
+- 先有 contract 和可测试状态机，再接真实执行。
+- 不要把 shell 执行藏在 API service 里；真实执行必须挂在 adapter 后面。
 
 ## 5. 写代码时的维护原则
 

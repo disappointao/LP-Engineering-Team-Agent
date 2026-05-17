@@ -176,6 +176,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 7 collaboration primitives implementation plan.
    - Read this after the collaboration primitives design when implementing or auditing local identity, member repositories, project owner creation, approval actor ownership, Web member state, and documentation updates.
 
+44. `specs/2026-05-17-worker-sandbox-runtime-design.md`
+   - Stage 8 worker sandbox runtime foundation design.
+   - Read this after the collaboration primitives plan when adding worker job contracts, sandbox policy, execution adapters, and the worker-backed `ToolCommandRunner` seam without opening real shell execution.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
