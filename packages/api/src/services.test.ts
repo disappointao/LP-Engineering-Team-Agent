@@ -19,6 +19,10 @@ import type {
 } from "@lp-agent/runtime-adapters";
 import type { SkillManifest } from "@lp-agent/skills";
 import {
+  InMemoryWorkerRuntime,
+  SimulatedExecutionAdapter
+} from "@lp-agent/worker-runtime";
+import {
   DemoWorkbenchService,
   createDemoWorkbenchService,
   runAgentStep,
@@ -41,6 +45,10 @@ import type {
   ToolCommandRunInput,
   ToolCommandRunResult
 } from "./tool-command-runner";
+import {
+  WorkerBackedToolCommandRunner,
+  createSandboxPolicyForToolCommand
+} from "./worker-backed-tool-command-runner";
 
 describe("demo workbench service", () => {
   it("exports record contracts used by API consumers", () => {
@@ -1297,6 +1305,67 @@ describe("demo workbench service", () => {
     expect(serializedEvents).not.toContain("secret-token");
     expect(serializedObservation).not.toContain("secret-token");
     expect(serializedObservation).not.toContain(artifactFragment);
+  });
+
+  it("executes a deployment skill command through an explicit worker-backed runner", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter(),
+      now: fixedClock()
+    });
+    const runner = new WorkerBackedToolCommandRunner(workerRuntime, (input) =>
+      createSandboxPolicyForToolCommand(input, {
+        mode: "simulate",
+        allowedCommands: [input.command],
+        allowedEnvNames: Object.keys(input.env),
+        maxStdoutBytes: 300,
+        maxStderrBytes: 300
+      })
+    );
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        deploymentSkillManifest({ commands: [commandWithoutArtifacts()] })
+      ),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.executeProjectSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.id,
+      commandId: "publish_static",
+      approvedByUserId: "user_1"
+    });
+    const expectedStdout = `Simulated static-deploy for project ${project.id}.`;
+    const jobs = await workerRuntime.listJobsForProject(project.id);
+    const serialized = JSON.stringify({ run: result.run, observation: result.observation, jobs });
+
+    expect(result.run.state).toBe("completed");
+    expect(result.observation.outputSummary).toBe(
+      `stdout: ${expectedStdout.length} chars\nstderr: 0 chars`
+    );
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      state: "completed",
+      inputSummary: {
+        command: "static-deploy",
+        envNames: ["LP_PROJECT_ID", "STATIC_DEPLOY_TOKEN"]
+      }
+    });
+    expect(serialized).not.toContain("secret-token");
   });
 
   it("persists failed deployment skill command results", async () => {
