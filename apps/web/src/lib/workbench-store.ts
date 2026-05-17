@@ -18,6 +18,7 @@ import {
   type SkillDraftResult,
   type SkillVersionRecord,
   type ToolCommandRunner,
+  normalizeWorkbenchUserIdentity,
   type WorkbenchUserIdentity,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
@@ -400,7 +401,9 @@ export function deriveProjectSkillCommands(
 
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
-  const currentUser = options.currentUser ?? getLocalWorkbenchUser();
+  const currentUser = normalizeWorkbenchUserIdentity(
+    options.currentUser ?? getLocalWorkbenchUser()
+  );
   const service = new DemoWorkbenchService({
     repositories,
     currentUser,

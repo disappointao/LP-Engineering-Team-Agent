@@ -645,9 +645,15 @@ describe("web workbench store", () => {
     expect(state.skillCommands).toEqual([]);
   });
 
-  it("executes skill commands with the simulated Web runner", async () => {
+  it("normalizes configured current user for ownership and skill command audit events", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
-    const store = createWebWorkbenchStore({ repositories });
+    const store = createWebWorkbenchStore({
+      repositories,
+      currentUser: {
+        id: " web-reviewer ",
+        displayName: " Web Reviewer "
+      }
+    });
     const project = await store.createProject({ name: "Project" });
     const draft = await store.createSkillDraft({
       manifestJson: deploymentSkillManifestJson(),
@@ -678,6 +684,7 @@ describe("web workbench store", () => {
       skillVersionId: published.value.id,
       commandId: "publish_static"
     });
+    const pageState = await store.getPageState({ projectId: project.id });
 
     expect(result).toMatchObject({
       ok: true,
@@ -699,8 +706,31 @@ describe("web workbench store", () => {
       "tool.completed",
       "run.completed"
     ]);
+    expect(pageState.projectMembers).toEqual([
+      expect.objectContaining({
+        projectId: project.id,
+        userId: "web-reviewer",
+        role: "owner",
+        displayName: "Web Reviewer"
+      })
+    ]);
     expect(JSON.stringify(events)).toContain("stdout: 47 chars");
-    expect(JSON.stringify(events)).toContain("local-web-user");
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "run.started",
+          payload: expect.objectContaining({
+            approvedByUserId: "web-reviewer"
+          })
+        }),
+        expect.objectContaining({
+          type: "tool.started",
+          payload: expect.objectContaining({
+            approvedByUserId: "web-reviewer"
+          })
+        })
+      ])
+    );
   });
 
   it("maps skill command execution validation errors to stable codes", async () => {

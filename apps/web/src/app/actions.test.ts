@@ -512,8 +512,7 @@ describe("submitPromptAction", () => {
       projectId: "project_2",
       skillVersionId: "skill_version_1",
       commandId: "publish_static",
-      pageVersionId: "version_1",
-      approvedByUserId: "local-web-user"
+      pageVersionId: "version_1"
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_2");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
@@ -536,8 +535,7 @@ describe("submitPromptAction", () => {
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
       projectId: "project_2",
       skillVersionId: "skill_version_1",
-      commandId: "publish_static",
-      approvedByUserId: "local-web-user"
+      commandId: "publish_static"
     });
   });
 
@@ -554,8 +552,7 @@ describe("submitPromptAction", () => {
       projectId: "project_2",
       skillVersionId: "skill_version_1",
       commandId: "publish_static",
-      pageVersionId: "version_1",
-      approvedByUserId: "local-web-user"
+      pageVersionId: "version_1"
     });
   });
 

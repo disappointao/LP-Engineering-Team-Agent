@@ -42,7 +42,6 @@ function parseAgentRole(
 }
 
 const maxSkillContentBytes = 200000;
-const localWebApprovalUserId = "local-web-user";
 const binarySignatures = [
   [0x50, 0x4b, 0x03, 0x04],
   [0x50, 0x4b, 0x05, 0x06],
@@ -276,8 +275,7 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
     projectId,
     skillVersionId: String(formData.get("skillVersionId") ?? "").trim(),
     commandId: String(formData.get("commandId") ?? "").trim(),
-    ...(pageVersionId ? { pageVersionId } : {}),
-    approvedByUserId: localWebApprovalUserId
+    ...(pageVersionId ? { pageVersionId } : {})
   });
   if (!result.ok) {
     redirectToSkillsWithError(result.error);
