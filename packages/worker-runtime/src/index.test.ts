@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  InMemoryWorkerJobRepository,
   InMemoryWorkerRuntime,
   RejectingExecutionAdapter,
   SimulatedExecutionAdapter,
@@ -9,6 +10,7 @@ import {
   type ExecutionAdapter,
   type ExecutionInput,
   type SandboxPolicy,
+  type WorkerJobRecord,
   type WorkerJobInput
 } from "./index";
 
@@ -29,7 +31,145 @@ const simulatedPolicy = (overrides: Partial<SandboxPolicy> = {}): SandboxPolicy 
     ...overrides
   });
 
+function workerJobRecord(overrides: Partial<WorkerJobRecord> = {}): WorkerJobRecord {
+  return {
+    id: "worker_job_1",
+    projectId: "project_a",
+    kind: "tool_command",
+    state: "queued",
+    policy: simulatedPolicy(),
+    inputSummary: {
+      projectId: "project_a",
+      kind: "tool_command",
+      commandId: "publish_static",
+      command: "build",
+      argCount: 1,
+      envNames: [],
+      timeoutMs: 1000
+    },
+    createdAt: "2026-05-17T00:00:00.000Z",
+    ...overrides
+  };
+}
+
 describe("InMemoryWorkerRuntime", () => {
+  it("persists worker records through an injected repository", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter: new SimulatedExecutionAdapter()
+    });
+
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+    const completed = await runtime.runNext();
+    const persisted = await repository.getById(queued.id);
+
+    expect(completed?.state).toBe("completed");
+    expect(persisted).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        stdout: "Simulated build for project project_a."
+      }
+    });
+  });
+
+  it("allocates the next id after existing repository records", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(workerJobRecord({ id: "worker_job_3" }));
+    await repository.save(workerJobRecord({ id: "other_prefix_9" }));
+    const runtime = new InMemoryWorkerRuntime({ repository });
+
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    expect(queued.id).toBe("worker_job_4");
+  });
+
+  it("allocates unique ids for parallel enqueues in one runtime instance", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const runtime = new InMemoryWorkerRuntime({ repository });
+
+    const queued = await Promise.all([
+      runtime.enqueue(baseInput(), simulatedPolicy()),
+      runtime.enqueue(baseInput(), simulatedPolicy()),
+      runtime.enqueue(baseInput(), simulatedPolicy())
+    ]);
+    const persisted = await repository.listAll();
+
+    expect(queued.map((job) => job.id)).toEqual([
+      "worker_job_1",
+      "worker_job_2",
+      "worker_job_3"
+    ]);
+    expect(persisted.map((job) => job.id)).toEqual([
+      "worker_job_1",
+      "worker_job_2",
+      "worker_job_3"
+    ]);
+  });
+
+  it("runs the oldest queued repository record before newer queued records", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const newer = await runtime.enqueue(
+      baseInput({ command: "test" }),
+      simulatedPolicy()
+    );
+    const older = await runtime.enqueue(baseInput(), simulatedPolicy());
+    await repository.save({
+      ...older,
+      createdAt: "2026-05-17T00:00:00.000Z"
+    });
+
+    const completed = await runtime.runNext();
+    const persistedOlder = await repository.getById(older.id);
+    const persistedNewer = await repository.getById(newer.id);
+
+    expect(completed?.id).toBe(older.id);
+    expect(persistedOlder?.state).toBe("completed");
+    expect(persistedNewer?.state).toBe("queued");
+  });
+
+  it("fails persisted queued jobs when process-local payload is unavailable", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async () => ({
+        state: "completed" as const,
+        exitCode: 0,
+        stdout: "should not run",
+        stderr: ""
+      }))
+    };
+    await repository.save(workerJobRecord());
+    const runtime = new InMemoryWorkerRuntime({ repository, adapter });
+
+    const failed = await runtime.runNext();
+    const persisted = await repository.getById("worker_job_1");
+
+    expect(failed).toMatchObject({
+      id: "worker_job_1",
+      state: "failed",
+      errorName: "worker_job_payload_unavailable",
+      resultSummary: {
+        state: "failed",
+        stderr: "Worker job execution payload is unavailable after restart.",
+        errorName: "worker_job_payload_unavailable"
+      }
+    });
+    expect(persisted?.errorName).toBe("worker_job_payload_unavailable");
+    expect(persisted?.resultSummary?.errorName).toBe(
+      "worker_job_payload_unavailable"
+    );
+    expect(persisted?.resultSummary?.stderr).toBe(
+      "Worker job execution payload is unavailable after restart."
+    );
+    expect(adapter.execute).not.toHaveBeenCalled();
+  });
+
   it("enqueue creates deterministic worker job ids with an injectable prefix and clock", async () => {
     const runtime = new InMemoryWorkerRuntime({
       idPrefix: "worker_job",

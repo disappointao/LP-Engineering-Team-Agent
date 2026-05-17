@@ -112,123 +112,199 @@ export type SandboxPolicyValidation =
   | { valid: true }
   | { valid: false; reason: string; errorName?: string };
 
-interface StoredJob {
-  record: WorkerJobRecord;
+interface WorkerJobExecutionPayload {
   args: string[];
   env: Record<string, string>;
-  policy: SandboxPolicy;
 }
 
 export interface InMemoryWorkerRuntimeOptions {
   adapter?: ExecutionAdapter;
   now?: () => Date;
   idPrefix?: string;
+  repository?: WorkerJobRepository;
 }
 
 export class InMemoryWorkerRuntime implements WorkerRuntime {
-  private readonly jobs: StoredJob[] = [];
   private readonly adapter: ExecutionAdapter;
   private readonly now: () => Date;
   private readonly idPrefix: string;
+  private readonly repository: WorkerJobRepository;
+  private readonly payloadsByJobId = new Map<string, WorkerJobExecutionPayload>();
   private nextJobNumber = 1;
+  private nextJobNumberInitialized = false;
+  private enqueueLock: Promise<void> = Promise.resolve();
 
   constructor(options: InMemoryWorkerRuntimeOptions = {}) {
     this.adapter = options.adapter ?? new RejectingExecutionAdapter();
     this.now = options.now ?? (() => new Date());
     this.idPrefix = options.idPrefix ?? "worker_job";
+    this.repository = options.repository ?? new InMemoryWorkerJobRepository();
   }
 
   async enqueue(
     input: WorkerJobInput,
     policy: SandboxPolicy = createRejectSandboxPolicy()
   ): Promise<WorkerJobRecord> {
-    const copiedPolicy = copyPolicy(policy);
-    const id = `${this.idPrefix}_${this.nextJobNumber}`;
-    this.nextJobNumber += 1;
+    return this.withEnqueueLock(async () => {
+      const copiedPolicy = copyPolicy(policy);
+      const id = await this.allocateJobId();
+      const record: WorkerJobRecord = {
+        id,
+        projectId: input.projectId,
+        kind: input.kind,
+        state: "queued",
+        policy: copyPolicy(copiedPolicy),
+        inputSummary: summarizeInput(input),
+        createdAt: this.nowIso()
+      };
 
-    const record: WorkerJobRecord = {
-      id,
-      projectId: input.projectId,
-      kind: input.kind,
-      state: "queued",
-      policy: copyPolicy(copiedPolicy),
-      inputSummary: summarizeInput(input),
-      createdAt: this.nowIso()
-    };
+      this.payloadsByJobId.set(id, {
+        args: [...input.args],
+        env: { ...input.env }
+      });
+      await this.repository.save(record);
 
-    this.jobs.push({
-      record,
-      args: [...input.args],
-      env: { ...input.env },
-      policy: copiedPolicy
+      return copyRecord(record);
     });
-
-    return copyRecord(record);
   }
 
   async runNext(): Promise<WorkerJobRecord | undefined> {
-    const storedJob = this.jobs.find((job) => job.record.state === "queued");
-    if (!storedJob) {
+    const queuedRecord = await this.repository.findOldestQueued();
+    if (!queuedRecord) {
       return undefined;
     }
 
-    storedJob.record.state = "running";
-    storedJob.record.startedAt = this.nowIso();
+    const runningRecord: WorkerJobRecord = {
+      ...copyRecord(queuedRecord),
+      state: "running",
+      startedAt: this.nowIso()
+    };
+    await this.repository.save(runningRecord);
 
     const validation = validateSandboxPolicy(
-      storedJob.record.inputSummary,
-      storedJob.policy
+      runningRecord.inputSummary,
+      runningRecord.policy
     );
     if (!validation.valid) {
-      this.completeJob(storedJob, {
-        state: "rejected",
-        stdout: "",
-        stderr: validation.reason,
-        errorName: validation.errorName
-      });
-      return copyRecord(storedJob.record);
+      this.payloadsByJobId.delete(runningRecord.id);
+      return this.completeJob(
+        runningRecord,
+        {
+          state: "rejected",
+          stdout: "",
+          stderr: validation.reason,
+          errorName: validation.errorName
+        },
+        []
+      );
+    }
+
+    const payload = this.payloadsByJobId.get(runningRecord.id);
+    if (!payload) {
+      return this.completeJob(
+        runningRecord,
+        {
+          state: "failed",
+          stdout: "",
+          stderr: "Worker job execution payload is unavailable after restart.",
+          errorName: "worker_job_payload_unavailable"
+        },
+        []
+      );
     }
 
     try {
       const result = await this.adapter.execute(
-        toExecutionInput(storedJob),
-        copyPolicy(storedJob.policy)
+        toExecutionInput(runningRecord, payload),
+        copyPolicy(runningRecord.policy)
       );
 
-      this.completeJob(storedJob, result);
+      return this.completeJob(
+        runningRecord,
+        result,
+        getSensitiveValues(payload.env)
+      );
     } catch (error) {
-      this.completeJob(storedJob, {
-        state: "failed",
-        stdout: "",
-        stderr: error instanceof Error ? error.message : String(error),
-        errorName: error instanceof Error && error.name ? error.name : "execution_adapter_failed"
-      });
+      return this.completeJob(
+        runningRecord,
+        {
+          state: "failed",
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          errorName:
+            error instanceof Error && error.name
+              ? error.name
+              : "execution_adapter_failed"
+        },
+        getSensitiveValues(payload.env)
+      );
+    } finally {
+      this.payloadsByJobId.delete(runningRecord.id);
     }
-
-    return copyRecord(storedJob.record);
   }
 
   async getJob(id: string): Promise<WorkerJobRecord | undefined> {
-    const storedJob = this.jobs.find((job) => job.record.id === id);
-    return storedJob ? copyRecord(storedJob.record) : undefined;
+    return this.repository.getById(id);
   }
 
   async listJobsForProject(projectId: string): Promise<WorkerJobRecord[]> {
-    return this.jobs
-      .filter((job) => job.record.projectId === projectId)
-      .map((job) => copyRecord(job.record));
+    return this.repository.listForProject(projectId);
   }
 
-  private completeJob(
-    storedJob: StoredJob,
-    result: ExecutionResult
-  ): void {
-    const { record, policy } = storedJob;
+  private async completeJob(
+    record: WorkerJobRecord,
+    result: ExecutionResult,
+    sensitiveValues: string[]
+  ): Promise<WorkerJobRecord> {
+    const completedRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      state: result.state,
+      resultSummary: summarizeResult(result, record.policy, sensitiveValues),
+      errorName: result.errorName,
+      completedAt: this.nowIso()
+    };
 
-    record.state = result.state;
-    record.resultSummary = summarizeResult(result, policy, getSensitiveValues(storedJob.env));
-    record.errorName = result.errorName;
-    record.completedAt = this.nowIso();
+    await this.repository.save(completedRecord);
+
+    return copyRecord(completedRecord);
+  }
+
+  private async allocateJobId(): Promise<string> {
+    if (!this.nextJobNumberInitialized) {
+      const idPattern = new RegExp(`^${escapeRegExp(this.idPrefix)}_(\\d+)$`);
+      const records = await this.repository.listAll();
+      const maxJobNumber = records.reduce((max, record) => {
+        const match = idPattern.exec(record.id);
+        if (!match) {
+          return max;
+        }
+
+        return Math.max(max, Number(match[1]));
+      }, 0);
+
+      this.nextJobNumber = maxJobNumber + 1;
+      this.nextJobNumberInitialized = true;
+    }
+
+    const id = `${this.idPrefix}_${this.nextJobNumber}`;
+    this.nextJobNumber += 1;
+
+    return id;
+  }
+
+  private async withEnqueueLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previousLock = this.enqueueLock;
+    let releaseLock: () => void = () => undefined;
+    this.enqueueLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    await previousLock;
+    try {
+      return await operation();
+    } finally {
+      releaseLock();
+    }
   }
 
   private nowIso(): string {
@@ -429,18 +505,21 @@ function getEnvNames(input: WorkerJobInput | WorkerJobInputSummary): string[] {
   return Object.keys(input.env).sort();
 }
 
-function toExecutionInput(storedJob: StoredJob): ExecutionInput {
+function toExecutionInput(
+  record: WorkerJobRecord,
+  payload: WorkerJobExecutionPayload
+): ExecutionInput {
   return {
-    jobId: storedJob.record.id,
-    projectId: storedJob.record.projectId,
-    kind: storedJob.record.kind,
-    commandId: storedJob.record.inputSummary.commandId,
-    command: storedJob.record.inputSummary.command,
-    args: [...storedJob.args],
-    env: { ...storedJob.env },
-    envNames: [...storedJob.record.inputSummary.envNames],
-    workingDirectory: storedJob.record.inputSummary.workingDirectory,
-    timeoutMs: storedJob.record.inputSummary.timeoutMs
+    jobId: record.id,
+    projectId: record.projectId,
+    kind: record.kind,
+    commandId: record.inputSummary.commandId,
+    command: record.inputSummary.command,
+    args: [...payload.args],
+    env: { ...payload.env },
+    envNames: [...record.inputSummary.envNames],
+    workingDirectory: record.inputSummary.workingDirectory,
+    timeoutMs: record.inputSummary.timeoutMs
   };
 }
 
@@ -516,6 +595,10 @@ function isPathWithinRoot(path: string, root: string): boolean {
     resolvedPath === resolvedRoot ||
     resolvedPath.startsWith(`${resolvedRoot}${sep}`)
   );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
