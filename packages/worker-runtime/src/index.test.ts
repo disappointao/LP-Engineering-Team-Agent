@@ -454,6 +454,7 @@ describe("InMemoryWorkerRuntime", () => {
       state: "cancelled",
       errorName: "worker_job_cancelled",
       cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+      cancelReason: "Stop this job",
       cancelledAt: "2026-05-17T12:00:03.000Z",
       completedAt: "2026-05-17T12:00:03.000Z",
       resultSummary: {
