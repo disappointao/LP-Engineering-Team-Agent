@@ -584,6 +584,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-17-worker-job-cancel-interrupt.md](./superpowers/plans/2026-05-17-worker-job-cancel-interrupt.md)
 
+当前实现状态：
+
+- Stage 10 v0 已实现 `WorkerRuntime.cancelJob()`。
+- queued worker job 可立即落到 `cancelled`，并持久化 `cancelRequestedAt`、`cancelledAt`、`completedAt` 和 bounded `cancelReason`。
+- running worker job 采用协作式取消：runtime 记录 `cancelRequestedAt`，adapter 通过 `ExecutionContext.isCancellationRequested()` 感知取消请求。
+- queued-to-running 竞态通过 execution token 校验处理，避免过期执行完成覆盖已取消状态。
+- `WorkerBackedToolCommandRunner` 已能把 cancelled worker job 映射为 `ToolCommandRunResult.state === "cancelled"`；现有 skill command service 仍把非 completed 命令结果落为 failed run/tool observation。
+
 学习重点：
 
 - interrupt 不是强杀进程；在真实执行能力上线前，先把“请求取消”和“确实取消完成”分开建模。
