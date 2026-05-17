@@ -243,6 +243,39 @@ describe("demo workbench service", () => {
     ]));
   });
 
+  it("keeps reserved encoded prefixes distinct from literal project member user ids", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories });
+    const project = await service.createProject({ name: "Spring sale" });
+
+    await service.addProjectMember({
+      projectId: project.id,
+      userId: "reviewer/a",
+      role: "reviewer",
+      displayName: "Slash Reviewer"
+    });
+    await service.addProjectMember({
+      projectId: project.id,
+      userId: "b64_cmV2aWV3ZXIvYQ",
+      role: "reviewer",
+      displayName: "Literal Encoded Reviewer"
+    });
+
+    await expect(service.listProjectMembers(project.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: "reviewer/a", role: "reviewer" }),
+      expect.objectContaining({ userId: "b64_cmV2aWV3ZXIvYQ", role: "reviewer" })
+    ]));
+    await expect(service.listProjectMembers(project.id)).resolves.toHaveLength(3);
+
+    const members = await repositories.projectMembers.listForProject(project.id);
+    const slashReviewer = members.find((member) => member.userId === "reviewer/a");
+    const literalReviewer = members.find((member) => member.userId === "b64_cmV2aWV3ZXIvYQ");
+
+    expect(slashReviewer?.id).toBe("project_member_project_1_b64_cmV2aWV3ZXIvYQ");
+    expect(literalReviewer?.id).toBeDefined();
+    expect(literalReviewer?.id).not.toBe(slashReviewer?.id);
+  });
+
   it("preserves project member display name when updating role without a replacement", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories });

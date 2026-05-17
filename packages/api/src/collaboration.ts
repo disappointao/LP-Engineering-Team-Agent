@@ -63,7 +63,7 @@ function toMembershipIdSegment(value: string): string {
   if (normalized.length === 0) {
     return "unknown";
   }
-  if (/^[A-Za-z0-9_-]+$/.test(normalized)) {
+  if (/^[A-Za-z0-9_-]+$/.test(normalized) && !normalized.startsWith("b64_")) {
     return normalized;
   }
   return `b64_${Buffer.from(normalized, "utf8").toString("base64url")}`;
