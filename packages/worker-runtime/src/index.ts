@@ -97,8 +97,16 @@ export interface ExecutionResult {
   errorName?: string;
 }
 
+export interface ExecutionContext {
+  isCancellationRequested(): Promise<boolean>;
+}
+
 export interface ExecutionAdapter {
-  execute(input: ExecutionInput, policy: SandboxPolicy): Promise<ExecutionResult>;
+  execute(
+    input: ExecutionInput,
+    policy: SandboxPolicy,
+    context: ExecutionContext
+  ): Promise<ExecutionResult>;
 }
 
 export interface WorkerRuntime {
@@ -226,7 +234,8 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       try {
         const result = await this.adapter.execute(
           toExecutionInput(runningRecord, payload),
-          copyPolicy(runningRecord.policy)
+          copyPolicy(runningRecord.policy),
+          this.createExecutionContext(runningRecord.id)
         );
 
         return this.completeJob(
@@ -383,6 +392,19 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return copyRecord(updatedRecord);
   }
 
+  private createExecutionContext(jobId: string): ExecutionContext {
+    return {
+      isCancellationRequested: async () => {
+        const record = await this.repository.getById(jobId);
+        return Boolean(
+          record &&
+            (record.state === "cancelled" ||
+              record.cancelRequestedAt !== undefined)
+        );
+      }
+    };
+  }
+
   private async completeJob(
     record: WorkerJobRecord,
     result: ExecutionResult,
@@ -391,13 +413,21 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return this.withJobMutationLock(record.id, async () => {
       const latest = await this.repository.getById(record.id);
       const baseRecord = latest ?? record;
+      const completedAt = this.nowIso();
 
       const completedRecord: WorkerJobRecord = {
         ...copyRecord(baseRecord),
         state: result.state,
         resultSummary: summarizeResult(result, baseRecord.policy, sensitiveValues),
         errorName: result.errorName,
-        completedAt: this.nowIso()
+        completedAt,
+        ...(result.state === "cancelled"
+          ? {
+              cancelRequestedAt: baseRecord.cancelRequestedAt ?? completedAt,
+              cancelledAt: completedAt,
+              cancelReason: baseRecord.cancelReason
+            }
+          : {})
       };
 
       await this.repository.save(completedRecord);
@@ -495,7 +525,8 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
 export class RejectingExecutionAdapter implements ExecutionAdapter {
   async execute(
     _input: ExecutionInput,
-    _policy: SandboxPolicy
+    _policy: SandboxPolicy,
+    _context: ExecutionContext
   ): Promise<ExecutionResult> {
     return {
       state: "rejected",
@@ -523,7 +554,20 @@ export class SimulatedExecutionAdapter implements ExecutionAdapter {
     this.stderrByCommand = { ...(options.stderrByCommand ?? {}) };
   }
 
-  async execute(input: ExecutionInput): Promise<ExecutionResult> {
+  async execute(
+    input: ExecutionInput,
+    _policy: SandboxPolicy,
+    context: ExecutionContext
+  ): Promise<ExecutionResult> {
+    if (await context.isCancellationRequested()) {
+      return {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled.",
+        errorName: WORKER_JOB_CANCELLED_ERROR
+      };
+    }
+
     if (this.failCommands.has(input.command)) {
       return {
         state: "failed",

@@ -13,6 +13,7 @@ import {
   createJsonFileWorkerJobRepository,
   createSimulatedSandboxPolicy,
   type ExecutionAdapter,
+  type ExecutionContext,
   type ExecutionInput,
   type SandboxPolicy,
   type WorkerJobRepository,
@@ -79,6 +80,10 @@ function createClock(values: string[]): () => Date {
   const lastValue = values[values.length - 1] as string;
   return () => new Date(values[index++] ?? lastValue);
 }
+
+const noCancellationContext: ExecutionContext = {
+  isCancellationRequested: async () => false
+};
 
 class BlockingRunningSaveRepository implements WorkerJobRepository {
   private readonly repository = new InMemoryWorkerJobRepository();
@@ -393,6 +398,72 @@ describe("InMemoryWorkerRuntime", () => {
     });
     expect(completed?.cancelledAt).toBeUndefined();
     expect(stored).toEqual(completed);
+  });
+
+  it("lets running adapters observe cooperative cancellation requests", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const started = deferred<void>();
+    const continueExecution = deferred<void>();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(async (_input, _policy, context) => {
+        started.resolve(undefined);
+        await continueExecution.promise;
+        if (await context.isCancellationRequested()) {
+          return {
+            state: "cancelled" as const,
+            stdout: "",
+            stderr: "Worker job cancelled.",
+            errorName: "worker_job_cancelled"
+          };
+        }
+        return {
+          state: "completed" as const,
+          exitCode: 0,
+          stdout: "completed",
+          stderr: ""
+        };
+      })
+    };
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      adapter,
+      now: createClock([
+        "2026-05-17T12:00:00.000Z",
+        "2026-05-17T12:00:01.000Z",
+        "2026-05-17T12:00:02.000Z",
+        "2026-05-17T12:00:03.000Z"
+      ])
+    });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const runPromise = runtime.runNext();
+    await started.promise;
+    const running = await runtime.cancelJob(queued.id, "Stop this job");
+    continueExecution.resolve(undefined);
+    const cancelled = await runPromise;
+    const stored = await repository.getById(queued.id);
+
+    expect(running).toMatchObject({
+      id: queued.id,
+      state: "running",
+      cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+      cancelReason: "Stop this job"
+    });
+    expect(cancelled).toMatchObject({
+      id: queued.id,
+      state: "cancelled",
+      errorName: "worker_job_cancelled",
+      cancelRequestedAt: "2026-05-17T12:00:02.000Z",
+      cancelledAt: "2026-05-17T12:00:03.000Z",
+      completedAt: "2026-05-17T12:00:03.000Z",
+      resultSummary: {
+        state: "cancelled",
+        stderr: "Worker job cancelled.",
+        errorName: "worker_job_cancelled"
+      }
+    });
+    expect(stored).toEqual(cancelled);
+    expect(adapter.execute).toHaveBeenCalledTimes(1);
   });
 
   it("records cancellation while a queued job is being claimed for execution", async () => {
@@ -1012,7 +1083,9 @@ describe("InMemoryWorkerRuntime", () => {
     };
     const policy: SandboxPolicy = createRejectSandboxPolicy();
 
-    await expect(adapter.execute(input, policy)).resolves.toMatchObject({
+    await expect(
+      adapter.execute(input, policy, noCancellationContext)
+    ).resolves.toMatchObject({
       state: "rejected",
       errorName: "execution_adapter_rejected",
       stderr: expect.stringContaining("real command execution is disabled")
