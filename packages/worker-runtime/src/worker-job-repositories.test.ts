@@ -93,6 +93,47 @@ async function requestRunningCancellation(
   ).requestRunningCancellation(input);
 }
 
+async function cancelQueued(
+  repository: unknown,
+  input: {
+    jobId: string;
+    errorName: string;
+    resultSummary: {
+      state: "cancelled";
+      stdout: string;
+      stderr: string;
+      stdoutBytes: number;
+      stderrBytes: number;
+      errorName?: string;
+    };
+    cancelRequestedAt: string;
+    cancelledAt: string;
+    completedAt: string;
+    cancelReason?: string;
+  }
+): Promise<WorkerJobRecord | undefined> {
+  return (
+    repository as {
+      cancelQueued(input: {
+        jobId: string;
+        errorName: string;
+        resultSummary: {
+          state: "cancelled";
+          stdout: string;
+          stderr: string;
+          stdoutBytes: number;
+          stderrBytes: number;
+          errorName?: string;
+        };
+        cancelRequestedAt: string;
+        cancelledAt: string;
+        completedAt: string;
+        cancelReason?: string;
+      }): Promise<WorkerJobRecord | undefined>;
+    }
+  ).cancelQueued(input);
+}
+
 async function createTempFilePath(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "worker-job-repositories-"));
   tempDirs.push(dir);
@@ -415,6 +456,130 @@ describe("InMemoryWorkerJobRepository", () => {
     });
     expect(completed?.cancelRequestedAt).toBeUndefined();
     expect(stored).toEqual(completed);
+  });
+
+  it("cancels queued jobs with terminal result and cancellation metadata", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(workerJobRecord());
+
+    const cancelled = await cancelQueued(repository, {
+      jobId: "worker_job_1",
+      errorName: "worker_job_cancelled",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled before execution.",
+        stdoutBytes: 0,
+        stderrBytes: 38,
+        errorName: "worker_job_cancelled"
+      },
+      cancelRequestedAt: "2026-05-18T00:01:00.000Z",
+      cancelledAt: "2026-05-18T00:01:00.000Z",
+      completedAt: "2026-05-18T00:01:00.000Z",
+      cancelReason: "User stopped it"
+    });
+    const stored = await repository.getById("worker_job_1");
+
+    expect(cancelled).toMatchObject({
+      id: "worker_job_1",
+      state: "cancelled",
+      errorName: "worker_job_cancelled",
+      cancelRequestedAt: "2026-05-18T00:01:00.000Z",
+      cancelledAt: "2026-05-18T00:01:00.000Z",
+      completedAt: "2026-05-18T00:01:00.000Z",
+      cancelReason: "User stopped it",
+      resultSummary: {
+        state: "cancelled",
+        stderr: "Worker job cancelled before execution.",
+        errorName: "worker_job_cancelled"
+      }
+    });
+    expect(stored).toEqual(cancelled);
+  });
+
+  it("returns running and completed jobs from queued cancellation without changing them", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_running",
+        state: "running",
+        startedAt: "2026-05-18T00:01:00.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      })
+    );
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_completed",
+        state: "completed",
+        completedAt: "2026-05-18T00:02:00.000Z",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "ok",
+          stderr: "",
+          stdoutBytes: 2,
+          stderrBytes: 0
+        }
+      })
+    );
+
+    const running = await cancelQueued(repository, {
+      jobId: "worker_job_running",
+      errorName: "worker_job_cancelled",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled before execution.",
+        stdoutBytes: 0,
+        stderrBytes: 38,
+        errorName: "worker_job_cancelled"
+      },
+      cancelRequestedAt: "2026-05-18T00:03:00.000Z",
+      cancelledAt: "2026-05-18T00:03:00.000Z",
+      completedAt: "2026-05-18T00:03:00.000Z",
+      cancelReason: "Too late"
+    });
+    const completed = await cancelQueued(repository, {
+      jobId: "worker_job_completed",
+      errorName: "worker_job_cancelled",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled before execution.",
+        stdoutBytes: 0,
+        stderrBytes: 38,
+        errorName: "worker_job_cancelled"
+      },
+      cancelRequestedAt: "2026-05-18T00:03:00.000Z",
+      cancelledAt: "2026-05-18T00:03:00.000Z",
+      completedAt: "2026-05-18T00:03:00.000Z",
+      cancelReason: "Too late"
+    });
+
+    expect(running).toMatchObject({
+      id: "worker_job_running",
+      state: "running",
+      claimedByWorkerId: "worker_a",
+      claimToken: "claim_token_1"
+    });
+    expect(running?.completedAt).toBeUndefined();
+    expect(completed).toMatchObject({
+      id: "worker_job_completed",
+      state: "completed",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(completed?.cancelRequestedAt).toBeUndefined();
+    await expect(repository.getById("worker_job_running")).resolves.toEqual(
+      running
+    );
+    await expect(repository.getById("worker_job_completed")).resolves.toEqual(
+      completed
+    );
   });
 
   it("does not complete running jobs when the claim token does not match", async () => {
@@ -794,6 +959,58 @@ describe("JsonFileWorkerJobRepository", () => {
     const completed = await requestRunningCancellation(repository, {
       jobId: "worker_job_completed",
       cancelRequestedAt: "2026-05-18T00:02:30.000Z",
+      cancelReason: "Too late"
+    });
+
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    const reloaded = await reopened.getById("worker_job_completed");
+
+    expect(completed).toMatchObject({
+      id: "worker_job_completed",
+      state: "completed",
+      completedAt: "2026-05-18T00:02:00.000Z",
+      resultSummary: {
+        state: "completed",
+        stdout: "ok"
+      }
+    });
+    expect(reloaded).toEqual(completed);
+    expect(reloaded?.cancelRequestedAt).toBeUndefined();
+  });
+
+  it("json-file repository does not overwrite completed jobs during queued cancellation", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_completed",
+        state: "completed",
+        completedAt: "2026-05-18T00:02:00.000Z",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "ok",
+          stderr: "",
+          stdoutBytes: 2,
+          stderrBytes: 0
+        }
+      })
+    );
+
+    const completed = await cancelQueued(repository, {
+      jobId: "worker_job_completed",
+      errorName: "worker_job_cancelled",
+      resultSummary: {
+        state: "cancelled",
+        stdout: "",
+        stderr: "Worker job cancelled before execution.",
+        stdoutBytes: 0,
+        stderrBytes: 38,
+        errorName: "worker_job_cancelled"
+      },
+      cancelRequestedAt: "2026-05-18T00:03:00.000Z",
+      cancelledAt: "2026-05-18T00:03:00.000Z",
+      completedAt: "2026-05-18T00:03:00.000Z",
       cancelReason: "Too late"
     });
 

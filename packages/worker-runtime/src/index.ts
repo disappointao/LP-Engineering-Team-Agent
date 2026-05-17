@@ -180,6 +180,9 @@ export interface WorkerJobRepository {
   requestRunningCancellation(
     input: WorkerJobRequestRunningCancellationInput
   ): Promise<WorkerJobRecord | undefined>;
+  cancelQueued(
+    input: WorkerJobCancelQueuedInput
+  ): Promise<WorkerJobRecord | undefined>;
 }
 
 export interface WorkerJobClaimOldestQueuedInput {
@@ -201,6 +204,16 @@ export interface WorkerJobCompleteClaimedInput {
 export interface WorkerJobRequestRunningCancellationInput {
   jobId: string;
   cancelRequestedAt: string;
+  cancelReason?: string;
+}
+
+export interface WorkerJobCancelQueuedInput {
+  jobId: string;
+  errorName: string;
+  resultSummary: WorkerJobResultSummary;
+  cancelRequestedAt: string;
+  cancelledAt: string;
+  completedAt: string;
   cancelReason?: string;
 }
 
@@ -575,31 +588,40 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   private async cancelQueuedJob(
     record: WorkerJobRecord,
     reason?: string
-  ): Promise<WorkerJobRecord> {
+  ): Promise<WorkerJobRecord | undefined> {
     const now = this.nowIso();
     const stderr = WORKER_JOB_CANCELLED_BEFORE_EXECUTION_MESSAGE;
-    const cancelledRecord: WorkerJobRecord = {
-      ...copyRecord(record),
+    const resultSummary: WorkerJobResultSummary = {
       state: "cancelled",
+      stdout: "",
+      stderr,
+      stdoutBytes: 0,
+      stderrBytes: byteLength(stderr),
+      errorName: WORKER_JOB_CANCELLED_ERROR
+    };
+    const updatedRecord = await this.repository.cancelQueued({
+      jobId: record.id,
       errorName: WORKER_JOB_CANCELLED_ERROR,
-      resultSummary: {
-        state: "cancelled",
-        stdout: "",
-        stderr,
-        stdoutBytes: 0,
-        stderrBytes: byteLength(stderr),
-        errorName: WORKER_JOB_CANCELLED_ERROR
-      },
+      resultSummary,
       cancelRequestedAt: record.cancelRequestedAt ?? now,
       cancelledAt: now,
       completedAt: now,
       cancelReason: normalizeCancelReason(reason) ?? record.cancelReason
-    };
+    });
 
-    await this.repository.save(cancelledRecord);
+    if (!updatedRecord) {
+      return undefined;
+    }
+    if (updatedRecord.state === "running") {
+      return this.requestRunningCancellation(updatedRecord, reason);
+    }
+    if (updatedRecord.state !== "cancelled") {
+      return copyRecord(updatedRecord);
+    }
+
     await this.deletePersistedPayloadBestEffort(record.id);
     this.payloadsByJobId.delete(record.id);
-    return copyRecord(cancelledRecord);
+    return copyRecord(updatedRecord);
   }
 
   private async requestRunningCancellation(

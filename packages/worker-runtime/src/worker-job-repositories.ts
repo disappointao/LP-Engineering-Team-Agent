@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import type {
   SandboxPolicy,
+  WorkerJobCancelQueuedInput,
   WorkerJobCompleteClaimedInput,
   WorkerJobClaimOldestQueuedInput,
   WorkerJobRecord,
@@ -105,6 +106,23 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     this.recordsById.set(record.id, copyRecord(updatedRecord));
 
     return copyRecord(updatedRecord);
+  }
+
+  async cancelQueued(
+    input: WorkerJobCancelQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    const record = this.recordsById.get(input.jobId);
+    if (!record) {
+      return undefined;
+    }
+    if (record.state !== "queued") {
+      return copyRecord(record);
+    }
+
+    const cancelledRecord = createQueuedCancellationRecord(record, input);
+    this.recordsById.set(record.id, copyRecord(cancelledRecord));
+
+    return copyRecord(cancelledRecord);
   }
 
   private sortedRecords(): WorkerJobRecord[] {
@@ -247,6 +265,34 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
     });
   }
 
+  async cancelQueued(
+    input: WorkerJobCancelQueuedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const recordIndex = records.findIndex(
+        (stored) => stored.id === input.jobId
+      );
+      if (recordIndex === -1) {
+        return undefined;
+      }
+
+      const record = records[recordIndex];
+      if (!record) {
+        return undefined;
+      }
+      if (record.state !== "queued") {
+        return copyRecord(record);
+      }
+
+      const cancelledRecord = createQueuedCancellationRecord(record, input);
+      records[recordIndex] = copyRecord(cancelledRecord);
+
+      await this.writeRecords(records);
+      return copyRecord(cancelledRecord);
+    });
+  }
+
   private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
     const previousSave = jsonFileSaveQueues.get(this.filePath) ?? Promise.resolve();
     const nextSave = previousSave.catch(() => undefined).then(operation);
@@ -350,6 +396,22 @@ function createRunningCancellationRecord(
     ...copyRecord(record),
     cancelRequestedAt: record.cancelRequestedAt ?? input.cancelRequestedAt,
     cancelReason: record.cancelReason ?? input.cancelReason
+  };
+}
+
+function createQueuedCancellationRecord(
+  record: WorkerJobRecord,
+  input: WorkerJobCancelQueuedInput
+): WorkerJobRecord {
+  return {
+    ...copyRecord(record),
+    state: "cancelled",
+    errorName: input.errorName,
+    resultSummary: { ...input.resultSummary },
+    cancelRequestedAt: input.cancelRequestedAt,
+    cancelledAt: input.cancelledAt,
+    completedAt: input.completedAt,
+    cancelReason: input.cancelReason ?? record.cancelReason
   };
 }
 
