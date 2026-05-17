@@ -4,6 +4,14 @@ import {
   type PageVersionRecord,
   type ProjectRecord
 } from "@lp-agent/api";
+import {
+  InMemoryWorkerRuntime,
+  SimulatedExecutionAdapter,
+  type ExecutionAdapter,
+  type WorkerJobPayloadRepository,
+  type WorkerJobRecord,
+  type WorkerJobRepository
+} from "@lp-agent/worker-runtime";
 
 type DemoWorkbenchService = ReturnType<typeof createDemoWorkbenchService>;
 
@@ -39,4 +47,34 @@ export async function runDemoWorkerJob(): Promise<DemoWorkerJobResult> {
   });
 
   return { project, brief, pageVersion: reviewed, deployment };
+}
+
+export interface RunWorkerOnceInput {
+  workerId: string;
+  jobRepository: WorkerJobRepository;
+  payloadRepository: WorkerJobPayloadRepository;
+  adapter?: ExecutionAdapter;
+  now?: () => Date;
+  claimTokenFactory?: () => string;
+}
+
+export async function runWorkerOnce(
+  input: RunWorkerOnceInput
+): Promise<WorkerJobRecord | undefined> {
+  const runtime = new InMemoryWorkerRuntime({
+    repository: input.jobRepository,
+    payloadRepository: input.payloadRepository,
+    adapter: input.adapter ?? new SimulatedExecutionAdapter(),
+    now: input.now,
+    claimTokenFactory: input.claimTokenFactory
+  });
+  const claim = await runtime.claimOldestQueued({
+    workerId: input.workerId
+  });
+
+  if (!claim) {
+    return undefined;
+  }
+
+  return runtime.runClaimedJob(claim);
 }

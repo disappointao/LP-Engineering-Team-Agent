@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lp-agent/api": "workspace:*",
+    "@lp-agent/worker-runtime": "workspace:*",
     "tsx": "^4.19.0"
   },
   "devDependencies": {
