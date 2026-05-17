@@ -180,6 +180,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 8 worker sandbox runtime foundation design.
    - Read this after the collaboration primitives plan when adding worker job contracts, sandbox policy, execution adapters, and the worker-backed `ToolCommandRunner` seam without opening real shell execution.
 
+45. `plans/2026-05-17-worker-sandbox-runtime.md`
+   - Stage 8 worker sandbox runtime foundation implementation plan.
+   - Read this after the worker sandbox runtime design when implementing or auditing `packages/worker-runtime`, sandbox policy validation, deterministic execution adapters, and the worker-backed `ToolCommandRunner`.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

@@ -523,12 +523,17 @@ pnpm --filter @lp-agent/model-gateway test
 - 默认 policy 是 reject；simulate adapter 只用于 deterministic 测试和链路验证。
 - Stage 8 的价值是让后续真实 deployment runner、MCP execution、文件操作、队列 worker、cancel/retry 和强 sandbox 都复用同一套 job/policy/observation 思路。
 
+当前计划：
+
+- [2026-05-17-worker-sandbox-runtime.md](./superpowers/plans/2026-05-17-worker-sandbox-runtime.md)
+
 学习重点：
 
 - worker job 是执行状态，不是聊天消息。
 - sandbox policy 是产品和运行时约束，不等同于 OS 级安全隔离。
 - 先有 contract 和可测试状态机，再接真实执行。
 - 不要把 shell 执行藏在 API service 里；真实执行必须挂在 adapter 后面。
+- 真实执行能力不应该和 job 状态机同时上线；先让 adapter 形状、policy 拒绝路径和 observation 映射稳定下来。
 
 ## 5. 写代码时的维护原则
 
