@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run src/index.test.ts src/worker-job-repositories.test.ts",
+    "test": "vitest run src/index.test.ts src/worker-job-repositories.test.ts src/worker-job-payload-repositories.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

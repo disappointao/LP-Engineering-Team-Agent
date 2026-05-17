@@ -76,6 +76,31 @@ export interface WorkerJobRecord {
   cancelReason?: string;
 }
 
+export const SAFE_WORKER_PAYLOAD_MAX_ARGS = 100;
+export const SAFE_WORKER_PAYLOAD_MAX_ARG_LENGTH = 1024;
+export const SAFE_WORKER_PAYLOAD_MAX_ENV_NAMES = 100;
+
+export type WorkerJobPayloadKind = "safe_simulated_tool_command";
+
+export interface WorkerJobPayloadRecord {
+  jobId: string;
+  kind: WorkerJobPayloadKind;
+  projectId: string;
+  commandId?: string;
+  command: string;
+  args: string[];
+  envNames: string[];
+  workingDirectory?: string;
+  timeoutMs: number;
+  createdAt: string;
+}
+
+export interface WorkerJobPayloadRepository {
+  save(record: WorkerJobPayloadRecord): Promise<void>;
+  getByJobId(jobId: string): Promise<WorkerJobPayloadRecord | undefined>;
+  deleteByJobId(jobId: string): Promise<void>;
+}
+
 export interface ExecutionInput {
   jobId: string;
   projectId: string;
@@ -859,3 +884,10 @@ export {
   createJsonFileWorkerJobRepository,
   type JsonFileWorkerJobRepositoryOptions
 } from "./worker-job-repositories";
+
+export {
+  InMemoryWorkerJobPayloadRepository,
+  JsonFileWorkerJobPayloadRepository,
+  createJsonFileWorkerJobPayloadRepository,
+  type JsonFileWorkerJobPayloadRepositoryOptions
+} from "./worker-job-payload-repositories";
