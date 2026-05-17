@@ -228,7 +228,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - MCP execution。
 - 文件系统 workspace 和 diff 注入。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
-- 团队成员、角色和审批 UI。
+- 团队成员、角色和审批 UI 已规划为 Stage 7 Collaboration Primitives v0；真实登录、邀请、复杂 RBAC 和实时协作仍未做。
 - 实时流式输出和真正的 interrupt/cancel。
 
 ## 4. 循序渐进路线
@@ -487,6 +487,25 @@ pnpm --filter @lp-agent/model-gateway test
 - dependency graph。
 - retry/cancel/resume。
 - 多 agent 通信状态。
+
+### 阶段 7：团队协作最小闭环
+
+当前设计：
+
+- [2026-05-17-collaboration-primitives-design.md](./superpowers/specs/2026-05-17-collaboration-primitives-design.md)
+- 这一阶段先把本地用户身份、workspace/project member、项目 owner、审批 actor 和成员展示做成可持久、可审计的产品状态。
+- 这不是完整 auth 系统：不做登录注册、OAuth、SSO、邀请邮件、计费席位、实时协作或完整 RBAC。
+- Web V1 继续使用 `local-web-user` 这类确定性的本地身份，但身份要通过 helper/resolver 注入，后续才能替换成真实登录、桌面本地 profile 或公司 SSO。
+- 项目创建时自动创建 owner membership，让“谁拥有这个项目”不再只是 UI 假设。
+- MCP tool approval、skill command approval、未来 deployment approval 都应该通过统一 actor 来源写入审计字段，不能信任表单里提交的 `approvedByUserId`。
+- 第一版成员信息默认不注入模型上下文；先稳定 durable state 和审计边界，再考虑 role-aware collaboration context。
+
+学习重点：
+
+- 本地身份不是认证，只是开发期 actor seam。
+- membership 是产品状态，v0 还不是安全边界。
+- 审批和工具执行必须记录 actor，后续才能做团队审计、权限和恢复。
+- 团队协作应先做可见、可查、可测试的状态，不急着做实时多人编辑。
 
 ## 5. 写代码时的维护原则
 

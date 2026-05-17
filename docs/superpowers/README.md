@@ -168,6 +168,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 6 structured agent handoff state implementation plan.
    - Read this after the handoff state design when implementing repository-backed handoffs, runtime/model context contracts, API handoff helpers, Context Pack injection, LP service flow wiring, and verification.
 
+42. `specs/2026-05-17-collaboration-primitives-design.md`
+   - Stage 7 collaboration primitives design.
+   - Read this after the handoff state plan when adding local user identity, workspace/project member repositories, project owner creation, approval actor audit ownership, and minimal Web member visibility without real auth or realtime collaboration.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
