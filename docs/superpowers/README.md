@@ -204,6 +204,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 11 worker queue handoff v0 design.
    - Read this after the worker job cancel implementation plan when adding safe persisted worker payloads, cross-process worker claim semantics, and an `apps/agent-worker` one-job execution path without enabling real shell execution, MCP execution, or Web interrupt wiring.
 
+51. `plans/2026-05-18-worker-queue-handoff.md`
+   - Stage 11 worker queue handoff v0 implementation plan.
+   - Read this after the worker queue handoff design when implementing or auditing safe persisted worker payloads, claim-token worker handoff, `apps/agent-worker` run-once execution, and verification that no real shell, MCP execution, or Web interrupt wiring was introduced.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

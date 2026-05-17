@@ -608,6 +608,10 @@ pnpm --filter @lp-agent/model-gateway test
 - 第一版只支持 `simulate` / `reject` 安全 payload；不持久化 raw env value、secret、artifact 内容，也不开放真实 shell。
 - Stage 11 会引入 claim metadata 和 claim token，避免多个 worker 或过期 worker 重复完成同一个 job。
 
+当前计划：
+
+- [2026-05-18-worker-queue-handoff.md](./superpowers/plans/2026-05-18-worker-queue-handoff.md)
+
 学习重点：
 
 - worker queue handoff 和真实执行是两个阶段。先解决 claim、payload、complete、cancel 的状态机，再讨论 shell、MCP 或部署。
