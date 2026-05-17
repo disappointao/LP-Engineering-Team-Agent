@@ -52,6 +52,18 @@ function workerJobRecord(overrides: Partial<WorkerJobRecord> = {}): WorkerJobRec
   };
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
+}
+
 describe("InMemoryWorkerRuntime", () => {
   it("persists worker records through an injected repository", async () => {
     const repository = new InMemoryWorkerJobRepository();
@@ -79,6 +91,21 @@ describe("InMemoryWorkerRuntime", () => {
     const repository = new InMemoryWorkerJobRepository();
     await repository.save(workerJobRecord({ id: "worker_job_3" }));
     await repository.save(workerJobRecord({ id: "other_prefix_9" }));
+    const runtime = new InMemoryWorkerRuntime({ repository });
+
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    expect(queued.id).toBe("worker_job_4");
+  });
+
+  it("ignores unsafe persisted id suffixes when allocating the next id", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    await repository.save(workerJobRecord({ id: "worker_job_3" }));
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_999999999999999999999999999999999999999999999999999999"
+      })
+    );
     const runtime = new InMemoryWorkerRuntime({ repository });
 
     const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
@@ -132,6 +159,40 @@ describe("InMemoryWorkerRuntime", () => {
     expect(completed?.id).toBe(older.id);
     expect(persistedOlder?.state).toBe("completed");
     expect(persistedNewer?.state).toBe("queued");
+  });
+
+  it("serializes parallel runNext calls in one runtime instance", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const execution = deferred<Awaited<ReturnType<ExecutionAdapter["execute"]>>>();
+    const adapter: ExecutionAdapter = {
+      execute: vi.fn(() => execution.promise)
+    };
+    const runtime = new InMemoryWorkerRuntime({ repository, adapter });
+    const queued = await runtime.enqueue(baseInput(), simulatedPolicy());
+
+    const runResultsPromise = Promise.all([runtime.runNext(), runtime.runNext()]);
+    await vi.waitFor(() => {
+      expect(adapter.execute).toHaveBeenCalled();
+    });
+    execution.resolve({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+
+    const runResults = await runResultsPromise;
+    const completedResults = runResults.filter((job) => job !== undefined);
+    const persisted = await repository.getById(queued.id);
+
+    expect(adapter.execute).toHaveBeenCalledTimes(1);
+    expect(completedResults).toHaveLength(1);
+    expect(completedResults[0]).toMatchObject({
+      id: queued.id,
+      state: "completed"
+    });
+    expect(runResults).toContain(undefined);
+    expect(persisted?.state).toBe("completed");
   });
 
   it("fails persisted queued jobs when process-local payload is unavailable", async () => {

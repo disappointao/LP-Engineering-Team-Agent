@@ -133,6 +133,7 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   private nextJobNumber = 1;
   private nextJobNumberInitialized = false;
   private enqueueLock: Promise<void> = Promise.resolve();
+  private runLock: Promise<void> = Promise.resolve();
 
   constructor(options: InMemoryWorkerRuntimeOptions = {}) {
     this.adapter = options.adapter ?? new RejectingExecutionAdapter();
@@ -162,85 +163,92 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
         args: [...input.args],
         env: { ...input.env }
       });
-      await this.repository.save(record);
+      try {
+        await this.repository.save(record);
+      } catch (error) {
+        this.payloadsByJobId.delete(id);
+        throw error;
+      }
 
       return copyRecord(record);
     });
   }
 
   async runNext(): Promise<WorkerJobRecord | undefined> {
-    const queuedRecord = await this.repository.findOldestQueued();
-    if (!queuedRecord) {
-      return undefined;
-    }
+    return this.withRunLock(async () => {
+      const queuedRecord = await this.repository.findOldestQueued();
+      if (!queuedRecord) {
+        return undefined;
+      }
 
-    const runningRecord: WorkerJobRecord = {
-      ...copyRecord(queuedRecord),
-      state: "running",
-      startedAt: this.nowIso()
-    };
-    await this.repository.save(runningRecord);
+      const runningRecord: WorkerJobRecord = {
+        ...copyRecord(queuedRecord),
+        state: "running",
+        startedAt: this.nowIso()
+      };
+      await this.repository.save(runningRecord);
 
-    const validation = validateSandboxPolicy(
-      runningRecord.inputSummary,
-      runningRecord.policy
-    );
-    if (!validation.valid) {
-      this.payloadsByJobId.delete(runningRecord.id);
-      return this.completeJob(
-        runningRecord,
-        {
-          state: "rejected",
-          stdout: "",
-          stderr: validation.reason,
-          errorName: validation.errorName
-        },
-        []
+      const validation = validateSandboxPolicy(
+        runningRecord.inputSummary,
+        runningRecord.policy
       );
-    }
+      if (!validation.valid) {
+        this.payloadsByJobId.delete(runningRecord.id);
+        return this.completeJob(
+          runningRecord,
+          {
+            state: "rejected",
+            stdout: "",
+            stderr: validation.reason,
+            errorName: validation.errorName
+          },
+          []
+        );
+      }
 
-    const payload = this.payloadsByJobId.get(runningRecord.id);
-    if (!payload) {
-      return this.completeJob(
-        runningRecord,
-        {
-          state: "failed",
-          stdout: "",
-          stderr: "Worker job execution payload is unavailable after restart.",
-          errorName: "worker_job_payload_unavailable"
-        },
-        []
-      );
-    }
+      const payload = this.payloadsByJobId.get(runningRecord.id);
+      if (!payload) {
+        return this.completeJob(
+          runningRecord,
+          {
+            state: "failed",
+            stdout: "",
+            stderr: "Worker job execution payload is unavailable after restart.",
+            errorName: "worker_job_payload_unavailable"
+          },
+          []
+        );
+      }
 
-    try {
-      const result = await this.adapter.execute(
-        toExecutionInput(runningRecord, payload),
-        copyPolicy(runningRecord.policy)
-      );
+      try {
+        const result = await this.adapter.execute(
+          toExecutionInput(runningRecord, payload),
+          copyPolicy(runningRecord.policy)
+        );
 
-      return this.completeJob(
-        runningRecord,
-        result,
-        getSensitiveValues(payload.env)
-      );
-    } catch (error) {
-      return this.completeJob(
-        runningRecord,
-        {
-          state: "failed",
-          stdout: "",
-          stderr: error instanceof Error ? error.message : String(error),
-          errorName:
-            error instanceof Error && error.name
-              ? error.name
-              : "execution_adapter_failed"
-        },
-        getSensitiveValues(payload.env)
-      );
-    } finally {
-      this.payloadsByJobId.delete(runningRecord.id);
-    }
+        return this.completeJob(
+          runningRecord,
+          result,
+          getSensitiveValues(payload.env)
+        );
+      } catch (error) {
+        return this.completeJob(
+          runningRecord,
+          {
+            state: "failed",
+            stdout: "",
+            stderr: error instanceof Error ? error.message : String(error),
+            errorName:
+              error instanceof Error && error.name
+                ? error.name
+                : "execution_adapter_failed"
+          },
+          getSensitiveValues(payload.env)
+        );
+      } finally {
+        this.payloadsByJobId.delete(runningRecord.id);
+      }
+    });
   }
 
   async getJob(id: string): Promise<WorkerJobRecord | undefined> {
@@ -275,11 +283,17 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
       const records = await this.repository.listAll();
       const maxJobNumber = records.reduce((max, record) => {
         const match = idPattern.exec(record.id);
-        if (!match) {
+        const suffix = match?.[1];
+        if (!suffix) {
           return max;
         }
 
-        return Math.max(max, Number(match[1]));
+        const parsed = Number.parseInt(suffix, 10);
+        if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+          return max;
+        }
+
+        return Math.max(max, parsed);
       }, 0);
 
       this.nextJobNumber = maxJobNumber + 1;
@@ -296,6 +310,21 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     const previousLock = this.enqueueLock;
     let releaseLock: () => void = () => undefined;
     this.enqueueLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    await previousLock;
+    try {
+      return await operation();
+    } finally {
+      releaseLock();
+    }
+  }
+
+  private async withRunLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previousLock = this.runLock;
+    let releaseLock: () => void = () => undefined;
+    this.runLock = new Promise<void>((resolve) => {
       releaseLock = resolve;
     });
 
