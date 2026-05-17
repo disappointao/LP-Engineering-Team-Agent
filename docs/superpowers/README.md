@@ -174,7 +174,7 @@ This directory contains Superpowers-generated specs and implementation plans. Re
 
 43. `plans/2026-05-17-collaboration-primitives.md`
    - Stage 7 collaboration primitives implementation plan.
-   - Read this after the collaboration primitives design when implementing local identity, member repositories, project owner creation, approval actor ownership, Web member state, and documentation updates.
+   - Read this after the collaboration primitives design when implementing or auditing local identity, member repositories, project owner creation, approval actor ownership, Web member state, and documentation updates.
 
 ## Maintenance Rule
 

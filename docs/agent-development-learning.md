@@ -208,6 +208,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
 - Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
 - Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
+- Stage 7 Collaboration Primitives v0：已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化、审批 actor 归属和 Web 项目成员只读展示。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
 - Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
@@ -228,7 +229,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - MCP execution。
 - 文件系统 workspace 和 diff 注入。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
-- 团队成员、角色和审批 UI 已规划为 Stage 7 Collaboration Primitives v0；真实登录、邀请、复杂 RBAC 和实时协作仍未做。
+- 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
 - 实时流式输出和真正的 interrupt/cancel。
 
 ## 4. 循序渐进路线
@@ -494,6 +495,8 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-17-collaboration-primitives-design.md](./superpowers/specs/2026-05-17-collaboration-primitives-design.md)
 - 当前实现计划：[2026-05-17-collaboration-primitives.md](./superpowers/plans/2026-05-17-collaboration-primitives.md)
+- Stage 7 v0 已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化和 Web 项目成员只读展示。
+- 当前仍不做真实 auth、邀请、复杂 RBAC 或实时协作；membership 是产品状态，不是完整安全边界。
 - 这一阶段先把本地用户身份、workspace/project member、项目 owner、审批 actor 和成员展示做成可持久、可审计的产品状态。
 - 这不是完整 auth 系统：不做登录注册、OAuth、SSO、邀请邮件、计费席位、实时协作或完整 RBAC。
 - Web V1 继续使用 `local-web-user` 这类确定性的本地身份，但身份要通过 helper/resolver 注入，后续才能替换成真实登录、桌面本地 profile 或公司 SSO。
