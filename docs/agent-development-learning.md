@@ -580,6 +580,10 @@ pnpm --filter @lp-agent/model-gateway test
 - queued job 可以立即取消并落到 `cancelled`；running job 采用协作式取消，只记录 `cancelRequestedAt` 和可选 `cancelReason`，由 adapter 通过 cancellation context 感知后返回 cancelled。
 - worker record 只增加最小取消元数据：`cancelRequestedAt`、`cancelledAt`、`cancelReason?`，不写 actor，用户身份和团队审计后续留给 API run event / collaboration 层。
 
+当前计划：
+
+- [2026-05-17-worker-job-cancel-interrupt.md](./superpowers/plans/2026-05-17-worker-job-cancel-interrupt.md)
+
 学习重点：
 
 - interrupt 不是强杀进程；在真实执行能力上线前，先把“请求取消”和“确实取消完成”分开建模。
