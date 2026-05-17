@@ -172,10 +172,20 @@ describe("in-memory workbench repositories", () => {
       createdAt: "2026-05-12T00:01:00.000Z",
       updatedAt: "2026-05-12T00:01:00.000Z"
     };
+    const laterProjectMember: ProjectMemberRecord = {
+      ...projectMember,
+      id: "project_member_3",
+      userId: "user_2",
+      role: "member",
+      displayName: "Grace Member",
+      createdAt: "2026-05-12T00:02:00.000Z",
+      updatedAt: "2026-05-12T00:02:00.000Z"
+    };
 
     await repositories.workspaceMembers.save(workspaceMember);
     await repositories.projectMembers.save(projectMember);
     await repositories.projectMembers.save(otherProjectMember);
+    await repositories.projectMembers.save(laterProjectMember);
     workspaceMember.displayName = "mutated";
     projectMember.displayName = "mutated";
 
@@ -213,11 +223,21 @@ describe("in-memory workbench repositories", () => {
         displayName: "Ada Owner",
         createdAt,
         updatedAt: createdAt
+      },
+      {
+        id: "project_member_3",
+        projectId: "project_1",
+        userId: "user_2",
+        role: "member",
+        displayName: "Grace Member",
+        createdAt: "2026-05-12T00:02:00.000Z",
+        updatedAt: "2026-05-12T00:02:00.000Z"
       }
     ]);
     await expect(repositories.projectMembers.listAll()).resolves.toEqual([
       expect.objectContaining({ id: "project_member_1", projectId: "project_1" }),
-      expect.objectContaining({ id: "project_member_2", projectId: "project_2" })
+      expect.objectContaining({ id: "project_member_2", projectId: "project_2" }),
+      expect.objectContaining({ id: "project_member_3", projectId: "project_1" })
     ]);
   });
 
