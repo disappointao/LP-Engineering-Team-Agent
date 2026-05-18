@@ -756,6 +756,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-19-web-artifact-diff-cards.md](./superpowers/plans/2026-05-19-web-artifact-diff-cards.md)
 
+当前实现状态：
+
+- Web workbench 已在完成的 LP 对话交付区显示 artifact diff cards，默认只展示路径、状态、大小、短 hash 和 summary。
+- `artifactPath` 查询参数已通过服务端归一化后进入 Web store；重复参数取第一个值，非法 path 只显示通用不可用信息，不回显原始 query。
+- 用户显式选择 `index.html`、`styles.css` 或 `script.js` 时，Web 只通过 artifact reader 读取一个最多 8KB 的只读 snippet；超限内容显示 size-limit 状态，不展示内容。
+- snippet 预览链接保留已有查询参数并只替换 `artifactPath`，避免选择文件时丢失当前错误或中断提示状态。
+- CSS 已加入紧凑 diff card 和 dark snippet panel 样式；长路径和长 snippet 使用 wrapping/scroll 约束，移动端 diff grid 回到单列。
+
 学习重点：
 
 - Web preview/export 和 Agent snippet preview 是两个不同场景：前者服务用户下载完整产物，后者必须经过 reader 边界并受路径、归属和大小限制。
