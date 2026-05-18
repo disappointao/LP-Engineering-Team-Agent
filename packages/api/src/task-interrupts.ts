@@ -21,6 +21,7 @@ export interface TaskInterruptView {
   taskId: string;
   runId?: string;
   workerJobId?: string;
+  requestedAt?: string;
 }
 
 export type InterruptTaskResult =
@@ -73,8 +74,13 @@ export interface DeriveTaskInterruptViewInput {
 
 interface InterruptTarget {
   run: RunRecord;
-  workerJobId: string;
+  workerJob: WorkerJobRecord;
 }
+
+type InterruptTargetLookup =
+  | { kind: "target"; target: InterruptTarget }
+  | { kind: "missing" }
+  | { kind: "none" };
 
 export async function linkWorkerJobToTask(
   input: LinkWorkerJobToTaskInput
@@ -106,8 +112,18 @@ export async function interruptTask(
     };
   }
 
-  const target = await findLatestInterruptTarget(input.repositories, input.taskId);
-  if (!target) {
+  const targetLookup = await findLatestInterruptTarget({
+    repositories: input.repositories,
+    workerRuntime: input.workerRuntime,
+    taskId: input.taskId
+  });
+  if (targetLookup.kind === "missing") {
+    return {
+      ok: false,
+      error: "interrupt_target_not_found"
+    };
+  }
+  if (targetLookup.kind === "none") {
     return {
       ok: true,
       taskId: input.taskId,
@@ -115,13 +131,8 @@ export async function interruptTask(
     };
   }
 
-  const workerJob = await input.workerRuntime.getJob(target.workerJobId);
-  if (!workerJob) {
-    return {
-      ok: false,
-      error: "interrupt_target_not_found"
-    };
-  }
+  const target = targetLookup.target;
+  const workerJob = target.workerJob;
 
   if (workerJob.state === "cancelled") {
     await markRunCancelled({
@@ -221,8 +232,12 @@ export async function interruptTask(
 export async function deriveTaskInterruptView(
   input: DeriveTaskInterruptViewInput
 ): Promise<TaskInterruptView> {
-  const target = await findLatestInterruptTarget(input.repositories, input.taskId);
-  if (!target) {
+  const targetLookup = await findLatestInterruptTarget({
+    repositories: input.repositories,
+    workerRuntime: input.workerRuntime,
+    taskId: input.taskId
+  });
+  if (targetLookup.kind !== "target") {
     return {
       available: false,
       state: "not_interruptible",
@@ -230,54 +245,80 @@ export async function deriveTaskInterruptView(
     };
   }
 
-  let workerJob: WorkerJobRecord | undefined;
-  try {
-    workerJob = await input.workerRuntime.getJob(target.workerJobId);
-  } catch {
-    workerJob = undefined;
-  }
-  if (!workerJob) {
-    return {
-      available: false,
-      state: "not_interruptible",
-      taskId: input.taskId
-    };
-  }
-
+  const target = targetLookup.target;
+  const workerJob = target.workerJob;
   const state = toTaskInterruptState(workerJob);
   return {
     available: state === "idle" || state === "stopping",
     state,
     taskId: input.taskId,
     runId: target.run.id,
-    workerJobId: workerJob.id
+    workerJobId: workerJob.id,
+    ...(workerJob.cancelRequestedAt
+      ? { requestedAt: workerJob.cancelRequestedAt }
+      : {})
   };
 }
 
-async function findLatestInterruptTarget(
-  repositories: WorkbenchRepositories,
-  taskId: string
-): Promise<InterruptTarget | undefined> {
+async function findLatestInterruptTarget(input: {
+  repositories: WorkbenchRepositories;
+  workerRuntime: Pick<WorkerRuntime, "getJob">;
+  taskId: string;
+}): Promise<InterruptTargetLookup> {
+  const { repositories, taskId, workerRuntime } = input;
   const linkedEvents = await repositories.runEvents.listForTask(taskId);
-  const latestLinkedEvent = linkedEvents
+  const linkedCandidates = linkedEvents
     .filter((event) => event.type === "worker.job.linked")
-    .at(-1);
-  const workerJobId = latestLinkedEvent
-    ? readWorkerJobId(latestLinkedEvent)
-    : undefined;
-  if (!latestLinkedEvent || !workerJobId) {
-    return undefined;
+    .reverse();
+
+  let latestTerminalTarget: InterruptTarget | undefined;
+  let sawLinkedWorkerJobId = false;
+  for (const linkedEvent of linkedCandidates) {
+    const workerJobId = readWorkerJobId(linkedEvent);
+    if (!workerJobId) {
+      continue;
+    }
+    sawLinkedWorkerJobId = true;
+
+    let workerJob: WorkerJobRecord | undefined;
+    try {
+      workerJob = await workerRuntime.getJob(workerJobId);
+    } catch {
+      workerJob = undefined;
+    }
+    if (!workerJob) {
+      continue;
+    }
+
+    const run = await repositories.runs.getById(linkedEvent.runId);
+    if (!run) {
+      continue;
+    }
+
+    if (!isTargetWorkerJob(workerJob)) {
+      latestTerminalTarget ??= {
+        run,
+        workerJob
+      };
+      continue;
+    }
+
+    return {
+      kind: "target",
+      target: {
+        run,
+        workerJob
+      }
+    };
   }
 
-  const run = await repositories.runs.getById(latestLinkedEvent.runId);
-  if (!run) {
-    return undefined;
+  if (latestTerminalTarget) {
+    return {
+      kind: "target",
+      target: latestTerminalTarget
+    };
   }
-
-  return {
-    run,
-    workerJobId
-  };
+  return sawLinkedWorkerJobId ? { kind: "missing" } : { kind: "none" };
 }
 
 function readWorkerJobId(event: RunEventRecord): string | undefined {
@@ -289,6 +330,10 @@ function readWorkerJobId(event: RunEventRecord): string | undefined {
 
 function isInterruptibleWorkerJob(workerJob: WorkerJobRecord): boolean {
   return workerJob.state === "queued" || workerJob.state === "running";
+}
+
+function isTargetWorkerJob(workerJob: WorkerJobRecord): boolean {
+  return isInterruptibleWorkerJob(workerJob) || workerJob.state === "cancelled";
 }
 
 function toTaskInterruptState(workerJob: WorkerJobRecord): TaskInterruptState {

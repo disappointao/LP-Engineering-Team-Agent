@@ -193,7 +193,8 @@ describe("task interrupts", () => {
       "2026-05-18T00:01:01.000Z",
       "2026-05-18T00:01:02.000Z",
       "2026-05-18T00:01:03.000Z",
-      "2026-05-18T00:01:04.000Z"
+      "2026-05-18T00:01:04.000Z",
+      "2026-05-18T00:01:05.000Z"
     ]);
     const workerRuntime = new InMemoryWorkerRuntime({ adapter, now });
     const workerJob = await workerRuntime.enqueue(
@@ -242,7 +243,8 @@ describe("task interrupts", () => {
       available: true,
       state: "stopping",
       runId,
-      workerJobId: workerJob.id
+      workerJobId: workerJob.id,
+      requestedAt: "2026-05-18T00:01:05.000Z"
     });
     await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
       state: "running"
@@ -325,7 +327,13 @@ describe("task interrupts", () => {
 
   it("derives exact idle, cancelled, and not interruptible view states", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
-    const workerRuntime = new InMemoryWorkerRuntime();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      now: fixedNow([
+        "2026-05-18T00:00:11.000Z",
+        "2026-05-18T00:00:12.000Z",
+        "2026-05-18T00:00:13.000Z"
+      ])
+    });
     const idle = await saveTaskAndRun({
       repositories,
       taskId: "task_idle",
@@ -441,7 +449,8 @@ describe("task interrupts", () => {
       state: "cancelled",
       taskId: cancelled.taskId,
       runId: cancelled.runId,
-      workerJobId: cancelledJob.id
+      workerJobId: cancelledJob.id,
+      requestedAt: "2026-05-18T00:00:13.000Z"
     });
     await expect(
       deriveTaskInterruptView({
@@ -501,6 +510,97 @@ describe("task interrupts", () => {
     });
     await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
       state: "cancelled"
+    });
+  });
+
+  it("selects the latest linked worker job that is not terminal", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId } = await saveTaskAndRun({
+      repositories,
+      runId: "run_older_interrupt"
+    });
+    await repositories.runs.save({
+      id: "run_newer_terminal",
+      projectId,
+      taskId,
+      role: "deployer",
+      state: "running",
+      startedAt: "2026-05-18T00:02:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    const workerRuntime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const completedJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createSimulatedSandboxPolicy({ allowedCommands: ["static-deploy"] })
+    );
+    await workerRuntime.runNext();
+    const queuedJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_older_interrupt",
+      workerJobId: queuedJob.id,
+      now: fixedNow(["2026-05-18T00:02:01.000Z"])
+    });
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_newer_terminal",
+      workerJobId: completedJob.id,
+      now: fixedNow(["2026-05-18T00:02:02.000Z"])
+    });
+
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime,
+        taskId
+      })
+    ).resolves.toEqual({
+      available: true,
+      state: "idle",
+      taskId,
+      runId: "run_older_interrupt",
+      workerJobId: queuedJob.id
+    });
+    await expect(
+      interruptTask({
+        repositories,
+        workerRuntime,
+        taskId,
+        reason: "Stop older active job",
+        now: fixedNow()
+      })
+    ).resolves.toEqual({
+      ok: true,
+      taskId,
+      state: "cancelled",
+      runId: "run_older_interrupt",
+      workerJobId: queuedJob.id
     });
   });
 
