@@ -963,20 +963,25 @@ async function buildWebArtifactDiffState(input: {
     pageVersionId: input.currentPageVersion.id,
     artifactWorkspaceId,
     previousPageVersionId: previousPageVersion?.id,
-    files: previousPageVersion
-      ? await buildDiffFileViews({
-          service: input.service,
-          projectId: input.projectId,
-          fromPageVersionId: previousPageVersion.id,
-          toPageVersionId: input.currentPageVersion.id
-        })
-      : await buildInitialFileViews({
+    files: []
+  };
+  const diffFiles = previousPageVersion
+    ? await buildDiffFileViews({
+        service: input.service,
+        projectId: input.projectId,
+        fromPageVersionId: previousPageVersion.id,
+        toPageVersionId: input.currentPageVersion.id
+      })
+    : [];
+  base.files =
+    !previousPageVersion || diffFiles.length === 0
+      ? await buildInitialFileViews({
           service: input.service,
           projectId: input.projectId,
           pageVersionId: input.currentPageVersion.id,
           artifactWorkspaceId
         })
-  };
+      : diffFiles;
 
   return base.files.length > 0 ? base : { ...base, errorCode: "artifact_diff_unavailable" };
 }

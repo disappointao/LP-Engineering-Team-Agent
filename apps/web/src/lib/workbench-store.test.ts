@@ -5,7 +5,6 @@ import {
 } from "@lp-agent/db";
 import {
   createStaticArtifactWorkspaceFiles,
-  type StaticArtifacts
 } from "@lp-agent/artifacts";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
@@ -1766,6 +1765,108 @@ describe("web workbench store", () => {
     expect(pageState.artifactDiff?.files.every((file) => file.shortSha256?.length === 12)).toBe(
       true
     );
+    expect(JSON.stringify(pageState.artifactDiff)).not.toContain("<!doctype html>");
+    expect(JSON.stringify(pageState.artifactDiff)).not.toContain("window.lpAgent");
+  });
+
+  it("falls back to current artifact metadata when legacy previous diff is unavailable", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "生成一个电商春季促销 LP，输出单文件 HTML",
+      implicitProjectName: "未命名 LP 项目"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected LP task creation.");
+    }
+
+    const firstPageState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+    expect(firstPageState.kind).toBe("task_ready");
+    if (
+      firstPageState.kind !== "task_ready" ||
+      !firstPageState.snapshot?.brief ||
+      !firstPageState.snapshot.currentPageVersion
+    ) {
+      throw new Error("Expected LP snapshot.");
+    }
+
+    const firstPageVersion = firstPageState.snapshot.currentPageVersion;
+    const activePageVersionId = "version_after_legacy_previous";
+    const activeWorkspaceId = "artifact_workspace_after_legacy_previous";
+    const createdAt = "2026-05-18T00:00:00.000Z";
+
+    await repositories.pageVersions.save({
+      id: "version_legacy_previous_without_workspace",
+      projectId: result.projectId,
+      briefId: firstPageState.snapshot.brief.id,
+      artifacts: firstPageVersion.artifacts,
+      reviewStatus: "passed",
+      findings: [],
+      createdAt
+    });
+    await repositories.artifactWorkspaces.save({
+      id: activeWorkspaceId,
+      projectId: result.projectId,
+      pageVersionId: activePageVersionId,
+      kind: "static_lp",
+      state: "active",
+      createdAt,
+      updatedAt: createdAt
+    });
+    for (const file of createStaticArtifactWorkspaceFiles({
+      workspaceId: activeWorkspaceId,
+      projectId: result.projectId,
+      pageVersionId: activePageVersionId,
+      artifacts: firstPageVersion.artifacts,
+      createdAt
+    })) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+    await repositories.pageVersions.save({
+      ...firstPageVersion,
+      id: activePageVersionId,
+      artifactWorkspaceId: activeWorkspaceId,
+      createdAt
+    });
+    await repositories.taskSnapshots.save({
+      taskId: result.taskId,
+      projectId: result.projectId,
+      briefId: firstPageState.snapshot.brief.id,
+      pageVersionId: activePageVersionId,
+      createdAt
+    });
+
+    const pageState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.artifactDiff?.files).toMatchObject([
+      {
+        path: "index.html",
+        state: "initial",
+        canPreview: true
+      },
+      {
+        path: "styles.css",
+        state: "initial",
+        canPreview: true
+      },
+      {
+        path: "script.js",
+        state: "initial",
+        canPreview: true
+      }
+    ]);
+    expect(pageState.artifactDiff?.errorCode).not.toBe("artifact_diff_unavailable");
     expect(JSON.stringify(pageState.artifactDiff)).not.toContain("<!doctype html>");
     expect(JSON.stringify(pageState.artifactDiff)).not.toContain("window.lpAgent");
   });
