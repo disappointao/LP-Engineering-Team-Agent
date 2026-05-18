@@ -141,6 +141,15 @@ export {
   createSandboxPolicyForToolCommand,
   type SandboxPolicyResolver
 } from "./worker-backed-tool-command-runner";
+export {
+  deriveTaskInterruptView,
+  interruptTask,
+  linkWorkerJobToTask,
+  type InterruptTaskResult,
+  type TaskInterruptState,
+  type TaskInterruptView,
+  type TaskInterruptWorkerRuntime
+} from "./task-interrupts";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
