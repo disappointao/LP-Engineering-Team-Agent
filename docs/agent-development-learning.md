@@ -690,11 +690,11 @@ pnpm --filter @lp-agent/model-gateway test
 
 当前计划：
 
-- 尚未生成 implementation plan；spec 审核通过后再进入计划编写。
+- [2026-05-18-durable-artifact-workspace.md](./superpowers/plans/2026-05-18-durable-artifact-workspace.md)
 
 当前实现状态：
 
-- 未实现。Stage 14 当前只完成设计方向，下一步应写 implementation plan，再按 TDD 小步实现 repository、workspace 创建、preview/export 恢复和 context 注入。
+- Stage 14 v0 已规划本地 durable artifact workspace：`@lp-agent/artifacts` 负责 manifest/hash/summary 纯 helper，`@lp-agent/db` 负责 workspace/file repository，API 在 page version 生成时创建 workspace，Context Pack 注入 metadata 而不是全文。
 
 学习重点：
 

@@ -228,6 +228,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 14 durable artifact workspace v0 design.
    - Read this after the Stage 13 plan when adding local persistent static LP artifact workspaces, file manifests, workspace-backed preview/export recovery, and metadata-first context injection without enabling real deployment, shell execution, MCP execution, object storage, or desktop filesystem workspaces.
 
+57. `plans/2026-05-18-durable-artifact-workspace.md`
+   - Stage 14 durable artifact workspace v0 implementation plan.
+   - Read this after the Stage 14 design when implementing or auditing artifact workspace helper types, local repository persistence, page-version workspace creation, workspace-backed artifact recovery, metadata-first context injection, and documentation updates.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
