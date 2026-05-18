@@ -1,6 +1,7 @@
 import {
   createArtifactWorkspaceManifest,
   createStaticArtifactWorkspaceFiles,
+  staticArtifactsFromWorkspaceFiles,
   type ArtifactWorkspaceKind,
   type ArtifactWorkspaceManifest,
   type StaticArtifacts
@@ -1356,7 +1357,9 @@ export class DemoWorkbenchService {
     return {
       project: copyProject(project),
       brief: brief ? copyBriefRecord(brief) : undefined,
-      currentPageVersion: currentPageVersion ? copyPageVersion(currentPageVersion) : undefined,
+      currentPageVersion: currentPageVersion
+        ? await this.hydratePageVersionArtifacts(currentPageVersion)
+        : undefined,
       deployment: deployment ? copyDeployment(deployment) : undefined
     };
   }
@@ -1394,9 +1397,32 @@ export class DemoWorkbenchService {
     return {
       project: copyProject(project),
       brief: brief ? copyBriefRecord(brief) : undefined,
-      currentPageVersion: currentPageVersion ? copyPageVersion(currentPageVersion) : undefined,
+      currentPageVersion: currentPageVersion
+        ? await this.hydratePageVersionArtifacts(currentPageVersion)
+        : undefined,
       deployment: deployment ? copyDeployment(deployment) : undefined
     };
+  }
+
+  private async hydratePageVersionArtifacts(
+    pageVersion: PageVersionRecord
+  ): Promise<PageVersionRecord> {
+    const copiedPageVersion = copyPageVersion(pageVersion);
+    if (!copiedPageVersion.artifactWorkspaceId) {
+      return copiedPageVersion;
+    }
+
+    try {
+      const files = await this.repositories.artifactWorkspaceFiles.listForWorkspace(
+        copiedPageVersion.artifactWorkspaceId
+      );
+      return {
+        ...copiedPageVersion,
+        artifacts: staticArtifactsFromWorkspaceFiles(files)
+      };
+    } catch {
+      return copiedPageVersion;
+    }
   }
 
   async createSkillDraft(input: CreateSkillDraftInput): Promise<SkillDraftResult> {

@@ -2,7 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { StaticArtifacts } from "@lp-agent/artifacts";
+import {
+  createStaticArtifactWorkspaceFiles,
+  type StaticArtifacts
+} from "@lp-agent/artifacts";
 import {
   createInMemoryWorkbenchRepositories,
   createJsonFileWorkbenchRepositories,
@@ -243,6 +246,170 @@ describe("demo workbench service", () => {
     expect(serializedPayload).not.toContain(artifacts.stylesCss);
     expect(serializedPayload).not.toContain("JS_WORKSPACE_SECRET");
     expect(serializedPayload).not.toContain("content");
+  });
+
+  it("recovers snapshot page artifacts from workspace files", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts: embeddedArtifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const version = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const recoveredArtifacts: StaticArtifacts = {
+      ...embeddedArtifacts,
+      indexHtml: "<!doctype html><html><body>Recovered workspace page</body></html>"
+    };
+    const updatedFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: version.artifactWorkspaceId ?? "",
+      projectId: project.id,
+      pageVersionId: version.id,
+      artifacts: recoveredArtifacts,
+      createdAt: "2026-05-11T00:01:00.000Z"
+    });
+    for (const file of updatedFiles) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe(version.artifactWorkspaceId);
+    expect(snapshot.currentPageVersion?.artifacts).toEqual(recoveredArtifacts);
+    expect(snapshot.currentPageVersion?.artifacts.indexHtml).not.toBe(version.artifacts.indexHtml);
+  });
+
+  it("falls back to embedded snapshot artifacts when workspace files are missing", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_missing_workspace",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "missing_workspace",
+      artifacts: embeddedArtifacts,
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    const originalListForWorkspace = repositories.artifactWorkspaceFiles.listForWorkspace.bind(
+      repositories.artifactWorkspaceFiles
+    );
+    let listAttempts = 0;
+    repositories.artifactWorkspaceFiles.listForWorkspace = async (workspaceId) => {
+      listAttempts += 1;
+      return originalListForWorkspace(workspaceId);
+    };
+
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(listAttempts).toBe(1);
+    expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe("missing_workspace");
+    expect(snapshot.currentPageVersion?.artifacts).toEqual(embeddedArtifacts);
+  });
+
+  it("recovers explicit record snapshots from workspace files", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts: embeddedArtifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const version = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const recoveredArtifacts: StaticArtifacts = {
+      ...embeddedArtifacts,
+      stylesCss: "body { color: rebeccapurple; }"
+    };
+    const updatedFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: version.artifactWorkspaceId ?? "",
+      projectId: project.id,
+      pageVersionId: version.id,
+      artifacts: recoveredArtifacts,
+      createdAt: "2026-05-11T00:01:00.000Z"
+    });
+    for (const file of updatedFiles) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const snapshot = await service.getSnapshotForRecords({
+      projectId: project.id,
+      briefId: brief.id,
+      pageVersionId: version.id
+    });
+
+    expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe(version.artifactWorkspaceId);
+    expect(snapshot.currentPageVersion?.artifacts).toEqual(recoveredArtifacts);
+  });
+
+  it("falls back to embedded artifacts when workspace files are incomplete", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_incomplete_workspace",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_incomplete",
+      artifacts: embeddedArtifacts,
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_incomplete",
+      projectId: project.id,
+      pageVersionId: "version_incomplete_workspace",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+    const [indexFile] = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_incomplete",
+      projectId: project.id,
+      pageVersionId: "version_incomplete_workspace",
+      artifacts: {
+        ...embeddedArtifacts,
+        indexHtml: "<!doctype html><html><body>Incomplete workspace page</body></html>"
+      },
+      createdAt: "2026-05-11T00:01:00.000Z"
+    });
+    await repositories.artifactWorkspaceFiles.save(indexFile!);
+
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe(
+      "artifact_workspace_incomplete"
+    );
+    expect(snapshot.currentPageVersion?.artifacts).toEqual(embeddedArtifacts);
   });
 
   it("does not save a page version pointer when durable artifact file persistence fails", async () => {

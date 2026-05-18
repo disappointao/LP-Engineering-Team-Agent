@@ -717,6 +717,7 @@ function pageVersionFixture(): PageVersionRecord {
     id: "version_1",
     projectId: "project_1",
     briefId: "brief_1",
+    artifactWorkspaceId: "artifact_workspace_1",
     artifacts: completeArtifacts(),
     reviewStatus: "passed",
     findings: [],
