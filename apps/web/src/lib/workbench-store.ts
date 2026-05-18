@@ -32,6 +32,8 @@ import {
   type WorkbenchSnapshot
 } from "@lp-agent/api";
 import {
+  ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES,
+  normalizeArtifactWorkspaceFilePath,
   type ArtifactWorkspaceDiffFile,
   type ArtifactWorkspaceFilePath
 } from "@lp-agent/artifacts";
@@ -983,7 +985,82 @@ async function buildWebArtifactDiffState(input: {
         })
       : diffFiles;
 
-  return base.files.length > 0 ? base : { ...base, errorCode: "artifact_diff_unavailable" };
+  const diffState =
+    base.files.length > 0 ? base : { ...base, errorCode: "artifact_diff_unavailable" as const };
+  const selectedPath = normalizeSelectedArtifactPath(input.selectedPath);
+
+  if (selectedPath === undefined) {
+    return diffState;
+  }
+  if (selectedPath === null) {
+    return {
+      ...diffState,
+      errorCode: "artifact_snippet_unavailable"
+    };
+  }
+
+  return {
+    ...diffState,
+    ...(await readSelectedArtifactSnippet({
+      service: input.service,
+      projectId: input.projectId,
+      pageVersionId: input.currentPageVersion.id,
+      artifactWorkspaceId,
+      path: selectedPath
+    }))
+  };
+}
+
+function normalizeSelectedArtifactPath(
+  path: string | null | undefined
+): ArtifactWorkspaceFilePath | null | undefined {
+  if (path === undefined || path === null || path.trim().length === 0) {
+    return undefined;
+  }
+  try {
+    return normalizeArtifactWorkspaceFilePath(path);
+  } catch {
+    return null;
+  }
+}
+
+async function readSelectedArtifactSnippet(input: {
+  service: DemoWorkbenchService;
+  projectId: string;
+  pageVersionId: string;
+  artifactWorkspaceId: string;
+  path: ArtifactWorkspaceFilePath;
+}): Promise<Pick<WebArtifactDiffState, "selectedSnippet" | "errorCode">> {
+  try {
+    const result = await input.service.readArtifactWorkspaceFile({
+      projectId: input.projectId,
+      workspaceId: input.artifactWorkspaceId,
+      pageVersionId: input.pageVersionId,
+      path: input.path,
+      includeContent: true,
+      maxBytes: ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+    });
+    return {
+      selectedSnippet: {
+        path: result.file.path,
+        sizeBytes: result.file.sizeBytes,
+        sha256: result.file.sha256,
+        shortSha256: toShortSha256(result.file.sha256),
+        ...(result.content !== undefined ? { content: result.content } : {}),
+        omittedReason: result.omittedReason,
+        maxBytes: ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+      }
+    };
+  } catch {
+    return {
+      selectedSnippet: {
+        path: input.path,
+        omittedReason: "unavailable",
+        maxBytes: ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+      },
+      errorCode: "artifact_snippet_unavailable"
+    };
+  }
 }
 
 async function buildInitialFileViews(input: {

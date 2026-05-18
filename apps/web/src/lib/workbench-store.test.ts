@@ -5,6 +5,7 @@ import {
 } from "@lp-agent/db";
 import {
   createStaticArtifactWorkspaceFiles,
+  type StaticArtifacts
 } from "@lp-agent/artifacts";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
@@ -105,6 +106,47 @@ async function savePublishedDeploymentSkill(
     enabled: true,
     createdAt: "2026-05-18T00:00:00.000Z",
     updatedAt: "2026-05-18T00:00:00.000Z"
+  });
+}
+
+async function saveManualPageVersion(input: {
+  repositories: WorkbenchRepositories;
+  projectId: string;
+  briefId: string;
+  pageVersionId: string;
+  workspaceId: string;
+  artifacts: StaticArtifacts;
+  createdAt?: string;
+}): Promise<void> {
+  const createdAt =
+    input.createdAt !== undefined ? input.createdAt : "2026-05-19T00:00:00.000Z";
+  await input.repositories.artifactWorkspaces.save({
+    id: input.workspaceId,
+    projectId: input.projectId,
+    pageVersionId: input.pageVersionId,
+    kind: "static_lp",
+    state: "active",
+    createdAt,
+    updatedAt: createdAt
+  });
+  for (const file of createStaticArtifactWorkspaceFiles({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    pageVersionId: input.pageVersionId,
+    artifacts: input.artifacts,
+    createdAt
+  })) {
+    await input.repositories.artifactWorkspaceFiles.save(file);
+  }
+  await input.repositories.pageVersions.save({
+    id: input.pageVersionId,
+    projectId: input.projectId,
+    briefId: input.briefId,
+    artifactWorkspaceId: input.workspaceId,
+    artifacts: input.artifacts,
+    reviewStatus: "passed",
+    findings: [],
+    createdAt
   });
 }
 
@@ -1869,6 +1911,160 @@ describe("web workbench store", () => {
     expect(pageState.artifactDiff?.errorCode).not.toBe("artifact_diff_unavailable");
     expect(JSON.stringify(pageState.artifactDiff)).not.toContain("<!doctype html>");
     expect(JSON.stringify(pageState.artifactDiff)).not.toContain("window.lpAgent");
+  });
+
+  it("compares current LP artifacts with the previous page version", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected LP task creation.");
+    }
+    const firstState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+    if (firstState.kind !== "task_ready" || !firstState.snapshot?.currentPageVersion) {
+      throw new Error("Expected first page version.");
+    }
+    const firstVersion = firstState.snapshot.currentPageVersion;
+
+    await saveManualPageVersion({
+      repositories,
+      projectId: result.projectId,
+      briefId: firstVersion.briefId,
+      pageVersionId: "page_version_changed",
+      workspaceId: "artifact_workspace_changed",
+      artifacts: {
+        ...firstVersion.artifacts,
+        stylesCss: `${firstVersion.artifacts.stylesCss}\nbody { color: #123456; }`
+      },
+      createdAt: "2026-05-19T00:01:00.000Z"
+    });
+    await repositories.taskSnapshots.save({
+      taskId: result.taskId,
+      projectId: result.projectId,
+      briefId: firstVersion.briefId,
+      pageVersionId: "page_version_changed",
+      createdAt: "2026-05-19T00:01:00.000Z"
+    });
+
+    const changedState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(changedState.kind).toBe("task_ready");
+    if (changedState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(changedState.artifactDiff?.previousPageVersionId).toBe(firstVersion.id);
+    expect(changedState.artifactDiff?.files.map((file) => [file.path, file.state])).toEqual([
+      ["index.html", "unchanged"],
+      ["styles.css", "changed"],
+      ["script.js", "unchanged"]
+    ]);
+    expect(JSON.stringify(changedState.artifactDiff)).not.toContain("<!doctype html>");
+    expect(JSON.stringify(changedState.artifactDiff)).not.toContain("body { color: #123456; }");
+  });
+
+  it("reads one bounded artifact snippet for a selected canonical path", async () => {
+    const store = createWebWorkbenchStore();
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected LP task creation.");
+    }
+
+    const pageState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId,
+      artifactPath: "styles.css"
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.artifactDiff?.selectedSnippet).toMatchObject({
+      path: "styles.css",
+      maxBytes: 8192,
+      omittedReason: undefined
+    });
+    expect(pageState.artifactDiff?.selectedSnippet?.content).toContain(":root");
+    expect(pageState.artifactDiff?.selectedSnippet?.shortSha256).toHaveLength(12);
+    expect(JSON.stringify(pageState.artifactDiff?.files)).not.toContain(":root");
+  });
+
+  it("omits oversized selected snippets and redacts invalid artifact paths", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected LP task creation.");
+    }
+    const initialState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+    if (initialState.kind !== "task_ready" || !initialState.snapshot?.currentPageVersion) {
+      throw new Error("Expected page version.");
+    }
+    const pageVersion = initialState.snapshot.currentPageVersion;
+    if (!pageVersion.artifactWorkspaceId) {
+      throw new Error("Expected artifact workspace.");
+    }
+    const largeCssSecret = "OVERSIZED_SNIPPET_SECRET";
+    const largeArtifacts = {
+      ...pageVersion.artifacts,
+      stylesCss: `${largeCssSecret}${"x".repeat(9000)}`
+    };
+    for (const file of createStaticArtifactWorkspaceFiles({
+      workspaceId: pageVersion.artifactWorkspaceId,
+      projectId: result.projectId,
+      pageVersionId: pageVersion.id,
+      artifacts: largeArtifacts,
+      createdAt: "2026-05-19T00:02:00.000Z"
+    })) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const oversizedState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId,
+      artifactPath: "styles.css"
+    });
+    expect(oversizedState.kind).toBe("task_ready");
+    if (oversizedState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(oversizedState.artifactDiff?.selectedSnippet).toMatchObject({
+      path: "styles.css",
+      omittedReason: "size_limit_exceeded"
+    });
+    expect(JSON.stringify(oversizedState.artifactDiff)).not.toContain(largeCssSecret);
+
+    const invalidPath = "../styles.css?token=ARTIFACT_QUERY_SECRET";
+    const invalidState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId,
+      artifactPath: invalidPath
+    });
+    expect(invalidState.kind).toBe("task_ready");
+    if (invalidState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(invalidState.artifactDiff?.errorCode).toBe("artifact_snippet_unavailable");
+    expect(JSON.stringify(invalidState.artifactDiff)).not.toContain(invalidPath);
+    expect(JSON.stringify(invalidState.artifactDiff)).not.toContain("ARTIFACT_QUERY_SECRET");
   });
 
   it("uses configured current user as the owner for implicit LP projects", async () => {
