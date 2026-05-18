@@ -177,11 +177,31 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   }
 
   const existingEvents = await input.repositories.runEvents.listForRun(run.id);
-  const terminalToolEvent = existingEvents
-    .filter((event) => isTerminalToolEvent(event.type))
+  const terminalEvents = existingEvents.filter((event) =>
+    isTerminalToolEvent(event.type) || isTerminalRunEvent(event.type)
+  );
+  if (
+    terminalEvents.some(
+      (event) =>
+        !isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
+    )
+  ) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
+
+  const terminalToolEvent = terminalEvents
+    .filter(
+      (event) =>
+        isTerminalToolEvent(event.type) &&
+        isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
+    )
     .at(-1);
-  const terminalRunEvent = existingEvents
-    .filter((event) => isTerminalRunEvent(event.type))
+  const terminalRunEvent = terminalEvents
+    .filter(
+      (event) =>
+        isTerminalRunEvent(event.type) &&
+        isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
+    )
     .at(-1);
   const terminalRecordState = terminalRunEvent
     ? terminalRunEventToRecordState(terminalRunEvent)
@@ -449,6 +469,17 @@ function isTerminalToolEvent(type: string): boolean {
     type === "tool.completed" ||
     type === "tool.failed" ||
     type === "tool.cancelled"
+  );
+}
+
+function isMatchingWorkerTerminalEvent(
+  event: RunEventRecord,
+  workerJobId: string,
+  observationId: string
+): boolean {
+  return (
+    event.payload.workerJobId === workerJobId &&
+    event.payload.observationId === observationId
   );
 }
 

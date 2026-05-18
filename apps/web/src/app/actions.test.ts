@@ -639,6 +639,7 @@ describe("submitPromptAction", () => {
   });
 
   it("runs one local worker pass and redirects to skills", async () => {
+    mocks.currentProjectId = "project_1";
     mocks.runLocalWorkerOnce.mockResolvedValue({
       ok: true,
       state: "completed",
@@ -654,7 +655,24 @@ describe("submitPromptAction", () => {
     expect(mocks.runLocalWorkerOnce).toHaveBeenCalledWith({ projectId: "project_1" });
   });
 
+  it("uses the cookie project id when local worker hidden project id is mismatched", async () => {
+    mocks.currentProjectId = "project_2";
+    mocks.runLocalWorkerOnce.mockResolvedValue({
+      ok: true,
+      state: "completed",
+      workerJobId: "worker_job_1",
+      runId: "run_skill_command_1"
+    });
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+
+    await expectRedirect(runLocalWorkerOnceAction(formData), "/?view=skills");
+
+    expect(mocks.runLocalWorkerOnce).toHaveBeenCalledWith({ projectId: "project_2" });
+  });
+
   it("redirects local worker errors with stable codes", async () => {
+    mocks.currentProjectId = "project_1";
     mocks.runLocalWorkerOnce.mockResolvedValue({
       ok: false,
       error: "worker_runtime_not_configured"

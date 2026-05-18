@@ -380,6 +380,53 @@ describe("worker-backed skill command finalization", () => {
     expect(terminalToolEvents).toHaveLength(1);
   });
 
+  it("rejects finalization when the run already has a different terminal worker event", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_4",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 4,
+      type: "run.completed",
+      message: "Another worker-backed command run completed.",
+      payload: {
+        workerJobId: "worker_job_other",
+        observationId: "tool_observation_other",
+        outputSummary: "stdout: 1 bytes\nstderr: 0 bytes",
+        exitCode: 0
+      },
+      createdAt: "2026-05-18T00:00:03.000Z"
+    });
+
+    const result = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "worker_job_finalization_failed"
+    });
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "running",
+        outputSummary: ""
+      })
+    ]);
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(
+      events.filter((event) => event.payload.workerJobId === workerJob.id)
+    ).toHaveLength(1);
+    expect(
+      terminalEventTypes(events).filter((type) => type === "run.completed")
+    ).toHaveLength(1);
+  });
+
   it("does not duplicate terminal tool events while writing a missing terminal run event", async () => {
     const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
     await repositories.runEvents.save({

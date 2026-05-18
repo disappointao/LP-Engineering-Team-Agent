@@ -320,7 +320,8 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
 }
 
 export async function runLocalWorkerOnceAction(formData: FormData): Promise<void> {
-  const projectId = String(formData.get("projectId") ?? "").trim();
+  const currentProjectId = (await getCurrentProjectId())?.trim();
+  const projectId = currentProjectId || String(formData.get("projectId") ?? "").trim();
   const result = await getWebWorkbenchStore().runLocalWorkerOnce(
     projectId ? { projectId } : {}
   );
