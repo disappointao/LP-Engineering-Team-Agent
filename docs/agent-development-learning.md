@@ -722,12 +722,17 @@ pnpm --filter @lp-agent/model-gateway test
 - v0 diff 只做 metadata-only 静态 diff，比较 `index.html`、`styles.css`、`script.js` 的 hash、size 和 summary，不做行级文本 diff，也不显示完整源码。
 - 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射、文件编辑 UI、大文件 chunking 或二进制资产。
 
+当前计划：
+
+- [2026-05-18-artifact-reader-static-diff.md](./superpowers/plans/2026-05-18-artifact-reader-static-diff.md)
+
 学习重点：
 
 - artifact workspace 解决“产物在哪里”，artifact reader 解决“谁可以按什么规则读取产物”。
 - diff 先从 metadata-only 开始，比一开始做源码级 diff 更适合 Agent MVP：它能支持 Reviewer、部署 skill、MCP 和桌面版的安全边界，又不会把完整文件到处传播。
 - 未来 MCP/deployment/desktop 读取产物时，应该复用 reader 和 diff contract，而不是绕过 API 直接读 repository、JSON-file 或本机绝对路径。
 - 需要把 preview/export 这种用户下载场景和 context/model/snippet 这种 Agent 上下文场景分开：前者可以恢复完整产物，后者必须受路径、归属和大小限制。
+- 实现时要把 snippet 放在 Context Pack 的显式 opt-in 区域，不默认进入 runtime/model context；这样既能为 Reviewer/MCP 预留小片段读取能力，又能保持模型请求边界默认 metadata-only。
 
 ## 5. 写代码时的维护原则
 
