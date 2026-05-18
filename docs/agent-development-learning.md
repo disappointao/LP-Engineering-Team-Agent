@@ -678,6 +678,31 @@ pnpm --filter @lp-agent/model-gateway test
 - safe payload 能证明跨进程 handoff，但不能为了方便执行而保存 secret、artifact 文件内容或不可控命令。
 - Web 上的本地 worker 按钮是 daemon 前的过渡形态；后续真正 daemon、MCP execution、真实 sandbox 和 streaming logs 都应复用同一套 queue/finalizer 边界。
 
+### 阶段 14：Durable Artifact Workspace v0
+
+当前设计：
+
+- [2026-05-18-durable-artifact-workspace-design.md](./superpowers/specs/2026-05-18-durable-artifact-workspace-design.md)
+- 这一阶段把生成的 `index.html`、`styles.css`、`script.js` 从“只在 page version 里保存的内容”推进为“可持久引用的 artifact workspace”。
+- workspace v0 会保存本地 JSON-file artifact workspace record、file record、manifest、hash、size 和安全 summary，让刷新或重启后仍能恢复静态 LP 产物。
+- Context Pack 和未来 worker/deploy payload 默认只拿 workspace id、文件 manifest、hash、size、summary，不直接注入完整文件内容。
+- 第一版仍不做真实部署、真实 shell、MCP execution、对象存储、Postgres blob、桌面本地目录映射或文件编辑 UI。
+
+当前计划：
+
+- 尚未生成 implementation plan；spec 审核通过后再进入计划编写。
+
+当前实现状态：
+
+- 未实现。Stage 14 当前只完成设计方向，下一步应写 implementation plan，再按 TDD 小步实现 repository、workspace 创建、preview/export 恢复和 context 注入。
+
+学习重点：
+
+- artifact workspace 是“产物状态边界”，不是执行权限边界。
+- worker 或部署系统以后应该拿 `artifactWorkspaceId` 和 file manifest，而不是拿 raw artifact 内容或本机绝对路径。
+- Context Pack 默认注入 metadata，不注入全文；需要全文时应通过受控 artifact reader 按路径、大小、项目归属和权限读取。
+- 本地 JSON-file content snapshot 是 Web MVP 的过渡实现，未来可以用同一 repository contract 换成对象存储、Postgres 元数据或桌面本地目录。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。

@@ -224,6 +224,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 13 Web worker queue integration v0 implementation plan.
    - Read this after the Stage 13 design when implementing or auditing queued Web skill command execution, project-scoped local worker run-once action, worker result finalization, localized queue controls, and safe worker queue configuration.
 
+56. `specs/2026-05-18-durable-artifact-workspace-design.md`
+   - Stage 14 durable artifact workspace v0 design.
+   - Read this after the Stage 13 plan when adding local persistent static LP artifact workspaces, file manifests, workspace-backed preview/export recovery, and metadata-first context injection without enabling real deployment, shell execution, MCP execution, object storage, or desktop filesystem workspaces.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
