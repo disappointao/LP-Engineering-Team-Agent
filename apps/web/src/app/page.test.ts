@@ -2546,38 +2546,65 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("body { color: #111827; }");
   });
 
-  it("does not render artifact source in visible diff cards by default", async () => {
+  it("does not render full preview artifact source in visible diff cards by default", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
-    pageMocks.pageState = createCompletedLpPageState({
-      artifactDiff: {
-        projectId: "project_1",
-        pageVersionId: "version_1",
-        artifactWorkspaceId: "artifact_workspace_1",
-        files: [
-          {
-            path: "styles.css",
-            state: "initial",
-            sizeBytes: 32,
-            sha256: "b".repeat(64),
-            shortSha256: "b".repeat(12),
-            summary: "styles.css static LP file",
-            canPreview: true
-          }
-        ]
-      }
-    });
+    const previewOnlyHtmlSource = "<main data-source=\"FULL_PREVIEW_HTML_SECRET\">Spring essentials</main>";
+    const previewOnlyCssSource = "body::before { content: \"FULL_PREVIEW_CSS_SECRET\"; }";
+    const previewOnlyJsSource = "window.__FULL_PREVIEW_JS_SECRET__ = true;";
+    const artifactDiff = {
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      artifactWorkspaceId: "artifact_workspace_1",
+      files: [
+        {
+          path: "styles.css",
+          state: "initial",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          summary: "styles.css static LP file",
+          canPreview: true
+        }
+      ]
+    };
+    const pageState = createCompletedLpPageState({ artifactDiff });
+    pageState.snapshot.currentPageVersion.artifacts = {
+      indexHtml: [
+        "<!doctype html><html><head>",
+        "<link rel=\"stylesheet\" href=\"styles.css\">",
+        "</head><body>",
+        previewOnlyHtmlSource,
+        "  <script src=\"script.js\"></script>",
+        "</body></html>"
+      ].join(""),
+      stylesCss: previewOnlyCssSource,
+      scriptJs: previewOnlyJsSource
+    };
+
+    expect(JSON.stringify(pageState.snapshot.currentPageVersion.artifacts)).toContain(
+      "FULL_PREVIEW_CSS_SECRET"
+    );
+    expect(JSON.stringify(artifactDiff)).not.toContain("FULL_PREVIEW_HTML_SECRET");
+    expect(JSON.stringify(artifactDiff)).not.toContain("FULL_PREVIEW_CSS_SECRET");
+    expect(JSON.stringify(artifactDiff)).not.toContain("FULL_PREVIEW_JS_SECRET");
+    pageMocks.pageState = pageState;
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
     const visibleText = collectText(page).join(" ");
 
     expect(visibleText).toContain("Artifact changes");
     expect(visibleText).toContain("styles.css static LP file");
-    expect(visibleText).not.toContain("body { color: #111827; }");
+    expect(visibleText).not.toContain(previewOnlyHtmlSource);
+    expect(visibleText).not.toContain(previewOnlyCssSource);
+    expect(visibleText).not.toContain(previewOnlyJsSource);
+    expect(visibleText).not.toContain("FULL_PREVIEW_HTML_SECRET");
+    expect(visibleText).not.toContain("FULL_PREVIEW_CSS_SECRET");
+    expect(visibleText).not.toContain("FULL_PREVIEW_JS_SECRET");
     expect(visibleText).not.toContain("<!doctype html>");
   });
 
-  it("renders safe snippet omitted messages without leaking invalid query values", async () => {
+  it("renders selected snippet omitted messages from sanitized artifact state", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState({
@@ -2618,6 +2645,42 @@ describe("HomePage project flow errors", () => {
     expect(visibleText).toContain("Content is over the 8 KB preview limit.");
     expect(visibleText).not.toContain("ARTIFACT_QUERY_SECRET");
     expect(visibleText).not.toContain("../styles.css");
+  });
+
+  it("renders a generic snippet unavailable message without leaking invalid query values", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "styles.css",
+            state: "initial",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ],
+        errorCode: "artifact_snippet_unavailable"
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        artifactPath: "../secret.css?token=ARTIFACT_QUERY_SECRET"
+      })
+    });
+    const visibleText = collectText(page).join(" ");
+
+    expect(visibleText).toContain("Artifact changes");
+    expect(visibleText).toContain("Snippet is unavailable.");
+    expect(visibleText).not.toContain("ARTIFACT_QUERY_SECRET");
+    expect(visibleText).not.toContain("../secret.css");
   });
 
   it("preserves existing query params when linking artifact preview snippets", async () => {
