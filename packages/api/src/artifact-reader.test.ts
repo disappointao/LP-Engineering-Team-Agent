@@ -242,6 +242,37 @@ describe("repository artifact reader", () => {
     expect(JSON.stringify(diff)).not.toContain("content");
   });
 
+  it("rejects diff files with mismatched page versions", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const from = await setupWorkspace(repositories, {
+      workspaceId: "artifact_workspace_from",
+      pageVersionId: "version_from"
+    });
+    const to = await setupWorkspace(repositories, {
+      workspaceId: "artifact_workspace_to",
+      pageVersionId: "version_to",
+      artifacts: changedArtifacts
+    });
+    const styles = await repositories.artifactWorkspaceFiles.getByPath({
+      workspaceId: to.workspaceId,
+      path: "styles.css"
+    });
+    await repositories.artifactWorkspaceFiles.save({
+      ...styles!,
+      pageVersionId: "version_wrong"
+    });
+
+    await expectArtifactReaderCode(
+      diffRepositoryArtifactWorkspaces({
+        repositories,
+        projectId: from.projectId,
+        fromWorkspaceId: from.workspaceId,
+        toWorkspaceId: to.workspaceId
+      }),
+      "artifact_workspace_diff_not_available"
+    );
+  });
+
   it("resolves page version artifact workspaces for diffs", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const from = await setupWorkspace(repositories, {

@@ -103,6 +103,8 @@ export async function diffRepositoryArtifactWorkspaces(
   try {
     fromFiles = await input.repositories.artifactWorkspaceFiles.listForWorkspace(fromWorkspace.id);
     toFiles = await input.repositories.artifactWorkspaceFiles.listForWorkspace(toWorkspace.id);
+    validateDiffFileScopes(fromFiles, fromWorkspace);
+    validateDiffFileScopes(toFiles, toWorkspace);
     return diffArtifactWorkspaceFiles({
       projectId: input.projectId,
       fromWorkspaceId: fromWorkspace.id,
@@ -214,6 +216,15 @@ const validateFileScope = (
       "artifact_workspace_page_version_mismatch",
       "Artifact workspace file does not belong to the workspace page version."
     );
+  }
+};
+
+const validateDiffFileScopes = (
+  files: ArtifactWorkspaceFileRecord[],
+  workspace: ArtifactWorkspaceRecord
+): void => {
+  for (const file of files) {
+    validateFileScope(file, workspace);
   }
 };
 
