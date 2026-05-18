@@ -283,7 +283,6 @@ async function findLatestInterruptTarget(input: {
     .filter((event) => event.type === "worker.job.linked")
     .reverse();
 
-  let latestCancelledTarget: InterruptTarget | undefined;
   let latestTerminalTarget: InterruptTarget | undefined;
   let sawLinkedWorkerJobId = false;
   for (const linkedEvent of linkedCandidates) {
@@ -308,14 +307,6 @@ async function findLatestInterruptTarget(input: {
       continue;
     }
 
-    if (workerJob.state === "cancelled") {
-      latestCancelledTarget ??= {
-        run,
-        workerJob
-      };
-      continue;
-    }
-
     if (!isInterruptibleWorkerJob(workerJob)) {
       latestTerminalTarget ??= {
         run,
@@ -333,12 +324,6 @@ async function findLatestInterruptTarget(input: {
     };
   }
 
-  if (latestCancelledTarget) {
-    return {
-      kind: "target",
-      target: latestCancelledTarget
-    };
-  }
   if (latestTerminalTarget) {
     return {
       kind: "target",

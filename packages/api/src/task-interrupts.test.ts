@@ -807,6 +807,107 @@ describe("task interrupts", () => {
     });
   });
 
+  it("uses the newest terminal linked worker when no active target exists", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId } = await saveTaskAndRun({
+      repositories,
+      runId: "run_older_cancelled"
+    });
+    await repositories.runs.save({
+      id: "run_newer_completed",
+      projectId,
+      taskId,
+      role: "deployer",
+      state: "running",
+      startedAt: "2026-05-18T00:06:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    const workerRuntime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter(),
+      now: fixedNow([
+        "2026-05-18T00:06:01.000Z",
+        "2026-05-18T00:06:02.000Z",
+        "2026-05-18T00:06:03.000Z",
+        "2026-05-18T00:06:04.000Z"
+      ])
+    });
+    const cancelledJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await workerRuntime.cancelJob(cancelledJob.id, "Older job cancelled.");
+    const completedJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createSimulatedSandboxPolicy({ allowedCommands: ["static-deploy"] })
+    );
+    await workerRuntime.runNext();
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_older_cancelled",
+      workerJobId: cancelledJob.id,
+      now: fixedNow(["2026-05-18T00:06:05.000Z"])
+    });
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_newer_completed",
+      workerJobId: completedJob.id,
+      now: fixedNow(["2026-05-18T00:06:06.000Z"])
+    });
+
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime,
+        taskId
+      })
+    ).resolves.toEqual({
+      available: false,
+      state: "not_interruptible",
+      taskId,
+      runId: "run_newer_completed",
+      workerJobId: completedJob.id
+    });
+    await expect(
+      interruptTask({
+        repositories,
+        workerRuntime,
+        taskId,
+        reason: "Stop latest terminal job",
+        now: fixedNow()
+      })
+    ).resolves.toEqual({
+      ok: true,
+      taskId,
+      state: "not_interruptible",
+      runId: "run_newer_completed",
+      workerJobId: completedJob.id
+    });
+    await expect(repositories.runs.getById("run_older_cancelled")).resolves.toMatchObject({
+      state: "running"
+    });
+  });
+
   it("returns interrupt_failed when worker cancellation throws", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const { taskId, projectId, runId } = await saveTaskAndRun({ repositories });
