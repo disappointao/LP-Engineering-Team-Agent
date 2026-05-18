@@ -1,4 +1,10 @@
-import type { StaticArtifacts } from "@lp-agent/artifacts";
+import {
+  createArtifactWorkspaceManifest,
+  createStaticArtifactWorkspaceFiles,
+  type ArtifactWorkspaceKind,
+  type ArtifactWorkspaceManifest,
+  type StaticArtifacts
+} from "@lp-agent/artifacts";
 import {
   createInMemoryWorkbenchRepositories,
   type BriefRecord,
@@ -655,33 +661,84 @@ export class DemoWorkbenchService {
         throw new Error("Builder run returned incomplete artifacts.");
       }
 
-      const pageVersion = await withRepositoryIdLock(this.repositories, async () => {
-        const pageVersion: PageVersionRecord = {
-          id: pageVersionId,
-          projectId: input.projectId,
-          briefId: brief.id,
-          artifacts: copyArtifacts(artifacts),
-          reviewStatus: "pending",
-          findings: [],
-          createdAt: this.timestamp()
-        };
-        await this.repositories.pageVersions.save(pageVersion);
-        return pageVersion;
-      });
-      await this.saveHandoffForRun({
-        runId: run.id,
-        projectId: input.projectId,
-        sequence: events.length + 1,
-        fromRole: "builder",
-        toRole: "reviewer",
-        state: "ready",
-        summary: "Builder produced static LP artifacts",
-        artifactRefs: {
-          briefId: brief.id,
-          pageVersionId: pageVersion.id
+      const artifactWorkspaceId = await reserveRepositoryId(
+        this.repositories,
+        "artifact_workspace",
+        async () => {
+          const existingWorkspaces = await this.repositories.artifactWorkspaces.listAll();
+          return existingWorkspaces.map((record) => record.id);
         }
-      });
-      return copyPageVersion(pageVersion);
+      );
+      try {
+        const { pageVersion, workspaceManifest } = await withRepositoryIdLock(
+          this.repositories,
+          async () => {
+            const createdAt = nextRepositoryTimestamp(this.repositories, this.now);
+            const files = createStaticArtifactWorkspaceFiles({
+              workspaceId: artifactWorkspaceId,
+              projectId: input.projectId,
+              pageVersionId,
+              artifacts,
+              createdAt
+            });
+            const workspaceManifest = createArtifactWorkspaceManifest({
+              workspaceId: artifactWorkspaceId,
+              projectId: input.projectId,
+              pageVersionId,
+              files
+            });
+            const pageVersion: PageVersionRecord = {
+              id: pageVersionId,
+              projectId: input.projectId,
+              briefId: brief.id,
+              artifactWorkspaceId,
+              artifacts: copyArtifacts(artifacts),
+              reviewStatus: "pending",
+              findings: [],
+              createdAt
+            };
+
+            await this.repositories.pageVersions.save(pageVersion);
+            await this.repositories.artifactWorkspaces.save({
+              id: artifactWorkspaceId,
+              projectId: input.projectId,
+              pageVersionId,
+              runId: run.id,
+              kind: "static_lp",
+              state: "active",
+              createdAt,
+              updatedAt: createdAt
+            });
+            for (const file of files) {
+              await this.repositories.artifactWorkspaceFiles.save(file);
+            }
+            return { pageVersion, workspaceManifest };
+          }
+        );
+        await this.saveArtifactWorkspaceCreatedEvent({
+          runId: run.id,
+          projectId: input.projectId,
+          sequence: events.length + 1,
+          kind: "static_lp",
+          manifest: workspaceManifest
+        });
+        await this.saveHandoffForRun({
+          runId: run.id,
+          projectId: input.projectId,
+          sequence: events.length + 2,
+          fromRole: "builder",
+          toRole: "reviewer",
+          state: "ready",
+          summary: "Builder produced static LP artifacts",
+          artifactRefs: {
+            briefId: brief.id,
+            pageVersionId: pageVersion.id
+          }
+        });
+        return copyPageVersion(pageVersion);
+      } finally {
+        releaseRepositoryId(this.repositories, artifactWorkspaceId);
+      }
     } finally {
       releaseRepositoryId(this.repositories, pageVersionId);
     }
@@ -1884,6 +1941,33 @@ export class DemoWorkbenchService {
 
   private timestamp(): string {
     return this.now().toISOString();
+  }
+
+  private async saveArtifactWorkspaceCreatedEvent(input: {
+    runId: string;
+    projectId: string;
+    taskId?: string;
+    sequence: number;
+    kind: ArtifactWorkspaceKind;
+    manifest: ArtifactWorkspaceManifest;
+  }): Promise<void> {
+    await this.repositories.runEvents.save({
+      id: `${input.runId}_event_${input.sequence}`,
+      runId: input.runId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      sequence: input.sequence,
+      type: "artifact.workspace.created",
+      message: "Artifact workspace created.",
+      payload: {
+        workspaceId: input.manifest.workspaceId,
+        pageVersionId: input.manifest.pageVersionId,
+        kind: input.kind,
+        files: input.manifest.files.map((file) => ({ ...file })),
+        fileCount: input.manifest.files.length
+      },
+      createdAt: nextRepositoryTimestamp(this.repositories, this.now)
+    });
   }
 
   private async saveHandoffForRun(input: {
