@@ -1,4 +1,8 @@
-import { generateStaticArtifacts, type StaticArtifacts } from "@lp-agent/artifacts";
+import {
+  generateStaticArtifacts,
+  type ArtifactWorkspaceManifestFile,
+  type StaticArtifacts
+} from "@lp-agent/artifacts";
 import type { LPBrief, ReviewFinding, RunState } from "@lp-agent/lp-schema";
 import {
   InMemoryModelGateway,
@@ -45,8 +49,10 @@ export interface RuntimeApprovalContext {
 
 export interface RuntimeArtifactWorkspace {
   mode: RuntimeArtifactWorkspaceMode;
+  workspaceId?: string;
   basePath?: string;
   writableFiles: string[];
+  files?: ArtifactWorkspaceManifestFile[];
 }
 
 export interface RuntimeAgentHandoffArtifactRefs {
@@ -347,10 +353,7 @@ function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext 
     })),
     mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
     approval: { ...context.approval },
-    artifactWorkspace: {
-      ...context.artifactWorkspace,
-      writableFiles: [...context.artifactWorkspace.writableFiles]
-    },
+    artifactWorkspace: cloneArtifactWorkspace(context.artifactWorkspace),
     ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {}),
     ...(context.handoffs ? { handoffs: cloneRuntimeHandoffs(context.handoffs) } : {})
   };
@@ -388,15 +391,37 @@ function cloneRuntimeContext(context: RuntimeRunContext): RuntimeRunContext {
     })),
     mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
     approval: { ...context.approval },
-    artifactWorkspace: {
-      ...context.artifactWorkspace,
-      writableFiles: [...context.artifactWorkspace.writableFiles]
-    },
+    artifactWorkspace: cloneArtifactWorkspace(context.artifactWorkspace),
     ...(context.memory ? { memory: cloneRuntimeMemory(context.memory) } : {}),
     ...(context.handoffs ? { handoffs: cloneRuntimeHandoffs(context.handoffs) } : {}),
     ...(context.modelRoutingPolicy
       ? { modelRoutingPolicy: cloneModelRoutingPolicy(context.modelRoutingPolicy) }
       : {})
+  };
+}
+
+function cloneArtifactWorkspace(
+  workspace: RuntimeArtifactWorkspace
+): RuntimeArtifactWorkspace {
+  return {
+    mode: workspace.mode,
+    ...(workspace.workspaceId ? { workspaceId: workspace.workspaceId } : {}),
+    ...(workspace.basePath ? { basePath: workspace.basePath } : {}),
+    writableFiles: [...workspace.writableFiles],
+    ...(workspace.files ? { files: workspace.files.map(cloneArtifactWorkspaceFile) } : {})
+  };
+}
+
+function cloneArtifactWorkspaceFile(
+  file: ArtifactWorkspaceManifestFile
+): ArtifactWorkspaceManifestFile {
+  return {
+    path: file.path,
+    kind: file.kind,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    sha256: file.sha256,
+    summary: file.summary
   };
 }
 

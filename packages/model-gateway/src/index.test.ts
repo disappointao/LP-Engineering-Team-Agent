@@ -112,6 +112,68 @@ describe("model gateway", () => {
     });
   });
 
+  it("clones artifact workspace file metadata in audit contexts defensively", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const context = baseModelContext({
+      artifactWorkspace: {
+        mode: "filesystem",
+        workspaceId: "artifact_workspace_1",
+        basePath: "/tmp/lp-agent/project_1",
+        writableFiles: ["index.html", "styles.css", "script.js"],
+        files: [
+          {
+            path: "index.html",
+            kind: "html",
+            mimeType: "text/html",
+            sizeBytes: 128,
+            sha256: "hash-index",
+            summary: "index.html static LP file",
+            content: "RAW_MODEL_CONTEXT_SECRET"
+          } as unknown as NonNullable<
+            ModelRequestContext["artifactWorkspace"]["files"]
+          >[number]
+        ]
+      }
+    });
+
+    await gateway.complete({
+      role: "builder",
+      prompt: "Build",
+      projectId: "project_1",
+      context
+    });
+    context.artifactWorkspace.writableFiles.push("mutated.html");
+    context.artifactWorkspace.files![0]!.sha256 = "mutated";
+    context.artifactWorkspace.files!.push({
+      path: "styles.css",
+      kind: "css",
+      mimeType: "text/css",
+      sizeBytes: 64,
+      sha256: "hash-css",
+      summary: "styles.css static LP file"
+    });
+
+    expect(gateway.getAuditLog()[0]?.context?.artifactWorkspace).toEqual({
+      mode: "filesystem",
+      workspaceId: "artifact_workspace_1",
+      basePath: "/tmp/lp-agent/project_1",
+      writableFiles: ["index.html", "styles.css", "script.js"],
+      files: [
+        {
+          path: "index.html",
+          kind: "html",
+          mimeType: "text/html",
+          sizeBytes: 128,
+          sha256: "hash-index",
+          summary: "index.html static LP file"
+        }
+      ]
+    });
+    expect(JSON.stringify(gateway.getAuditLog()[0]?.context)).not.toContain(
+      "RAW_MODEL_CONTEXT_SECRET"
+    );
+  });
+
   it("clones context memory into model audit entries defensively", async () => {
     const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
     const memory = {

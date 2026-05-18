@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  createArtifactWorkspaceManifest,
+  type ArtifactWorkspaceFileRecord,
+  type ArtifactWorkspaceRecord
+} from "@lp-agent/artifacts";
 import type {
   BriefRecord,
   PageVersionRecord,
@@ -38,9 +43,15 @@ const RECENCY_SCORE_DIVISOR = 1_000_000_000_000_000;
 const CONTEXT_MEMORY_REDACTION = "[REDACTED]";
 const TOTAL_BUDGET_EXCEEDED_REASON = "memory:total:budget_exceeded";
 
+const StaticArtifactFilePathSchema = z.enum(["index.html", "styles.css", "script.js"]);
+
 const ContextMemoryFileSchema = z.object({
-  name: z.enum(["index.html", "styles.css", "script.js"]),
-  characterCount: z.number().int().min(0)
+  name: StaticArtifactFilePathSchema,
+  path: StaticArtifactFilePathSchema.optional(),
+  characterCount: z.number().int().min(0),
+  sizeBytes: z.number().int().min(0).optional(),
+  sha256: z.string().min(1).optional(),
+  summary: z.string().min(1).optional()
 });
 
 export const ContextMemoryMessageSummarySchema = z.object({
@@ -80,6 +91,7 @@ export const ContextMemoryToolSummarySchema = z.object({
 export const ContextMemoryArtifactSummarySchema = z.object({
   pageVersionId: z.string().min(1),
   briefId: z.string().min(1),
+  artifactWorkspaceId: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
   objective: z.string().min(1).optional(),
   files: z.array(ContextMemoryFileSchema),
@@ -162,7 +174,8 @@ export async function assembleContextMemory(
     ),
     currentTaskId: input.taskId
   });
-  const artifactSummaries = summarizeArtifacts({
+  const artifactSummaries = await summarizeArtifacts({
+    repositories: input.repositories,
     pageVersions: (await input.repositories.pageVersions.listAll()).filter(
       (pageVersion) => pageVersion.projectId === input.projectId
     ),
@@ -362,44 +375,147 @@ function compareScoredTools(
   return left.id.localeCompare(right.id);
 }
 
-function summarizeArtifacts(input: {
+async function summarizeArtifacts(input: {
+  repositories: WorkbenchRepositories;
   pageVersions: PageVersionRecord[];
   briefs: BriefRecord[];
-}): ContextMemoryArtifactSummary[] {
+}): Promise<ContextMemoryArtifactSummary[]> {
   const briefsById = new Map(
     input.briefs.map((brief) => [`${brief.projectId}:${brief.id}`, brief] as const)
   );
 
-  return input.pageVersions
-    .map((pageVersion) => {
+  const summaries = await Promise.all(
+    input.pageVersions.map(async (pageVersion) => {
       const brief = briefsById.get(`${pageVersion.projectId}:${pageVersion.briefId}`);
       const title = toOptionalNonEmptyString(brief?.brief.title);
       const objective = toOptionalNonEmptyString(brief?.brief.objective);
+      const artifactFiles = await summarizeArtifactFiles(input.repositories, pageVersion);
 
       return {
         pageVersionId: pageVersion.id,
         briefId: pageVersion.briefId,
+        ...(artifactFiles.artifactWorkspaceId
+          ? { artifactWorkspaceId: artifactFiles.artifactWorkspaceId }
+          : {}),
         ...(title ? { title } : {}),
         ...(objective ? { objective } : {}),
-        files: [
-          {
-            name: "index.html" as const,
-            characterCount: pageVersion.artifacts.indexHtml.length
-          },
-          {
-            name: "styles.css" as const,
-            characterCount: pageVersion.artifacts.stylesCss.length
-          },
-          {
-            name: "script.js" as const,
-            characterCount: pageVersion.artifacts.scriptJs.length
-          }
-        ],
+        files: artifactFiles.files,
         createdAt: pageVersion.createdAt,
         score: scoreArtifact(pageVersion)
       };
     })
-    .sort(compareScoredArtifacts);
+  );
+
+  return summaries.sort(compareScoredArtifacts);
+}
+
+async function summarizeArtifactFiles(
+  repositories: WorkbenchRepositories,
+  pageVersion: PageVersionRecord
+): Promise<{
+  artifactWorkspaceId?: string;
+  files: ContextMemoryArtifactSummary["files"];
+}> {
+  if (!pageVersion.artifactWorkspaceId) {
+    return {
+      files: summarizeEmbeddedArtifactFiles(pageVersion)
+    };
+  }
+
+  const workspace = await repositories.artifactWorkspaces.getById(
+    pageVersion.artifactWorkspaceId
+  );
+  if (!workspace) {
+    return {
+      files: summarizeEmbeddedArtifactFiles(pageVersion)
+    };
+  }
+  assertArtifactWorkspaceOwnership(workspace, pageVersion);
+
+  let workspaceFiles: ArtifactWorkspaceFileRecord[];
+  try {
+    workspaceFiles = await repositories.artifactWorkspaceFiles.listForWorkspace(workspace.id);
+  } catch {
+    return {
+      files: summarizeEmbeddedArtifactFiles(pageVersion)
+    };
+  }
+
+  assertArtifactWorkspaceFileOwnership(workspaceFiles, workspace, pageVersion);
+
+  try {
+    const manifest = createArtifactWorkspaceManifest({
+      workspaceId: workspace.id,
+      projectId: workspace.projectId,
+      pageVersionId: workspace.pageVersionId,
+      files: workspaceFiles
+    });
+    const filesByPath = new Map(workspaceFiles.map((file) => [file.path, file] as const));
+
+    return {
+      artifactWorkspaceId: workspace.id,
+      files: manifest.files.map((file) => ({
+        name: file.path,
+        path: file.path,
+        characterCount: filesByPath.get(file.path)?.content.length ?? 0,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256,
+        summary: file.summary
+      }))
+    };
+  } catch {
+    return {
+      files: summarizeEmbeddedArtifactFiles(pageVersion)
+    };
+  }
+}
+
+function summarizeEmbeddedArtifactFiles(
+  pageVersion: PageVersionRecord
+): ContextMemoryArtifactSummary["files"] {
+  return [
+    {
+      name: "index.html",
+      characterCount: pageVersion.artifacts.indexHtml.length
+    },
+    {
+      name: "styles.css",
+      characterCount: pageVersion.artifacts.stylesCss.length
+    },
+    {
+      name: "script.js",
+      characterCount: pageVersion.artifacts.scriptJs.length
+    }
+  ];
+}
+
+function assertArtifactWorkspaceOwnership(
+  workspace: ArtifactWorkspaceRecord,
+  pageVersion: PageVersionRecord
+): void {
+  if (workspace.projectId !== pageVersion.projectId || workspace.pageVersionId !== pageVersion.id) {
+    throw new Error(
+      `Artifact workspace ${workspace.id} does not belong to page version ${pageVersion.id}.`
+    );
+  }
+}
+
+function assertArtifactWorkspaceFileOwnership(
+  files: ArtifactWorkspaceFileRecord[],
+  workspace: ArtifactWorkspaceRecord,
+  pageVersion: PageVersionRecord
+): void {
+  const mismatchedFile = files.find(
+    (file) =>
+      file.workspaceId !== workspace.id ||
+      file.projectId !== pageVersion.projectId ||
+      file.pageVersionId !== pageVersion.id
+  );
+  if (mismatchedFile) {
+    throw new Error(
+      `Artifact workspace file ${mismatchedFile.path} does not belong to page version ${pageVersion.id}.`
+    );
+  }
 }
 
 function scoreArtifact(pageVersion: PageVersionRecord): number {

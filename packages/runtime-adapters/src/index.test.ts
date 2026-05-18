@@ -278,6 +278,78 @@ describe("local agent runtime adapter", () => {
     ]);
   });
 
+  it("forwards artifact workspace file metadata with defensive clones", async () => {
+    const gateway = new RecordingPortableGateway();
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+    const expectedFiles = [
+      {
+        path: "index.html" as const,
+        kind: "html" as const,
+        mimeType: "text/html" as const,
+        sizeBytes: 128,
+        sha256: "hash-index",
+        summary: "index.html static LP file"
+      },
+      {
+        path: "styles.css" as const,
+        kind: "css" as const,
+        mimeType: "text/css" as const,
+        sizeBytes: 64,
+        sha256: "hash-css",
+        summary: "styles.css static LP file"
+      }
+    ];
+    const context = completeRuntimeContext({
+      artifactWorkspace: {
+        mode: "filesystem",
+        workspaceId: "artifact_workspace_1",
+        basePath: "/tmp/lp-agent/project_1",
+        writableFiles: ["index.html", "styles.css", "script.js"],
+        files: [
+          {
+            ...expectedFiles[0]!,
+            content: "RAW_RUNTIME_CONTEXT_SECRET"
+          } as unknown as typeof expectedFiles[number],
+          expectedFiles[1]!
+        ]
+      }
+    });
+
+    await runtime.run({
+      runId: "run_builder_workspace_context",
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build",
+        brief: sampleBrief
+      },
+      context
+    });
+    context.artifactWorkspace.writableFiles.push("mutated.html");
+    context.artifactWorkspace.files![0]!.sha256 = "mutated";
+    context.artifactWorkspace.files!.push({
+      path: "script.js",
+      kind: "js",
+      mimeType: "text/javascript",
+      sizeBytes: 32,
+      sha256: "hash-js",
+      summary: "script.js static LP file"
+    });
+    const modelWorkspace = gateway.requests[0]?.context
+      ?.artifactWorkspace as RuntimeRunContext["artifactWorkspace"] | undefined;
+
+    expect(modelWorkspace).toEqual({
+      mode: "filesystem",
+      workspaceId: "artifact_workspace_1",
+      basePath: "/tmp/lp-agent/project_1",
+      writableFiles: ["index.html", "styles.css", "script.js"],
+      files: expectedFiles
+    });
+    expect(JSON.stringify(gateway.requests[0]?.context)).not.toContain(
+      "RAW_RUNTIME_CONTEXT_SECRET"
+    );
+  });
+
   it("passes scoped skills, visible MCP tools, approval, and workspace context into model calls", async () => {
     const gateway = new RecordingPortableGateway();
     const adapter = new LocalAgentRuntimeAdapter(gateway);

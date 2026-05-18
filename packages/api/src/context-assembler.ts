@@ -36,10 +36,29 @@ const RuntimeApprovalContextSchema = z.object({
   approvedByUserId: z.string().min(1).optional()
 });
 
+const ArtifactWorkspaceFilePathSchema = z.enum(["index.html", "styles.css", "script.js"]);
+const ArtifactWorkspaceFileKindSchema = z.enum(["html", "css", "js"]);
+const ArtifactWorkspaceMimeTypeSchema = z.enum([
+  "text/html",
+  "text/css",
+  "text/javascript"
+]);
+
+const RuntimeArtifactWorkspaceFileSchema = z.object({
+  path: ArtifactWorkspaceFilePathSchema,
+  kind: ArtifactWorkspaceFileKindSchema,
+  mimeType: ArtifactWorkspaceMimeTypeSchema,
+  sizeBytes: z.number().int().min(0),
+  sha256: z.string().min(1),
+  summary: z.string().min(1)
+});
+
 const RuntimeArtifactWorkspaceSchema = z.object({
   mode: z.enum(["memory", "filesystem"]),
+  workspaceId: z.string().min(1).optional(),
   basePath: z.string().min(1).optional(),
-  writableFiles: z.array(z.string().min(1))
+  writableFiles: z.array(z.string().min(1)),
+  files: z.array(RuntimeArtifactWorkspaceFileSchema).optional()
 });
 
 const ModelProviderApiSchema = z.enum(["mock", "openai-completions", "anthropic-messages"]);

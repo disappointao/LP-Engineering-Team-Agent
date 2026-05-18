@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createStaticArtifactWorkspaceFiles } from "@lp-agent/artifacts";
 import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import { sampleBrief } from "@lp-agent/lp-schema";
+import { ContextPackSchema } from "./context-assembler";
 import {
   assembleContextMemory,
   ContextMemorySchema,
@@ -487,6 +489,293 @@ describe("context memory", () => {
     expect(serialized).not.toContain("<!doctype html>");
     expect(serialized).not.toContain("console.log");
     expect(serialized).not.toContain("secret-token");
+  });
+
+  it("summarizes workspace-backed artifacts with file metadata without raw content", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspaceArtifacts = {
+      indexHtml:
+        "<!doctype html><html><body>WORKSPACE_RAW_HTML_SECRET secret-token</body></html>",
+      stylesCss: "body::before { content: 'WORKSPACE_RAW_CSS_SECRET'; }",
+      scriptJs: "console.log('WORKSPACE_RAW_JS_SECRET');"
+    };
+    await repositories.briefs.save({
+      id: "brief_1",
+      projectId: "project_1",
+      prompt: "Build a spring sale landing page",
+      brief: {
+        ...sampleBrief,
+        title: "Spring Sale Landing Page",
+        objective: "Convert paid traffic"
+      },
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await repositories.pageVersions.save({
+      id: "page_version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>EMBEDDED_RAW_HTML_SECRET</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('EMBEDDED_RAW_JS_SECRET');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "page_version_1",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-14T00:03:00.000Z",
+      updatedAt: "2026-05-14T00:03:00.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "page_version_1",
+      artifacts: workspaceArtifacts,
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page",
+        brief: sampleBrief
+      }
+    });
+
+    expect(memory.artifacts).toEqual([
+      {
+        pageVersionId: "page_version_1",
+        briefId: "brief_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        title: "Spring Sale Landing Page",
+        objective: "Convert paid traffic",
+        files: files.map((file) => ({
+          name: file.path,
+          path: file.path,
+          characterCount: file.content.length,
+          sizeBytes: file.sizeBytes,
+          sha256: file.sha256,
+          summary: file.summary
+        })),
+        createdAt: "2026-05-14T00:03:00.000Z",
+        score: expect.any(Number)
+      }
+    ]);
+    const serialized = JSON.stringify(memory);
+    expect(serialized).not.toContain("WORKSPACE_RAW_HTML_SECRET");
+    expect(serialized).not.toContain("WORKSPACE_RAW_CSS_SECRET");
+    expect(serialized).not.toContain("WORKSPACE_RAW_JS_SECRET");
+    expect(serialized).not.toContain("EMBEDDED_RAW_HTML_SECRET");
+    expect(serialized).not.toContain("EMBEDDED_RAW_JS_SECRET");
+    expect(serialized).not.toContain("<!doctype html>");
+    expect(serialized).not.toContain("console.log");
+  });
+
+  it("falls back to embedded artifact lengths when a referenced workspace is missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.pageVersions.save({
+      id: "page_version_missing_workspace",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_missing",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>secret-token</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('secret-token');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+
+    const memory = await assembleContextMemory({
+      repositories,
+      projectId: "project_1",
+      role: "builder",
+      input: {
+        prompt: "Build a spring sale page"
+      }
+    });
+
+    expect(memory.artifacts).toEqual([
+      {
+        pageVersionId: "page_version_missing_workspace",
+        briefId: "brief_1",
+        files: [
+          { name: "index.html", characterCount: 53 },
+          { name: "styles.css", characterCount: 20 },
+          { name: "script.js", characterCount: 28 }
+        ],
+        createdAt: "2026-05-14T00:03:00.000Z",
+        score: expect.any(Number)
+      }
+    ]);
+    expect(memory.artifacts[0]).not.toHaveProperty("artifactWorkspaceId");
+    expect(memory.artifacts[0]?.files[0]).not.toHaveProperty("sha256");
+  });
+
+  it("fails closed when the workspace owner does not match the page version", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.pageVersions.save({
+      id: "page_version_wrong_workspace_owner",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_wrong_owner",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>Embedded page</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('embedded');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_wrong_owner",
+      projectId: "project_2",
+      pageVersionId: "page_version_wrong_workspace_owner",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-14T00:03:00.000Z",
+      updatedAt: "2026-05-14T00:03:00.000Z"
+    });
+
+    await expect(
+      assembleContextMemory({
+        repositories,
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Build a spring sale page"
+        }
+      })
+    ).rejects.toThrow(
+      "Artifact workspace artifact_workspace_wrong_owner does not belong to page version page_version_wrong_workspace_owner."
+    );
+  });
+
+  it("fails closed when workspace file ownership does not match the page version", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.pageVersions.save({
+      id: "page_version_wrong_file_owner",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_wrong_file_owner",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>Embedded page</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('embedded');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_wrong_file_owner",
+      projectId: "project_1",
+      pageVersionId: "page_version_wrong_file_owner",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-14T00:03:00.000Z",
+      updatedAt: "2026-05-14T00:03:00.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_wrong_file_owner",
+      projectId: "project_1",
+      pageVersionId: "page_version_other",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>Wrong file owner</body></html>",
+        stylesCss: "body { color: blue; }",
+        scriptJs: "console.log('wrong');"
+      },
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    await expect(
+      assembleContextMemory({
+        repositories,
+        projectId: "project_1",
+        role: "builder",
+        input: {
+          prompt: "Build a spring sale page"
+        }
+      })
+    ).rejects.toThrow(
+      "Artifact workspace file index.html does not belong to page version page_version_wrong_file_owner."
+    );
+  });
+
+  it("preserves artifact workspace metadata in context pack schema without raw content", () => {
+    const parsed = ContextPackSchema.parse({
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: {
+        prompt: "Build"
+      },
+      runtimeContext: {
+        skills: [],
+        mcpTools: [],
+        approval: {
+          state: "not_required"
+        },
+        artifactWorkspace: {
+          mode: "filesystem",
+          workspaceId: "artifact_workspace_1",
+          basePath: "/tmp/lp-agent/project_1",
+          writableFiles: ["index.html", "styles.css", "script.js"],
+          files: [
+            {
+              path: "index.html",
+              kind: "html",
+              mimeType: "text/html",
+              sizeBytes: 128,
+              sha256: "hash-index",
+              summary: "index.html static LP file",
+              content: "RAW_RUNTIME_CONTEXT_SECRET"
+            }
+          ]
+        }
+      },
+      trace: {
+        injected: ["artifactWorkspace:filesystem"],
+        omitted: []
+      },
+      createdAt: "2026-05-14T00:03:00.000Z"
+    });
+
+    expect(parsed.runtimeContext.artifactWorkspace).toEqual({
+      mode: "filesystem",
+      workspaceId: "artifact_workspace_1",
+      basePath: "/tmp/lp-agent/project_1",
+      writableFiles: ["index.html", "styles.css", "script.js"],
+      files: [
+        {
+          path: "index.html",
+          kind: "html",
+          mimeType: "text/html",
+          sizeBytes: 128,
+          sha256: "hash-index",
+          summary: "index.html static LP file"
+        }
+      ]
+    });
+    expect(JSON.stringify(parsed)).not.toContain("RAW_RUNTIME_CONTEXT_SECRET");
   });
 
   it("does not emit empty artifact title or objective when the linked brief is missing", async () => {

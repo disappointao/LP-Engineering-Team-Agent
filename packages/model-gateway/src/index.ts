@@ -86,6 +86,9 @@ export type ModelRoutingPolicy = Record<AgentRole, ModelRoute>;
 
 export type ModelApprovalState = "not_required" | "pending" | "approved";
 export type ArtifactWorkspaceMode = "memory" | "filesystem";
+export type ModelArtifactWorkspaceFilePath = "index.html" | "styles.css" | "script.js";
+export type ModelArtifactWorkspaceFileKind = "html" | "css" | "js";
+export type ModelArtifactWorkspaceMimeType = "text/html" | "text/css" | "text/javascript";
 
 export interface ModelSkillContext {
   id: string;
@@ -112,8 +115,19 @@ export interface ModelApprovalContext {
 
 export interface ModelArtifactWorkspaceContext {
   mode: ArtifactWorkspaceMode;
+  workspaceId?: string;
   basePath?: string;
   writableFiles: string[];
+  files?: ModelArtifactWorkspaceFile[];
+}
+
+export interface ModelArtifactWorkspaceFile {
+  path: ModelArtifactWorkspaceFilePath;
+  kind: ModelArtifactWorkspaceFileKind;
+  mimeType: ModelArtifactWorkspaceMimeType;
+  sizeBytes: number;
+  sha256: string;
+  summary: string;
 }
 
 export interface ModelContextMemoryMessage {
@@ -152,12 +166,17 @@ export interface ModelContextMemoryTool {
 
 export interface ModelContextMemoryArtifactFile {
   name: string;
+  path?: ModelArtifactWorkspaceFilePath;
   characterCount: number;
+  sizeBytes?: number;
+  sha256?: string;
+  summary?: string;
 }
 
 export interface ModelContextMemoryArtifact {
   pageVersionId: string;
   briefId: string;
+  artifactWorkspaceId?: string;
   title?: string;
   objective?: string;
   files: ModelContextMemoryArtifactFile[];
@@ -455,12 +474,34 @@ function cloneModelRequestContext(context: ModelRequestContext): ModelRequestCon
     })),
     mcpTools: context.mcpTools.map((tool) => ({ ...tool })),
     approval: { ...context.approval },
-    artifactWorkspace: {
-      ...context.artifactWorkspace,
-      writableFiles: [...context.artifactWorkspace.writableFiles]
-    },
+    artifactWorkspace: cloneModelArtifactWorkspace(context.artifactWorkspace),
     ...(context.memory ? { memory: cloneModelContextMemory(context.memory) } : {}),
     ...(context.handoffs ? { handoffs: cloneModelAgentHandoffs(context.handoffs) } : {})
+  };
+}
+
+function cloneModelArtifactWorkspace(
+  workspace: ModelArtifactWorkspaceContext
+): ModelArtifactWorkspaceContext {
+  return {
+    mode: workspace.mode,
+    ...(workspace.workspaceId ? { workspaceId: workspace.workspaceId } : {}),
+    ...(workspace.basePath ? { basePath: workspace.basePath } : {}),
+    writableFiles: [...workspace.writableFiles],
+    ...(workspace.files ? { files: workspace.files.map(cloneModelArtifactWorkspaceFile) } : {})
+  };
+}
+
+function cloneModelArtifactWorkspaceFile(
+  file: ModelArtifactWorkspaceFile
+): ModelArtifactWorkspaceFile {
+  return {
+    path: file.path,
+    kind: file.kind,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    sha256: file.sha256,
+    summary: file.summary
   };
 }
 
@@ -483,13 +524,26 @@ function cloneModelContextMemory(memory: ModelContextMemory): ModelContextMemory
     tools: memory.tools.map((tool) => ({ ...tool })),
     artifacts: memory.artifacts.map((artifact) => ({
       ...artifact,
-      files: artifact.files.map((file) => ({ ...file }))
+      files: artifact.files.map(cloneModelContextMemoryArtifactFile)
     })),
     retrieval: {
       ...memory.retrieval,
       selected: [...memory.retrieval.selected],
       omitted: [...memory.retrieval.omitted]
     }
+  };
+}
+
+function cloneModelContextMemoryArtifactFile(
+  file: ModelContextMemoryArtifactFile
+): ModelContextMemoryArtifactFile {
+  return {
+    name: file.name,
+    ...(file.path ? { path: file.path } : {}),
+    characterCount: file.characterCount,
+    ...(file.sizeBytes !== undefined ? { sizeBytes: file.sizeBytes } : {}),
+    ...(file.sha256 ? { sha256: file.sha256 } : {}),
+    ...(file.summary ? { summary: file.summary } : {})
   };
 }
 
