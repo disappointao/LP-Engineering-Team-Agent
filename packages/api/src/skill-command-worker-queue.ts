@@ -103,12 +103,20 @@ export async function finalizeWorkerBackedSkillCommand(input: {
 
   const runId = toOptionalString(link.payload.runId);
   const observationId = toOptionalString(link.payload.observationId);
-  if (!runId) {
+  if (!runId || !observationId) {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
 
   const run = await input.repositories.runs.getById(runId);
   if (!run) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
+
+  const observations = await input.repositories.toolObservations.listForRun(run.id);
+  const observation = observations.find(
+    (candidate) => candidate.id === observationId
+  );
+  if (!observation) {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
 
@@ -175,18 +183,15 @@ export async function finalizeWorkerBackedSkillCommand(input: {
     await input.repositories.runEvents.save(reconciledRunEvent);
   }
 
-  if (observationId) {
-    await updateLinkedObservation({
-      repositories: input.repositories,
-      runId: run.id,
-      observationId,
-      state: terminalRecordState,
-      outputSummary,
-      exitCode,
-      errorName,
-      completedAt: reconciledRunEvent.createdAt
-    });
-  }
+  await updateLinkedObservation({
+    repositories: input.repositories,
+    observation,
+    state: terminalRecordState,
+    outputSummary,
+    exitCode,
+    errorName,
+    completedAt: reconciledRunEvent.createdAt
+  });
 
   await input.repositories.runs.save({
     ...run,
@@ -219,29 +224,18 @@ async function findWorkerLinkEvent(
 
 async function updateLinkedObservation(input: {
   repositories: WorkbenchRepositories;
-  runId: string;
-  observationId: string;
+  observation: ToolObservationRecord;
   state: ToolObservationRecord["state"];
   outputSummary: string;
   exitCode?: number;
   errorName?: string;
   completedAt: string;
 }): Promise<void> {
-  const observations = await input.repositories.toolObservations.listForRun(
-    input.runId
-  );
-  const observation = observations.find(
-    (candidate) => candidate.id === input.observationId
-  );
-  if (!observation) {
-    return;
-  }
-
   const {
     exitCode: _previousExitCode,
     errorName: _previousErrorName,
     ...baseObservation
-  } = observation;
+  } = input.observation;
   await input.repositories.toolObservations.save({
     ...baseObservation,
     outputSummary: input.outputSummary,

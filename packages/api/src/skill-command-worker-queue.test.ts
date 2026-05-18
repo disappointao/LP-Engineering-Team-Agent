@@ -333,6 +333,50 @@ describe("worker-backed skill command finalization", () => {
     ]);
   });
 
+  it("fails finalization without appending terminal state when linked observation is missing", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_4",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 4,
+      type: "worker.job.linked",
+      message: "Worker job linked to task with missing observation.",
+      payload: {
+        taskId: "task_1",
+        runId: "run_skill_command_1",
+        workerJobId: workerJob.id,
+        observationId: "missing_observation"
+      },
+      createdAt: "2026-05-18T00:00:03.000Z"
+    });
+
+    const result = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "worker_job_finalization_failed"
+    });
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    const terminalEvents = (await repositories.runEvents.listForRun("run_skill_command_1"))
+      .filter((event) =>
+        event.type === "tool.completed" ||
+        event.type === "tool.failed" ||
+        event.type === "tool.cancelled" ||
+        event.type === "run.completed" ||
+        event.type === "run.failed" ||
+        event.type === "run.cancelled"
+      );
+    expect(terminalEvents).toHaveLength(0);
+  });
+
   it("preserves rejected worker state across idempotent finalization retries", async () => {
     const { repositories, workerJob } = await linkedWorkerJob({
       state: "rejected",
