@@ -726,6 +726,12 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-18-artifact-reader-static-diff.md](./superpowers/plans/2026-05-18-artifact-reader-static-diff.md)
 
+当前实现状态：
+
+- Stage 15 v0 已实现受控 artifact reader：读取单个 workspace file 前会校验 project、workspace、page version、路径 allowlist、文件归属和 hash/size 完整性。
+- Stage 15 v0 已实现 metadata-only static diff：比较两个 workspace 或两个 page version 的 `index.html`、`styles.css`、`script.js`，默认只返回 hash、size、summary 和 changed/added/removed/unchanged 状态。
+- Context Pack 已支持显式 opt-in 的 bounded artifact snippets；默认不注入 snippets，runtime/model context 仍保持 metadata-only。
+
 学习重点：
 
 - artifact workspace 解决“产物在哪里”，artifact reader 解决“谁可以按什么规则读取产物”。
