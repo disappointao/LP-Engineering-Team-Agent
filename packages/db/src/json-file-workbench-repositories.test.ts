@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ArtifactWorkspaceFileRecord, ArtifactWorkspaceRecord } from "@lp-agent/artifacts";
 import {
   createJsonFileWorkbenchRepositories,
   type RunEventRecord,
@@ -220,6 +221,114 @@ describe("json-file workbench repositories", () => {
 
     await expect(repositories.workspaceMembers.listAll()).resolves.toEqual([]);
     await expect(repositories.projectMembers.listAll()).resolves.toEqual([]);
+  });
+
+  it("reopens artifact workspaces and files from disk", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
+    tempDirs.push(tempRoot);
+    const filePath = join(tempRoot, "artifact-workspaces.json");
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const workspace: ArtifactWorkspaceRecord = {
+      id: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      runId: "run_1",
+      kind: "static_lp",
+      state: "active",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const laterWorkspace: ArtifactWorkspaceRecord = {
+      ...workspace,
+      id: "artifact_workspace_2",
+      pageVersionId: "version_2",
+      runId: "run_2",
+      createdAt: "2026-05-13T00:01:00.000Z",
+      updatedAt: "2026-05-13T00:01:00.000Z"
+    };
+    const file: ArtifactWorkspaceFileRecord = {
+      id: "artifact_workspace_1_file_index_html",
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      path: "index.html",
+      kind: "html",
+      mimeType: "text/html",
+      sizeBytes: 15,
+      sha256: "hash-index",
+      summary: "index file",
+      content: "<h1>Spring</h1>",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const otherWorkspaceFile: ArtifactWorkspaceFileRecord = {
+      ...file,
+      id: "artifact_workspace_2_file_index_html",
+      workspaceId: "artifact_workspace_2",
+      pageVersionId: "version_2",
+      content: "<h1>Summer</h1>",
+      createdAt: "2026-05-13T00:01:00.000Z",
+      updatedAt: "2026-05-13T00:01:00.000Z"
+    };
+
+    await first.artifactWorkspaces.save(workspace);
+    await first.artifactWorkspaces.save(laterWorkspace);
+    await first.artifactWorkspaceFiles.save(file);
+    await first.artifactWorkspaceFiles.save(otherWorkspaceFile);
+
+    const aliasPath = join(tempRoot, "artifact-workspaces-alias.json");
+    await symlink(filePath, aliasPath);
+    const second = createJsonFileWorkbenchRepositories({ filePath: aliasPath });
+
+    await expect(second.artifactWorkspaces.getById("artifact_workspace_1")).resolves.toEqual(
+      workspace
+    );
+    await expect(second.artifactWorkspaces.listForProject("project_1")).resolves.toEqual([
+      workspace,
+      laterWorkspace
+    ]);
+    await expect(
+      second.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_1")
+    ).resolves.toEqual([file]);
+    await expect(second.artifactWorkspaceFiles.listAll()).resolves.toEqual([
+      file,
+      otherWorkspaceFile
+    ]);
+  });
+
+  it("defaults missing artifact workspace arrays when reopening old local state files", async () => {
+    const filePath = await tempStateFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        projects: [],
+        workspaceMembers: [],
+        projectMembers: [],
+        briefs: [],
+        pageVersions: [],
+        deployments: [],
+        tasks: [],
+        messages: [],
+        taskSnapshots: [],
+        skills: [],
+        skillVersions: [],
+        skillBindings: [],
+        modelProviders: [],
+        modelRoutingPolicies: [],
+        mcpConnectors: [],
+        mcpToolApprovals: [],
+        runs: [],
+        runEvents: [],
+        toolObservations: [],
+        agentHandoffs: []
+      }),
+      "utf8"
+    );
+
+    const repositories = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(repositories.artifactWorkspaces.listAll()).resolves.toEqual([]);
+    await expect(repositories.artifactWorkspaceFiles.listAll()).resolves.toEqual([]);
   });
 
   it("reopens skills, versions, and bindings from disk", async () => {

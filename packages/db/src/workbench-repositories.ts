@@ -1,4 +1,8 @@
-import type { StaticArtifacts } from "@lp-agent/artifacts";
+import type {
+  ArtifactWorkspaceFileRecord,
+  ArtifactWorkspaceRecord,
+  StaticArtifacts
+} from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { LPBrief, ProjectRole, ReviewFinding } from "@lp-agent/lp-schema";
 import type { MCPToolDefinition } from "@lp-agent/mcp-gateway";
@@ -47,6 +51,7 @@ export interface PageVersionRecord {
   id: string;
   projectId: string;
   briefId: string;
+  artifactWorkspaceId?: string;
   artifacts: StaticArtifacts;
   reviewStatus: ReviewStatus;
   findings: ReviewFinding[];
@@ -277,6 +282,19 @@ export interface PageVersionRepository {
   listAll(): Promise<PageVersionRecord[]>;
 }
 
+export interface ArtifactWorkspaceRepository {
+  save(workspace: ArtifactWorkspaceRecord): Promise<void>;
+  getById(workspaceId: string): Promise<ArtifactWorkspaceRecord | undefined>;
+  listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]>;
+  listAll(): Promise<ArtifactWorkspaceRecord[]>;
+}
+
+export interface ArtifactWorkspaceFileRepository {
+  save(file: ArtifactWorkspaceFileRecord): Promise<void>;
+  listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]>;
+  listAll(): Promise<ArtifactWorkspaceFileRecord[]>;
+}
+
 export interface DeploymentRepository {
   save(deployment: DeploymentHandoff): Promise<void>;
   getByPageVersionId(pageVersionId: string): Promise<DeploymentHandoff | undefined>;
@@ -407,6 +425,8 @@ export interface WorkbenchRepositories {
   projectMembers: ProjectMemberRepository;
   briefs: BriefRepository;
   pageVersions: PageVersionRepository;
+  artifactWorkspaces: ArtifactWorkspaceRepository;
+  artifactWorkspaceFiles: ArtifactWorkspaceFileRepository;
   deployments: DeploymentRepository;
   tasks: WorkbenchTaskRepository;
   messages: WorkbenchMessageRepository;
@@ -434,6 +454,8 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly projectMembers = new InMemoryProjectMemberRepository();
   readonly briefs = new InMemoryBriefRepository();
   readonly pageVersions = new InMemoryPageVersionRepository();
+  readonly artifactWorkspaces = new InMemoryArtifactWorkspaceRepository();
+  readonly artifactWorkspaceFiles = new InMemoryArtifactWorkspaceFileRepository();
   readonly deployments = new InMemoryDeploymentRepository();
   readonly tasks = new InMemoryWorkbenchTaskRepository();
   readonly messages = new InMemoryWorkbenchMessageRepository();
@@ -933,6 +955,47 @@ class InMemoryPageVersionRepository implements PageVersionRepository {
   }
 }
 
+class InMemoryArtifactWorkspaceRepository implements ArtifactWorkspaceRepository {
+  private readonly workspaces = new Map<string, ArtifactWorkspaceRecord>();
+
+  async save(workspace: ArtifactWorkspaceRecord): Promise<void> {
+    this.workspaces.set(workspace.id, copyArtifactWorkspace(workspace));
+  }
+
+  async getById(workspaceId: string): Promise<ArtifactWorkspaceRecord | undefined> {
+    const workspace = this.workspaces.get(workspaceId);
+    return workspace ? copyArtifactWorkspace(workspace) : undefined;
+  }
+
+  async listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]> {
+    return [...this.workspaces.values()]
+      .filter((workspace) => workspace.projectId === projectId)
+      .map(copyArtifactWorkspace);
+  }
+
+  async listAll(): Promise<ArtifactWorkspaceRecord[]> {
+    return [...this.workspaces.values()].map(copyArtifactWorkspace);
+  }
+}
+
+class InMemoryArtifactWorkspaceFileRepository implements ArtifactWorkspaceFileRepository {
+  private readonly files = new Map<string, ArtifactWorkspaceFileRecord>();
+
+  async save(file: ArtifactWorkspaceFileRecord): Promise<void> {
+    this.files.set(file.id, copyArtifactWorkspaceFile(file));
+  }
+
+  async listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]> {
+    return [...this.files.values()]
+      .filter((file) => file.workspaceId === workspaceId)
+      .map(copyArtifactWorkspaceFile);
+  }
+
+  async listAll(): Promise<ArtifactWorkspaceFileRecord[]> {
+    return [...this.files.values()].map(copyArtifactWorkspaceFile);
+  }
+}
+
 class InMemoryDeploymentRepository implements DeploymentRepository {
   private readonly deploymentsByPageVersion = new Map<string, DeploymentHandoff>();
 
@@ -1167,6 +1230,16 @@ function copyPageVersion(pageVersion: PageVersionRecord): PageVersionRecord {
     artifacts: { ...pageVersion.artifacts },
     findings: pageVersion.findings.map((finding) => ({ ...finding }))
   };
+}
+
+function copyArtifactWorkspace(workspace: ArtifactWorkspaceRecord): ArtifactWorkspaceRecord {
+  return { ...workspace };
+}
+
+function copyArtifactWorkspaceFile(
+  file: ArtifactWorkspaceFileRecord
+): ArtifactWorkspaceFileRecord {
+  return { ...file };
 }
 
 function copyDeployment(deployment: DeploymentHandoff): DeploymentHandoff {

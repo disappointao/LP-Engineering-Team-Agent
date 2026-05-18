@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import type { ArtifactWorkspaceFileRecord, ArtifactWorkspaceRecord } from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { AgentRole } from "@lp-agent/model-gateway";
 import type {
   AgentHandoffRecord,
   AgentHandoffRepository,
+  ArtifactWorkspaceFileRepository,
+  ArtifactWorkspaceRepository,
   BriefRecord,
   BriefRepository,
   DeploymentRepository,
@@ -56,6 +59,8 @@ interface JsonFileWorkbenchState {
   projectMembers: ProjectMemberRecord[];
   briefs: BriefRecord[];
   pageVersions: PageVersionRecord[];
+  artifactWorkspaces: ArtifactWorkspaceRecord[];
+  artifactWorkspaceFiles: ArtifactWorkspaceFileRecord[];
   deployments: DeploymentHandoff[];
   tasks: WorkbenchTaskRecord[];
   messages: WorkbenchMessageRecord[];
@@ -96,6 +101,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly projectMembers: ProjectMemberRepository;
   readonly briefs: BriefRepository;
   readonly pageVersions: PageVersionRepository;
+  readonly artifactWorkspaces: ArtifactWorkspaceRepository;
+  readonly artifactWorkspaceFiles: ArtifactWorkspaceFileRepository;
   readonly deployments: DeploymentRepository;
   readonly tasks: WorkbenchTaskRepository;
   readonly messages: WorkbenchMessageRepository;
@@ -118,6 +125,8 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.projectMembers = new JsonFileProjectMemberRepository(filePath);
     this.briefs = new JsonFileBriefRepository(filePath);
     this.pageVersions = new JsonFilePageVersionRepository(filePath);
+    this.artifactWorkspaces = new JsonFileArtifactWorkspaceRepository(filePath);
+    this.artifactWorkspaceFiles = new JsonFileArtifactWorkspaceFileRepository(filePath);
     this.deployments = new JsonFileDeploymentRepository(filePath);
     this.tasks = new JsonFileWorkbenchTaskRepository(filePath);
     this.messages = new JsonFileWorkbenchMessageRepository(filePath);
@@ -711,6 +720,63 @@ class JsonFilePageVersionRepository implements PageVersionRepository {
   }
 }
 
+class JsonFileArtifactWorkspaceRepository implements ArtifactWorkspaceRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(workspace: ArtifactWorkspaceRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.artifactWorkspaces = upsertBy(
+        state.artifactWorkspaces,
+        copy(workspace),
+        (record) => record.id === workspace.id
+      );
+    });
+  }
+
+  async getById(workspaceId: string): Promise<ArtifactWorkspaceRecord | undefined> {
+    const state = await readState(this.filePath);
+    return copyOptional(state.artifactWorkspaces.find((workspace) => workspace.id === workspaceId));
+  }
+
+  async listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]> {
+    const state = await readState(this.filePath);
+    return state.artifactWorkspaces
+      .filter((workspace) => workspace.projectId === projectId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<ArtifactWorkspaceRecord[]> {
+    const state = await readState(this.filePath);
+    return state.artifactWorkspaces.map(copy);
+  }
+}
+
+class JsonFileArtifactWorkspaceFileRepository implements ArtifactWorkspaceFileRepository {
+  constructor(private readonly filePath: string) {}
+
+  async save(file: ArtifactWorkspaceFileRecord): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.artifactWorkspaceFiles = upsertBy(
+        state.artifactWorkspaceFiles,
+        copy(file),
+        (record) => record.id === file.id
+      );
+    });
+  }
+
+  async listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]> {
+    const state = await readState(this.filePath);
+    return state.artifactWorkspaceFiles
+      .filter((file) => file.workspaceId === workspaceId)
+      .map(copy);
+  }
+
+  async listAll(): Promise<ArtifactWorkspaceFileRecord[]> {
+    const state = await readState(this.filePath);
+    return state.artifactWorkspaceFiles.map(copy);
+  }
+}
+
 class JsonFileDeploymentRepository implements DeploymentRepository {
   constructor(private readonly filePath: string) {}
 
@@ -837,6 +903,8 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       projectMembers: parsed.projectMembers ?? [],
       briefs: parsed.briefs ?? [],
       pageVersions: parsed.pageVersions ?? [],
+      artifactWorkspaces: parsed.artifactWorkspaces ?? [],
+      artifactWorkspaceFiles: parsed.artifactWorkspaceFiles ?? [],
       deployments: parsed.deployments ?? [],
       tasks: parsed.tasks ?? [],
       messages: parsed.messages ?? [],
@@ -876,6 +944,8 @@ function emptyState(): JsonFileWorkbenchState {
     projectMembers: [],
     briefs: [],
     pageVersions: [],
+    artifactWorkspaces: [],
+    artifactWorkspaceFiles: [],
     deployments: [],
     tasks: [],
     messages: [],

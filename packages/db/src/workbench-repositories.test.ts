@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ArtifactWorkspaceFileRecord, ArtifactWorkspaceRecord } from "@lp-agent/artifacts";
 import { sampleBrief } from "@lp-agent/lp-schema";
 import {
   createInMemoryWorkbenchRepositories,
@@ -97,6 +98,133 @@ describe("in-memory workbench repositories", () => {
       id: "deployment_1",
       pageVersionId: "version_1"
     });
+  });
+
+  it("persists page version artifact workspace references", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const pageVersion: PageVersionRecord = {
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt
+    };
+
+    await repositories.pageVersions.save(pageVersion);
+
+    await expect(repositories.pageVersions.getById("version_1")).resolves.toEqual(pageVersion);
+    await expect(repositories.pageVersions.findLatestForProject("project_1")).resolves.toEqual(
+      pageVersion
+    );
+  });
+
+  it("stores artifact workspaces and files with scoped lists and defensive copies", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspace: ArtifactWorkspaceRecord = {
+      id: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      runId: "run_1",
+      kind: "static_lp",
+      state: "active",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const laterWorkspace: ArtifactWorkspaceRecord = {
+      ...workspace,
+      id: "artifact_workspace_2",
+      pageVersionId: "version_2",
+      runId: "run_2",
+      createdAt: "2026-05-12T00:01:00.000Z",
+      updatedAt: "2026-05-12T00:01:00.000Z"
+    };
+    const otherProjectWorkspace: ArtifactWorkspaceRecord = {
+      ...workspace,
+      id: "artifact_workspace_other",
+      projectId: "project_2",
+      pageVersionId: "version_other"
+    };
+    const indexFile: ArtifactWorkspaceFileRecord = {
+      id: "artifact_workspace_1_file_index_html",
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      path: "index.html",
+      kind: "html",
+      mimeType: "text/html",
+      sizeBytes: 15,
+      sha256: "hash-index",
+      summary: "index file",
+      content: "<h1>Spring</h1>",
+      createdAt,
+      updatedAt: createdAt
+    };
+    const stylesFile: ArtifactWorkspaceFileRecord = {
+      ...indexFile,
+      id: "artifact_workspace_1_file_styles_css",
+      path: "styles.css",
+      kind: "css",
+      mimeType: "text/css",
+      sizeBytes: 19,
+      sha256: "hash-styles",
+      summary: "styles file",
+      content: "body { color: red; }",
+      createdAt: "2026-05-12T00:01:00.000Z",
+      updatedAt: "2026-05-12T00:01:00.000Z"
+    };
+    const otherWorkspaceFile: ArtifactWorkspaceFileRecord = {
+      ...indexFile,
+      id: "artifact_workspace_2_file_index_html",
+      workspaceId: "artifact_workspace_2",
+      pageVersionId: "version_2",
+      content: "<h1>Summer</h1>"
+    };
+
+    await repositories.artifactWorkspaces.save(workspace);
+    await repositories.artifactWorkspaces.save(laterWorkspace);
+    await repositories.artifactWorkspaces.save(otherProjectWorkspace);
+    await repositories.artifactWorkspaceFiles.save(indexFile);
+    await repositories.artifactWorkspaceFiles.save(stylesFile);
+    await repositories.artifactWorkspaceFiles.save(otherWorkspaceFile);
+    workspace.state = "archived";
+    indexFile.content = "mutated original";
+
+    const savedWorkspace = await repositories.artifactWorkspaces.getById("artifact_workspace_1");
+    const savedFiles = await repositories.artifactWorkspaceFiles.listForWorkspace(
+      "artifact_workspace_1"
+    );
+    if (!savedWorkspace || savedFiles.length === 0) {
+      throw new Error("Expected saved artifact workspace records.");
+    }
+    savedWorkspace.state = "archived";
+    savedFiles[0]!.content = "mutated after read";
+
+    await expect(repositories.artifactWorkspaces.getById("artifact_workspace_1")).resolves.toEqual({
+      ...workspace,
+      state: "active"
+    });
+    await expect(repositories.artifactWorkspaces.listForProject("project_1")).resolves.toEqual([
+      { ...workspace, state: "active" },
+      laterWorkspace
+    ]);
+    await expect(
+      repositories.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_1")
+    ).resolves.toEqual([
+      { ...indexFile, content: "<h1>Spring</h1>" },
+      stylesFile
+    ]);
+    await expect(repositories.artifactWorkspaceFiles.listAll()).resolves.toEqual([
+      { ...indexFile, content: "<h1>Spring</h1>" },
+      stylesFile,
+      otherWorkspaceFile
+    ]);
   });
 
   it("returns undefined when records are missing", async () => {
