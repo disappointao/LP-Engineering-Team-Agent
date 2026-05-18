@@ -97,4 +97,16 @@ describe("web i18n", () => {
       expect(zh.skillsView.errors[code]).toBeTruthy();
     }
   });
+
+  it("exposes localized worker queue copy for both locales", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    expect(en.skillsView.approveAndQueue).toBe("Approve and queue");
+    expect(zh.skillsView.approveAndQueue).toBe("批准并入队");
+    expect(en.skillsView.runLocalWorkerOnce).toBe("Run local worker once");
+    expect(zh.skillsView.runLocalWorkerOnce).toBe("运行一次本地 Worker");
+    expect(en.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
+    expect(zh.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
+  });
 });

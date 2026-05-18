@@ -126,6 +126,7 @@ button {
 
 .sidebarAction {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
@@ -575,6 +576,28 @@ button {
   overflow-wrap: anywhere;
 }
 
+.localWorkerPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--surface-raised);
+}
+
+.localWorkerPanel h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.localWorkerPanel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .mcpEditor,
 .mcpList,
 .skillEditor,
@@ -669,6 +692,7 @@ button {
 .skillEditor button,
 .skillActions button,
 .skillCommandCard button,
+.localWorkerPanel button,
 .modelEditor button,
 .modelRow button,
 .modelRouteForm button {

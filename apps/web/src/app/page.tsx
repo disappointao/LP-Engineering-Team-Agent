@@ -5,6 +5,7 @@ import {
   createMCPConnectorAction,
   createProjectAction,
   executeSkillCommandAction,
+  runLocalWorkerOnceAction,
   createModelProviderAction,
   createSkillDraftAction,
   publishSkillVersionAction,
@@ -33,6 +34,7 @@ import {
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode,
   type WebProjectModelState,
+  type WorkerQueueFlowErrorCode,
   type WorkbenchPageState
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
@@ -45,6 +47,7 @@ interface HomePageProps {
     modelError?: string;
     mcpError?: string;
     interruptError?: string;
+    workerError?: string;
     view?: string;
   }>;
 }
@@ -68,6 +71,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const mcpError = toMCPFlowError(params?.mcpError);
   const modelError = toModelFlowError(params?.modelError);
   const interruptError = toInterruptFlowError(params?.interruptError);
+  const workerError = parseWorkerQueueError(params?.workerError);
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
@@ -84,6 +88,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         pageState.projects.find((project) => project.id === activeTask?.projectId);
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
+  const workerErrorMessage = workerError
+    ? copy.skillsView.workerErrors[workerError]
+    : undefined;
   const mcpErrorMessage = mcpError ? copy.mcpView.errors[mcpError] : undefined;
   const modelErrorMessage = modelError
     ? copy.modelsView.errors[modelError]
@@ -409,7 +416,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                           <h2 id="skill-commands-title">{copy.skillsView.commandsTitle}</h2>
                           <p>{copy.skillsView.commandsSubtitle}</p>
                         </div>
-                        <span>{copy.skillsView.commandSimulationLabel}</span>
+                        <span>{copy.skillsView.commandQueueLabel}</span>
                       </div>
                       {skillCommands.length > 0 ? (
                         <div className="skillCommandGrid">
@@ -449,7 +456,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   value={currentPageVersionId ?? ""}
                                 />
                                 <button type="submit">
-                                  {copy.skillsView.approveAndSimulate}
+                                  {copy.skillsView.approveAndQueue}
                                 </button>
                               </form>
                             </div>
@@ -459,6 +466,21 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         <p>{copy.skillsView.emptyCommands}</p>
                       )}
                     </section>
+
+                    <section className="localWorkerPanel" aria-labelledby="local-worker-title">
+                      <div>
+                        <h2 id="local-worker-title">{copy.skillsView.commandQueueLabel}</h2>
+                        <p>{copy.skillsView.localWorkerIdle}</p>
+                      </div>
+                      <form action={runLocalWorkerOnceAction}>
+                        <input type="hidden" name="projectId" value={activeProject.id} />
+                        <button type="submit">{copy.skillsView.runLocalWorkerOnce}</button>
+                      </form>
+                    </section>
+
+                    {workerErrorMessage ? (
+                      <p className="formError" role="alert">{workerErrorMessage}</p>
+                    ) : null}
                   </>
                 ) : null}
               </section>
@@ -961,6 +983,14 @@ function toInterruptFlowError(value: string | undefined): InterruptFlowErrorCode
     return value;
   }
   return undefined;
+}
+
+function parseWorkerQueueError(value: unknown): WorkerQueueFlowErrorCode | undefined {
+  return value === "worker_runtime_not_configured" ||
+    value === "worker_job_execution_failed" ||
+    value === "worker_job_finalization_failed"
+    ? value
+    : undefined;
 }
 
 function getPageModelState(pageState: { models?: WebProjectModelState }): WebProjectModelState {

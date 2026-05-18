@@ -70,7 +70,7 @@ vi.mock("react-dom", () => ({
 }));
 
 import HomePage from "./page";
-import { executeSkillCommandAction } from "./actions";
+import { executeSkillCommandAction, runLocalWorkerOnceAction } from "./actions";
 
 async function renderHomePage({
   searchParams,
@@ -497,6 +497,54 @@ describe("HomePage project flow errors", () => {
     });
 
     expect(html).toContain("该技能命令未绑定到当前项目。");
+  });
+
+  it("renders skill command queue controls and local worker form", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      skills: {
+        boundSkills: [deploymentBoundSkill],
+        availableVersions: []
+      },
+      skillCommands: [
+        {
+          skillId: "skill_static_deploy",
+          skillVersionId: "skill_version_deploy",
+          skillName: "Static deploy",
+          commandId: "publish_static",
+          commandName: "Publish static",
+          description: "Simulate publishing generated static files.",
+          permission: "deploy:simulate",
+          requiresApproval: true
+        }
+      ]
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const text = collectText(page);
+    const forms = collectElements(page, "form");
+
+    expect(text).toContain("Approve and queue");
+    expect(text).toContain("Run local worker once");
+    expect(forms.some((form) => form.props?.action === executeSkillCommandAction)).toBe(true);
+    expect(forms.some((form) => form.props?.action === runLocalWorkerOnceAction)).toBe(true);
+  });
+
+  it("renders localized worker queue errors", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({
+        view: "skills",
+        workerError: "worker_runtime_not_configured"
+      }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Local worker runtime is not configured.");
   });
 
   it("renders project members in the sidebar", async () => {
@@ -1373,8 +1421,8 @@ describe("HomePage project flow errors", () => {
     const inputs = collectElements(page, "input");
 
     expect(text).toContain("Skill Commands");
-    expect(text).toContain("Approve and simulate");
-    expect(text).toContain("Simulation only");
+    expect(text).toContain("Approve and queue");
+    expect(text).toContain("Local worker queue");
     expect(text).toContain("Publish static");
     expect(text).toContain("deploy:simulate");
     const commandForm = forms.find((form) => form.props?.action === executeSkillCommandAction);
@@ -1541,8 +1589,8 @@ describe("HomePage project flow errors", () => {
     const text = collectText(page);
 
     expect(text).toContain("技能命令");
-    expect(text).toContain("批准并模拟执行");
-    expect(text).toContain("仅模拟执行");
+    expect(text).toContain("批准并入队");
+    expect(text).toContain("本地 Worker 队列");
   });
 
   it("shows the active bound skill count in the workbench shell", async () => {

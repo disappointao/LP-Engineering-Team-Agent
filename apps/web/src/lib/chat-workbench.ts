@@ -170,7 +170,10 @@ function toChatToolStatus(
   if (event.type === "task.interrupt.requested") {
     return terminalRunIds.has(event.runId) ? "complete" : "running";
   }
-  if (event.type === "worker.job.linked" || event.type.endsWith(".started")) {
+  if (event.type === "worker.job.linked" || event.type === "tool.started") {
+    return "running";
+  }
+  if (event.type.endsWith(".started")) {
     return terminalRunIds.has(event.runId) ? "complete" : "running";
   }
   return "complete";
@@ -203,12 +206,16 @@ function toChatToolRole(event: RunEventRecord): ChatToolRole {
 function formatRunEventMeta(event: RunEventRecord): string {
   const parts = [event.type];
   const commandId = toDisplayValue(event.payload.commandId);
+  const workerJobId = toDisplayValue(event.payload.workerJobId);
   const exitCode = toDisplayValue(event.payload.exitCode);
   const errorName = toDisplayValue(event.payload.errorName);
   const outputSummary = toDisplayValue(event.payload.outputSummary);
 
   if (commandId) {
     parts.push(commandId);
+  }
+  if (workerJobId) {
+    parts.push(workerJobId);
   }
   if (exitCode) {
     parts.push(`exit ${exitCode}`);

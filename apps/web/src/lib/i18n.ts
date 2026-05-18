@@ -3,7 +3,8 @@ import type {
   MCPFlowErrorCode,
   ModelFlowErrorCode,
   ProjectFlowErrorCode,
-  SkillFlowErrorCode
+  SkillFlowErrorCode,
+  WorkerQueueFlowErrorCode
 } from "./workbench-store";
 
 export type Locale = "en" | "zh-CN";
@@ -110,9 +111,14 @@ export interface WorkbenchCopy {
     commandApprovalNotRequired: string;
     commandSimulationLabel: string;
     approveAndSimulate: string;
+    approveAndQueue: string;
+    commandQueueLabel: string;
+    runLocalWorkerOnce: string;
+    localWorkerIdle: string;
     emptyCommands: string;
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
+    workerErrors: Record<WorkerQueueFlowErrorCode, string>;
   };
   mcpView: {
     title: string;
@@ -414,12 +420,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       emptyVersions: "No skill versions yet.",
       emptyBound: "No project skills bound yet.",
       commandsTitle: "Skill Commands",
-      commandsSubtitle: "Run published deployment skill commands through a simulated Web runner.",
+      commandsSubtitle: "Queue published deployment skill commands for the local worker.",
       commandPermissionLabel: "Permission",
       commandApprovalRequired: "One-shot approval required",
       commandApprovalNotRequired: "Approval still required in this Web version",
       commandSimulationLabel: "Simulation only",
       approveAndSimulate: "Approve and simulate",
+      approveAndQueue: "Approve and queue",
+      commandQueueLabel: "Local worker queue",
+      runLocalWorkerOnce: "Run local worker once",
+      localWorkerIdle: "No queued worker jobs",
       emptyCommands: "No executable deployment skill commands are bound to this project.",
       statusLabels: {
         draft: "Draft",
@@ -453,6 +463,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_command_page_version_not_found: "The selected page version is no longer available.",
         skill_command_unknown_template_variable: "The skill command has an unknown template variable.",
         skill_command_execution_failed: "The skill command failed. Try again."
+      },
+      workerErrors: {
+        worker_runtime_not_configured: "Local worker runtime is not configured. Worker queue is unavailable.",
+        worker_job_execution_failed: "Local worker job execution failed.",
+        worker_job_finalization_failed: "Worker result could not be finalized."
       }
     },
     mcpView: {
@@ -799,12 +814,16 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       emptyVersions: "暂无技能版本。",
       emptyBound: "暂无已绑定项目技能。",
       commandsTitle: "技能命令",
-      commandsSubtitle: "通过 Web 模拟运行器执行已发布部署技能声明的命令。",
+      commandsSubtitle: "将已发布部署技能声明的命令加入本地 Worker 队列。",
       commandPermissionLabel: "权限",
       commandApprovalRequired: "需要一次性批准",
       commandApprovalNotRequired: "当前 Web 版本仍需要批准",
       commandSimulationLabel: "仅模拟执行",
       approveAndSimulate: "批准并模拟执行",
+      approveAndQueue: "批准并入队",
+      commandQueueLabel: "本地 Worker 队列",
+      runLocalWorkerOnce: "运行一次本地 Worker",
+      localWorkerIdle: "当前没有排队的 Worker 任务",
       emptyCommands: "当前项目暂无已绑定的可执行部署技能命令。",
       statusLabels: {
         draft: "草稿",
@@ -838,6 +857,11 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_command_page_version_not_found: "当前页面版本已经不可用。",
         skill_command_unknown_template_variable: "该技能命令包含未知模板变量。",
         skill_command_execution_failed: "技能命令执行失败，请重试。"
+      },
+      workerErrors: {
+        worker_runtime_not_configured: "本地 Worker runtime 未配置。",
+        worker_job_execution_failed: "本地 Worker 任务执行失败。",
+        worker_job_finalization_failed: "Worker 结果无法写回运行状态。"
       }
     },
     mcpView: {
