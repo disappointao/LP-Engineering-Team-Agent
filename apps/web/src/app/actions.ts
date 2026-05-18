@@ -8,7 +8,10 @@ import {
   type MCPFlowErrorCode,
   type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
-  type SkillFlowErrorCode
+  type SkillCommandFlowErrorCode,
+  type SkillCommandQueueFlowErrorCode,
+  type SkillFlowErrorCode,
+  type WorkerQueueFlowErrorCode
 } from "../lib/workbench-store";
 import {
   getCurrentTaskId,
@@ -25,8 +28,14 @@ function redirectToInterruptError(error: InterruptFlowErrorCode): never {
   redirect(`/?interruptError=${encodeURIComponent(error)}`);
 }
 
-function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
+function redirectToSkillsWithError(
+  error: SkillFlowErrorCode | SkillCommandFlowErrorCode | SkillCommandQueueFlowErrorCode
+): never {
   redirect(`/?view=skills&skillError=${encodeURIComponent(error)}`);
+}
+
+function redirectToSkillsWithWorkerError(error: WorkerQueueFlowErrorCode): never {
+  redirect(`/?view=skills&workerError=${encodeURIComponent(error)}`);
 }
 
 function redirectToModelsWithError(error: ModelFlowErrorCode): never {
@@ -306,6 +315,21 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
   }
 
   await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=skills");
+}
+
+export async function runLocalWorkerOnceAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  const result = await getWebWorkbenchStore().runLocalWorkerOnce(
+    projectId ? { projectId } : {}
+  );
+  if (!result.ok) {
+    redirectToSkillsWithWorkerError(result.error);
+  }
+  if (projectId) {
+    await setCurrentProjectId(projectId);
+  }
   revalidatePath("/");
   redirect("/?view=skills");
 }

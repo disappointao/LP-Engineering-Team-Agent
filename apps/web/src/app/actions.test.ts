@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   bindSkillVersionToProject: vi.fn(),
   setProjectSkillBindingEnabled: vi.fn(),
   executeSkillCommand: vi.fn(),
+  runLocalWorkerOnce: vi.fn(),
   createModelProvider: vi.fn(),
   setModelProviderEnabled: vi.fn(),
   upsertProjectModelRoute: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock("../lib/workbench-store", () => ({
     bindSkillVersionToProject: mocks.bindSkillVersionToProject,
     setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
     executeSkillCommand: mocks.executeSkillCommand,
+    runLocalWorkerOnce: mocks.runLocalWorkerOnce,
     createModelProvider: mocks.createModelProvider,
     setModelProviderEnabled: mocks.setModelProviderEnabled,
     upsertProjectModelRoute: mocks.upsertProjectModelRoute,
@@ -70,6 +72,7 @@ import {
   executeSkillCommandAction,
   interruptCurrentTaskAction,
   publishSkillVersionAction,
+  runLocalWorkerOnceAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
   setModelProviderEnabledAction,
@@ -181,6 +184,11 @@ describe("submitPromptAction", () => {
         run: { id: "run_skill_command_1" },
         observation: { id: "tool_observation_1" }
       }
+    });
+    mocks.runLocalWorkerOnce.mockReset();
+    mocks.runLocalWorkerOnce.mockResolvedValue({
+      ok: true,
+      state: "idle"
     });
     mocks.createModelProvider.mockReset();
     mocks.createModelProvider.mockResolvedValue({
@@ -627,6 +635,36 @@ describe("submitPromptAction", () => {
     await expectRedirect(
       executeSkillCommandAction(buildSkillCommandForm()),
       "/?view=skills&skillError=skill_command_not_bound"
+    );
+  });
+
+  it("runs one local worker pass and redirects to skills", async () => {
+    mocks.runLocalWorkerOnce.mockResolvedValue({
+      ok: true,
+      state: "completed",
+      workerJobId: "worker_job_1",
+      runId: "run_skill_command_1"
+    });
+
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+
+    await expectRedirect(runLocalWorkerOnceAction(formData), "/?view=skills");
+
+    expect(mocks.runLocalWorkerOnce).toHaveBeenCalledWith({ projectId: "project_1" });
+  });
+
+  it("redirects local worker errors with stable codes", async () => {
+    mocks.runLocalWorkerOnce.mockResolvedValue({
+      ok: false,
+      error: "worker_runtime_not_configured"
+    });
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+
+    await expectRedirect(
+      runLocalWorkerOnceAction(formData),
+      "/?view=skills&workerError=worker_runtime_not_configured"
     );
   });
 

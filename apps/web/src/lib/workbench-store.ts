@@ -2,6 +2,7 @@ import {
   DemoWorkbenchService,
   deriveTaskInterruptView,
   interruptTask,
+  runLocalWorkerOnceAndFinalize,
   type AgentRole,
   type InterruptTaskResult,
   type MCPConnectorRecord,
@@ -15,7 +16,9 @@ import {
   type ProjectRecord,
   type ProjectSkillState,
   type RunEventRecord,
+  type RunLocalWorkerOnceResult,
   type SkillCommandExecutionResult,
+  type SkillCommandQueueRuntime,
   type SkillBindingRecord,
   type SkillContentType,
   type SkillDraftResult,
@@ -79,7 +82,7 @@ export type SkillFlowErrorCode =
   | "skill_binding_not_found"
   | "publish_not_allowed"
   | "skill_operation_failed"
-  | SkillCommandFlowErrorCode;
+  | StableSkillCommandFlowErrorCode;
 
 export type SkillCommandFlowErrorCode =
   | "project_not_found"
@@ -92,6 +95,21 @@ export type SkillCommandFlowErrorCode =
   | "skill_command_page_version_not_found"
   | "skill_command_unknown_template_variable"
   | "skill_command_execution_failed";
+
+export type SkillCommandQueueFlowErrorCode =
+  | "skill_command_not_queueable"
+  | "worker_runtime_not_configured";
+
+type SkillCommandExecutionFlowErrorCode =
+  | SkillCommandFlowErrorCode
+  | SkillCommandQueueFlowErrorCode;
+
+type StableSkillCommandFlowErrorCode = SkillCommandFlowErrorCode;
+
+export type WorkerQueueFlowErrorCode =
+  | "worker_runtime_not_configured"
+  | "worker_job_execution_failed"
+  | "worker_job_finalization_failed";
 
 export type ModelFlowErrorCode =
   | "project_not_found"
@@ -157,7 +175,7 @@ export type SkillActionResult<T> =
 
 export type SkillCommandActionResult =
   | { ok: true; value: SkillCommandExecutionResult }
-  | { ok: false; error: SkillCommandFlowErrorCode };
+  | { ok: false; error: SkillCommandExecutionFlowErrorCode };
 
 export type ModelActionResult<T> =
   | { ok: true; value: T }
@@ -288,6 +306,7 @@ export interface WebWorkbenchStore {
     enabled: boolean;
   }): Promise<SkillActionResult<SkillBindingRecord>>;
   executeSkillCommand(input: ExecuteSkillCommandFormInput): Promise<SkillCommandActionResult>;
+  runLocalWorkerOnce(input?: { projectId?: string }): Promise<RunLocalWorkerOnceResult>;
   createModelProvider(
     input: CreateModelProviderFormInput
   ): Promise<ModelActionResult<ModelProviderRecord>>;
@@ -316,6 +335,8 @@ export interface WebWorkbenchStoreOptions {
   repositories?: WorkbenchRepositories;
   toolCommandRunner?: ToolCommandRunner;
   workerRuntime?: TaskInterruptWorkerRuntime;
+  workerQueueRuntime?: SkillCommandQueueRuntime;
+  workerId?: string;
   currentUser?: WorkbenchUserIdentity;
 }
 
@@ -422,13 +443,16 @@ export function deriveProjectSkillCommands(
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
   const workerRuntime = options.workerRuntime;
+  const workerQueueRuntime = options.workerQueueRuntime;
+  const workerId = options.workerId ?? "local-web-worker";
   const currentUser = normalizeWorkbenchUserIdentity(
     options.currentUser ?? getLocalWorkbenchUser()
   );
   const service = new DemoWorkbenchService({
     repositories,
     currentUser,
-    toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner()
+    toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner(),
+    workerQueueRuntime
   });
 
   const listProjects = async () =>
@@ -760,14 +784,29 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
     async executeSkillCommand(input) {
       try {
-        const value = await service.executeProjectSkillCommand({
+        const commandInput = {
           ...input,
           approvedByUserId: currentUser.id
-        });
+        };
+        const value = workerQueueRuntime
+          ? await service.enqueueProjectSkillCommand(commandInput)
+          : await service.executeProjectSkillCommand(commandInput);
         return { ok: true, value };
       } catch (error) {
         return { ok: false, error: toSkillCommandFlowError(error) };
       }
+    },
+
+    async runLocalWorkerOnce(input = {}) {
+      const result = await runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerRuntime: workerQueueRuntime,
+        workerId
+      });
+      if (result.ok && input.projectId) {
+        await service.ensureProjectOwnerMembership(input.projectId, currentUser);
+      }
+      return result;
     },
 
     async createModelProvider(input) {
@@ -920,7 +959,7 @@ function toSkillFlowError(error: unknown): SkillFlowErrorCode {
   return "skill_operation_failed";
 }
 
-function toSkillCommandFlowError(error: unknown): SkillCommandFlowErrorCode {
+function toSkillCommandFlowError(error: unknown): SkillCommandExecutionFlowErrorCode {
   const message = error instanceof Error ? error.message : "";
   if (
     message === "project_not_found" ||
@@ -931,7 +970,9 @@ function toSkillCommandFlowError(error: unknown): SkillCommandFlowErrorCode {
     message === "skill_command_permission_denied" ||
     message === "skill_command_approval_required" ||
     message === "skill_command_page_version_not_found" ||
-    message === "skill_command_unknown_template_variable"
+    message === "skill_command_unknown_template_variable" ||
+    message === "skill_command_not_queueable" ||
+    message === "worker_runtime_not_configured"
   ) {
     return message;
   }

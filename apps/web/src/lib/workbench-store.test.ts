@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
+import {
+  createInMemoryWorkbenchRepositories,
+  type WorkbenchRepositories
+} from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import {
+  InMemoryWorkerJobPayloadRepository,
+  InMemoryWorkerRuntime,
+  SimulatedExecutionAdapter
+} from "@lp-agent/worker-runtime";
 import {
   classifyTaskPrompt,
   createWebWorkbenchStore,
@@ -63,7 +71,122 @@ function deploymentSkillManifestJson(): string {
   });
 }
 
+async function savePublishedDeploymentSkill(
+  repositories: WorkbenchRepositories,
+  projectId: string
+): Promise<void> {
+  const manifest = JSON.parse(deploymentSkillManifestJson());
+  await repositories.skills.save({
+    id: manifest.id,
+    name: manifest.name,
+    type: manifest.type,
+    scope: manifest.scope,
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.skillVersions.save({
+    id: "skill_version_deploy",
+    skillId: manifest.id,
+    version: manifest.version,
+    manifest,
+    content: "# Deploy",
+    contentType: "text/markdown",
+    reviewState: "published",
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.skillBindings.save({
+    id: "skill_binding_deploy",
+    skillVersionId: "skill_version_deploy",
+    scope: "project",
+    targetKey: projectId,
+    projectId,
+    enabled: true,
+    createdAt: "2026-05-18T00:00:00.000Z",
+    updatedAt: "2026-05-18T00:00:00.000Z"
+  });
+}
+
 describe("web workbench store", () => {
+  it("queues deployment skill commands through the worker queue runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const project = await store.createProject({ name: "Project" });
+    await savePublishedDeploymentSkill(repositories, project.id);
+
+    const result = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        run: {
+          state: "running"
+        },
+        observation: {
+          state: "running"
+        }
+      }
+    });
+    const jobs = await workerRuntime.listJobsForProject(project.id);
+    expect(jobs).toEqual([
+      expect.objectContaining({
+        state: "queued",
+        payloadSource: "safe_persisted"
+      })
+    ]);
+  });
+
+  it("runs one local worker job and finalizes the queued command", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const project = await store.createProject({ name: "Project" });
+    await savePublishedDeploymentSkill(repositories, project.id);
+    const queued = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static"
+    });
+    if (!queued.ok) {
+      throw new Error(`Expected command queueing to succeed, got ${queued.error}.`);
+    }
+
+    const result = await store.runLocalWorkerOnce({ projectId: project.id });
+
+    expect(result).toEqual({
+      ok: true,
+      state: "completed",
+      workerJobId: "worker_job_1",
+      runId: queued.value.run.id
+    });
+    await expect(repositories.runs.getById(queued.value.run.id)).resolves.toMatchObject({
+      state: "completed"
+    });
+  });
+
   it("exposes a non-interruptible task interrupt view by default", async () => {
     const store = createWebWorkbenchStore();
     const result = await store.submitTaskPrompt({
