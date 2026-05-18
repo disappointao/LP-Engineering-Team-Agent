@@ -3971,6 +3971,154 @@ describe("demo workbench service", () => {
     );
   });
 
+  it("keeps artifact snippets out of context packs by default", async () => {
+    const artifacts: StaticArtifacts = {
+      indexHtml: "<!doctype html><html><body>SNIPPET_HTML_SECRET</body></html>",
+      stylesCss: "body { color: #123456; }",
+      scriptJs: "window.lpAgent = true;"
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.artifactSnippets).toEqual([]);
+    expect(JSON.stringify(parsedContextPack)).not.toContain("SNIPPET_HTML_SECRET");
+  });
+
+  it("injects bounded artifact snippets only when explicitly requested", async () => {
+    const artifacts: StaticArtifacts = {
+      indexHtml: "<!doctype html><html><body>SNIPPET_HTML_SECRET</body></html>",
+      stylesCss: "body { color: #123456; }",
+      scriptJs: "window.lpAgent = true;"
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      artifactSnippetRequests: [
+        {
+          workspaceId: pageVersion.artifactWorkspaceId ?? "",
+          pageVersionId: pageVersion.id,
+          path: "styles.css",
+          maxBytes: artifacts.stylesCss.length
+        },
+        {
+          workspaceId: pageVersion.artifactWorkspaceId ?? "",
+          pageVersionId: pageVersion.id,
+          path: "index.html",
+          maxBytes: 8
+        }
+      ],
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.artifactSnippets).toEqual([
+      expect.objectContaining({
+        workspaceId: pageVersion.artifactWorkspaceId,
+        pageVersionId: pageVersion.id,
+        path: "styles.css",
+        content: artifacts.stylesCss,
+        truncated: false
+      })
+    ]);
+    expect(parsedContextPack.artifactSnippets[0]).toMatchObject({
+      sizeBytes: artifacts.stylesCss.length,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+    });
+    expect(parsedContextPack.trace.injected).toContain("artifactSnippets:1");
+    expect(parsedContextPack.trace.omitted).toContain(
+      "artifactSnippet:index.html:size_limit_exceeded"
+    );
+    expect(JSON.stringify(parsedContextPack.runtimeContext)).not.toContain(artifacts.stylesCss);
+  });
+
+  it("does not pass top-level artifact snippets into runtime requests", async () => {
+    const artifacts: StaticArtifacts = {
+      indexHtml: "<!doctype html><html></html>",
+      stylesCss: "body { color: SNIPPET_CSS_SECRET; }",
+      scriptJs: "window.lpAgent = true;"
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_no_runtime_snippets",
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      now: fixedClock()
+    });
+
+    expect(JSON.stringify(runtime.requests[0]?.context)).not.toContain(artifacts.stylesCss);
+  });
+
   it("binds runtime artifact workspace metadata to the target page version", async () => {
     const reviewerRuntime = new RecordingRuntime({ state: "completed", findings: [] });
     const deployerRuntime = new RecordingRuntime({ state: "completed" });

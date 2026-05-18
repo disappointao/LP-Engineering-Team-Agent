@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES,
+  type ArtifactWorkspaceFilePath
+} from "@lp-agent/artifacts";
 import type { WorkbenchRepositories } from "@lp-agent/db";
 import { LPBriefSchema } from "@lp-agent/lp-schema";
 import { agentRoles, type AgentRole } from "@lp-agent/model-gateway";
@@ -10,6 +14,10 @@ import {
   RuntimeHandoffSummarySchema,
   assembleRuntimeHandoffs
 } from "./agent-handoffs";
+import {
+  ArtifactReaderError,
+  readRepositoryArtifactWorkspaceFile
+} from "./artifact-reader";
 import { ContextMemorySchema, assembleContextMemory } from "./context-memory";
 import type { DemoWorkbenchService } from "./index";
 
@@ -62,6 +70,16 @@ const RuntimeArtifactWorkspaceSchema = z.object({
   files: z.array(RuntimeArtifactWorkspaceFileSchema).optional()
 });
 
+const ArtifactSnippetSchema = z.object({
+  workspaceId: z.string().min(1),
+  pageVersionId: z.string().min(1).optional(),
+  path: ArtifactWorkspaceFilePathSchema,
+  sizeBytes: z.number().int().min(0),
+  sha256: z.string().regex(SHA256_HEX_PATTERN),
+  content: z.string(),
+  truncated: z.literal(false)
+});
+
 const ModelProviderApiSchema = z.enum(["mock", "openai-completions", "anthropic-messages"]);
 
 const ModelRouteSchema = z.object({
@@ -111,6 +129,7 @@ export const ContextPackSchema = z.object({
   role: z.enum(agentRoles),
   input: RuntimeRunInputSchema,
   runtimeContext: RuntimeRunContextSchema,
+  artifactSnippets: z.array(ArtifactSnippetSchema),
   trace: z.object({
     injected: z.array(z.string().min(1)),
     omitted: z.array(z.string().min(1))
@@ -121,6 +140,13 @@ export const ContextPackSchema = z.object({
 export type ContextPack = z.infer<typeof ContextPackSchema>;
 export type ContextAssemblyTrace = ContextPack["trace"];
 
+export interface ArtifactSnippetRequest {
+  workspaceId: string;
+  pageVersionId?: string;
+  path: ArtifactWorkspaceFilePath;
+  maxBytes?: number;
+}
+
 export interface AssembleContextPackInput {
   repositories: WorkbenchRepositories;
   service: Pick<DemoWorkbenchService, "createRuntimeContextForRole">;
@@ -129,6 +155,7 @@ export interface AssembleContextPackInput {
   pageVersionId?: string;
   role: AgentRole;
   input: RuntimeRunInput;
+  artifactSnippetRequests?: ArtifactSnippetRequest[];
   now?: () => Date;
 }
 
@@ -152,6 +179,11 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
     taskId: input.taskId,
     role: input.role
   });
+  const artifactSnippetContext = await assembleArtifactSnippetsSafely({
+    repositories: input.repositories,
+    projectId: input.projectId,
+    requests: input.artifactSnippetRequests ?? []
+  });
   const runtimeContextWithMemory = {
     ...runtimeContext,
     memory,
@@ -163,6 +195,7 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
     role: input.role,
     input: cloneRuntimeInput(input.input),
     runtimeContext: runtimeContextWithMemory,
+    artifactSnippets: artifactSnippetContext.snippets,
     trace: {
       injected: [
         `skills:${runtimeContext.skills.length}`,
@@ -177,9 +210,14 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
         `memory:tools:${memory.tools.length}`,
         `memory:artifacts:${memory.artifacts.length}`,
         `memory:strategy:${memory.retrieval.strategy}`,
+        `artifactSnippets:${artifactSnippetContext.snippets.length}`,
         ...handoffContext.trace.injected
       ],
-      omitted: [...memory.retrieval.omitted, ...handoffContext.trace.omitted]
+      omitted: [
+        ...memory.retrieval.omitted,
+        ...handoffContext.trace.omitted,
+        ...artifactSnippetContext.omitted
+      ]
     },
     createdAt
   };
@@ -211,4 +249,63 @@ async function assembleRuntimeHandoffsSafely(input: {
       }
     };
   }
+}
+
+async function assembleArtifactSnippetsSafely(input: {
+  repositories: WorkbenchRepositories;
+  projectId: string;
+  requests: ArtifactSnippetRequest[];
+}): Promise<{
+  snippets: ContextPack["artifactSnippets"];
+  omitted: string[];
+}> {
+  const snippets: ContextPack["artifactSnippets"] = [];
+  const omitted: string[] = [];
+  const requests = input.requests.slice(0, 3);
+
+  if (input.requests.length > requests.length) {
+    omitted.push("artifactSnippet:requests:limit_exceeded");
+  }
+
+  for (const request of requests) {
+    try {
+      const result = await readRepositoryArtifactWorkspaceFile({
+        repositories: input.repositories,
+        projectId: input.projectId,
+        workspaceId: request.workspaceId,
+        pageVersionId: request.pageVersionId,
+        path: request.path,
+        includeContent: true,
+        maxBytes: request.maxBytes ?? ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+      });
+
+      if (result.content === undefined) {
+        omitted.push(
+          `artifactSnippet:${request.path}:${result.omittedReason ?? "content_omitted"}`
+        );
+        continue;
+      }
+
+      snippets.push({
+        workspaceId: result.workspaceId,
+        ...(result.pageVersionId !== undefined ? { pageVersionId: result.pageVersionId } : {}),
+        path: result.file.path,
+        sizeBytes: result.file.sizeBytes,
+        sha256: result.file.sha256,
+        content: result.content,
+        truncated: false
+      });
+    } catch (error) {
+      omitted.push(
+        `artifactSnippet:${request.path}:${
+          error instanceof ArtifactReaderError ? error.code : "error"
+        }`
+      );
+    }
+  }
+
+  return {
+    snippets,
+    omitted
+  };
 }
