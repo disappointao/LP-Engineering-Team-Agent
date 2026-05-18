@@ -174,6 +174,37 @@ describe("model gateway", () => {
     );
   });
 
+  it("does not persist forged artifact workspace file content in audit logs", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+
+    await gateway.complete({
+      role: "builder",
+      prompt: "Build",
+      projectId: "project_1",
+      context: baseModelContext({
+        artifactWorkspace: {
+          mode: "filesystem",
+          workspaceId: "artifact_workspace_1",
+          basePath: "/tmp/lp-agent/project_1",
+          writableFiles: ["index.html", "styles.css", "script.js"],
+          files: [
+            {
+              path: "index.html",
+              kind: "html",
+              mimeType: "text/html",
+              sizeBytes: 128,
+              sha256: "hash-index",
+              summary: "index.html static LP file",
+              content: "<!doctype html><html><body>SECRET</body></html>"
+            } as never
+          ]
+        }
+      })
+    });
+
+    expect(JSON.stringify(gateway.getAuditLog())).not.toContain("SECRET");
+  });
+
   it("clones context memory into model audit entries defensively", async () => {
     const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
     const memory = {
