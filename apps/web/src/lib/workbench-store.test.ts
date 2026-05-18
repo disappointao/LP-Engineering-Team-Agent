@@ -87,6 +87,39 @@ describe("web workbench store", () => {
     });
   });
 
+  it("returns task_not_found when interrupting a missing task without a worker runtime", async () => {
+    const store = createWebWorkbenchStore();
+
+    await expect(
+      store.interruptCurrentTask({
+        taskId: "task_missing"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "task_not_found"
+    });
+  });
+
+  it("returns interrupt_target_not_found when interrupting an existing task without a worker runtime", async () => {
+    const store = createWebWorkbenchStore();
+    const result = await store.submitTaskPrompt({
+      prompt: "Help me write a campaign plan.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok) {
+      throw new Error("Expected task submission to succeed.");
+    }
+
+    await expect(
+      store.interruptCurrentTask({
+        taskId: result.taskId
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "interrupt_target_not_found"
+    });
+  });
+
   it("interrupts the current task through the injected worker runtime", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.projects.save({

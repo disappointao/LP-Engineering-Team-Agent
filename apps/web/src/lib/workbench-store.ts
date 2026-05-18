@@ -698,6 +698,10 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     },
 
     async interruptCurrentTask(input) {
+      const task = await repositories.tasks.getById(input.taskId);
+      if (!task) {
+        return { ok: false, error: "task_not_found" };
+      }
       if (!workerRuntime) {
         return { ok: false, error: "interrupt_target_not_found" };
       }
