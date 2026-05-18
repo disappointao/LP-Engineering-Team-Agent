@@ -450,6 +450,37 @@ describe("in-memory workbench repositories", () => {
     ]);
   });
 
+  it("persists running and cancelled tool observation states", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const running: ToolObservationRecord = {
+      id: "tool_observation_running",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      toolName: "skill:skill_static_deploy:publish_static",
+      input: { commandId: "publish_static" },
+      outputSummary: "",
+      state: "running",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    };
+    const cancelled: ToolObservationRecord = {
+      ...running,
+      id: "tool_observation_cancelled",
+      outputSummary: "Worker job cancelled.",
+      state: "cancelled",
+      createdAt: "2026-05-18T00:00:01.000Z",
+      completedAt: "2026-05-18T00:00:01.000Z"
+    };
+
+    await repositories.toolObservations.save(running);
+    await repositories.toolObservations.save(cancelled);
+
+    await expect(repositories.toolObservations.listForRun("run_1")).resolves.toEqual([
+      running,
+      cancelled
+    ]);
+  });
+
   it("persists agent handoffs with defensive copies and role-aware filters", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const handoff = {

@@ -174,7 +174,7 @@ export type RunRecordState =
   | "failed"
   | "completed"
   | "cancelled";
-export type ToolObservationState = "completed" | "failed";
+export type ToolObservationState = "running" | "completed" | "failed" | "cancelled";
 export type AgentHandoffState = "ready" | "blocked" | "consumed";
 
 export interface RunRecord {

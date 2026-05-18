@@ -523,6 +523,39 @@ describe("json-file workbench repositories", () => {
     ]);
   });
 
+  it("persists running and cancelled tool observations through JSON storage", async () => {
+    const filePath = await tempStateFile();
+    const first = createJsonFileWorkbenchRepositories({ filePath });
+    const running: ToolObservationRecord = {
+      id: "tool_observation_running",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      toolName: "skill:skill_static_deploy:publish_static",
+      input: { commandId: "publish_static" },
+      outputSummary: "",
+      state: "running",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    };
+    const cancelled: ToolObservationRecord = {
+      ...running,
+      id: "tool_observation_cancelled",
+      outputSummary: "Worker job cancelled.",
+      state: "cancelled",
+      createdAt: "2026-05-18T00:00:01.000Z",
+      completedAt: "2026-05-18T00:00:01.000Z"
+    };
+
+    await first.toolObservations.save(running);
+    await first.toolObservations.save(cancelled);
+
+    const second = createJsonFileWorkbenchRepositories({ filePath });
+    await expect(second.toolObservations.listForRun("run_1")).resolves.toEqual([
+      running,
+      cancelled
+    ]);
+  });
+
   it("reopens agent handoffs from disk", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
     tempDirs.push(tempRoot);
