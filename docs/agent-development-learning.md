@@ -638,7 +638,7 @@ pnpm --filter @lp-agent/model-gateway test
 
 当前计划：
 
-- 待根据该设计生成 Stage 12 implementation plan。
+- [2026-05-18-web-api-interrupt-wiring.md](./superpowers/plans/2026-05-18-web-api-interrupt-wiring.md)
 
 当前实现状态：
 

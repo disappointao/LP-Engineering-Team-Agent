@@ -212,6 +212,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 12 Web/API interrupt wiring v0 design.
    - Read this after the worker queue handoff plan when adding current-task interrupt UI, optimistic stopping state, API cancellation routing, task/run/worker target association, and cancellation timeline display without real shell signals, MCP execution, streaming logs, worker daemon control, or bulk cancellation.
 
+53. `plans/2026-05-18-web-api-interrupt-wiring.md`
+   - Stage 12 Web/API interrupt wiring v0 implementation plan.
+   - Read this after the Web/API interrupt design when implementing or auditing the current-task interrupt action, optimistic stopping UI, API task/run/worker cancellation routing, and cancelled timeline rendering.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
