@@ -1,6 +1,9 @@
 import {
   DemoWorkbenchService,
+  deriveTaskInterruptView,
+  interruptTask,
   type AgentRole,
+  type InterruptTaskResult,
   type MCPConnectorRecord,
   type MCPToolApprovalRecord,
   type ModelProviderRecord,
@@ -17,6 +20,8 @@ import {
   type SkillContentType,
   type SkillDraftResult,
   type SkillVersionRecord,
+  type TaskInterruptView,
+  type TaskInterruptWorkerRuntime,
   type ToolCommandRunner,
   normalizeWorkbenchUserIdentity,
   type WorkbenchUserIdentity,
@@ -48,6 +53,15 @@ export type ProjectFlowErrorCode =
   | "prompt_required"
   | "project_not_found"
   | "generation_failed";
+
+export type InterruptFlowErrorCode =
+  | "task_not_found"
+  | "task_not_interruptible"
+  | "interrupt_target_not_found"
+  | "interrupt_failed";
+
+export type TaskInterrupt = TaskInterruptView;
+export type InterruptCurrentTaskResult = InterruptTaskResult;
 
 export type SkillFlowErrorCode =
   | "invalid_manifest_json"
@@ -241,6 +255,7 @@ export type WorkbenchPageState =
       task: TaskRecord;
       messages: ChatMessageRecord[];
       runEvents: RunEventRecord[];
+      interrupt: TaskInterrupt;
       snapshot?: WorkbenchSnapshot;
     };
 
@@ -257,6 +272,10 @@ export interface WebWorkbenchStore {
     prompt: string;
     implicitProjectName: string;
   }): Promise<SubmitTaskResult>;
+  interruptCurrentTask(input: {
+    taskId: string;
+    reason?: string;
+  }): Promise<InterruptCurrentTaskResult>;
   createSkillDraft(input: CreateSkillDraftFormInput): Promise<SkillActionResult<SkillDraftResult>>;
   validateSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
   publishSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
@@ -296,6 +315,7 @@ export interface WebWorkbenchStore {
 export interface WebWorkbenchStoreOptions {
   repositories?: WorkbenchRepositories;
   toolCommandRunner?: ToolCommandRunner;
+  workerRuntime?: TaskInterruptWorkerRuntime;
   currentUser?: WorkbenchUserIdentity;
 }
 
@@ -401,6 +421,7 @@ export function deriveProjectSkillCommands(
 
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+  const workerRuntime = options.workerRuntime;
   const currentUser = normalizeWorkbenchUserIdentity(
     options.currentUser ?? getLocalWorkbenchUser()
   );
@@ -590,6 +611,11 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         task: { ...task },
         messages: await listMessages(task.id),
         runEvents,
+        interrupt: await deriveWebTaskInterruptView({
+          repositories,
+          workerRuntime,
+          taskId: task.id
+        }),
         snapshot
       };
     },
@@ -669,6 +695,18 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       } catch {
         return { ok: false, error: "generation_failed" };
       }
+    },
+
+    async interruptCurrentTask(input) {
+      if (!workerRuntime) {
+        return { ok: false, error: "interrupt_target_not_found" };
+      }
+      return interruptTask({
+        repositories,
+        workerRuntime,
+        taskId: input.taskId,
+        reason: input.reason ?? "User interrupted the task."
+      });
     },
 
     async createSkillDraft(input) {
@@ -814,6 +852,25 @@ function filterRunEventsForSnapshot(
   return runEvents.filter(
     (event) => runIds.has(event.runId) || isSkillCommandRunEventForSnapshot(event, snapshot)
   );
+}
+
+async function deriveWebTaskInterruptView(input: {
+  repositories: WorkbenchRepositories;
+  workerRuntime?: TaskInterruptWorkerRuntime;
+  taskId: string;
+}): Promise<TaskInterrupt> {
+  if (!input.workerRuntime) {
+    return {
+      available: false,
+      state: "not_interruptible",
+      taskId: input.taskId
+    };
+  }
+  return deriveTaskInterruptView({
+    repositories: input.repositories,
+    workerRuntime: input.workerRuntime,
+    taskId: input.taskId
+  });
 }
 
 function isSkillCommandRunEventForSnapshot(

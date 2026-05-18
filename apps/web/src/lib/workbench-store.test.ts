@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryWorkbenchRepositories } from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
@@ -64,6 +64,159 @@ function deploymentSkillManifestJson(): string {
 }
 
 describe("web workbench store", () => {
+  it("exposes a non-interruptible task interrupt view by default", async () => {
+    const store = createWebWorkbenchStore();
+    const result = await store.submitTaskPrompt({
+      prompt: "Help me write a campaign plan.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!result.ok) {
+      throw new Error("Expected task submission to succeed.");
+    }
+
+    const pageState = await store.getPageState({ taskId: result.taskId });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.interrupt).toEqual({
+      available: false,
+      state: "not_interruptible",
+      taskId: result.taskId
+    });
+  });
+
+  it("interrupts the current task through the injected worker runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Project",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Interruptible task",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Deploy this",
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_interrupt_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      state: "running",
+      startedAt: "2026-05-18T00:00:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    await repositories.runEvents.save({
+      id: "run_interrupt_1_event_1",
+      runId: "run_interrupt_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 1,
+      type: "worker.job.linked",
+      message: "Worker job linked to task.",
+      payload: {
+        taskId: "task_1",
+        runId: "run_interrupt_1",
+        workerJobId: "worker_job_1"
+      },
+      createdAt: "2026-05-18T00:00:00.000Z"
+    });
+    const workerJob = {
+      id: "worker_job_1",
+      projectId: "project_1",
+      kind: "tool_command" as const,
+      state: "queued" as const,
+      policy: {
+        mode: "reject" as const,
+        allowedCommands: [],
+        timeoutMs: 1000,
+        allowedEnvNames: [],
+        maxStdoutBytes: 300,
+        maxStderrBytes: 300,
+        network: "disabled" as const
+      },
+      inputSummary: {
+        projectId: "project_1",
+        kind: "tool_command" as const,
+        command: "static-deploy",
+        argCount: 0,
+        envNames: [],
+        timeoutMs: 1000
+      },
+      createdAt: "2026-05-18T00:00:00.000Z"
+    };
+    const workerRuntime = {
+      getJob: vi.fn(async () => workerJob),
+      cancelJob: vi.fn(async () => ({
+        ...workerJob,
+        state: "cancelled" as const,
+        completedAt: "2026-05-18T00:00:01.000Z",
+        cancelRequestedAt: "2026-05-18T00:00:01.000Z",
+        cancelledAt: "2026-05-18T00:00:01.000Z",
+        errorName: "worker_job_cancelled",
+        resultSummary: {
+          state: "cancelled" as const,
+          stdout: "",
+          stderr: "Worker job cancelled before execution.",
+          stdoutBytes: 0,
+          stderrBytes: 38,
+          errorName: "worker_job_cancelled"
+        }
+      }))
+    };
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerRuntime,
+      currentUser: {
+        id: "local-web-user",
+        displayName: "Local user"
+      }
+    });
+
+    const before = await store.getPageState({ taskId: "task_1" });
+    const result = await store.interruptCurrentTask({
+      taskId: "task_1",
+      reason: "User interrupted the task."
+    });
+
+    expect(before.kind).toBe("task_ready");
+    if (before.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(before.interrupt).toMatchObject({
+      available: true,
+      state: "idle",
+      runId: "run_interrupt_1",
+      workerJobId: "worker_job_1"
+    });
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_1",
+      state: "cancelled",
+      runId: "run_interrupt_1",
+      workerJobId: "worker_job_1"
+    });
+    expect(workerRuntime.cancelJob).toHaveBeenCalledWith(
+      "worker_job_1",
+      "User interrupted the task."
+    );
+  });
+
   it("creates projects and exposes them in creation order", async () => {
     const store = createWebWorkbenchStore();
 
