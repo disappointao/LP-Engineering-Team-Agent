@@ -665,6 +665,12 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-18-web-worker-queue-integration.md](./superpowers/plans/2026-05-18-web-worker-queue-integration.md)
 
+当前实现状态：
+
+- Stage 13 v0 已把 Web deployment skill command 接到本地 safe worker queue：Web 负责批准并入队，API 写入 run/tool/worker link，`Run local worker once` / `运行一次本地 Worker` 最多执行一个同项目 queued job，并把结果 finalization 回 run 和 observation。
+- 当前本地 Web 默认使用 JSON-file worker queue 文件，enqueue、interrupt 和 run-once 共用同一个 local worker runtime；run-once 已做 project-scoped claim，避免项目 A 误执行项目 B 的队列任务。
+- 当前仍只支持 safe simulated worker payload，不做 daemon、真实 shell、MCP execution、真实部署、streaming logs、secret payload 或 durable artifact workspace replay。
+
 学习重点：
 
 - worker queue 的产品闭环要分成 enqueue、claim、execute、finalize 四段，而不是把所有事情塞进一次 Web request。

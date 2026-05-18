@@ -222,7 +222,7 @@ This directory contains Superpowers-generated specs and implementation plans. Re
 
 55. `plans/2026-05-18-web-worker-queue-integration.md`
    - Stage 13 Web worker queue integration v0 implementation plan.
-   - Read this after the Stage 13 design when implementing or auditing queued Web skill command execution, local worker run-once action, worker result finalization, localized queue controls, and safe worker queue configuration.
+   - Read this after the Stage 13 design when implementing or auditing queued Web skill command execution, project-scoped local worker run-once action, worker result finalization, localized queue controls, and safe worker queue configuration.
 
 ## Maintenance Rule
 
