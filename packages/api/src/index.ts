@@ -150,6 +150,12 @@ export {
   type TaskInterruptView,
   type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
+export {
+  finalizeWorkerBackedSkillCommand,
+  runLocalWorkerOnceAndFinalize,
+  type RunLocalWorkerOnceResult,
+  type SkillCommandQueueRuntime
+} from "./skill-command-worker-queue";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
