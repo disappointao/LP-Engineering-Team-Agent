@@ -429,7 +429,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       approveAndQueue: "Approve and queue",
       commandQueueLabel: "Local worker queue",
       runLocalWorkerOnce: "Run local worker once",
-      localWorkerIdle: "No queued worker jobs",
+      localWorkerIdle: "Run the local worker to process queued jobs.",
       emptyCommands: "No executable deployment skill commands are bound to this project.",
       statusLabels: {
         draft: "Draft",
@@ -823,7 +823,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       approveAndQueue: "批准并入队",
       commandQueueLabel: "本地 Worker 队列",
       runLocalWorkerOnce: "运行一次本地 Worker",
-      localWorkerIdle: "当前没有排队的 Worker 任务",
+      localWorkerIdle: "运行本地 Worker 来处理排队任务。",
       emptyCommands: "当前项目暂无已绑定的可执行部署技能命令。",
       statusLabels: {
         draft: "草稿",

@@ -552,6 +552,116 @@ describe("chat workbench view model", () => {
     );
   });
 
+  it("marks failed queued worker timeline events failed after terminal event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_1",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "tool.started",
+          message: "Deployment skill command started.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        },
+        {
+          id: "run_skill_command_1_event_2",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 2,
+          type: "worker.job.linked",
+          message: "Worker job linked.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        },
+        {
+          id: "run_skill_command_1_event_3",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 3,
+          type: "tool.failed",
+          message: "Deployment skill command failed.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            workerJobId: "worker_job_1",
+            errorName: "worker_job_execution_failed"
+          },
+          createdAt: "2026-05-18T00:00:03.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents.map((event) => event.status)).toEqual([
+      "failed",
+      "failed",
+      "failed"
+    ]);
+    expect(thread.toolEvents.map((event) => event.meta)).toContain(
+      "worker.job.linked - publish_static - worker_job_1"
+    );
+  });
+
+  it("keeps active queued worker timeline events running without terminal event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_1",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "tool.started",
+          message: "Deployment skill command started.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        },
+        {
+          id: "run_skill_command_1_event_2",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 2,
+          type: "worker.job.linked",
+          message: "Worker job linked.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents.map((event) => event.status)).toEqual([
+      "running",
+      "running"
+    ]);
+    expect(thread.toolEvents.map((event) => event.meta)).toContain(
+      "worker.job.linked - publish_static - worker_job_1"
+    );
+  });
+
   it("includes single html and three static file artifact cards", async () => {
     const copy = getWorkbenchCopy("en");
     const snapshot = await createDemoWorkbenchSnapshot();

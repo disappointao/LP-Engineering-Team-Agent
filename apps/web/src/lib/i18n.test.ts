@@ -106,6 +106,8 @@ describe("web i18n", () => {
     expect(zh.skillsView.approveAndQueue).toBe("批准并入队");
     expect(en.skillsView.runLocalWorkerOnce).toBe("Run local worker once");
     expect(zh.skillsView.runLocalWorkerOnce).toBe("运行一次本地 Worker");
+    expect(en.skillsView.localWorkerIdle).toBe("Run the local worker to process queued jobs.");
+    expect(zh.skillsView.localWorkerIdle).toBe("运行本地 Worker 来处理排队任务。");
     expect(en.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
     expect(zh.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
   });
