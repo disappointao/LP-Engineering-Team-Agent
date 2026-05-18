@@ -986,6 +986,155 @@ describe("queued skill command enqueueing", () => {
       })
     ).rejects.toThrow("skill_command_not_queueable");
   });
+
+  it("marks the run failed when safe worker enqueueing fails after start events", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await savePublishedBoundDeploymentSkill(repositories, deploymentSkillManifest());
+    const workerRuntime: SkillCommandQueueRuntime = {
+      enqueueSafe: async () => {
+        throw new Error("enqueue failed");
+      },
+      claimOldestQueued: async () => undefined,
+      runClaimedJob: async () => {
+        throw new Error("unexpected run");
+      },
+      getJob: async () => undefined
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      now: () => new Date("2026-05-18T00:00:01.000Z")
+    });
+
+    await expect(
+      service.enqueueProjectSkillCommand({
+        projectId: "project_1",
+        skillVersionId: "skill_version_1",
+        commandId: "publish_static",
+        approvedByUserId: "local-web-user",
+        taskId: "task_1"
+      })
+    ).rejects.toThrow("enqueue failed");
+
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "failed",
+      completedAt: "2026-05-18T00:00:01.000Z"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "tool_observation_1",
+        state: "failed",
+        outputSummary: "Worker job enqueue failed.",
+        errorName: "worker_job_enqueue_failed",
+        completedAt: "2026-05-18T00:00:01.000Z"
+      })
+    ]);
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+    expect(events.filter((event) => event.type === "worker.job.linked")).toHaveLength(0);
+    expect(events.slice(2)).toEqual([
+      expect.objectContaining({
+        sequence: 3,
+        type: "tool.failed",
+        payload: expect.objectContaining({
+          observationId: "tool_observation_1",
+          outputSummary: "Worker job enqueue failed.",
+          errorName: "worker_job_enqueue_failed"
+        })
+      }),
+      expect.objectContaining({
+        sequence: 4,
+        type: "run.failed",
+        payload: expect.objectContaining({
+          observationId: "tool_observation_1",
+          outputSummary: "Worker job enqueue failed.",
+          errorName: "worker_job_enqueue_failed"
+        })
+      })
+    ]);
+  });
+
+  it("cancels the worker job and marks the run failed when linking the job fails", async () => {
+    const baseRepositories = createInMemoryWorkbenchRepositories();
+    const repositories = withThrowingWorkerJobLinkedSave(baseRepositories);
+    await savePublishedBoundDeploymentSkill(repositories, deploymentSkillManifest());
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository,
+      adapter: new SimulatedExecutionAdapter(),
+      now: () => new Date("2026-05-18T00:00:02.000Z")
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      now: () => new Date("2026-05-18T00:00:01.000Z")
+    });
+
+    await expect(
+      service.enqueueProjectSkillCommand({
+        projectId: "project_1",
+        skillVersionId: "skill_version_1",
+        commandId: "publish_static",
+        approvedByUserId: "local-web-user",
+        taskId: "task_1"
+      })
+    ).rejects.toThrow("worker link failed");
+
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "failed",
+      completedAt: "2026-05-18T00:00:01.000Z"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "tool_observation_1",
+        state: "failed",
+        outputSummary: "Worker job link failed.",
+        errorName: "worker_job_link_failed",
+        completedAt: "2026-05-18T00:00:01.000Z"
+      })
+    ]);
+    await expect(workerRuntime.getJob("worker_job_1")).resolves.toMatchObject({
+      state: "cancelled",
+      errorName: "worker_job_cancelled",
+      cancelReason: "Worker job link failed."
+    });
+    await expect(payloadRepository.getByJobId("worker_job_1")).resolves.toBeUndefined();
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+    expect(events.filter((event) => event.type === "worker.job.linked")).toHaveLength(0);
+    expect(events.slice(2)).toEqual([
+      expect.objectContaining({
+        sequence: 3,
+        type: "tool.failed",
+        payload: expect.objectContaining({
+          observationId: "tool_observation_1",
+          workerJobId: "worker_job_1",
+          outputSummary: "Worker job link failed.",
+          errorName: "worker_job_link_failed"
+        })
+      }),
+      expect.objectContaining({
+        sequence: 4,
+        type: "run.failed",
+        payload: expect.objectContaining({
+          observationId: "tool_observation_1",
+          workerJobId: "worker_job_1",
+          outputSummary: "Worker job link failed.",
+          errorName: "worker_job_link_failed"
+        })
+      })
+    ]);
+  });
 });
 
 function withThrowingRunEventListAll(
@@ -1003,6 +1152,28 @@ function withThrowingRunEventListAll(
       listAll: async () => {
         throw new Error("run event list failed");
       }
+    }
+  };
+}
+
+function withThrowingWorkerJobLinkedSave(
+  repositories: WorkbenchRepositories
+): WorkbenchRepositories {
+  return {
+    ...repositories,
+    runEvents: {
+      save: async (event) => {
+        if (event.type === "worker.job.linked") {
+          throw new Error("worker link failed");
+        }
+        await repositories.runEvents.save(event);
+      },
+      listForRun: repositories.runEvents.listForRun.bind(repositories.runEvents),
+      listForTask: repositories.runEvents.listForTask.bind(repositories.runEvents),
+      listForProject: repositories.runEvents.listForProject.bind(
+        repositories.runEvents
+      ),
+      listAll: repositories.runEvents.listAll.bind(repositories.runEvents)
     }
   };
 }

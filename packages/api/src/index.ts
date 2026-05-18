@@ -1219,31 +1219,59 @@ export class DemoWorkbenchService {
         observationId
       });
 
-      const workerJob = await this.workerQueueRuntime.enqueueSafe(
-        createSafeWorkerJobInput({
-          projectId: input.projectId,
-          commandId: command.id,
-          command,
-          args,
-          envNames
-        }),
-        createQueueSandboxPolicy({
-          command,
-          envNames
-        })
-      );
-      await saveEvent("worker.job.linked", "Worker job linked to task.", {
-        ...basePayload,
-        ...(input.taskId ? { taskId: input.taskId } : {}),
-        runId,
-        workerJobId: workerJob.id,
-        observationId
-      });
+      let workerJobId: string | undefined;
+      try {
+        const workerJob = await this.workerQueueRuntime.enqueueSafe(
+          createSafeWorkerJobInput({
+            projectId: input.projectId,
+            commandId: command.id,
+            command,
+            args,
+            envNames
+          }),
+          createQueueSandboxPolicy({
+            command,
+            envNames
+          })
+        );
+        workerJobId = workerJob.id;
+        await saveEvent("worker.job.linked", "Worker job linked to task.", {
+          ...basePayload,
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          runId,
+          workerJobId,
+          observationId
+        });
+      } catch (error) {
+        if (workerJobId) {
+          await cancelQueuedWorkerJobBestEffort(
+            this.workerQueueRuntime,
+            workerJobId,
+            "Worker job link failed."
+          );
+        }
+        await markQueuedSkillCommandRunFailedBestEffort({
+          repositories: this.repositories,
+          run,
+          observation,
+          nextSequence: sequence,
+          timestamp: () => this.timestamp(),
+          basePayload,
+          workerJobId,
+          outputSummary: workerJobId
+            ? "Worker job link failed."
+            : "Worker job enqueue failed.",
+          errorName: workerJobId
+            ? "worker_job_link_failed"
+            : "worker_job_enqueue_failed"
+        });
+        throw error;
+      }
 
       return {
         run: copyRunRecord(run),
         observation: copyToolObservationRecord(observation),
-        workerJobId: workerJob.id
+        workerJobId
       };
     } finally {
       releaseRepositoryId(this.repositories, runId);
@@ -2675,6 +2703,83 @@ function createQueueSandboxPolicy(input: {
     maxStderrBytes: 300,
     network: "disabled"
   });
+}
+
+async function cancelQueuedWorkerJobBestEffort(
+  workerRuntime: SkillCommandQueueRuntime,
+  workerJobId: string,
+  reason: string
+): Promise<void> {
+  const cancelableRuntime = workerRuntime as SkillCommandQueueRuntime & {
+    cancelJob?: (id: string, reason?: string) => Promise<unknown>;
+  };
+  if (!cancelableRuntime.cancelJob) {
+    return;
+  }
+  try {
+    await cancelableRuntime.cancelJob(workerJobId, reason);
+  } catch {
+    // The run compensation below is the durable recovery path for the UI.
+  }
+}
+
+async function markQueuedSkillCommandRunFailedBestEffort(input: {
+  repositories: WorkbenchRepositories;
+  run: RunRecord;
+  observation: ToolObservationRecord;
+  nextSequence: number;
+  timestamp: () => string;
+  basePayload: Record<string, unknown>;
+  workerJobId?: string;
+  outputSummary: string;
+  errorName: string;
+}): Promise<void> {
+  try {
+    const completedAt = input.timestamp();
+    const terminalPayload = {
+      ...input.basePayload,
+      observationId: input.observation.id,
+      ...(input.workerJobId ? { workerJobId: input.workerJobId } : {}),
+      outputSummary: input.outputSummary,
+      errorName: input.errorName
+    };
+    await input.repositories.toolObservations.save({
+      ...input.observation,
+      outputSummary: input.outputSummary,
+      state: "failed",
+      errorName: input.errorName,
+      completedAt
+    });
+    await input.repositories.runEvents.save({
+      id: `${input.run.id}_event_${input.nextSequence}`,
+      runId: input.run.id,
+      projectId: input.run.projectId,
+      ...(input.run.taskId ? { taskId: input.run.taskId } : {}),
+      sequence: input.nextSequence,
+      type: "tool.failed",
+      message: "Deployment skill command failed.",
+      payload: terminalPayload,
+      createdAt: completedAt
+    });
+    await input.repositories.runEvents.save({
+      id: `${input.run.id}_event_${input.nextSequence + 1}`,
+      runId: input.run.id,
+      projectId: input.run.projectId,
+      ...(input.run.taskId ? { taskId: input.run.taskId } : {}),
+      sequence: input.nextSequence + 1,
+      type: "run.failed",
+      message: "Deployment skill command run failed.",
+      payload: terminalPayload,
+      createdAt: completedAt
+    });
+    await input.repositories.runs.save({
+      ...input.run,
+      state: "failed",
+      completedAt
+    });
+  } catch {
+    // Preserve the original enqueue/link rejection for callers.
+  }
 }
 
 function preflightSkillCommandTemplates(input: {
