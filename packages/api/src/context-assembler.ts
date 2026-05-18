@@ -51,6 +51,8 @@ const ArtifactWorkspaceMimeTypeSchema = z.enum([
   "text/css",
   "text/javascript"
 ]);
+const CONTEXT_ARTIFACT_SNIPPET_MAX_BYTES = ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES;
+const CONTEXT_ARTIFACT_SNIPPET_MAX_COUNT = 3;
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 const RuntimeArtifactWorkspaceFileSchema = z.object({
@@ -76,7 +78,7 @@ const ArtifactSnippetSchema = z.object({
   path: ArtifactWorkspaceFilePathSchema,
   sizeBytes: z.number().int().min(0),
   sha256: z.string().regex(SHA256_HEX_PATTERN),
-  content: z.string(),
+  content: z.string().max(CONTEXT_ARTIFACT_SNIPPET_MAX_BYTES),
   truncated: z.literal(false)
 });
 
@@ -129,7 +131,10 @@ export const ContextPackSchema = z.object({
   role: z.enum(agentRoles),
   input: RuntimeRunInputSchema,
   runtimeContext: RuntimeRunContextSchema,
-  artifactSnippets: z.array(ArtifactSnippetSchema).default([]),
+  artifactSnippets: z
+    .array(ArtifactSnippetSchema)
+    .max(CONTEXT_ARTIFACT_SNIPPET_MAX_COUNT)
+    .default([]),
   trace: z.object({
     injected: z.array(z.string().min(1)),
     omitted: z.array(z.string().min(1))
@@ -261,7 +266,7 @@ async function assembleArtifactSnippetsSafely(input: {
 }> {
   const snippets: ContextPack["artifactSnippets"] = [];
   const omitted: string[] = [];
-  const requests = input.requests.slice(0, 3);
+  const requests = input.requests.slice(0, CONTEXT_ARTIFACT_SNIPPET_MAX_COUNT);
 
   if (input.requests.length > requests.length) {
     omitted.push("artifactSnippet:requests:limit_exceeded");
@@ -276,7 +281,10 @@ async function assembleArtifactSnippetsSafely(input: {
         pageVersionId: request.pageVersionId,
         path: request.path,
         includeContent: true,
-        maxBytes: request.maxBytes ?? ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+        maxBytes: Math.min(
+          request.maxBytes ?? CONTEXT_ARTIFACT_SNIPPET_MAX_BYTES,
+          CONTEXT_ARTIFACT_SNIPPET_MAX_BYTES
+        )
       });
 
       if (result.content === undefined) {
@@ -298,7 +306,7 @@ async function assembleArtifactSnippetsSafely(input: {
     } catch (error) {
       omitted.push(
         `artifactSnippet:${request.path}:${
-          error instanceof ArtifactReaderError ? error.code : "error"
+          error instanceof ArtifactReaderError ? error.code : "unexpected_error"
         }`
       );
     }

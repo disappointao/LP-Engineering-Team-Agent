@@ -4079,6 +4079,62 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(parsedContextPack.runtimeContext)).not.toContain(artifacts.stylesCss);
   });
 
+  it("caps requested artifact snippets at the context byte limit", async () => {
+    const largeHtmlSecret = "SNIPPET_LARGE_HTML_SECRET";
+    const largeHtml = `<!doctype html><html><body>${largeHtmlSecret}${"x".repeat(
+      9000
+    )}</body></html>`;
+    const artifacts: StaticArtifacts = {
+      indexHtml: largeHtml,
+      stylesCss: "body { color: #123456; }",
+      scriptJs: "window.lpAgent = true;"
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      artifactSnippetRequests: [
+        {
+          workspaceId: pageVersion.artifactWorkspaceId ?? "",
+          pageVersionId: pageVersion.id,
+          path: "index.html",
+          maxBytes: largeHtml.length
+        }
+      ],
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.artifactSnippets).toEqual([]);
+    expect(parsedContextPack.trace.injected).toContain("artifactSnippets:0");
+    expect(parsedContextPack.trace.omitted).toContain(
+      "artifactSnippet:index.html:size_limit_exceeded"
+    );
+    expect(JSON.stringify(parsedContextPack)).not.toContain(largeHtmlSecret);
+    expect(JSON.stringify(parsedContextPack)).not.toContain(largeHtml);
+  });
+
   it("does not pass top-level artifact snippets into runtime requests", async () => {
     const artifacts: StaticArtifacts = {
       indexHtml: "<!doctype html><html></html>",
