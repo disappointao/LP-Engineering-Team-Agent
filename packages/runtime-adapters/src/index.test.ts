@@ -350,6 +350,69 @@ describe("local agent runtime adapter", () => {
     );
   });
 
+  it("strips unexpected memory artifact file content before model requests", async () => {
+    const gateway = new RecordingPortableGateway();
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+    const context = completeRuntimeContext({
+      memory: {
+        messages: [],
+        runs: [],
+        tools: [],
+        artifacts: [
+          {
+            pageVersionId: "page_version_1",
+            briefId: "brief_1",
+            artifactWorkspaceId: "artifact_workspace_1",
+            files: [
+              {
+                name: "index.html",
+                path: "index.html",
+                characterCount: 1200,
+                sizeBytes: 1280,
+                sha256: "hash-index",
+                summary: "index.html static LP file",
+                content: "RAW_SECRET"
+              } as unknown as NonNullable<
+                RuntimeRunContext["memory"]
+              >["artifacts"][number]["files"][number]
+            ],
+            createdAt: "2026-05-15T08:03:00.000Z",
+            score: 6
+          }
+        ],
+        retrieval: {
+          query: "spring sale",
+          strategy: "deterministic-keyword-v0",
+          selected: ["artifact:page_version_1"],
+          omitted: []
+        }
+      }
+    });
+
+    await runtime.run({
+      runId: "run_memory_artifact_file_sanitize",
+      projectId: "project_1",
+      role: "reviewer",
+      input: {
+        prompt: "Review",
+        brief: sampleBrief
+      },
+      context
+    });
+
+    expect(JSON.stringify(gateway.requests[0]?.context)).not.toContain("RAW_SECRET");
+    expect(gateway.requests[0]?.context?.memory?.artifacts[0]?.files).toEqual([
+      {
+        name: "index.html",
+        path: "index.html",
+        characterCount: 1200,
+        sizeBytes: 1280,
+        sha256: "hash-index",
+        summary: "index.html static LP file"
+      }
+    ]);
+  });
+
   it("passes scoped skills, visible MCP tools, approval, and workspace context into model calls", async () => {
     const gateway = new RecordingPortableGateway();
     const adapter = new LocalAgentRuntimeAdapter(gateway);

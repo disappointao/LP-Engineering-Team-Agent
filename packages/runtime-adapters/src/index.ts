@@ -11,6 +11,7 @@ import {
   type ModelAgentHandoffSummary,
   type ModelGateway,
   type ModelContextMemory,
+  type ModelContextMemoryArtifactFile,
   type ModelRequestContext,
   type ModelRoutingPolicy,
   type ModelResponse
@@ -444,13 +445,26 @@ function cloneRuntimeMemory(memory: ModelContextMemory): ModelContextMemory {
     tools: memory.tools.map((tool) => ({ ...tool })),
     artifacts: memory.artifacts.map((artifact) => ({
       ...artifact,
-      files: artifact.files.map((file) => ({ ...file }))
+      files: artifact.files.map(cloneRuntimeMemoryArtifactFile)
     })),
     retrieval: {
       ...memory.retrieval,
       selected: [...memory.retrieval.selected],
       omitted: [...memory.retrieval.omitted]
     }
+  };
+}
+
+function cloneRuntimeMemoryArtifactFile(
+  file: ModelContextMemoryArtifactFile
+): ModelContextMemoryArtifactFile {
+  return {
+    name: file.name,
+    ...(file.path ? { path: file.path } : {}),
+    characterCount: file.characterCount,
+    ...(file.sizeBytes !== undefined ? { sizeBytes: file.sizeBytes } : {}),
+    ...(file.sha256 ? { sha256: file.sha256 } : {}),
+    ...(file.summary ? { summary: file.summary } : {})
   };
 }
 
