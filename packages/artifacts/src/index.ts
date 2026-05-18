@@ -56,6 +56,49 @@ export interface ArtifactWorkspaceManifest {
   files: ArtifactWorkspaceManifestFile[];
 }
 
+export const ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES = 8192;
+
+export type ArtifactWorkspaceFileReadOmittedReason =
+  | "content_not_requested"
+  | "size_limit_exceeded";
+
+export interface ArtifactWorkspaceFileReadResult extends ArtifactWorkspaceManifestFile {
+  content?: string;
+  truncated: boolean;
+  omittedReason?: ArtifactWorkspaceFileReadOmittedReason;
+}
+
+export interface ReadArtifactWorkspaceFileRecordInput {
+  file: ArtifactWorkspaceFileRecord;
+  includeContent?: boolean;
+  maxBytes?: number;
+}
+
+export type ArtifactWorkspaceDiffFileStatus = "added" | "removed" | "changed" | "unchanged";
+
+export interface ArtifactWorkspaceDiffFile {
+  path: ArtifactWorkspaceFilePath;
+  status: ArtifactWorkspaceDiffFileStatus;
+  from?: ArtifactWorkspaceManifestFile;
+  to?: ArtifactWorkspaceManifestFile;
+}
+
+export interface ArtifactWorkspaceDiffResult {
+  projectId: string;
+  fromWorkspaceId: string;
+  toWorkspaceId: string;
+  changedFileCount: number;
+  files: ArtifactWorkspaceDiffFile[];
+}
+
+export interface DiffArtifactWorkspaceFilesInput {
+  projectId: string;
+  fromWorkspaceId: string;
+  toWorkspaceId: string;
+  fromFiles: ArtifactWorkspaceFileRecord[];
+  toFiles: ArtifactWorkspaceFileRecord[];
+}
+
 export interface CreateStaticArtifactWorkspaceFilesInput {
   workspaceId: string;
   projectId: string;
@@ -149,6 +192,98 @@ export function createArtifactWorkspaceManifest(input: {
       sha256: file.sha256,
       summary: getStaticArtifactFileSpec(file.path).summary
     }))
+  };
+}
+
+export function readArtifactWorkspaceFileRecord(
+  input: ReadArtifactWorkspaceFileRecordInput
+): ArtifactWorkspaceFileReadResult {
+  const metadata = createArtifactWorkspaceFileMetadata(validateStaticWorkspaceFileRecord(input.file));
+
+  if (!input.includeContent) {
+    return {
+      ...metadata,
+      content: undefined,
+      truncated: false,
+      omittedReason: "content_not_requested"
+    };
+  }
+
+  const maxBytes = input.maxBytes ?? ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES;
+
+  if (metadata.sizeBytes > maxBytes) {
+    return {
+      ...metadata,
+      content: undefined,
+      truncated: true,
+      omittedReason: "size_limit_exceeded"
+    };
+  }
+
+  return {
+    ...metadata,
+    content: input.file.content,
+    truncated: false
+  };
+}
+
+export function diffArtifactWorkspaceFiles(
+  input: DiffArtifactWorkspaceFilesInput
+): ArtifactWorkspaceDiffResult {
+  const fromByPath = validatePartialStaticWorkspaceFiles(input.fromFiles, {
+    workspaceId: input.fromWorkspaceId,
+    projectId: input.projectId
+  });
+  const toByPath = validatePartialStaticWorkspaceFiles(input.toFiles, {
+    workspaceId: input.toWorkspaceId,
+    projectId: input.projectId
+  });
+
+  const files = staticArtifactFileSpecs
+    .map((spec): ArtifactWorkspaceDiffFile | undefined => {
+      const from = fromByPath.get(spec.path);
+      const to = toByPath.get(spec.path);
+
+      if (!from && !to) {
+        return undefined;
+      }
+
+      if (!from) {
+        return {
+          path: spec.path,
+          status: "added",
+          to: createArtifactWorkspaceFileMetadata(to!)
+        };
+      }
+
+      if (!to) {
+        return {
+          path: spec.path,
+          status: "removed",
+          from: createArtifactWorkspaceFileMetadata(from)
+        };
+      }
+
+      const fromMetadata = createArtifactWorkspaceFileMetadata(from);
+      const toMetadata = createArtifactWorkspaceFileMetadata(to);
+
+      return {
+        path: spec.path,
+        status: areArtifactWorkspaceFileMetadataEqual(fromMetadata, toMetadata)
+          ? "unchanged"
+          : "changed",
+        from: fromMetadata,
+        to: toMetadata
+      };
+    })
+    .filter((file): file is ArtifactWorkspaceDiffFile => file !== undefined);
+
+  return {
+    projectId: input.projectId,
+    fromWorkspaceId: input.fromWorkspaceId,
+    toWorkspaceId: input.toWorkspaceId,
+    changedFileCount: files.filter((file) => file.status !== "unchanged").length,
+    files
   };
 }
 
@@ -258,17 +393,107 @@ const validateCompleteStaticWorkspaceFiles = (
 
   return [...files].sort(
     (left, right) =>
-      staticArtifactPathOrder.get(assertArtifactWorkspaceFilePath(left.path))! -
-      staticArtifactPathOrder.get(assertArtifactWorkspaceFilePath(right.path))!
+      staticArtifactPathOrder.get(normalizeArtifactWorkspaceFilePath(left.path))! -
+      staticArtifactPathOrder.get(normalizeArtifactWorkspaceFilePath(right.path))!
   );
 };
 
+const validatePartialStaticWorkspaceFiles = (
+  files: ArtifactWorkspaceFileRecord[],
+  expected: {
+    workspaceId: string;
+    projectId: string;
+  }
+): Map<ArtifactWorkspaceFilePath, ArtifactWorkspaceFileRecord> => {
+  const byPath = new Map<ArtifactWorkspaceFilePath, ArtifactWorkspaceFileRecord>();
+
+  for (const file of files) {
+    const validatedFile = validateStaticWorkspaceFileRecord(file);
+    const path = validatedFile.path;
+
+    if (byPath.has(path)) {
+      throw new Error(`Artifact workspace has duplicate file path: ${path}.`);
+    }
+
+    if (validatedFile.workspaceId !== expected.workspaceId) {
+      throw new Error(
+        `Artifact workspace file set workspaceId mismatch: expected ${expected.workspaceId}, received ${validatedFile.workspaceId}.`
+      );
+    }
+
+    if (validatedFile.projectId !== expected.projectId) {
+      throw new Error(
+        `Artifact workspace file set projectId mismatch: expected ${expected.projectId}, received ${validatedFile.projectId}.`
+      );
+    }
+
+    byPath.set(path, validatedFile);
+  }
+
+  return byPath;
+};
+
+const validateStaticWorkspaceFileRecord = (
+  file: ArtifactWorkspaceFileRecord
+): ArtifactWorkspaceFileRecord => {
+  const spec = getStaticArtifactFileSpec(file.path);
+  const path = spec.path;
+
+  if (file.kind !== spec.kind) {
+    throw new Error(
+      `Artifact workspace file kind mismatch for ${path}: expected ${spec.kind}, received ${file.kind}.`
+    );
+  }
+
+  if (file.mimeType !== spec.mimeType) {
+    throw new Error(
+      `Artifact workspace file mimeType mismatch for ${path}: expected ${spec.mimeType}, received ${file.mimeType}.`
+    );
+  }
+
+  if (file.sizeBytes !== Buffer.byteLength(file.content, "utf8")) {
+    throw new Error(`Artifact workspace file sizeBytes mismatch for ${path}.`);
+  }
+
+  if (file.sha256 !== sha256Hex(file.content)) {
+    throw new Error(`Artifact workspace file sha256 mismatch for ${path}.`);
+  }
+
+  return file;
+};
+
+const createArtifactWorkspaceFileMetadata = (
+  file: ArtifactWorkspaceFileRecord
+): ArtifactWorkspaceManifestFile => {
+  const spec = getStaticArtifactFileSpec(file.path);
+
+  return {
+    path: spec.path,
+    kind: spec.kind,
+    mimeType: spec.mimeType,
+    sizeBytes: file.sizeBytes,
+    sha256: file.sha256,
+    summary: spec.summary
+  };
+};
+
+const areArtifactWorkspaceFileMetadataEqual = (
+  left: ArtifactWorkspaceManifestFile,
+  right: ArtifactWorkspaceManifestFile
+): boolean =>
+  left.path === right.path &&
+  left.kind === right.kind &&
+  left.mimeType === right.mimeType &&
+  left.sizeBytes === right.sizeBytes &&
+  left.sha256 === right.sha256 &&
+  left.summary === right.summary;
+
 const getStaticArtifactFileSpec = (path: string) => {
-  const allowedPath = assertArtifactWorkspaceFilePath(path);
+  const allowedPath = normalizeArtifactWorkspaceFilePath(path);
   return staticArtifactSpecsByPath.get(allowedPath)!;
 };
 
-const assertArtifactWorkspaceFilePath = (path: string): ArtifactWorkspaceFilePath => {
+export const normalizeArtifactWorkspaceFilePath = (path: string): ArtifactWorkspaceFilePath => {
   if (path === "index.html" || path === "styles.css" || path === "script.js") {
     return path;
   }

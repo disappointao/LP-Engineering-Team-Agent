@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { sampleBrief } from "@lp-agent/lp-schema";
 import {
+  ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES,
   bundleSingleFileHtml,
   createArtifactWorkspaceManifest,
   createStaticArtifactWorkspaceFiles,
+  diffArtifactWorkspaceFiles,
   type ArtifactWorkspaceFileRecord,
   generateStaticArtifacts,
+  normalizeArtifactWorkspaceFilePath,
+  readArtifactWorkspaceFileRecord,
   staticArtifactsFromWorkspaceFiles
 } from "./index";
 
@@ -229,6 +233,150 @@ describe("artifact workspace helpers", () => {
     expect(JSON.stringify(manifest)).not.toContain(rawSecret);
     expect(JSON.stringify(manifest)).not.toContain("<!doctype html>");
     expect(JSON.stringify(manifest)).not.toContain("console.log");
+  });
+
+  it("reads workspace file metadata without content by default", () => {
+    const rawSecret = "secret-html";
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: `<!doctype html><html><body>${rawSecret}</body></html>`,
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const result = readArtifactWorkspaceFileRecord({ file: files[0]! });
+
+    expect(result).toEqual({
+      path: "index.html",
+      kind: "html",
+      mimeType: "text/html",
+      sizeBytes: files[0]!.sizeBytes,
+      sha256: files[0]!.sha256,
+      summary: "index.html static LP file",
+      content: undefined,
+      truncated: false,
+      omittedReason: "content_not_requested"
+    });
+    expect(JSON.stringify(result)).not.toContain(rawSecret);
+  });
+
+  it("reads workspace file content when requested within the byte limit", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const result = readArtifactWorkspaceFileRecord({
+      file: files[0]!,
+      includeContent: true,
+      maxBytes: ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES
+    });
+
+    expect(result.content).toBe(files[0]!.content);
+    expect(result.truncated).toBe(false);
+    expect(result.omittedReason).toBeUndefined();
+  });
+
+  it("omits workspace file content when requested above the byte limit", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const result = readArtifactWorkspaceFileRecord({
+      file: files[0]!,
+      includeContent: true,
+      maxBytes: 1
+    });
+
+    expect(result.content).toBeUndefined();
+    expect(result.truncated).toBe(true);
+    expect(result.omittedReason).toBe("size_limit_exceeded");
+  });
+
+  it("normalizes only static workspace file paths", () => {
+    expect(normalizeArtifactWorkspaceFilePath("index.html")).toBe("index.html");
+    expect(normalizeArtifactWorkspaceFilePath("styles.css")).toBe("styles.css");
+    expect(normalizeArtifactWorkspaceFilePath("script.js")).toBe("script.js");
+    expect(() => normalizeArtifactWorkspaceFilePath("../index.html")).toThrow(
+      "Unsupported artifact workspace file path: ../index.html."
+    );
+  });
+
+  it("throws when reading a file with stale size metadata", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[0]!,
+        content: `${files[0]!.content} stale`
+      }
+    })).toThrow("Artifact workspace file sizeBytes mismatch for index.html.");
+  });
+
+  it("diffs workspace files using metadata only in canonical order", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    }).filter((file) => file.path !== "styles.css");
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    }).filter((file) => file.path !== "script.js");
+
+    const diff = diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles,
+      toFiles
+    });
+
+    expect(diff.changedFileCount).toBe(2);
+    expect(diff.files.map((file) => [file.path, file.status])).toEqual([
+      ["index.html", "unchanged"],
+      ["styles.css", "added"],
+      ["script.js", "removed"]
+    ]);
+    expect(JSON.stringify(diff)).not.toContain("<!doctype html>");
+    expect(JSON.stringify(diff)).not.toContain("console.log");
   });
 
   it("derives manifest summaries from the static file allowlist", () => {
