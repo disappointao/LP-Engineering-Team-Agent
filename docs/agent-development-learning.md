@@ -642,7 +642,8 @@ pnpm --filter @lp-agent/model-gateway test
 
 当前实现状态：
 
-- 尚未实现。当前只有设计文档，后续会先补 plan，再按 TDD 实现 Web action、store interrupt contract、task interrupt view、timeline cancelled state 和相关测试。
+- Stage 12 v0 已实现当前任务 Web/API interrupt wiring：Web action 从当前 task cookie 读取任务，API 根据 task/run/worker link 推导取消目标，前端按钮支持 optimistic `正在停止...`，chat timeline 能区分 running、cancelled 和 failed。
+- 这一阶段仍不做真实 shell signal、MCP execution、deployment execution、streaming logs、worker daemon 控制或批量取消。
 
 学习重点：
 
