@@ -91,8 +91,12 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   workerJob: WorkerJobRecord;
   now?: () => Date;
 }): Promise<RunLocalWorkerOnceResult> {
-  const link = await findWorkerLinkEvent(input.repositories, input.workerJob.id);
   const workerFinalState = toFinalState(input.workerJob);
+  if (!workerFinalState) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
+
+  const link = await findWorkerLinkEvent(input.repositories, input.workerJob.id);
   if (!link) {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
@@ -265,7 +269,7 @@ function toTerminalRunEventRecord(input: {
 
 function toFinalState(
   workerJob: WorkerJobRecord
-): WorkerFinalState {
+): WorkerFinalState | undefined {
   if (
     workerJob.state === "completed" ||
     workerJob.state === "failed" ||
@@ -274,7 +278,7 @@ function toFinalState(
   ) {
     return workerJob.state;
   }
-  return "failed";
+  return undefined;
 }
 
 function toRecordTerminalState(
