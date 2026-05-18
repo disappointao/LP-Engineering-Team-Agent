@@ -586,8 +586,16 @@ export class DemoWorkbenchService {
     await this.getProjectOrThrow(input.projectId);
     const brief = await this.getBriefForProjectOrThrow(input.projectId, input.briefId);
     const pageVersionId = await reserveRepositoryId(this.repositories, "version", async () => {
-      const existingPageVersions = await this.repositories.pageVersions.listAll();
-      return existingPageVersions.map((record) => record.id);
+      const [existingPageVersions, existingWorkspaces] = await Promise.all([
+        this.repositories.pageVersions.listAll(),
+        this.repositories.artifactWorkspaces.listAll()
+      ]);
+      return [
+        ...existingPageVersions.map((record) => record.id),
+        ...existingWorkspaces
+          .map((record) => record.pageVersionId)
+          .filter((id): id is string => id !== undefined)
+      ];
     });
     let parsedBuilderArtifacts: StaticArtifacts | undefined;
     const builderPrompt = this.structuredBuilderOutputEnabled
@@ -670,51 +678,48 @@ export class DemoWorkbenchService {
         }
       );
       try {
-        const { pageVersion, workspaceManifest } = await withRepositoryIdLock(
-          this.repositories,
-          async () => {
-            const createdAt = nextRepositoryTimestamp(this.repositories, this.now);
-            const files = createStaticArtifactWorkspaceFiles({
-              workspaceId: artifactWorkspaceId,
-              projectId: input.projectId,
-              pageVersionId,
-              artifacts,
-              createdAt
-            });
-            const workspaceManifest = createArtifactWorkspaceManifest({
-              workspaceId: artifactWorkspaceId,
-              projectId: input.projectId,
-              pageVersionId,
-              files
-            });
-            const pageVersion: PageVersionRecord = {
-              id: pageVersionId,
-              projectId: input.projectId,
-              briefId: brief.id,
-              artifactWorkspaceId,
-              artifacts: copyArtifacts(artifacts),
-              reviewStatus: "pending",
-              findings: [],
-              createdAt
-            };
+        const createdAt = nextRepositoryTimestamp(this.repositories, this.now);
+        const files = createStaticArtifactWorkspaceFiles({
+          workspaceId: artifactWorkspaceId,
+          projectId: input.projectId,
+          pageVersionId,
+          artifacts,
+          createdAt
+        });
+        const workspace = {
+          id: artifactWorkspaceId,
+          projectId: input.projectId,
+          pageVersionId,
+          runId: run.id,
+          kind: "static_lp" as const,
+          state: "active" as const,
+          createdAt,
+          updatedAt: createdAt
+        };
+        const pageVersion: PageVersionRecord = {
+          id: pageVersionId,
+          projectId: input.projectId,
+          briefId: brief.id,
+          artifactWorkspaceId,
+          artifacts: copyArtifacts(artifacts),
+          reviewStatus: "pending",
+          findings: [],
+          createdAt
+        };
+        const workspaceManifest = createArtifactWorkspaceManifest({
+          workspaceId: artifactWorkspaceId,
+          projectId: input.projectId,
+          pageVersionId,
+          files
+        });
 
-            await this.repositories.pageVersions.save(pageVersion);
-            await this.repositories.artifactWorkspaces.save({
-              id: artifactWorkspaceId,
-              projectId: input.projectId,
-              pageVersionId,
-              runId: run.id,
-              kind: "static_lp",
-              state: "active",
-              createdAt,
-              updatedAt: createdAt
-            });
-            for (const file of files) {
-              await this.repositories.artifactWorkspaceFiles.save(file);
-            }
-            return { pageVersion, workspaceManifest };
+        await withRepositoryIdLock(this.repositories, async () => {
+          await this.repositories.artifactWorkspaces.save(workspace);
+          for (const file of files) {
+            await this.repositories.artifactWorkspaceFiles.save(file);
           }
-        );
+          await this.repositories.pageVersions.save(pageVersion);
+        });
         await this.saveArtifactWorkspaceCreatedEvent({
           runId: run.id,
           projectId: input.projectId,
@@ -1961,6 +1966,7 @@ export class DemoWorkbenchService {
       message: "Artifact workspace created.",
       payload: {
         workspaceId: input.manifest.workspaceId,
+        artifactWorkspaceId: input.manifest.workspaceId,
         pageVersionId: input.manifest.pageVersionId,
         kind: input.kind,
         files: input.manifest.files.map((file) => ({ ...file })),

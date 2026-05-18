@@ -227,6 +227,7 @@ describe("demo workbench service", () => {
       message: "Artifact workspace created.",
       payload: {
         workspaceId: "artifact_workspace_1",
+        artifactWorkspaceId: "artifact_workspace_1",
         pageVersionId: version.id,
         kind: "static_lp",
         fileCount: 3,
@@ -242,6 +243,87 @@ describe("demo workbench service", () => {
     expect(serializedPayload).not.toContain(artifacts.stylesCss);
     expect(serializedPayload).not.toContain("JS_WORKSPACE_SECRET");
     expect(serializedPayload).not.toContain("content");
+  });
+
+  it("does not save a page version pointer when durable artifact file persistence fails", async () => {
+    const artifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const originalSaveFile = repositories.artifactWorkspaceFiles.save.bind(
+      repositories.artifactWorkspaceFiles
+    );
+    let fileSaveAttempts = 0;
+    repositories.artifactWorkspaceFiles.save = async (file) => {
+      fileSaveAttempts += 1;
+      if (fileSaveAttempts === 2) {
+        throw new Error("artifact workspace file save failed");
+      }
+      await originalSaveFile(file);
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+
+    await expect(
+      service.generatePageVersion({ projectId: project.id, briefId: brief.id })
+    ).rejects.toThrow("artifact workspace file save failed");
+
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([]);
+    const failedBuilderEvents = await repositories.runEvents.listForRun("run_builder_version_1");
+    expect(failedBuilderEvents.map((event) => event.type)).not.toContain(
+      "artifact.workspace.created"
+    );
+    expect(failedBuilderEvents.map((event) => event.type)).not.toContain("handoff.created");
+
+    const orphanWorkspaces = await repositories.artifactWorkspaces.listAll();
+    const orphanWorkspaceIds = orphanWorkspaces.map((workspace) => workspace.id);
+    const orphanPageVersionIds = new Set(
+      orphanWorkspaces
+        .map((workspace) => workspace.pageVersionId)
+        .filter((pageVersionId): pageVersionId is string => pageVersionId !== undefined)
+    );
+
+    const version = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    expect(version.artifactWorkspaceId).toBeDefined();
+    if (orphanWorkspaceIds.length > 0) {
+      expect(orphanWorkspaceIds).not.toContain(version.artifactWorkspaceId);
+    }
+    if (orphanPageVersionIds.size > 0) {
+      expect(orphanPageVersionIds.has(version.id)).toBe(false);
+    }
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([
+      expect.objectContaining({
+        id: version.id,
+        artifactWorkspaceId: version.artifactWorkspaceId
+      })
+    ]);
+    const workspace = await repositories.artifactWorkspaces.getById(
+      version.artifactWorkspaceId ?? ""
+    );
+    expect(workspace).toMatchObject({
+      id: version.artifactWorkspaceId,
+      pageVersionId: version.id
+    });
+    await expect(repositories.artifactWorkspaces.getForPageVersion(version.id)).resolves.toEqual(
+      workspace
+    );
+    await expect(
+      repositories.artifactWorkspaceFiles.listForWorkspace(version.artifactWorkspaceId ?? "")
+    ).resolves.toEqual([
+      expect.objectContaining({ path: "index.html", content: artifacts.indexHtml }),
+      expect.objectContaining({ path: "styles.css", content: artifacts.stylesCss }),
+      expect.objectContaining({ path: "script.js", content: artifacts.scriptJs })
+    ]);
   });
 
   it("creates an owner project member for the current local user", async () => {
