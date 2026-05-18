@@ -176,6 +176,25 @@ describe("artifact workspace helpers", () => {
     ]);
   });
 
+  it("computes exact sha256 digests and UTF-8 byte sizes", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "abc",
+        stylesCss: "é",
+        scriptJs: ""
+      },
+      createdAt
+    });
+
+    expect(files[0]?.sha256).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    expect(files[1]?.content.length).toBe(1);
+    expect(files[1]?.sizeBytes).toBe(2);
+  });
+
   it("creates metadata-only manifests without full content", () => {
     const rawSecret = "secret-token";
     const files = createStaticArtifactWorkspaceFiles({
@@ -212,6 +231,30 @@ describe("artifact workspace helpers", () => {
     expect(JSON.stringify(manifest)).not.toContain("console.log");
   });
 
+  it("derives manifest summaries from the static file allowlist", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    }).map((file) => file.path === "index.html"
+      ? { ...file, summary: "forged secret summary" }
+      : file);
+
+    const manifest = createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      files
+    });
+
+    expect(manifest.files[0]?.summary).toBe("index.html static LP file");
+    expect(JSON.stringify(manifest)).not.toContain("forged secret summary");
+  });
+
   it("rebuilds static artifacts from a complete workspace file set", () => {
     const artifacts = generateStaticArtifacts(sampleBrief);
     const files = createStaticArtifactWorkspaceFiles({
@@ -238,6 +281,98 @@ describe("artifact workspace helpers", () => {
     );
   });
 
+  it("throws a clear error for mismatched workspace and project ids", () => {
+    const artifacts = generateStaticArtifacts(sampleBrief);
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts,
+      createdAt
+    });
+
+    expect(() => createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_2",
+      projectId: "project_1",
+      files
+    })).toThrow(
+      "Artifact workspace file set workspaceId mismatch: expected artifact_workspace_2, received artifact_workspace_1."
+    );
+    expect(() => staticArtifactsFromWorkspaceFiles(files.map((file) => file.path === "styles.css"
+      ? { ...file, projectId: "project_2" }
+      : file))).toThrow(
+      "Artifact workspace file projectId mismatch for styles.css: expected project_1, received project_2."
+    );
+  });
+
+  it("throws a clear error for conflicting page version ids", () => {
+    const artifacts = generateStaticArtifacts(sampleBrief);
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      artifacts,
+      createdAt
+    });
+
+    expect(() => createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_2",
+      files
+    })).toThrow(
+      "Artifact workspace file set pageVersionId mismatch: expected version_2, received version_1."
+    );
+    expect(() => staticArtifactsFromWorkspaceFiles(files.map((file) => file.path === "script.js"
+      ? { ...file, pageVersionId: undefined }
+      : file))).toThrow(
+      "Artifact workspace file pageVersionId mismatch for script.js: expected version_1, received undefined."
+    );
+  });
+
+  it("throws a clear error for kind and mime metadata mismatches", () => {
+    const artifacts = generateStaticArtifacts(sampleBrief);
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts,
+      createdAt
+    });
+
+    expect(() => createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      files: files.map((file) => file.path === "index.html"
+        ? { ...file, kind: "css" }
+        : file) as ArtifactWorkspaceFileRecord[]
+    })).toThrow("Artifact workspace file kind mismatch for index.html: expected html, received css.");
+    expect(() => staticArtifactsFromWorkspaceFiles(files.map((file) => file.path === "script.js"
+      ? { ...file, mimeType: "text/css" }
+      : file) as ArtifactWorkspaceFileRecord[])).toThrow(
+      "Artifact workspace file mimeType mismatch for script.js: expected text/javascript, received text/css."
+    );
+  });
+
+  it("throws a clear error for stale size and sha metadata", () => {
+    const artifacts = generateStaticArtifacts(sampleBrief);
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts,
+      createdAt
+    });
+
+    expect(() => createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      files: files.map((file) => file.path === "styles.css"
+        ? { ...file, sizeBytes: file.sizeBytes + 1 }
+        : file)
+    })).toThrow("Artifact workspace file sizeBytes mismatch for styles.css.");
+    expect(() => staticArtifactsFromWorkspaceFiles(files.map((file) => file.path === "script.js"
+      ? { ...file, sha256: "0".repeat(64) }
+      : file))).toThrow("Artifact workspace file sha256 mismatch for script.js.");
+  });
+
   it("throws a clear error for unsupported workspace file paths", () => {
     const artifacts = generateStaticArtifacts(sampleBrief);
     const files = createStaticArtifactWorkspaceFiles({
@@ -262,6 +397,29 @@ describe("artifact workspace helpers", () => {
     })).toThrow("Unsupported artifact workspace file path: assets/app.js.");
     expect(() => staticArtifactsFromWorkspaceFiles(unsupportedFiles)).toThrow(
       "Unsupported artifact workspace file path: assets/app.js."
+    );
+  });
+
+  it("throws a clear error for absolute paths and path traversal", () => {
+    const artifacts = generateStaticArtifacts(sampleBrief);
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts,
+      createdAt
+    });
+
+    expect(() => createArtifactWorkspaceManifest({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      files: files.map((file) => file.path === "index.html"
+        ? { ...file, path: "/tmp/index.html" }
+        : file) as ArtifactWorkspaceFileRecord[]
+    })).toThrow("Unsupported artifact workspace file path: /tmp/index.html.");
+    expect(() => staticArtifactsFromWorkspaceFiles(files.map((file) => file.path === "styles.css"
+      ? { ...file, path: "../styles.css" }
+      : file) as ArtifactWorkspaceFileRecord[])).toThrow(
+      "Unsupported artifact workspace file path: ../styles.css."
     );
   });
 });

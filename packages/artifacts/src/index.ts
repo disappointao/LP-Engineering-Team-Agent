@@ -69,14 +69,36 @@ const staticArtifactFileSpecs: Array<{
   kind: ArtifactWorkspaceFileKind;
   mimeType: ArtifactWorkspaceMimeType;
   contentKey: keyof StaticArtifacts;
+  summary: string;
 }> = [
-  { path: "index.html", kind: "html", mimeType: "text/html", contentKey: "indexHtml" },
-  { path: "styles.css", kind: "css", mimeType: "text/css", contentKey: "stylesCss" },
-  { path: "script.js", kind: "js", mimeType: "text/javascript", contentKey: "scriptJs" }
+  {
+    path: "index.html",
+    kind: "html",
+    mimeType: "text/html",
+    contentKey: "indexHtml",
+    summary: "index.html static LP file"
+  },
+  {
+    path: "styles.css",
+    kind: "css",
+    mimeType: "text/css",
+    contentKey: "stylesCss",
+    summary: "styles.css static LP file"
+  },
+  {
+    path: "script.js",
+    kind: "js",
+    mimeType: "text/javascript",
+    contentKey: "scriptJs",
+    summary: "script.js static LP file"
+  }
 ];
 
 const staticArtifactPathOrder = new Map<ArtifactWorkspaceFilePath, number>(
   staticArtifactFileSpecs.map((spec, index) => [spec.path, index])
+);
+const staticArtifactSpecsByPath = new Map(
+  staticArtifactFileSpecs.map((spec) => [spec.path, spec])
 );
 
 export function createStaticArtifactWorkspaceFiles(
@@ -95,7 +117,7 @@ export function createStaticArtifactWorkspaceFiles(
       mimeType: spec.mimeType,
       sizeBytes: Buffer.byteLength(content, "utf8"),
       sha256: sha256Hex(content),
-      summary: `${spec.path} static LP file`,
+      summary: spec.summary,
       content,
       createdAt: input.createdAt,
       updatedAt: input.createdAt
@@ -109,7 +131,11 @@ export function createArtifactWorkspaceManifest(input: {
   pageVersionId?: string;
   files: ArtifactWorkspaceFileRecord[];
 }): ArtifactWorkspaceManifest {
-  const files = validateCompleteStaticWorkspaceFiles(input.files);
+  const files = validateCompleteStaticWorkspaceFiles(input.files, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    pageVersionId: input.pageVersionId
+  });
 
   return {
     workspaceId: input.workspaceId,
@@ -121,7 +147,7 @@ export function createArtifactWorkspaceManifest(input: {
       mimeType: file.mimeType,
       sizeBytes: file.sizeBytes,
       sha256: file.sha256,
-      summary: file.summary
+      summary: getStaticArtifactFileSpec(file.path).summary
     }))
   };
 }
@@ -141,15 +167,82 @@ export function staticArtifactsFromWorkspaceFiles(
 }
 
 const validateCompleteStaticWorkspaceFiles = (
-  files: ArtifactWorkspaceFileRecord[]
+  files: ArtifactWorkspaceFileRecord[],
+  expected?: {
+    workspaceId?: string;
+    projectId?: string;
+    pageVersionId?: string;
+  }
 ): ArtifactWorkspaceFileRecord[] => {
   const seenPaths = new Set<ArtifactWorkspaceFilePath>();
+  let workspaceId = expected?.workspaceId;
+  let projectId = expected?.projectId;
+  let pageVersionId = expected?.pageVersionId;
+  let hasPageVersionIdBaseline = pageVersionId !== undefined;
 
   for (const file of files) {
-    const path = assertArtifactWorkspaceFilePath(file.path);
+    const spec = getStaticArtifactFileSpec(file.path);
+    const path = spec.path;
 
     if (seenPaths.has(path)) {
       throw new Error(`Artifact workspace has duplicate file path: ${path}.`);
+    }
+
+    if (workspaceId === undefined) {
+      workspaceId = file.workspaceId;
+    } else if (file.workspaceId !== workspaceId) {
+      throw expected?.workspaceId === undefined
+        ? new Error(
+          `Artifact workspace file workspaceId mismatch for ${path}: expected ${workspaceId}, received ${file.workspaceId}.`
+        )
+        : new Error(
+          `Artifact workspace file set workspaceId mismatch: expected ${workspaceId}, received ${file.workspaceId}.`
+        );
+    }
+
+    if (projectId === undefined) {
+      projectId = file.projectId;
+    } else if (file.projectId !== projectId) {
+      throw expected?.projectId === undefined
+        ? new Error(
+          `Artifact workspace file projectId mismatch for ${path}: expected ${projectId}, received ${file.projectId}.`
+        )
+        : new Error(
+          `Artifact workspace file set projectId mismatch: expected ${projectId}, received ${file.projectId}.`
+        );
+    }
+
+    if (!hasPageVersionIdBaseline) {
+      pageVersionId = file.pageVersionId;
+      hasPageVersionIdBaseline = true;
+    } else if (file.pageVersionId !== pageVersionId) {
+      throw expected?.pageVersionId === undefined
+        ? new Error(
+          `Artifact workspace file pageVersionId mismatch for ${path}: expected ${formatOptionalId(pageVersionId)}, received ${formatOptionalId(file.pageVersionId)}.`
+        )
+        : new Error(
+          `Artifact workspace file set pageVersionId mismatch: expected ${formatOptionalId(pageVersionId)}, received ${formatOptionalId(file.pageVersionId)}.`
+        );
+    }
+
+    if (file.kind !== spec.kind) {
+      throw new Error(
+        `Artifact workspace file kind mismatch for ${path}: expected ${spec.kind}, received ${file.kind}.`
+      );
+    }
+
+    if (file.mimeType !== spec.mimeType) {
+      throw new Error(
+        `Artifact workspace file mimeType mismatch for ${path}: expected ${spec.mimeType}, received ${file.mimeType}.`
+      );
+    }
+
+    if (file.sizeBytes !== Buffer.byteLength(file.content, "utf8")) {
+      throw new Error(`Artifact workspace file sizeBytes mismatch for ${path}.`);
+    }
+
+    if (file.sha256 !== sha256Hex(file.content)) {
+      throw new Error(`Artifact workspace file sha256 mismatch for ${path}.`);
     }
 
     seenPaths.add(path);
@@ -170,6 +263,11 @@ const validateCompleteStaticWorkspaceFiles = (
   );
 };
 
+const getStaticArtifactFileSpec = (path: string) => {
+  const allowedPath = assertArtifactWorkspaceFilePath(path);
+  return staticArtifactSpecsByPath.get(allowedPath)!;
+};
+
 const assertArtifactWorkspaceFilePath = (path: string): ArtifactWorkspaceFilePath => {
   if (path === "index.html" || path === "styles.css" || path === "script.js") {
     return path;
@@ -180,6 +278,8 @@ const assertArtifactWorkspaceFilePath = (path: string): ArtifactWorkspaceFilePat
 
 const sha256Hex = (content: string): string =>
   createHash("sha256").update(content, "utf8").digest("hex");
+
+const formatOptionalId = (value: string | undefined): string => value ?? "undefined";
 
 const escapeHtml = (value: string): string =>
   value
