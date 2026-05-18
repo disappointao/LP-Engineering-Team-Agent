@@ -28,6 +28,7 @@ export interface ArtifactWorkspaceFileRecord {
   id: string;
   workspaceId: string;
   projectId: string;
+  pageVersionId?: string;
   path: ArtifactWorkspaceFilePath;
   kind: ArtifactWorkspaceFileKind;
   mimeType: ArtifactWorkspaceMimeType;
@@ -88,6 +89,7 @@ export function createStaticArtifactWorkspaceFiles(
       id: `${input.workspaceId}_file_${spec.path.replaceAll(".", "_")}`,
       workspaceId: input.workspaceId,
       projectId: input.projectId,
+      pageVersionId: input.pageVersionId,
       path: spec.path,
       kind: spec.kind,
       mimeType: spec.mimeType,

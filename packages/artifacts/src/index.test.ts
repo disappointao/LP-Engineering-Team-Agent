@@ -156,6 +156,26 @@ describe("artifact workspace helpers", () => {
     expect(files[0]?.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("sets page version id on each workspace file when provided", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(files.map((file) => file.pageVersionId)).toEqual([
+      "version_1",
+      "version_1",
+      "version_1"
+    ]);
+  });
+
   it("creates metadata-only manifests without full content", () => {
     const rawSecret = "secret-token";
     const files = createStaticArtifactWorkspaceFiles({
