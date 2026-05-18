@@ -58,7 +58,7 @@ export interface ArtifactWorkspaceManifest {
 
 export const ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES = 8192;
 
-export type ArtifactWorkspaceFileReadOmittedReason =
+export type ArtifactWorkspaceFileOmittedReason =
   | "content_not_requested"
   | "size_limit_exceeded";
 
@@ -69,7 +69,7 @@ export interface ArtifactWorkspaceFileReadResult {
   file: ArtifactWorkspaceManifestFile;
   content?: string;
   truncated: boolean;
-  omittedReason?: ArtifactWorkspaceFileReadOmittedReason;
+  omittedReason?: ArtifactWorkspaceFileOmittedReason;
 }
 
 export interface ReadArtifactWorkspaceFileRecordInput {
