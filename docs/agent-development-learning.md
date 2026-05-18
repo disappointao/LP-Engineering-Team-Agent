@@ -652,6 +652,26 @@ pnpm --filter @lp-agent/model-gateway test
 - 客户端只应该表达用户意图，例如“停止当前任务”，不要直接暴露 worker job id 这种内部执行标识。
 - task / run / worker job 的关联可以先用安全 run event 表达，后续再正规化成数据库表，避免第一版直接引入过重调度系统。
 
+### 阶段 13：Web Worker Queue Integration v0
+
+当前设计：
+
+- [2026-05-18-web-worker-queue-integration-design.md](./superpowers/specs/2026-05-18-web-worker-queue-integration-design.md)
+- 这一阶段把现有 Web skill command loop 从“Web 内模拟执行”推进到“Web 入队、Worker 执行、Web 可观察”的本地闭环。
+- 用户在 Skills 页面批准并入队一个 queueable deployment skill command；Web 再提供 `Run local worker once` / `运行一次本地 Worker` 操作，最多 claim 并执行一个安全 queued worker job。
+- 第一版只支持 safe simulated worker payload，不持久化 raw env value、secret、完整 artifact 内容，也不做真实 shell、MCP execution、真实部署、daemon 或 streaming logs。
+
+当前计划：
+
+- 尚未生成；下一步应基于 Stage 13 spec 写 implementation plan。
+
+学习重点：
+
+- worker queue 的产品闭环要分成 enqueue、claim、execute、finalize 四段，而不是把所有事情塞进一次 Web request。
+- 入队成功不等于任务完成；run/tool observation 需要先记录 queued/running，再由 worker 完成结果反向 finalization。
+- safe payload 能证明跨进程 handoff，但不能为了方便执行而保存 secret、artifact 文件内容或不可控命令。
+- Web 上的本地 worker 按钮是 daemon 前的过渡形态；后续真正 daemon、MCP execution、真实 sandbox 和 streaming logs 都应复用同一套 queue/finalizer 边界。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。

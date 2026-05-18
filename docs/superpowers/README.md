@@ -216,6 +216,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 12 Web/API interrupt wiring v0 implementation plan.
    - Read this after the Web/API interrupt design when implementing or auditing the current-task interrupt action, optimistic stopping UI, API task/run/worker cancellation routing, and cancelled timeline rendering.
 
+54. `specs/2026-05-18-web-worker-queue-integration-design.md`
+   - Stage 13 Web worker queue integration v0 design.
+   - Read this after the Web/API interrupt plan when adding the Web skill command queue path, local `Run local worker once` action, worker job finalization back into run/tool events, and safe queue visibility without enabling daemon workers, real shell execution, MCP execution, real deployment, streaming logs, or secret/artifact payload persistence.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
