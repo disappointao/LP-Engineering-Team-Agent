@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LPBrief, LPSection } from "@lp-agent/lp-schema";
 
 export interface StaticArtifacts {
@@ -5,6 +6,178 @@ export interface StaticArtifacts {
   stylesCss: string;
   scriptJs: string;
 }
+
+export type ArtifactWorkspaceKind = "static_lp";
+export type ArtifactWorkspaceState = "active" | "archived";
+export type ArtifactWorkspaceFilePath = "index.html" | "styles.css" | "script.js";
+export type ArtifactWorkspaceFileKind = "html" | "css" | "js";
+export type ArtifactWorkspaceMimeType = "text/html" | "text/css" | "text/javascript";
+
+export interface ArtifactWorkspaceRecord {
+  id: string;
+  projectId: string;
+  pageVersionId?: string;
+  runId?: string;
+  kind: ArtifactWorkspaceKind;
+  state: ArtifactWorkspaceState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ArtifactWorkspaceFileRecord {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  path: ArtifactWorkspaceFilePath;
+  kind: ArtifactWorkspaceFileKind;
+  mimeType: ArtifactWorkspaceMimeType;
+  sizeBytes: number;
+  sha256: string;
+  summary: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ArtifactWorkspaceManifestFile {
+  path: ArtifactWorkspaceFilePath;
+  kind: ArtifactWorkspaceFileKind;
+  mimeType: ArtifactWorkspaceMimeType;
+  sizeBytes: number;
+  sha256: string;
+  summary: string;
+}
+
+export interface ArtifactWorkspaceManifest {
+  workspaceId: string;
+  projectId: string;
+  pageVersionId?: string;
+  files: ArtifactWorkspaceManifestFile[];
+}
+
+export interface CreateStaticArtifactWorkspaceFilesInput {
+  workspaceId: string;
+  projectId: string;
+  pageVersionId?: string;
+  artifacts: StaticArtifacts;
+  createdAt: string;
+}
+
+const staticArtifactFileSpecs: Array<{
+  path: ArtifactWorkspaceFilePath;
+  kind: ArtifactWorkspaceFileKind;
+  mimeType: ArtifactWorkspaceMimeType;
+  contentKey: keyof StaticArtifacts;
+}> = [
+  { path: "index.html", kind: "html", mimeType: "text/html", contentKey: "indexHtml" },
+  { path: "styles.css", kind: "css", mimeType: "text/css", contentKey: "stylesCss" },
+  { path: "script.js", kind: "js", mimeType: "text/javascript", contentKey: "scriptJs" }
+];
+
+const staticArtifactPathOrder = new Map<ArtifactWorkspaceFilePath, number>(
+  staticArtifactFileSpecs.map((spec, index) => [spec.path, index])
+);
+
+export function createStaticArtifactWorkspaceFiles(
+  input: CreateStaticArtifactWorkspaceFilesInput
+): ArtifactWorkspaceFileRecord[] {
+  return staticArtifactFileSpecs.map((spec) => {
+    const content = input.artifacts[spec.contentKey];
+
+    return {
+      id: `${input.workspaceId}_file_${spec.path.replaceAll(".", "_")}`,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      path: spec.path,
+      kind: spec.kind,
+      mimeType: spec.mimeType,
+      sizeBytes: Buffer.byteLength(content, "utf8"),
+      sha256: sha256Hex(content),
+      summary: `${spec.path} static LP file`,
+      content,
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt
+    };
+  });
+}
+
+export function createArtifactWorkspaceManifest(input: {
+  workspaceId: string;
+  projectId: string;
+  pageVersionId?: string;
+  files: ArtifactWorkspaceFileRecord[];
+}): ArtifactWorkspaceManifest {
+  const files = validateCompleteStaticWorkspaceFiles(input.files);
+
+  return {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    pageVersionId: input.pageVersionId,
+    files: files.map((file) => ({
+      path: file.path,
+      kind: file.kind,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+      summary: file.summary
+    }))
+  };
+}
+
+export function staticArtifactsFromWorkspaceFiles(
+  files: ArtifactWorkspaceFileRecord[]
+): StaticArtifacts {
+  const byPath = new Map(
+    validateCompleteStaticWorkspaceFiles(files).map((file) => [file.path, file] as const)
+  );
+
+  return {
+    indexHtml: byPath.get("index.html")!.content,
+    stylesCss: byPath.get("styles.css")!.content,
+    scriptJs: byPath.get("script.js")!.content
+  };
+}
+
+const validateCompleteStaticWorkspaceFiles = (
+  files: ArtifactWorkspaceFileRecord[]
+): ArtifactWorkspaceFileRecord[] => {
+  const seenPaths = new Set<ArtifactWorkspaceFilePath>();
+
+  for (const file of files) {
+    const path = assertArtifactWorkspaceFilePath(file.path);
+
+    if (seenPaths.has(path)) {
+      throw new Error(`Artifact workspace has duplicate file path: ${path}.`);
+    }
+
+    seenPaths.add(path);
+  }
+
+  const missingPaths = staticArtifactFileSpecs
+    .map((spec) => spec.path)
+    .filter((path) => !seenPaths.has(path));
+
+  if (missingPaths.length > 0) {
+    throw new Error(`Artifact workspace is incomplete: missing ${missingPaths.join(", ")}.`);
+  }
+
+  return [...files].sort(
+    (left, right) =>
+      staticArtifactPathOrder.get(assertArtifactWorkspaceFilePath(left.path))! -
+      staticArtifactPathOrder.get(assertArtifactWorkspaceFilePath(right.path))!
+  );
+};
+
+const assertArtifactWorkspaceFilePath = (path: string): ArtifactWorkspaceFilePath => {
+  if (path === "index.html" || path === "styles.css" || path === "script.js") {
+    return path;
+  }
+
+  throw new Error(`Unsupported artifact workspace file path: ${path}.`);
+};
+
+const sha256Hex = (content: string): string =>
+  createHash("sha256").update(content, "utf8").digest("hex");
 
 const escapeHtml = (value: string): string =>
   value
