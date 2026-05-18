@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { Buffer } from "node:buffer";
 import {
   createInMemoryWorkbenchRepositories,
   type RunRecord,
-  type ToolObservationRecord
+  type ToolObservationRecord,
+  type WorkbenchRepositories
 } from "@lp-agent/db";
 import {
   InMemoryWorkerJobPayloadRepository,
@@ -13,7 +15,8 @@ import {
 } from "@lp-agent/worker-runtime";
 import {
   finalizeWorkerBackedSkillCommand,
-  runLocalWorkerOnceAndFinalize
+  runLocalWorkerOnceAndFinalize,
+  type SkillCommandQueueRuntime
 } from "./skill-command-worker-queue";
 
 function runningRun(): RunRecord {
@@ -56,6 +59,10 @@ function runningObservation(): ToolObservationRecord {
 async function linkedWorkerJob(input: {
   state?: "completed" | "failed" | "rejected" | "cancelled";
   errorName?: string;
+  stdout?: string;
+  stderr?: string;
+  stdoutBytes?: number;
+  stderrBytes?: number;
 } = {}): Promise<{
   repositories: ReturnType<typeof createInMemoryWorkbenchRepositories>;
   workerRuntime: InMemoryWorkerRuntime;
@@ -105,6 +112,8 @@ async function linkedWorkerJob(input: {
       allowedEnvNames: ["LP_PROJECT_ID"]
     })
   );
+  const stdout = input.stdout ?? (input.state === "completed" ? "published" : "");
+  const stderr = input.stderr ?? (input.state === "completed" ? "" : "failed");
   const workerJob = input.state
     ? {
         ...queued,
@@ -114,10 +123,10 @@ async function linkedWorkerJob(input: {
         resultSummary: {
           state: input.state,
           exitCode: input.state === "completed" ? 0 : 1,
-          stdout: input.state === "completed" ? "published" : "",
-          stderr: input.state === "completed" ? "" : "failed",
-          stdoutBytes: input.state === "completed" ? 9 : 0,
-          stderrBytes: input.state === "completed" ? 0 : 6,
+          stdout,
+          stderr,
+          stdoutBytes: input.stdoutBytes ?? Buffer.byteLength(stdout, "utf8"),
+          stderrBytes: input.stderrBytes ?? Buffer.byteLength(stderr, "utf8"),
           errorName: input.errorName
         }
       }
@@ -168,7 +177,7 @@ describe("worker-backed skill command finalization", () => {
       expect.objectContaining({
         id: "tool_observation_1",
         state: "completed",
-        outputSummary: expect.stringContaining("stdout: 9 chars")
+        outputSummary: expect.stringContaining("stdout: 9 bytes")
       })
     ]);
     await expect(repositories.runEvents.listForRun("run_skill_command_1")).resolves.toEqual(
@@ -177,6 +186,42 @@ describe("worker-backed skill command finalization", () => {
         expect.objectContaining({ type: "run.completed" })
       ])
     );
+  });
+
+  it("uses byte-count output summaries without exposing raw worker output", async () => {
+    const rawStdout = "你好a";
+    const rawStderr = "部署失败";
+    const { repositories, workerJob } = await linkedWorkerJob({
+      state: "completed",
+      stdout: rawStdout,
+      stderr: rawStderr
+    });
+
+    await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    const expectedSummary = [
+      `stdout: ${Buffer.byteLength(rawStdout, "utf8")} bytes`,
+      `stderr: ${Buffer.byteLength(rawStderr, "utf8")} bytes`
+    ].join("\n");
+    const observations = await repositories.toolObservations.listForRun(
+      "run_skill_command_1"
+    );
+    expect(observations[0]?.outputSummary).toBe(expectedSummary);
+    expect(observations[0]?.outputSummary).not.toContain(rawStdout);
+    expect(observations[0]?.outputSummary).not.toContain(rawStderr);
+
+    const terminalEvents = (await repositories.runEvents.listForRun(
+      "run_skill_command_1"
+    )).filter((event) => event.type === "tool.completed" || event.type === "run.completed");
+    for (const event of terminalEvents) {
+      expect(event.payload).toMatchObject({ outputSummary: expectedSummary });
+      expect(JSON.stringify(event.payload)).not.toContain(rawStdout);
+      expect(JSON.stringify(event.payload)).not.toContain(rawStderr);
+    }
   });
 
   it("is idempotent when a terminal run event already exists", async () => {
@@ -193,11 +238,99 @@ describe("worker-backed skill command finalization", () => {
       now: () => new Date("2026-05-18T00:00:05.000Z")
     });
 
-    const terminalEvents = (await repositories.runEvents.listForRun("run_skill_command_1")).filter(
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    const terminalRunEvents = events.filter(
       (event) => event.type === "run.completed"
     );
+    const terminalToolEvents = events.filter(
+      (event) => event.type === "tool.completed"
+    );
     expect(second).toMatchObject({ ok: true, state: "completed" });
-    expect(terminalEvents).toHaveLength(1);
+    expect(terminalRunEvents).toHaveLength(1);
+    expect(terminalToolEvents).toHaveLength(1);
+  });
+
+  it("does not duplicate terminal tool events while writing a missing terminal run event", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_4",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 4,
+      type: "tool.completed",
+      message: "Deployment skill command completed.",
+      payload: {
+        workerJobId: workerJob.id,
+        observationId: "tool_observation_1",
+        outputSummary: "stdout: 9 bytes\nstderr: 0 bytes",
+        exitCode: 0
+      },
+      createdAt: "2026-05-18T00:00:03.000Z"
+    });
+
+    const result = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(result).toMatchObject({ ok: true, state: "completed" });
+    expect(events.filter((event) => event.type === "tool.completed")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "run.completed")).toHaveLength(1);
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "completed",
+      completedAt: "2026-05-18T00:00:04.000Z"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "completed",
+        outputSummary: "stdout: 9 bytes\nstderr: 0 bytes"
+      })
+    ]);
+  });
+
+  it("reconciles stale records when a terminal run event already exists", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_4",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 4,
+      type: "run.completed",
+      message: "Deployment skill command run completed.",
+      payload: {
+        workerJobId: workerJob.id,
+        observationId: "tool_observation_1",
+        outputSummary: "stdout: 9 bytes\nstderr: 0 bytes",
+        exitCode: 0
+      },
+      createdAt: "2026-05-18T00:00:03.000Z"
+    });
+
+    const result = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(result).toMatchObject({ ok: true, state: "completed" });
+    expect(events.filter((event) => event.type === "run.completed")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "tool.completed")).toHaveLength(1);
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "completed",
+      completedAt: "2026-05-18T00:00:03.000Z"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "completed",
+        outputSummary: "stdout: 9 bytes\nstderr: 0 bytes",
+        completedAt: "2026-05-18T00:00:03.000Z"
+      })
+    ]);
   });
 
   it("finalizes cancelled worker jobs as cancelled instead of failed", async () => {
@@ -314,6 +447,91 @@ describe("worker-backed skill command finalization", () => {
     expect(finalizeSpy).toHaveBeenCalledOnce();
   });
 
+  it("returns worker runtime not configured when no runtime is available", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+
+    await expect(
+      runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerId: "local-web-worker"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_runtime_not_configured"
+    });
+  });
+
+  it("maps worker claim and run exceptions to worker job execution failed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { workerJob } = await linkedWorkerJob({ state: "completed" });
+    const throwingClaimRuntime: SkillCommandQueueRuntime = {
+      enqueueSafe: async () => workerJob,
+      claimOldestQueued: async () => {
+        throw new Error("claim failed");
+      },
+      runClaimedJob: async () => workerJob,
+      getJob: async () => undefined
+    };
+    await expect(
+      runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerRuntime: throwingClaimRuntime,
+        workerId: "local-web-worker"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_job_execution_failed"
+    });
+
+    const throwingRunRuntime: SkillCommandQueueRuntime = {
+      enqueueSafe: async () => workerJob,
+      claimOldestQueued: async () => ({
+        record: workerJob,
+        claimToken: "claim_token_1"
+      }),
+      runClaimedJob: async () => {
+        throw new Error("run failed");
+      },
+      getJob: async () => undefined
+    };
+    await expect(
+      runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerRuntime: throwingRunRuntime,
+        workerId: "local-web-worker"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_job_execution_failed"
+    });
+  });
+
+  it("maps finalization exceptions to worker job finalization failed", async () => {
+    const baseRepositories = createInMemoryWorkbenchRepositories();
+    const repositories = withThrowingRunEventListAll(baseRepositories);
+    const { workerJob } = await linkedWorkerJob({ state: "completed" });
+    const workerRuntime: SkillCommandQueueRuntime = {
+      enqueueSafe: async () => workerJob,
+      claimOldestQueued: async () => ({
+        record: workerJob,
+        claimToken: "claim_token_1"
+      }),
+      runClaimedJob: async () => workerJob,
+      getJob: async () => undefined
+    };
+
+    await expect(
+      runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerRuntime,
+        workerId: "local-web-worker"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_job_finalization_failed"
+    });
+  });
+
   it("returns idle when there is no queued worker job", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workerRuntime = new InMemoryWorkerRuntime();
@@ -327,3 +545,22 @@ describe("worker-backed skill command finalization", () => {
     ).resolves.toEqual({ ok: true, state: "idle" });
   });
 });
+
+function withThrowingRunEventListAll(
+  repositories: WorkbenchRepositories
+): WorkbenchRepositories {
+  return {
+    ...repositories,
+    runEvents: {
+      save: repositories.runEvents.save.bind(repositories.runEvents),
+      listForRun: repositories.runEvents.listForRun.bind(repositories.runEvents),
+      listForTask: repositories.runEvents.listForTask.bind(repositories.runEvents),
+      listForProject: repositories.runEvents.listForProject.bind(
+        repositories.runEvents
+      ),
+      listAll: async () => {
+        throw new Error("run event list failed");
+      }
+    }
+  };
+}

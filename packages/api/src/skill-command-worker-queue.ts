@@ -43,6 +43,9 @@ export type RunLocalWorkerOnceResult =
         | "worker_job_finalization_failed";
     };
 
+type WorkerFinalState = "completed" | "failed" | "rejected" | "cancelled";
+type TerminalRecordState = "completed" | "failed" | "cancelled";
+
 export async function runLocalWorkerOnceAndFinalize(input: {
   repositories: WorkbenchRepositories;
   workerRuntime?: SkillCommandQueueRuntime;
@@ -89,11 +92,11 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   now?: () => Date;
 }): Promise<RunLocalWorkerOnceResult> {
   const link = await findWorkerLinkEvent(input.repositories, input.workerJob.id);
-  const finalState = toFinalState(input.workerJob);
+  const workerFinalState = toFinalState(input.workerJob);
   if (!link) {
     return {
       ok: true,
-      state: finalState,
+      state: workerFinalState,
       workerJobId: input.workerJob.id
     };
   }
@@ -110,30 +113,36 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   }
 
   const existingEvents = await input.repositories.runEvents.listForRun(run.id);
-  const terminalEvents = existingEvents.filter((event) =>
-    isTerminalRunEvent(event.type)
-  );
-  const terminalEvent = terminalEvents.at(-1);
-  if (terminalEvent) {
-    return {
-      ok: true,
-      state: terminalEventToResultState(terminalEvent),
-      workerJobId: input.workerJob.id,
-      runId: run.id
-    };
-  }
-
-  const completedAt = nextRepositoryTimestamp(
-    input.repositories,
-    input.now ?? (() => new Date())
-  );
+  const terminalToolEvent = existingEvents
+    .filter((event) => isTerminalToolEvent(event.type))
+    .at(-1);
+  const terminalRunEvent = existingEvents
+    .filter((event) => isTerminalRunEvent(event.type))
+    .at(-1);
+  const terminalRecordState = terminalRunEvent
+    ? terminalRunEventToRecordState(terminalRunEvent)
+    : terminalToolEvent
+      ? terminalToolEventToRecordState(terminalToolEvent)
+      : toRecordTerminalState(workerFinalState);
+  const resultState = terminalRunEvent
+    ? terminalRunEventToRecordState(terminalRunEvent)
+    : terminalToolEvent
+      ? terminalToolEventToRecordState(terminalToolEvent)
+      : workerFinalState;
+  let newTerminalEventCreatedAt: string | undefined;
+  const getNewTerminalEventCreatedAt = (): string => {
+    newTerminalEventCreatedAt ??= nextRepositoryTimestamp(
+      input.repositories,
+      input.now ?? (() => new Date())
+    );
+    return newTerminalEventCreatedAt;
+  };
   const outputSummary = summarizeWorkerResult(input.workerJob);
   const errorName = sanitizeWorkerErrorName(
     input.workerJob.errorName ?? input.workerJob.resultSummary?.errorName
   );
   const exitCode = input.workerJob.resultSummary?.exitCode;
-  const terminalRecordState = toRecordTerminalState(finalState);
-  const nextSequence =
+  let nextSequence =
     existingEvents.reduce((max, event) => Math.max(max, event.sequence), 0) + 1;
   const terminalPayload = {
     workerJobId: input.workerJob.id,
@@ -143,42 +152,32 @@ export async function finalizeWorkerBackedSkillCommand(input: {
     ...(errorName ? { errorName } : {})
   };
 
-  await input.repositories.runEvents.save(
-    toTerminalRunEventRecord({
+  if (!terminalToolEvent) {
+    await input.repositories.runEvents.save(
+      toTerminalRunEventRecord({
+        run,
+        sequence: nextSequence,
+        type: toTerminalToolEventType(terminalRecordState),
+        message: toTerminalToolEventMessage(terminalRecordState),
+        payload: terminalPayload,
+        createdAt: getNewTerminalEventCreatedAt()
+      })
+    );
+    nextSequence += 1;
+  }
+
+  let reconciledRunEvent = terminalRunEvent;
+  if (!reconciledRunEvent) {
+    reconciledRunEvent = toTerminalRunEventRecord({
       run,
       sequence: nextSequence,
-      type: terminalRecordState === "completed"
-        ? "tool.completed"
-        : terminalRecordState === "cancelled"
-          ? "tool.cancelled"
-          : "tool.failed",
-      message: terminalRecordState === "completed"
-        ? "Deployment skill command completed."
-        : terminalRecordState === "cancelled"
-          ? "Deployment skill command cancelled."
-          : "Deployment skill command failed.",
+      type: toTerminalRunEventType(terminalRecordState),
+      message: toTerminalRunEventMessage(terminalRecordState),
       payload: terminalPayload,
-      createdAt: completedAt
-    })
-  );
-  await input.repositories.runEvents.save(
-    toTerminalRunEventRecord({
-      run,
-      sequence: nextSequence + 1,
-      type: terminalRecordState === "completed"
-        ? "run.completed"
-        : terminalRecordState === "cancelled"
-          ? "run.cancelled"
-          : "run.failed",
-      message: terminalRecordState === "completed"
-        ? "Deployment skill command run completed."
-        : terminalRecordState === "cancelled"
-          ? "Deployment skill command run cancelled."
-          : "Deployment skill command run failed.",
-      payload: terminalPayload,
-      createdAt: completedAt
-    })
-  );
+      createdAt: getNewTerminalEventCreatedAt()
+    });
+    await input.repositories.runEvents.save(reconciledRunEvent);
+  }
 
   if (observationId) {
     await updateLinkedObservation({
@@ -189,19 +188,19 @@ export async function finalizeWorkerBackedSkillCommand(input: {
       outputSummary,
       exitCode,
       errorName,
-      completedAt
+      completedAt: reconciledRunEvent.createdAt
     });
   }
 
   await input.repositories.runs.save({
     ...run,
     state: terminalRecordState,
-    completedAt
+    completedAt: reconciledRunEvent.createdAt
   });
 
   return {
     ok: true,
-    state: finalState,
+    state: resultState,
     workerJobId: input.workerJob.id,
     runId: run.id
   };
@@ -242,12 +241,17 @@ async function updateLinkedObservation(input: {
     return;
   }
 
+  const {
+    exitCode: _previousExitCode,
+    errorName: _previousErrorName,
+    ...baseObservation
+  } = observation;
   await input.repositories.toolObservations.save({
-    ...observation,
+    ...baseObservation,
     outputSummary: input.outputSummary,
     state: input.state,
     ...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
-    ...(input.errorName ? { errorName: input.errorName } : {}),
+    ...(input.errorName !== undefined ? { errorName: input.errorName } : {}),
     completedAt: input.completedAt
   });
 }
@@ -275,7 +279,7 @@ function toTerminalRunEventRecord(input: {
 
 function toFinalState(
   workerJob: WorkerJobRecord
-): "completed" | "failed" | "rejected" | "cancelled" {
+): WorkerFinalState {
   if (
     workerJob.state === "completed" ||
     workerJob.state === "failed" ||
@@ -288,14 +292,14 @@ function toFinalState(
 }
 
 function toRecordTerminalState(
-  state: "completed" | "failed" | "rejected" | "cancelled"
-): "completed" | "failed" | "cancelled" {
+  state: WorkerFinalState
+): TerminalRecordState {
   return state === "rejected" ? "failed" : state;
 }
 
-function terminalEventToResultState(
+function terminalRunEventToRecordState(
   event: RunEventRecord
-): "completed" | "failed" | "cancelled" {
+): TerminalRecordState {
   if (event.type === "run.completed") {
     return "completed";
   }
@@ -305,14 +309,66 @@ function terminalEventToResultState(
   return "failed";
 }
 
+function terminalToolEventToRecordState(
+  event: RunEventRecord
+): TerminalRecordState {
+  if (event.type === "tool.completed") {
+    return "completed";
+  }
+  if (event.type === "tool.cancelled") {
+    return "cancelled";
+  }
+  return "failed";
+}
+
+function toTerminalToolEventType(state: TerminalRecordState): string {
+  if (state === "completed") {
+    return "tool.completed";
+  }
+  if (state === "cancelled") {
+    return "tool.cancelled";
+  }
+  return "tool.failed";
+}
+
+function toTerminalRunEventType(state: TerminalRecordState): string {
+  if (state === "completed") {
+    return "run.completed";
+  }
+  if (state === "cancelled") {
+    return "run.cancelled";
+  }
+  return "run.failed";
+}
+
+function toTerminalToolEventMessage(state: TerminalRecordState): string {
+  if (state === "completed") {
+    return "Deployment skill command completed.";
+  }
+  if (state === "cancelled") {
+    return "Deployment skill command cancelled.";
+  }
+  return "Deployment skill command failed.";
+}
+
+function toTerminalRunEventMessage(state: TerminalRecordState): string {
+  if (state === "completed") {
+    return "Deployment skill command run completed.";
+  }
+  if (state === "cancelled") {
+    return "Deployment skill command run cancelled.";
+  }
+  return "Deployment skill command run failed.";
+}
+
 function summarizeWorkerResult(workerJob: WorkerJobRecord): string {
   const result = workerJob.resultSummary;
   if (!result) {
     return "Worker job did not produce a result.";
   }
   return [
-    `stdout: ${result.stdoutBytes} chars`,
-    `stderr: ${result.stderrBytes} chars`
+    `stdout: ${result.stdoutBytes} bytes`,
+    `stderr: ${result.stderrBytes} bytes`
   ].join("\n");
 }
 
@@ -339,6 +395,14 @@ function isTerminalRunEvent(type: string): boolean {
     type === "run.completed" ||
     type === "run.failed" ||
     type === "run.cancelled"
+  );
+}
+
+function isTerminalToolEvent(type: string): boolean {
+  return (
+    type === "tool.completed" ||
+    type === "tool.failed" ||
+    type === "tool.cancelled"
   );
 }
 
