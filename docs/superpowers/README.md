@@ -208,6 +208,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 11 worker queue handoff v0 implementation plan.
    - Read this after the worker queue handoff design when implementing or auditing safe persisted worker payloads, claim-token worker handoff, `apps/agent-worker` run-once execution, and verification that no real shell, MCP execution, or Web interrupt wiring was introduced.
 
+52. `specs/2026-05-18-web-api-interrupt-wiring-design.md`
+   - Stage 12 Web/API interrupt wiring v0 design.
+   - Read this after the worker queue handoff plan when adding current-task interrupt UI, optimistic stopping state, API cancellation routing, task/run/worker target association, and cancellation timeline display without real shell signals, MCP execution, streaming logs, worker daemon control, or bulk cancellation.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

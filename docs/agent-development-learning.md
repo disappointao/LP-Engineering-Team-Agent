@@ -627,6 +627,30 @@ pnpm --filter @lp-agent/model-gateway test
 - running job 的取消在跨进程场景里仍应是协作式的：runtime 记录取消请求，worker adapter 主动检查 cancellation context。
 - claim token 是防止 stale worker 覆盖状态的并发边界，不是用户身份或授权信息。
 
+### 阶段 12：Web/API Interrupt Wiring v0
+
+当前设计：
+
+- [2026-05-18-web-api-interrupt-wiring-design.md](./superpowers/specs/2026-05-18-web-api-interrupt-wiring-design.md)
+- 这一阶段把 Web 里的“打断/停止”按钮接到 API 和 worker cancel 底座上，但只覆盖当前会话任务，不做批量取消、不做部署、不做真实 shell signal，也不做 MCP execution。
+- 用户点击停止后，前端先进入 optimistic `正在停止...` 状态；真正的持久状态仍以 repository 里的 task/run/worker event 为准。
+- API 不接受客户端传入的 worker job id，而是根据当前 task 推导它关联的 run / worker job，避免用户从浏览器任意取消其它 job。
+
+当前计划：
+
+- 待根据该设计生成 Stage 12 implementation plan。
+
+当前实现状态：
+
+- 尚未实现。当前只有设计文档，后续会先补 plan，再按 TDD 实现 Web action、store interrupt contract、task interrupt view、timeline cancelled state 和相关测试。
+
+学习重点：
+
+- 产品里的 interrupt 不是底层 kill。第一版要把“用户请求停止”“系统正在停止”“实际已经取消”分开表达。
+- optimistic UI 只能改善反馈速度，不能替代服务端状态；刷新后的事实必须来自持久化事件。
+- 客户端只应该表达用户意图，例如“停止当前任务”，不要直接暴露 worker job id 这种内部执行标识。
+- task / run / worker job 的关联可以先用安全 run event 表达，后续再正规化成数据库表，避免第一版直接引入过重调度系统。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
