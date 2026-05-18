@@ -49,6 +49,7 @@ interface HomePageProps {
     interruptError?: string;
     workerError?: string;
     view?: string;
+    artifactPath?: string;
   }>;
 }
 
@@ -76,7 +77,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
     projectId: currentProjectId,
-    taskId: currentTaskId
+    taskId: currentTaskId,
+    artifactPath: params?.artifactPath
   });
   const modelState = getPageModelState(pageState);
   const mcpState = getPageMCPState(pageState);
@@ -900,6 +902,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               </a>
                             ))}
                           </div>
+                          {pageState.kind === "task_ready" && pageState.artifactDiff ? (
+                            ArtifactDiffBlock({
+                              artifactDiff: pageState.artifactDiff,
+                              copy: copy.chat,
+                              locale: copy.locale
+                            })
+                          ) : null}
                         </section>
 
                         <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
@@ -1045,6 +1054,74 @@ function ProjectMembersBlock({
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+function ArtifactDiffBlock({
+  artifactDiff,
+  copy,
+  locale
+}: {
+  artifactDiff: NonNullable<Extract<WorkbenchPageState, { kind: "task_ready" }>["artifactDiff"]>;
+  copy: ReturnType<typeof getWorkbenchCopy>["chat"];
+  locale: string;
+}) {
+  return (
+    <section className="artifactDiffBlock" aria-label={copy.artifactChangesTitle}>
+      <div className="artifactDiffHeader">
+        <strong>{copy.artifactChangesTitle}</strong>
+        <span>
+          {artifactDiff.previousPageVersionId
+            ? `${copy.artifactPreviousVersionLabel} -> ${copy.artifactCurrentVersionLabel}`
+            : copy.artifactVersionInitial}
+        </span>
+      </div>
+      <div className="artifactDiffGrid">
+        {artifactDiff.files.map((file) => (
+          <div className="artifactDiffCard" data-state={file.state} key={file.path}>
+            <div className="artifactDiffTop">
+              <strong>{file.path}</strong>
+              <span>{copy.artifactDiffStateLabels[file.state]}</span>
+            </div>
+            <small>
+              {file.sizeBytes !== undefined
+                ? `${file.sizeBytes.toLocaleString(locale)} bytes`
+                : copy.snippetUnavailableMessage}
+            </small>
+            {file.shortSha256 ? (
+              <small>
+                {copy.artifactHashLabel}: {file.shortSha256}
+              </small>
+            ) : null}
+            {file.summary ? <p>{file.summary}</p> : null}
+            {file.canPreview ? (
+              <a href={`/?artifactPath=${encodeURIComponent(file.path)}`}>
+                {copy.previewSnippetLabel}
+              </a>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {artifactDiff.selectedSnippet ? (
+        <div className="artifactSnippetPanel">
+          <div className="artifactSnippetHeader">
+            <strong>{copy.snippetPreviewTitle}</strong>
+            <span>{artifactDiff.selectedSnippet.path}</span>
+          </div>
+          {artifactDiff.selectedSnippet.content !== undefined ? (
+            <pre><code>{artifactDiff.selectedSnippet.content}</code></pre>
+          ) : (
+            <p>
+              {artifactDiff.selectedSnippet.omittedReason === "size_limit_exceeded"
+                ? copy.snippetSizeLimitMessage
+                : copy.snippetUnavailableMessage}
+            </p>
+          )}
+        </div>
+      ) : artifactDiff.errorCode === "artifact_snippet_unavailable" ? (
+        <p className="artifactSnippetNotice">{copy.snippetUnavailableMessage}</p>
+      ) : null}
     </section>
   );
 }

@@ -251,6 +251,16 @@ export interface WorkbenchCopy {
     branchLabel: string;
     findingsLabel: string;
     filesLabel: string;
+    artifactChangesTitle: string;
+    artifactVersionInitial: string;
+    artifactPreviousVersionLabel: string;
+    artifactCurrentVersionLabel: string;
+    artifactHashLabel: string;
+    previewSnippetLabel: string;
+    snippetPreviewTitle: string;
+    snippetSizeLimitMessage: string;
+    snippetUnavailableMessage: string;
+    artifactDiffStateLabels: Record<"initial" | "added" | "removed" | "changed" | "unchanged", string>;
     artifactKinds: {
       handoff: string;
       single: string;
@@ -670,6 +680,22 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       branchLabel: "Branch",
       findingsLabel: "Findings",
       filesLabel: "Files",
+      artifactChangesTitle: "Artifact changes",
+      artifactVersionInitial: "Initial version",
+      artifactPreviousVersionLabel: "Previous",
+      artifactCurrentVersionLabel: "Current",
+      artifactHashLabel: "Hash",
+      previewSnippetLabel: "Preview snippet",
+      snippetPreviewTitle: "Snippet preview",
+      snippetSizeLimitMessage: "Content is over the 8 KB preview limit.",
+      snippetUnavailableMessage: "Snippet is unavailable.",
+      artifactDiffStateLabels: {
+        initial: "Initial",
+        added: "Added",
+        removed: "Removed",
+        changed: "Changed",
+        unchanged: "Unchanged"
+      },
       artifactKinds: {
         handoff: "PR handoff",
         single: "single HTML",
@@ -1065,6 +1091,22 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       branchLabel: "分支",
       findingsLabel: "问题",
       filesLabel: "文件",
+      artifactChangesTitle: "文件变化",
+      artifactVersionInitial: "初始版本",
+      artifactPreviousVersionLabel: "上一版",
+      artifactCurrentVersionLabel: "当前版",
+      artifactHashLabel: "哈希",
+      previewSnippetLabel: "预览片段",
+      snippetPreviewTitle: "片段预览",
+      snippetSizeLimitMessage: "内容超过 8 KB 预览限制。",
+      snippetUnavailableMessage: "片段暂不可用。",
+      artifactDiffStateLabels: {
+        initial: "初始",
+        added: "新增",
+        removed: "已移除",
+        changed: "已变更",
+        unchanged: "未变更"
+      },
       artifactKinds: {
         handoff: "PR 交接",
         single: "单文件 HTML",

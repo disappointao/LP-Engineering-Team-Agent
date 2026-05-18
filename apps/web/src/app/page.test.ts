@@ -4,6 +4,7 @@ const pageMocks = vi.hoisted(() => ({
   acceptLanguage: "en",
   currentProjectId: undefined as string | undefined,
   currentTaskId: undefined as string | undefined,
+  getPageStateMock: vi.fn(),
   pageState: {
     kind: "empty",
     projects: [],
@@ -56,7 +57,7 @@ vi.mock("next/headers", () => ({
 
 vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
-    getPageState: vi.fn(async () => pageMocks.pageState)
+    getPageState: pageMocks.getPageStateMock.mockImplementation(async () => pageMocks.pageState)
   }))
 }));
 
@@ -197,6 +198,125 @@ const unavailableInterrupt = {
   available: false,
   state: "not_interruptible"
 };
+
+function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "task_ready",
+    projects: [
+      {
+        id: "project_1",
+        name: "Completed LP",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      }
+    ],
+    projectMembers: [],
+    tasks: [
+      {
+        id: "task_1",
+        title: "Create a no git spring ecommerce landing page.",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      }
+    ],
+    skills: {
+      boundSkills: [],
+      availableVersions: []
+    },
+    skillCommands: [],
+    models: {
+      providers: [],
+      routes: [],
+      resolvedPolicy: {
+        planner: { provider: "mock-openai", model: "planning-model" },
+        builder: { provider: "mock-anthropic", model: "code-model" },
+        reviewer: { provider: "mock-openai", model: "review-model" },
+        deployer: { provider: "mock-local", model: "tool-model" }
+      }
+    },
+    mcp: {
+      connectors: [],
+      approvals: [],
+      visibleToolsByRole: {
+        planner: [],
+        builder: [],
+        reviewer: [],
+        deployer: []
+      }
+    },
+    activeTaskId: "task_1",
+    task: {
+      id: "task_1",
+      title: "Create a no git spring ecommerce landing page.",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-05-12T08:00:00.000Z"
+    },
+    messages: [
+      {
+        id: "message_1",
+        taskId: "task_1",
+        role: "user",
+        content: "Create a no git spring ecommerce landing page.",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      {
+        id: "message_2",
+        taskId: "task_1",
+        role: "assistant",
+        content: "LP artifacts are ready for review.",
+        createdAt: "2026-05-12T08:00:01.000Z"
+      }
+    ],
+    runEvents: [],
+    interrupt: unavailableInterrupt,
+    snapshot: {
+      project: {
+        id: "project_1",
+        name: "Completed LP",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      brief: {
+        id: "brief_1",
+        projectId: "project_1",
+        prompt: "Create a no git spring ecommerce landing page.",
+        brief: {
+          objective: "Convert paid traffic into spring campaign purchases.",
+          audience: "Returning ecommerce shoppers",
+          offer: "Save 25% through Sunday.",
+          primaryCta: "Shop the sale"
+        },
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      currentPageVersion: {
+        id: "version_1",
+        projectId: "project_1",
+        briefId: "brief_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        artifacts: {
+          indexHtml: [
+            "<!doctype html><html><head>",
+            "<link rel=\"stylesheet\" href=\"styles.css\">",
+            "</head><body>",
+            "<main><h1>Spring essentials</h1></main>",
+            "  <script src=\"script.js\"></script>",
+            "</body></html>"
+          ].join(""),
+          stylesCss: "body { color: #111827; }",
+          scriptJs: "window.lpAgent = true;"
+        },
+        reviewStatus: "passed",
+        findings: [],
+        createdAt: "2026-05-12T08:01:00.000Z"
+      },
+      deployment: undefined
+    },
+    ...overrides
+  };
+}
+
 const deploymentBoundSkill = {
   ...publishedProjectSkill,
   skill: {
@@ -276,6 +396,7 @@ beforeEach(() => {
   pageMocks.acceptLanguage = "en";
   pageMocks.currentProjectId = undefined;
   pageMocks.currentTaskId = undefined;
+  pageMocks.getPageStateMock.mockReset();
   pageMocks.pageState = {
     kind: "empty",
     projects: [],
@@ -2160,6 +2281,49 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("<html>");
   });
 
+  it("passes artifactPath query values into page state loading", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [],
+      projectMembers: [],
+      tasks: [],
+      skills: { boundSkills: [], availableVersions: [] },
+      skillCommands: [],
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      mcp: {
+        connectors: [],
+        approvals: [],
+        visibleToolsByRole: {
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    };
+
+    await HomePage({
+      searchParams: Promise.resolve({ artifactPath: "styles.css" })
+    });
+
+    expect(pageMocks.getPageStateMock).toHaveBeenCalledWith({
+      projectId: "project_1",
+      taskId: "task_1",
+      artifactPath: "styles.css"
+    });
+  });
+
   it("renders completed static artifacts without deployment UI", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
@@ -2275,5 +2439,67 @@ describe("HomePage project flow errors", () => {
     expect(spacedText).not.toContain("PR handoff");
     expect(spacedText).not.toContain("Deployments");
     expect(spacedText).not.toContain("Repository URL");
+  });
+
+  it("renders artifact diff cards and a selected bounded snippet", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          },
+          {
+            path: "script.js",
+            state: "unchanged",
+            sizeBytes: 24,
+            sha256: "c".repeat(64),
+            shortSha256: "c".repeat(12),
+            summary: "script.js static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ artifactPath: "styles.css" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Artifact changes");
+    expect(text).toContain("index.html");
+    expect(text).toContain("Initial");
+    expect(text).toContain("styles.css");
+    expect(text).toContain("Changed");
+    expect(text).toContain("Snippet preview");
+    expect(text).toContain("body { color: #111827; }");
   });
 });
