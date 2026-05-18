@@ -128,7 +128,7 @@ describe("in-memory workbench repositories", () => {
   it("stores artifact workspaces and files with scoped lists and defensive copies", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workspace: ArtifactWorkspaceRecord = {
-      id: "artifact_workspace_1",
+      id: "artifact_workspace_b",
       projectId: "project_1",
       pageVersionId: "version_1",
       runId: "run_1",
@@ -137,9 +137,15 @@ describe("in-memory workbench repositories", () => {
       createdAt,
       updatedAt: createdAt
     };
+    const sameTimeWorkspace: ArtifactWorkspaceRecord = {
+      ...workspace,
+      id: "artifact_workspace_a",
+      pageVersionId: "version_0",
+      runId: "run_0"
+    };
     const laterWorkspace: ArtifactWorkspaceRecord = {
       ...workspace,
-      id: "artifact_workspace_2",
+      id: "artifact_workspace_c",
       pageVersionId: "version_2",
       runId: "run_2",
       createdAt: "2026-05-12T00:01:00.000Z",
@@ -152,8 +158,8 @@ describe("in-memory workbench repositories", () => {
       pageVersionId: "version_other"
     };
     const indexFile: ArtifactWorkspaceFileRecord = {
-      id: "artifact_workspace_1_file_index_html",
-      workspaceId: "artifact_workspace_1",
+      id: "artifact_workspace_b_file_index_html",
+      workspaceId: "artifact_workspace_b",
       projectId: "project_1",
       pageVersionId: "version_1",
       path: "index.html",
@@ -166,9 +172,15 @@ describe("in-memory workbench repositories", () => {
       createdAt,
       updatedAt: createdAt
     };
+    const laterIndexFile: ArtifactWorkspaceFileRecord = {
+      ...indexFile,
+      id: "artifact_workspace_b_file_index_html_later",
+      summary: "later index file",
+      content: "<h1>Spring later</h1>"
+    };
     const stylesFile: ArtifactWorkspaceFileRecord = {
       ...indexFile,
-      id: "artifact_workspace_1_file_styles_css",
+      id: "artifact_workspace_b_file_styles_css",
       path: "styles.css",
       kind: "css",
       mimeType: "text/css",
@@ -179,26 +191,42 @@ describe("in-memory workbench repositories", () => {
       createdAt: "2026-05-12T00:01:00.000Z",
       updatedAt: "2026-05-12T00:01:00.000Z"
     };
+    const scriptFile: ArtifactWorkspaceFileRecord = {
+      ...indexFile,
+      id: "artifact_workspace_b_file_script_js",
+      path: "script.js",
+      kind: "js",
+      mimeType: "text/javascript",
+      sizeBytes: 21,
+      sha256: "hash-script",
+      summary: "script file",
+      content: "console.log('ready');",
+      createdAt: "2026-05-12T00:02:00.000Z",
+      updatedAt: "2026-05-12T00:02:00.000Z"
+    };
     const otherWorkspaceFile: ArtifactWorkspaceFileRecord = {
       ...indexFile,
-      id: "artifact_workspace_2_file_index_html",
-      workspaceId: "artifact_workspace_2",
+      id: "artifact_workspace_c_file_index_html",
+      workspaceId: "artifact_workspace_c",
       pageVersionId: "version_2",
       content: "<h1>Summer</h1>"
     };
 
-    await repositories.artifactWorkspaces.save(workspace);
     await repositories.artifactWorkspaces.save(laterWorkspace);
+    await repositories.artifactWorkspaces.save(workspace);
+    await repositories.artifactWorkspaces.save(sameTimeWorkspace);
     await repositories.artifactWorkspaces.save(otherProjectWorkspace);
-    await repositories.artifactWorkspaceFiles.save(indexFile);
-    await repositories.artifactWorkspaceFiles.save(stylesFile);
+    await repositories.artifactWorkspaceFiles.save(scriptFile);
     await repositories.artifactWorkspaceFiles.save(otherWorkspaceFile);
+    await repositories.artifactWorkspaceFiles.save(laterIndexFile);
+    await repositories.artifactWorkspaceFiles.save(stylesFile);
+    await repositories.artifactWorkspaceFiles.save(indexFile);
     workspace.state = "archived";
     indexFile.content = "mutated original";
 
-    const savedWorkspace = await repositories.artifactWorkspaces.getById("artifact_workspace_1");
+    const savedWorkspace = await repositories.artifactWorkspaces.getById("artifact_workspace_b");
     const savedFiles = await repositories.artifactWorkspaceFiles.listForWorkspace(
-      "artifact_workspace_1"
+      "artifact_workspace_b"
     );
     if (!savedWorkspace || savedFiles.length === 0) {
       throw new Error("Expected saved artifact workspace records.");
@@ -206,24 +234,39 @@ describe("in-memory workbench repositories", () => {
     savedWorkspace.state = "archived";
     savedFiles[0]!.content = "mutated after read";
 
-    await expect(repositories.artifactWorkspaces.getById("artifact_workspace_1")).resolves.toEqual({
+    await expect(repositories.artifactWorkspaces.getById("artifact_workspace_b")).resolves.toEqual({
+      ...workspace,
+      state: "active"
+    });
+    await expect(repositories.artifactWorkspaces.getForPageVersion("version_1")).resolves.toEqual({
       ...workspace,
       state: "active"
     });
     await expect(repositories.artifactWorkspaces.listForProject("project_1")).resolves.toEqual([
+      sameTimeWorkspace,
       { ...workspace, state: "active" },
       laterWorkspace
     ]);
     await expect(
-      repositories.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_1")
+      repositories.artifactWorkspaceFiles.getByPath({
+        workspaceId: "artifact_workspace_b",
+        path: "styles.css"
+      })
+    ).resolves.toEqual(stylesFile);
+    await expect(
+      repositories.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_b")
     ).resolves.toEqual([
       { ...indexFile, content: "<h1>Spring</h1>" },
-      stylesFile
+      laterIndexFile,
+      stylesFile,
+      scriptFile
     ]);
     await expect(repositories.artifactWorkspaceFiles.listAll()).resolves.toEqual([
       { ...indexFile, content: "<h1>Spring</h1>" },
+      laterIndexFile,
+      otherWorkspaceFile,
       stylesFile,
-      otherWorkspaceFile
+      scriptFile
     ]);
   });
 

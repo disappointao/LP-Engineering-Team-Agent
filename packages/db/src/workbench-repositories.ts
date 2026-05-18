@@ -1,4 +1,5 @@
 import type {
+  ArtifactWorkspaceFilePath,
   ArtifactWorkspaceFileRecord,
   ArtifactWorkspaceRecord,
   StaticArtifacts
@@ -285,12 +286,17 @@ export interface PageVersionRepository {
 export interface ArtifactWorkspaceRepository {
   save(workspace: ArtifactWorkspaceRecord): Promise<void>;
   getById(workspaceId: string): Promise<ArtifactWorkspaceRecord | undefined>;
+  getForPageVersion(pageVersionId: string): Promise<ArtifactWorkspaceRecord | undefined>;
   listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]>;
   listAll(): Promise<ArtifactWorkspaceRecord[]>;
 }
 
 export interface ArtifactWorkspaceFileRepository {
   save(file: ArtifactWorkspaceFileRecord): Promise<void>;
+  getByPath(input: {
+    workspaceId: string;
+    path: ArtifactWorkspaceFilePath;
+  }): Promise<ArtifactWorkspaceFileRecord | undefined>;
   listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]>;
   listAll(): Promise<ArtifactWorkspaceFileRecord[]>;
 }
@@ -967,14 +973,25 @@ class InMemoryArtifactWorkspaceRepository implements ArtifactWorkspaceRepository
     return workspace ? copyArtifactWorkspace(workspace) : undefined;
   }
 
+  async getForPageVersion(pageVersionId: string): Promise<ArtifactWorkspaceRecord | undefined> {
+    return this.sortedWorkspaces((workspace) => workspace.pageVersionId === pageVersionId).at(0);
+  }
+
   async listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]> {
-    return [...this.workspaces.values()]
-      .filter((workspace) => workspace.projectId === projectId)
-      .map(copyArtifactWorkspace);
+    return this.sortedWorkspaces((workspace) => workspace.projectId === projectId);
   }
 
   async listAll(): Promise<ArtifactWorkspaceRecord[]> {
-    return [...this.workspaces.values()].map(copyArtifactWorkspace);
+    return this.sortedWorkspaces(() => true);
+  }
+
+  private sortedWorkspaces(
+    matches: (workspace: ArtifactWorkspaceRecord) => boolean
+  ): ArtifactWorkspaceRecord[] {
+    return [...this.workspaces.values()]
+      .filter(matches)
+      .sort(compareArtifactWorkspaces)
+      .map(copyArtifactWorkspace);
   }
 }
 
@@ -985,14 +1002,30 @@ class InMemoryArtifactWorkspaceFileRepository implements ArtifactWorkspaceFileRe
     this.files.set(file.id, copyArtifactWorkspaceFile(file));
   }
 
+  async getByPath(input: {
+    workspaceId: string;
+    path: ArtifactWorkspaceFilePath;
+  }): Promise<ArtifactWorkspaceFileRecord | undefined> {
+    return this.sortedFiles(
+      (file) => file.workspaceId === input.workspaceId && file.path === input.path
+    ).at(0);
+  }
+
   async listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]> {
-    return [...this.files.values()]
-      .filter((file) => file.workspaceId === workspaceId)
-      .map(copyArtifactWorkspaceFile);
+    return this.sortedFiles((file) => file.workspaceId === workspaceId);
   }
 
   async listAll(): Promise<ArtifactWorkspaceFileRecord[]> {
-    return [...this.files.values()].map(copyArtifactWorkspaceFile);
+    return this.sortedFiles(() => true);
+  }
+
+  private sortedFiles(
+    matches: (file: ArtifactWorkspaceFileRecord) => boolean
+  ): ArtifactWorkspaceFileRecord[] {
+    return [...this.files.values()]
+      .filter(matches)
+      .sort(compareArtifactWorkspaceFiles)
+      .map(copyArtifactWorkspaceFile);
   }
 }
 
@@ -1145,6 +1178,33 @@ function compareProjectMembers(a: ProjectMemberRecord, b: ProjectMemberRecord): 
     a.userId.localeCompare(b.userId) ||
     a.id.localeCompare(b.id)
   );
+}
+
+function compareArtifactWorkspaces(
+  a: ArtifactWorkspaceRecord,
+  b: ArtifactWorkspaceRecord
+): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+}
+
+const artifactWorkspaceFilePathOrder = new Map<ArtifactWorkspaceFilePath, number>([
+  ["index.html", 0],
+  ["styles.css", 1],
+  ["script.js", 2]
+]);
+
+function compareArtifactWorkspaceFiles(
+  a: ArtifactWorkspaceFileRecord,
+  b: ArtifactWorkspaceFileRecord
+): number {
+  return (
+    getArtifactWorkspaceFilePathOrder(a.path) - getArtifactWorkspaceFilePathOrder(b.path) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function getArtifactWorkspaceFilePathOrder(path: ArtifactWorkspaceFilePath): number {
+  return artifactWorkspaceFilePathOrder.get(path) ?? Number.MAX_SAFE_INTEGER;
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {

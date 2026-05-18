@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ArtifactWorkspaceFileRecord, ArtifactWorkspaceRecord } from "@lp-agent/artifacts";
 import {
   createJsonFileWorkbenchRepositories,
+  type PageVersionRecord,
   type RunEventRecord,
   type RunRecord,
   type ToolObservationRecord
@@ -229,7 +230,7 @@ describe("json-file workbench repositories", () => {
     const filePath = join(tempRoot, "artifact-workspaces.json");
     const first = createJsonFileWorkbenchRepositories({ filePath });
     const workspace: ArtifactWorkspaceRecord = {
-      id: "artifact_workspace_1",
+      id: "artifact_workspace_b",
       projectId: "project_1",
       pageVersionId: "version_1",
       runId: "run_1",
@@ -238,17 +239,23 @@ describe("json-file workbench repositories", () => {
       createdAt,
       updatedAt: createdAt
     };
+    const sameTimeWorkspace: ArtifactWorkspaceRecord = {
+      ...workspace,
+      id: "artifact_workspace_a",
+      pageVersionId: "version_0",
+      runId: "run_0"
+    };
     const laterWorkspace: ArtifactWorkspaceRecord = {
       ...workspace,
-      id: "artifact_workspace_2",
+      id: "artifact_workspace_c",
       pageVersionId: "version_2",
       runId: "run_2",
       createdAt: "2026-05-13T00:01:00.000Z",
       updatedAt: "2026-05-13T00:01:00.000Z"
     };
     const file: ArtifactWorkspaceFileRecord = {
-      id: "artifact_workspace_1_file_index_html",
-      workspaceId: "artifact_workspace_1",
+      id: "artifact_workspace_b_file_index_html",
+      workspaceId: "artifact_workspace_b",
       projectId: "project_1",
       pageVersionId: "version_1",
       path: "index.html",
@@ -261,38 +268,95 @@ describe("json-file workbench repositories", () => {
       createdAt,
       updatedAt: createdAt
     };
+    const stylesFile: ArtifactWorkspaceFileRecord = {
+      ...file,
+      id: "artifact_workspace_b_file_styles_css",
+      path: "styles.css",
+      kind: "css",
+      mimeType: "text/css",
+      sizeBytes: 19,
+      sha256: "hash-styles",
+      summary: "styles file",
+      content: "body { color: red; }",
+      createdAt: "2026-05-13T00:01:00.000Z",
+      updatedAt: "2026-05-13T00:01:00.000Z"
+    };
+    const scriptFile: ArtifactWorkspaceFileRecord = {
+      ...file,
+      id: "artifact_workspace_b_file_script_js",
+      path: "script.js",
+      kind: "js",
+      mimeType: "text/javascript",
+      sizeBytes: 21,
+      sha256: "hash-script",
+      summary: "script file",
+      content: "console.log('ready');",
+      createdAt: "2026-05-13T00:02:00.000Z",
+      updatedAt: "2026-05-13T00:02:00.000Z"
+    };
     const otherWorkspaceFile: ArtifactWorkspaceFileRecord = {
       ...file,
-      id: "artifact_workspace_2_file_index_html",
-      workspaceId: "artifact_workspace_2",
+      id: "artifact_workspace_c_file_index_html",
+      workspaceId: "artifact_workspace_c",
       pageVersionId: "version_2",
       content: "<h1>Summer</h1>",
       createdAt: "2026-05-13T00:01:00.000Z",
       updatedAt: "2026-05-13T00:01:00.000Z"
     };
+    const pageVersion: PageVersionRecord = {
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifactWorkspaceId: "artifact_workspace_b",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt
+    };
 
-    await first.artifactWorkspaces.save(workspace);
+    await first.pageVersions.save(pageVersion);
     await first.artifactWorkspaces.save(laterWorkspace);
-    await first.artifactWorkspaceFiles.save(file);
+    await first.artifactWorkspaces.save(workspace);
+    await first.artifactWorkspaces.save(sameTimeWorkspace);
+    await first.artifactWorkspaceFiles.save(scriptFile);
     await first.artifactWorkspaceFiles.save(otherWorkspaceFile);
+    await first.artifactWorkspaceFiles.save(stylesFile);
+    await first.artifactWorkspaceFiles.save(file);
 
     const aliasPath = join(tempRoot, "artifact-workspaces-alias.json");
     await symlink(filePath, aliasPath);
     const second = createJsonFileWorkbenchRepositories({ filePath: aliasPath });
 
-    await expect(second.artifactWorkspaces.getById("artifact_workspace_1")).resolves.toEqual(
+    await expect(second.pageVersions.getById("version_1")).resolves.toEqual(pageVersion);
+    await expect(second.artifactWorkspaces.getById("artifact_workspace_b")).resolves.toEqual(
+      workspace
+    );
+    await expect(second.artifactWorkspaces.getForPageVersion("version_1")).resolves.toEqual(
       workspace
     );
     await expect(second.artifactWorkspaces.listForProject("project_1")).resolves.toEqual([
+      sameTimeWorkspace,
       workspace,
       laterWorkspace
     ]);
     await expect(
-      second.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_1")
-    ).resolves.toEqual([file]);
+      second.artifactWorkspaceFiles.getByPath({
+        workspaceId: "artifact_workspace_b",
+        path: "styles.css"
+      })
+    ).resolves.toEqual(stylesFile);
+    await expect(
+      second.artifactWorkspaceFiles.listForWorkspace("artifact_workspace_b")
+    ).resolves.toEqual([file, stylesFile, scriptFile]);
     await expect(second.artifactWorkspaceFiles.listAll()).resolves.toEqual([
       file,
-      otherWorkspaceFile
+      otherWorkspaceFile,
+      stylesFile,
+      scriptFile
     ]);
   });
 
@@ -306,6 +370,43 @@ describe("json-file workbench repositories", () => {
         projectMembers: [],
         briefs: [],
         pageVersions: [],
+        deployments: [],
+        tasks: [],
+        messages: [],
+        taskSnapshots: [],
+        skills: [],
+        skillVersions: [],
+        skillBindings: [],
+        modelProviders: [],
+        modelRoutingPolicies: [],
+        mcpConnectors: [],
+        mcpToolApprovals: [],
+        runs: [],
+        runEvents: [],
+        toolObservations: [],
+        agentHandoffs: []
+      }),
+      "utf8"
+    );
+
+    const repositories = createJsonFileWorkbenchRepositories({ filePath });
+
+    await expect(repositories.artifactWorkspaces.listAll()).resolves.toEqual([]);
+    await expect(repositories.artifactWorkspaceFiles.listAll()).resolves.toEqual([]);
+  });
+
+  it("defaults malformed artifact workspace arrays when reopening local state files", async () => {
+    const filePath = await tempStateFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        projects: [],
+        workspaceMembers: [],
+        projectMembers: [],
+        briefs: [],
+        pageVersions: [],
+        artifactWorkspaces: { invalid: true },
+        artifactWorkspaceFiles: null,
         deployments: [],
         tasks: [],
         messages: [],

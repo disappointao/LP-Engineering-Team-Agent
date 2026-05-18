@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { ArtifactWorkspaceFileRecord, ArtifactWorkspaceRecord } from "@lp-agent/artifacts";
+import type {
+  ArtifactWorkspaceFilePath,
+  ArtifactWorkspaceFileRecord,
+  ArtifactWorkspaceRecord
+} from "@lp-agent/artifacts";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { AgentRole } from "@lp-agent/model-gateway";
 import type {
@@ -738,16 +742,28 @@ class JsonFileArtifactWorkspaceRepository implements ArtifactWorkspaceRepository
     return copyOptional(state.artifactWorkspaces.find((workspace) => workspace.id === workspaceId));
   }
 
+  async getForPageVersion(pageVersionId: string): Promise<ArtifactWorkspaceRecord | undefined> {
+    return (
+      await this.sortedWorkspaces((workspace) => workspace.pageVersionId === pageVersionId)
+    ).at(0);
+  }
+
   async listForProject(projectId: string): Promise<ArtifactWorkspaceRecord[]> {
-    const state = await readState(this.filePath);
-    return state.artifactWorkspaces
-      .filter((workspace) => workspace.projectId === projectId)
-      .map(copy);
+    return this.sortedWorkspaces((workspace) => workspace.projectId === projectId);
   }
 
   async listAll(): Promise<ArtifactWorkspaceRecord[]> {
+    return this.sortedWorkspaces(() => true);
+  }
+
+  private async sortedWorkspaces(
+    matches: (workspace: ArtifactWorkspaceRecord) => boolean
+  ): Promise<ArtifactWorkspaceRecord[]> {
     const state = await readState(this.filePath);
-    return state.artifactWorkspaces.map(copy);
+    return state.artifactWorkspaces
+      .filter(matches)
+      .sort(compareArtifactWorkspaces)
+      .map(copy);
   }
 }
 
@@ -764,16 +780,33 @@ class JsonFileArtifactWorkspaceFileRepository implements ArtifactWorkspaceFileRe
     });
   }
 
+  async getByPath(input: {
+    workspaceId: string;
+    path: ArtifactWorkspaceFilePath;
+  }): Promise<ArtifactWorkspaceFileRecord | undefined> {
+    return (
+      await this.sortedFiles(
+        (file) => file.workspaceId === input.workspaceId && file.path === input.path
+      )
+    ).at(0);
+  }
+
   async listForWorkspace(workspaceId: string): Promise<ArtifactWorkspaceFileRecord[]> {
-    const state = await readState(this.filePath);
-    return state.artifactWorkspaceFiles
-      .filter((file) => file.workspaceId === workspaceId)
-      .map(copy);
+    return this.sortedFiles((file) => file.workspaceId === workspaceId);
   }
 
   async listAll(): Promise<ArtifactWorkspaceFileRecord[]> {
+    return this.sortedFiles(() => true);
+  }
+
+  private async sortedFiles(
+    matches: (file: ArtifactWorkspaceFileRecord) => boolean
+  ): Promise<ArtifactWorkspaceFileRecord[]> {
     const state = await readState(this.filePath);
-    return state.artifactWorkspaceFiles.map(copy);
+    return state.artifactWorkspaceFiles
+      .filter(matches)
+      .sort(compareArtifactWorkspaceFiles)
+      .map(copy);
   }
 }
 
@@ -903,8 +936,10 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       projectMembers: parsed.projectMembers ?? [],
       briefs: parsed.briefs ?? [],
       pageVersions: parsed.pageVersions ?? [],
-      artifactWorkspaces: parsed.artifactWorkspaces ?? [],
-      artifactWorkspaceFiles: parsed.artifactWorkspaceFiles ?? [],
+      artifactWorkspaces: arrayOrEmpty<ArtifactWorkspaceRecord>(parsed.artifactWorkspaces),
+      artifactWorkspaceFiles: arrayOrEmpty<ArtifactWorkspaceFileRecord>(
+        parsed.artifactWorkspaceFiles
+      ),
       deployments: parsed.deployments ?? [],
       tasks: parsed.tasks ?? [],
       messages: parsed.messages ?? [],
@@ -983,6 +1018,10 @@ function copyOptional<T>(record: T | undefined): T | undefined {
   return record ? copy(record) : undefined;
 }
 
+function arrayOrEmpty<T>(records: unknown): T[] {
+  return Array.isArray(records) ? records : [];
+}
+
 function compareWorkspaceMembers(
   a: WorkspaceMemberRecord,
   b: WorkspaceMemberRecord
@@ -1002,6 +1041,33 @@ function compareProjectMembers(a: ProjectMemberRecord, b: ProjectMemberRecord): 
     a.userId.localeCompare(b.userId) ||
     a.id.localeCompare(b.id)
   );
+}
+
+function compareArtifactWorkspaces(
+  a: ArtifactWorkspaceRecord,
+  b: ArtifactWorkspaceRecord
+): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+}
+
+const artifactWorkspaceFilePathOrder = new Map<ArtifactWorkspaceFilePath, number>([
+  ["index.html", 0],
+  ["styles.css", 1],
+  ["script.js", 2]
+]);
+
+function compareArtifactWorkspaceFiles(
+  a: ArtifactWorkspaceFileRecord,
+  b: ArtifactWorkspaceFileRecord
+): number {
+  return (
+    getArtifactWorkspaceFilePathOrder(a.path) - getArtifactWorkspaceFilePathOrder(b.path) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function getArtifactWorkspaceFilePathOrder(path: ArtifactWorkspaceFilePath): number {
+  return artifactWorkspaceFilePathOrder.get(path) ?? Number.MAX_SAFE_INTEGER;
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {
