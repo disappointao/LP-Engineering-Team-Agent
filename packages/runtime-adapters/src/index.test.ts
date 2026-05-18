@@ -350,10 +350,11 @@ describe("local agent runtime adapter", () => {
     );
   });
 
-  it("does not leak forged artifact workspace file content into runtime events", async () => {
-    const runtime = new LocalAgentRuntimeAdapter();
+  it("does not forward forged artifact workspace file content to model requests", async () => {
+    const gateway = new RecordingPortableGateway();
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
 
-    const result = await runtime.run({
+    await runtime.run({
       runId: "run_builder_workspace_content_guard",
       projectId: "project_1",
       role: "builder",
@@ -382,7 +383,17 @@ describe("local agent runtime adapter", () => {
       })
     });
 
-    expect(JSON.stringify(result.events)).not.toContain("SECRET");
+    const modelContext = gateway.requests[0]?.context;
+    expect(JSON.stringify(modelContext)).not.toContain("SECRET");
+    expect(modelContext?.artifactWorkspace.files?.[0]).toEqual({
+      path: "index.html",
+      kind: "html",
+      mimeType: "text/html",
+      sizeBytes: 128,
+      sha256: "hash-index",
+      summary: "index.html static LP file"
+    });
+    expect(modelContext?.artifactWorkspace.files?.[0]).not.toHaveProperty("content");
   });
 
   it("strips unexpected memory artifact file content before model requests", async () => {

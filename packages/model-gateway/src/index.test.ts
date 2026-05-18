@@ -202,7 +202,17 @@ describe("model gateway", () => {
       })
     });
 
+    const auditFile = gateway.getAuditLog()[0]?.context?.artifactWorkspace.files?.[0];
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("SECRET");
+    expect(auditFile).toEqual({
+      path: "index.html",
+      kind: "html",
+      mimeType: "text/html",
+      sizeBytes: 128,
+      sha256: "hash-index",
+      summary: "index.html static LP file"
+    });
+    expect(auditFile).not.toHaveProperty("content");
   });
 
   it("clones context memory into model audit entries defensively", async () => {
