@@ -2155,17 +2155,63 @@ export class DemoWorkbenchService {
     approvalState: ApprovalState = "not_required"
   ): Promise<RuntimeRunContext> {
     const skillVersions = await this.listRuntimeSkillsForProject(projectId);
-    const [mcpTools, modelRoutingPolicy] = await Promise.all([
+    const [mcpTools, modelRoutingPolicy, artifactWorkspace] = await Promise.all([
       this.resolveVisibleMCPTools({ projectId, role, skillVersions }),
-      this.resolveModelRoutingPolicyForProject(projectId)
+      this.resolveModelRoutingPolicyForProject(projectId),
+      this.createRuntimeArtifactWorkspaceContext(projectId)
     ]);
     return createWorkbenchRuntimeContext({
       role,
       approvalState,
       skillVersions,
       mcpTools,
-      modelRoutingPolicy
+      modelRoutingPolicy,
+      artifactWorkspace
     });
+  }
+
+  private async createRuntimeArtifactWorkspaceContext(
+    projectId: string
+  ): Promise<RuntimeRunContext["artifactWorkspace"]> {
+    const legacyWorkspace = createLegacyRuntimeArtifactWorkspace();
+    const pageVersion = await this.repositories.pageVersions.findLatestForProject(projectId);
+    if (!pageVersion?.artifactWorkspaceId) {
+      return legacyWorkspace;
+    }
+
+    const workspace = await this.repositories.artifactWorkspaces.getById(
+      pageVersion.artifactWorkspaceId
+    );
+    if (!workspace) {
+      return legacyWorkspace;
+    }
+    this.assertArtifactWorkspaceOwnership(workspace, pageVersion);
+
+    let files: ArtifactWorkspaceFileRecord[];
+    try {
+      files = await this.repositories.artifactWorkspaceFiles.listForWorkspace(workspace.id);
+    } catch {
+      return legacyWorkspace;
+    }
+
+    this.assertArtifactWorkspaceFileOwnership(files, workspace, pageVersion);
+
+    try {
+      const manifest = createArtifactWorkspaceManifest({
+        workspaceId: workspace.id,
+        projectId: workspace.projectId,
+        pageVersionId: workspace.pageVersionId,
+        files
+      });
+
+      return {
+        ...legacyWorkspace,
+        workspaceId: manifest.workspaceId,
+        files: manifest.files
+      };
+    } catch {
+      return legacyWorkspace;
+    }
   }
 
   private async getProjectOrThrow(projectId: string): Promise<ProjectRecord> {
@@ -2462,6 +2508,7 @@ function createWorkbenchRuntimeContext(input: {
   skillVersions: SkillVersionRecord[];
   mcpTools: RuntimeRunContext["mcpTools"];
   modelRoutingPolicy: ModelRoutingPolicy;
+  artifactWorkspace: RuntimeRunContext["artifactWorkspace"];
 }): RuntimeRunContext {
   const approvalState = input.approvalState ?? "not_required";
   const grantedPermissions = [
@@ -2484,11 +2531,27 @@ function createWorkbenchRuntimeContext(input: {
     approval: {
       state: approvalState
     },
-    artifactWorkspace: {
-      mode: "memory",
-      writableFiles: ["index.html", "styles.css", "script.js"]
-    },
+    artifactWorkspace: cloneRuntimeArtifactWorkspace(input.artifactWorkspace),
     modelRoutingPolicy: input.modelRoutingPolicy
+  };
+}
+
+function createLegacyRuntimeArtifactWorkspace(): RuntimeRunContext["artifactWorkspace"] {
+  return {
+    mode: "memory",
+    writableFiles: ["index.html", "styles.css", "script.js"]
+  };
+}
+
+function cloneRuntimeArtifactWorkspace(
+  workspace: RuntimeRunContext["artifactWorkspace"]
+): RuntimeRunContext["artifactWorkspace"] {
+  return {
+    mode: workspace.mode,
+    ...(workspace.workspaceId ? { workspaceId: workspace.workspaceId } : {}),
+    ...(workspace.basePath ? { basePath: workspace.basePath } : {}),
+    writableFiles: [...workspace.writableFiles],
+    ...(workspace.files ? { files: workspace.files.map((file) => ({ ...file })) } : {})
   };
 }
 

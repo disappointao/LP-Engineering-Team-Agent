@@ -3907,6 +3907,189 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("injects durable artifact workspace metadata into context packs", async () => {
+    const artifacts: StaticArtifacts = {
+      indexHtml:
+        "<!doctype html><html><body>RUNTIME_WORKSPACE_HTML_SECRET</body></html>",
+      stylesCss: "body::before { content: 'RUNTIME_WORKSPACE_CSS_SECRET'; }",
+      scriptJs: "console.log('RUNTIME_WORKSPACE_JS_SECRET');"
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "completed", artifacts }),
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const workspaceFiles = await repositories.artifactWorkspaceFiles.listForWorkspace(
+      pageVersion.artifactWorkspaceId ?? ""
+    );
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      taskId: "task_1",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.runtimeContext.artifactWorkspace).toEqual({
+      mode: "memory",
+      workspaceId: pageVersion.artifactWorkspaceId,
+      writableFiles: ["index.html", "styles.css", "script.js"],
+      files: workspaceFiles.map((file) => ({
+        path: file.path,
+        kind: file.kind,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256,
+        summary: file.summary
+      }))
+    });
+    expect(JSON.stringify(parsedContextPack.runtimeContext.artifactWorkspace)).not.toContain(
+      "RUNTIME_WORKSPACE_HTML_SECRET"
+    );
+    expect(JSON.stringify(parsedContextPack.runtimeContext.artifactWorkspace)).not.toContain(
+      "RUNTIME_WORKSPACE_CSS_SECRET"
+    );
+    expect(JSON.stringify(parsedContextPack.runtimeContext.artifactWorkspace)).not.toContain(
+      "RUNTIME_WORKSPACE_JS_SECRET"
+    );
+  });
+
+  it("falls back to legacy runtime artifact workspace when the latest workspace is missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_missing_runtime_workspace",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "missing_runtime_workspace",
+      artifacts: completeArtifacts(),
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+
+    const context = await service.createRuntimeContextForRole({
+      projectId: project.id,
+      role: "builder"
+    });
+
+    expect(context.artifactWorkspace).toEqual({
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    });
+  });
+
+  it("falls back to legacy runtime artifact workspace when file metadata is corrupt", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_corrupt_runtime_workspace",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_corrupt_runtime",
+      artifacts: completeArtifacts(),
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_corrupt_runtime",
+      projectId: project.id,
+      pageVersionId: "version_corrupt_runtime_workspace",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_corrupt_runtime",
+      projectId: project.id,
+      pageVersionId: "version_corrupt_runtime_workspace",
+      artifacts: completeArtifacts(),
+      createdAt: "2026-05-11T00:01:00.000Z"
+    }).map((file) =>
+      file.path === "styles.css" ? { ...file, sha256: "wrong-hash" } : file
+    );
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const context = await service.createRuntimeContextForRole({
+      projectId: project.id,
+      role: "builder"
+    });
+
+    expect(context.artifactWorkspace).toEqual({
+      mode: "memory",
+      writableFiles: ["index.html", "styles.css", "script.js"]
+    });
+  });
+
+  it("fails closed when runtime workspace ownership does not match the latest page version", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_wrong_runtime_workspace_owner",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_wrong_runtime_owner",
+      artifacts: completeArtifacts(),
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_wrong_runtime_owner",
+      projectId: "project_other",
+      pageVersionId: "version_other",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+
+    await expect(
+      service.createRuntimeContextForRole({
+        projectId: project.id,
+        role: "builder"
+      })
+    ).rejects.toThrow(
+      "Artifact workspace artifact_workspace_wrong_runtime_owner does not belong to page version version_wrong_runtime_workspace_owner."
+    );
+  });
+
   it("injects deterministic context memory into context packs", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
