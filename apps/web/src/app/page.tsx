@@ -919,7 +919,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <span>{composer.runtimeChip}</span>
               <InterruptSubmitButton
                 action={interruptCurrentTaskAction}
-                available={pageState.kind === "task_ready" && pageState.interrupt.available}
+                state={pageState.kind === "task_ready"
+                  ? pageState.interrupt.state
+                  : "not_interruptible"}
                 labels={{
                   idle: composer.interruptLabel,
                   stopping: copy.chat.interruptStoppingLabel,

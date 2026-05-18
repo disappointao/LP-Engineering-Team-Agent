@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 
 interface InterruptSubmitButtonProps {
   action: (formData: FormData) => Promise<void>;
-  available: boolean;
+  state: "idle" | "stopping" | "cancelled" | "not_interruptible";
   labels: {
     idle: string;
     stopping: string;
@@ -15,22 +15,29 @@ interface InterruptSubmitButtonProps {
 
 export function InterruptSubmitButton({
   action,
-  available,
+  state,
   labels
 }: InterruptSubmitButtonProps) {
   const status = useFormStatus();
   const isInterruptPending = status.pending && status.action === action;
-  const disabled = !available || status.pending;
+  const isPersistedStopping = state === "stopping";
+  const isAvailable = state === "idle";
+  const disabled = !isAvailable || status.pending;
+  const isBusy = isInterruptPending || isPersistedStopping;
   return (
     <button
       type="submit"
       formAction={action}
       className="interruptButton"
       disabled={disabled}
-      aria-busy={isInterruptPending ? true : undefined}
-      title={!available ? labels.unavailable : undefined}
+      aria-busy={isBusy ? true : undefined}
+      title={!isAvailable && !isPersistedStopping ? labels.unavailable : undefined}
     >
-      {isInterruptPending ? labels.stopping : available ? labels.idle : labels.unavailable}
+      {isInterruptPending || isPersistedStopping
+        ? labels.stopping
+        : isAvailable
+          ? labels.idle
+          : labels.unavailable}
     </button>
   );
 }

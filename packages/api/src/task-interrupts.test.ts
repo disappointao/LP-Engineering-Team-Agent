@@ -993,4 +993,72 @@ describe("task interrupts", () => {
       error: "interrupt_target_not_found"
     });
   });
+
+  it("returns target not found when the newest linked worker is missing without cancelling an older worker", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId } = await saveTaskAndRun({
+      repositories,
+      runId: "run_older_queued"
+    });
+    await repositories.runs.save({
+      id: "run_newer_missing",
+      projectId,
+      taskId,
+      role: "deployer",
+      state: "running",
+      startedAt: "2026-05-18T00:07:00.000Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    const workerRuntime = new InMemoryWorkerRuntime();
+    const queuedJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_older_queued",
+      workerJobId: queuedJob.id,
+      now: fixedNow(["2026-05-18T00:07:01.000Z"])
+    });
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId: "run_newer_missing",
+      workerJobId: "worker_job_missing_newest",
+      now: fixedNow(["2026-05-18T00:07:02.000Z"])
+    });
+
+    await expect(
+      interruptTask({
+        repositories,
+        workerRuntime,
+        taskId,
+        reason: "Do not cancel older target",
+        now: fixedNow()
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "interrupt_target_not_found"
+    });
+    await expect(workerRuntime.getJob(queuedJob.id)).resolves.toMatchObject({
+      state: "queued",
+      cancelRequestedAt: undefined
+    });
+    await expect(repositories.runs.getById("run_older_queued")).resolves.toMatchObject({
+      state: "running"
+    });
+  });
 });

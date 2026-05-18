@@ -299,7 +299,7 @@ async function findLatestInterruptTarget(input: {
       workerJob = undefined;
     }
     if (!workerJob) {
-      continue;
+      return { kind: "missing" };
     }
 
     const run = await repositories.runs.getById(linkedEvent.runId);

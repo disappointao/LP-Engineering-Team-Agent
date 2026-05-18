@@ -260,6 +260,55 @@ describe("chat workbench view model", () => {
     });
   });
 
+  it("marks interrupt requested events complete when the same run has a cancelled event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_interrupt_1_event_2",
+          runId: "run_interrupt_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          sequence: 2,
+          type: "task.interrupt.requested",
+          message: "Task interrupt requested.",
+          payload: {
+            role: "deployer",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        },
+        {
+          id: "run_interrupt_1_event_3",
+          runId: "run_interrupt_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          sequence: 3,
+          type: "task.interrupt.cancelled",
+          message: "Task interrupted.",
+          payload: {
+            role: "deployer",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      status: "complete",
+      statusLabel: "Complete"
+    });
+    expect(thread.toolEvents[1]).toMatchObject({
+      status: "cancelled",
+      statusLabel: "Stopped"
+    });
+  });
+
   it("marks started events as complete when the run has a terminal event", () => {
     const thread = createChatWorkbenchThread({
       copy: getWorkbenchCopy("en"),

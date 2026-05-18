@@ -168,7 +168,7 @@ function toChatToolStatus(
     return "cancelled";
   }
   if (event.type === "task.interrupt.requested") {
-    return "running";
+    return terminalRunIds.has(event.runId) ? "complete" : "running";
   }
   if (event.type === "worker.job.linked" || event.type.endsWith(".started")) {
     return terminalRunIds.has(event.runId) ? "complete" : "running";

@@ -386,6 +386,55 @@ describe("HomePage project flow errors", () => {
     expect(interruptButton?.props?.disabled).toBe(false);
   });
 
+  it("renders a persisted stopping interrupt button as disabled and busy", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      kind: "task_ready",
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Interruptible task",
+        type: "general_chat",
+        status: "complete",
+        createdAt: "2026-05-18T00:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Run something",
+          createdAt: "2026-05-18T00:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Stopping",
+          createdAt: "2026-05-18T00:00:01.000Z"
+        }
+      ],
+      runEvents: [],
+      interrupt: {
+        available: true,
+        state: "stopping",
+        runId: "run_interrupt_1",
+        workerJobId: "worker_job_1",
+        requestedAt: "2026-05-18T00:00:02.000Z"
+      }
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const buttons = collectElements(page, "button");
+    const interruptButton = buttons.find((button) =>
+      collectText(button).includes("Stopping...")
+    );
+
+    expect(interruptButton?.props?.disabled).toBe(true);
+    expect(interruptButton?.props?.["aria-busy"]).toBe(true);
+  });
+
   it("renders localized interrupt errors", async () => {
     const html = await renderHomePage({
       searchParams: Promise.resolve({ interruptError: "task_not_found" }),

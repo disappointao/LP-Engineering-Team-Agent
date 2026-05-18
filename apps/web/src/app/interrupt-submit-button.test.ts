@@ -27,7 +27,7 @@ describe("InterruptSubmitButton", () => {
       action: null
     }));
 
-    const element = InterruptSubmitButton({ action, available: true, labels });
+    const element = InterruptSubmitButton({ action, state: "idle", labels });
 
     expect(element.props.children).toBe("Interrupt");
     expect(element.props.disabled).toBe(false);
@@ -42,7 +42,7 @@ describe("InterruptSubmitButton", () => {
       action: null
     }));
 
-    const element = InterruptSubmitButton({ action, available: false, labels });
+    const element = InterruptSubmitButton({ action, state: "not_interruptible", labels });
 
     expect(element.props.children).toBe("Nothing running");
     expect(element.props.disabled).toBe(true);
@@ -57,7 +57,7 @@ describe("InterruptSubmitButton", () => {
       action
     }));
 
-    const element = InterruptSubmitButton({ action, available: true, labels });
+    const element = InterruptSubmitButton({ action, state: "idle", labels });
 
     expect(element.props.children).toBe("Stopping...");
     expect(element.props.disabled).toBe(true);
@@ -72,9 +72,24 @@ describe("InterruptSubmitButton", () => {
       action: otherAction
     }));
 
-    const element = InterruptSubmitButton({ action, available: true, labels });
+    const element = InterruptSubmitButton({ action, state: "idle", labels });
 
     expect(element.props.children).toBe("Interrupt");
     expect(element.props.disabled).toBe(true);
+  });
+
+  it("renders persisted stopping copy when an interrupt is already requested", () => {
+    vi.mocked(useFormStatus).mockReturnValue(formStatus({
+      pending: false,
+      data: null,
+      method: null,
+      action: null
+    }));
+
+    const element = InterruptSubmitButton({ action, state: "stopping", labels });
+
+    expect(element.props.children).toBe("Stopping...");
+    expect(element.props.disabled).toBe(true);
+    expect(element.props["aria-busy"]).toBe(true);
   });
 });
