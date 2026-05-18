@@ -10,10 +10,10 @@ import type {
 import { nextRepositoryTimestamp } from "./run-orchestrator";
 
 export type TaskInterruptState =
-  | "interruptible"
+  | "idle"
   | "stopping"
-  | "not_interruptible"
-  | "unavailable";
+  | "cancelled"
+  | "not_interruptible";
 
 export interface TaskInterruptView {
   available: boolean;
@@ -27,13 +27,20 @@ export type InterruptTaskResult =
   | {
       ok: true;
       taskId: string;
-      state: "cancelled" | "interrupt_requested" | "not_interruptible";
+      state: "cancelled" | "interrupt_requested";
       runId: string;
       workerJobId: string;
     }
   | {
+      ok: true;
+      taskId: string;
+      state: "not_interruptible";
+      runId?: string;
+      workerJobId?: string;
+    }
+  | {
       ok: false;
-      error: "task_not_found" | "interrupt_target_not_found";
+      error: "task_not_found" | "interrupt_target_not_found" | "interrupt_failed";
     };
 
 export type TaskInterruptWorkerRuntime = Pick<
@@ -81,6 +88,7 @@ export async function linkWorkerJobToTask(
     message: "Worker job linked to task.",
     payload: {
       taskId: input.taskId,
+      runId: input.runId,
       workerJobId: input.workerJobId
     },
     now: input.now
@@ -101,8 +109,9 @@ export async function interruptTask(
   const target = await findLatestInterruptTarget(input.repositories, input.taskId);
   if (!target) {
     return {
-      ok: false,
-      error: "interrupt_target_not_found"
+      ok: true,
+      taskId: input.taskId,
+      state: "not_interruptible"
     };
   }
 
@@ -111,6 +120,21 @@ export async function interruptTask(
     return {
       ok: false,
       error: "interrupt_target_not_found"
+    };
+  }
+
+  if (workerJob.state === "cancelled") {
+    await markRunCancelled({
+      repositories: input.repositories,
+      run: target.run,
+      now: input.now
+    });
+    return {
+      ok: true,
+      taskId: input.taskId,
+      state: "cancelled",
+      runId: target.run.id,
+      workerJobId: workerJob.id
     };
   }
 
@@ -133,13 +157,21 @@ export async function interruptTask(
     message: "Task interrupt requested.",
     payload: {
       taskId: input.taskId,
-      workerJobId: workerJob.id,
-      reason: input.reason
+      runId: target.run.id,
+      workerJobId: workerJob.id
     },
     now: input.now
   });
 
-  const cancelledJob = await input.workerRuntime.cancelJob(workerJob.id, input.reason);
+  let cancelledJob: WorkerJobRecord | undefined;
+  try {
+    cancelledJob = await input.workerRuntime.cancelJob(workerJob.id, input.reason);
+  } catch {
+    return {
+      ok: false,
+      error: "interrupt_failed"
+    };
+  }
   if (!cancelledJob) {
     return {
       ok: false,
@@ -148,14 +180,10 @@ export async function interruptTask(
   }
 
   if (cancelledJob.state === "cancelled") {
-    const completedAt = nextRepositoryTimestamp(
-      input.repositories,
-      input.now ?? (() => new Date())
-    );
-    await input.repositories.runs.save({
-      ...target.run,
-      state: "cancelled",
-      completedAt
+    await markRunCancelled({
+      repositories: input.repositories,
+      run: target.run,
+      now: input.now
     });
     await saveRunEvent({
       repositories: input.repositories,
@@ -166,6 +194,7 @@ export async function interruptTask(
       message: "Task interrupt cancelled the worker job.",
       payload: {
         taskId: input.taskId,
+        runId: target.run.id,
         workerJobId: workerJob.id
       },
       now: input.now
@@ -196,25 +225,28 @@ export async function deriveTaskInterruptView(
   if (!target) {
     return {
       available: false,
-      state: "unavailable",
+      state: "not_interruptible",
       taskId: input.taskId
     };
   }
 
-  const workerJob = await input.workerRuntime.getJob(target.workerJobId);
+  let workerJob: WorkerJobRecord | undefined;
+  try {
+    workerJob = await input.workerRuntime.getJob(target.workerJobId);
+  } catch {
+    workerJob = undefined;
+  }
   if (!workerJob) {
     return {
       available: false,
-      state: "unavailable",
-      taskId: input.taskId,
-      runId: target.run.id,
-      workerJobId: target.workerJobId
+      state: "not_interruptible",
+      taskId: input.taskId
     };
   }
 
   const state = toTaskInterruptState(workerJob);
   return {
-    available: state === "interruptible" || state === "stopping",
+    available: state === "idle" || state === "stopping",
     state,
     taskId: input.taskId,
     runId: target.run.id,
@@ -226,21 +258,18 @@ async function findLatestInterruptTarget(
   repositories: WorkbenchRepositories,
   taskId: string
 ): Promise<InterruptTarget | undefined> {
-  const runs = await repositories.runs.listForTask(taskId);
   const linkedEvents = await repositories.runEvents.listForTask(taskId);
   const latestLinkedEvent = linkedEvents
     .filter((event) => event.type === "worker.job.linked")
     .at(-1);
   const workerJobId = latestLinkedEvent
     ? readWorkerJobId(latestLinkedEvent)
-    : readWorkerJobIdFromRuns(runs);
-  if (!workerJobId) {
+    : undefined;
+  if (!latestLinkedEvent || !workerJobId) {
     return undefined;
   }
 
-  const run = latestLinkedEvent
-    ? await repositories.runs.getById(latestLinkedEvent.runId)
-    : runs.at(-1);
+  const run = await repositories.runs.getById(latestLinkedEvent.runId);
   if (!run) {
     return undefined;
   }
@@ -258,19 +287,6 @@ function readWorkerJobId(event: RunEventRecord): string | undefined {
     : undefined;
 }
 
-function readWorkerJobIdFromRuns(runs: RunRecord[]): string | undefined {
-  for (const run of [...runs].reverse()) {
-    const injectedWorkerJob = [...run.contextSummary.injected]
-      .reverse()
-      .find((entry) => entry.startsWith("workerJob:"));
-    const workerJobId = injectedWorkerJob?.slice("workerJob:".length);
-    if (workerJobId && workerJobId.trim().length > 0) {
-      return workerJobId;
-    }
-  }
-  return undefined;
-}
-
 function isInterruptibleWorkerJob(workerJob: WorkerJobRecord): boolean {
   return workerJob.state === "queued" || workerJob.state === "running";
 }
@@ -280,9 +296,28 @@ function toTaskInterruptState(workerJob: WorkerJobRecord): TaskInterruptState {
     return "stopping";
   }
   if (isInterruptibleWorkerJob(workerJob)) {
-    return "interruptible";
+    return "idle";
+  }
+  if (workerJob.state === "cancelled") {
+    return "cancelled";
   }
   return "not_interruptible";
+}
+
+async function markRunCancelled(input: {
+  repositories: WorkbenchRepositories;
+  run: RunRecord;
+  now?: () => Date;
+}): Promise<void> {
+  const completedAt = nextRepositoryTimestamp(
+    input.repositories,
+    input.now ?? (() => new Date())
+  );
+  await input.repositories.runs.save({
+    ...input.run,
+    state: "cancelled",
+    completedAt
+  });
 }
 
 async function saveRunEvent(input: {

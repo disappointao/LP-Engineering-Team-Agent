@@ -14,7 +14,8 @@ import {
 import {
   deriveTaskInterruptView,
   interruptTask,
-  linkWorkerJobToTask
+  linkWorkerJobToTask,
+  type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
 
 function fixedNow(values: string[] = []) {
@@ -110,6 +111,32 @@ describe("task interrupts", () => {
       expect.objectContaining({ type: "worker.job.linked" }),
       expect.objectContaining({ type: "task.interrupt.requested" }),
       expect.objectContaining({ type: "task.interrupt.cancelled" })
+    ]);
+    await expect(repositories.runEvents.listForRun(runId)).resolves.toEqual([
+      expect.objectContaining({
+        type: "worker.job.linked",
+        payload: {
+          taskId,
+          runId,
+          workerJobId: workerJob.id
+        }
+      }),
+      expect.objectContaining({
+        type: "task.interrupt.requested",
+        payload: {
+          taskId,
+          runId,
+          workerJobId: workerJob.id
+        }
+      }),
+      expect.objectContaining({
+        type: "task.interrupt.cancelled",
+        payload: {
+          taskId,
+          runId,
+          workerJobId: workerJob.id
+        }
+      })
     ]);
     expect(result).toEqual({
       ok: true,
@@ -272,6 +299,255 @@ describe("task interrupts", () => {
     await expect(workerRuntime.getJob(workerJob.id)).resolves.toMatchObject({
       state: "completed",
       cancelRequestedAt: undefined
+    });
+  });
+
+  it("returns not interruptible without events when a task has no active target", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId } = await saveTaskAndRun({ repositories });
+    const workerRuntime = new InMemoryWorkerRuntime();
+
+    const result = await interruptTask({
+      repositories,
+      workerRuntime,
+      taskId,
+      reason: "Stale click",
+      now: fixedNow()
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId,
+      state: "not_interruptible"
+    });
+    await expect(repositories.runEvents.listForTask(taskId)).resolves.toEqual([]);
+  });
+
+  it("derives exact idle, cancelled, and not interruptible view states", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime();
+    const idle = await saveTaskAndRun({
+      repositories,
+      taskId: "task_idle",
+      runId: "run_idle"
+    });
+    const idleJob = await workerRuntime.enqueue(
+      {
+        projectId: idle.projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await linkWorkerJobToTask({
+      repositories,
+      taskId: idle.taskId,
+      projectId: idle.projectId,
+      runId: idle.runId,
+      workerJobId: idleJob.id,
+      now: fixedNow()
+    });
+
+    const cancelled = await saveTaskAndRun({
+      repositories,
+      taskId: "task_cancelled",
+      runId: "run_cancelled"
+    });
+    const cancelledJob = await workerRuntime.enqueue(
+      {
+        projectId: cancelled.projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await workerRuntime.cancelJob(cancelledJob.id, "Already stopped");
+    await linkWorkerJobToTask({
+      repositories,
+      taskId: cancelled.taskId,
+      projectId: cancelled.projectId,
+      runId: cancelled.runId,
+      workerJobId: cancelledJob.id,
+      now: fixedNow()
+    });
+
+    const completed = await saveTaskAndRun({
+      repositories,
+      taskId: "task_completed",
+      runId: "run_completed"
+    });
+    const completedRuntime = new InMemoryWorkerRuntime({
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const completedJob = await completedRuntime.enqueue(
+      {
+        projectId: completed.projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createSimulatedSandboxPolicy({ allowedCommands: ["static-deploy"] })
+    );
+    await completedRuntime.runNext();
+    await linkWorkerJobToTask({
+      repositories,
+      taskId: completed.taskId,
+      projectId: completed.projectId,
+      runId: completed.runId,
+      workerJobId: completedJob.id,
+      now: fixedNow()
+    });
+
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime,
+        taskId: "task_missing_target"
+      })
+    ).resolves.toEqual({
+      available: false,
+      state: "not_interruptible",
+      taskId: "task_missing_target"
+    });
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime,
+        taskId: idle.taskId
+      })
+    ).resolves.toEqual({
+      available: true,
+      state: "idle",
+      taskId: idle.taskId,
+      runId: idle.runId,
+      workerJobId: idleJob.id
+    });
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime,
+        taskId: cancelled.taskId
+      })
+    ).resolves.toEqual({
+      available: false,
+      state: "cancelled",
+      taskId: cancelled.taskId,
+      runId: cancelled.runId,
+      workerJobId: cancelledJob.id
+    });
+    await expect(
+      deriveTaskInterruptView({
+        repositories,
+        workerRuntime: completedRuntime,
+        taskId: completed.taskId
+      })
+    ).resolves.toEqual({
+      available: false,
+      state: "not_interruptible",
+      taskId: completed.taskId,
+      runId: completed.runId,
+      workerJobId: completedJob.id
+    });
+  });
+
+  it("marks an already cancelled linked worker job run cancelled", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId, runId } = await saveTaskAndRun({ repositories });
+    const now = fixedNow();
+    const workerRuntime = new InMemoryWorkerRuntime({ now });
+    const workerJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await workerRuntime.cancelJob(workerJob.id, "Already cancelled.");
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId,
+      workerJobId: workerJob.id,
+      now
+    });
+
+    const result = await interruptTask({
+      repositories,
+      workerRuntime,
+      taskId,
+      reason: "Stop",
+      now
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId,
+      state: "cancelled",
+      runId,
+      workerJobId: workerJob.id
+    });
+    await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
+      state: "cancelled"
+    });
+  });
+
+  it("returns interrupt_failed when worker cancellation throws", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId, runId } = await saveTaskAndRun({ repositories });
+    const workerRuntime = new InMemoryWorkerRuntime();
+    const workerJob = await workerRuntime.enqueue(
+      {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        args: [],
+        env: {},
+        timeoutMs: 1000
+      },
+      createRejectSandboxPolicy()
+    );
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId,
+      workerJobId: workerJob.id,
+      now: fixedNow()
+    });
+    const throwingRuntime: TaskInterruptWorkerRuntime = {
+      getJob: (id) => workerRuntime.getJob(id),
+      cancelJob: async () => {
+        throw new Error("cancel failed");
+      }
+    };
+
+    await expect(
+      interruptTask({
+        repositories,
+        workerRuntime: throwingRuntime,
+        taskId,
+        reason: "Stop",
+        now: fixedNow()
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "interrupt_failed"
+    });
+    await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
+      state: "running"
     });
   });
 
