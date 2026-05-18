@@ -94,11 +94,7 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   const link = await findWorkerLinkEvent(input.repositories, input.workerJob.id);
   const workerFinalState = toFinalState(input.workerJob);
   if (!link) {
-    return {
-      ok: true,
-      state: workerFinalState,
-      workerJobId: input.workerJob.id
-    };
+    return { ok: false, error: "worker_job_finalization_failed" };
   }
 
   const runId = toOptionalString(link.payload.runId);

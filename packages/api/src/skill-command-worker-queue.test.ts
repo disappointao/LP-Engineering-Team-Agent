@@ -153,6 +153,73 @@ async function linkedWorkerJob(input: {
   return { repositories, workerRuntime, workerJob };
 }
 
+async function unlinkedWorkerJob(): Promise<{
+  repositories: ReturnType<typeof createInMemoryWorkbenchRepositories>;
+  workerJob: WorkerJobRecord;
+}> {
+  const repositories = createInMemoryWorkbenchRepositories();
+  await repositories.runs.save(runningRun());
+  await repositories.toolObservations.save(runningObservation());
+  await repositories.runEvents.save({
+    id: "run_skill_command_1_event_1",
+    runId: "run_skill_command_1",
+    projectId: "project_1",
+    taskId: "task_1",
+    sequence: 1,
+    type: "run.started",
+    message: "Deployment skill command run started.",
+    payload: { commandId: "publish_static", observationId: "tool_observation_1" },
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.runEvents.save({
+    id: "run_skill_command_1_event_2",
+    runId: "run_skill_command_1",
+    projectId: "project_1",
+    taskId: "task_1",
+    sequence: 2,
+    type: "tool.started",
+    message: "Deployment skill command queued.",
+    payload: { commandId: "publish_static", observationId: "tool_observation_1" },
+    createdAt: "2026-05-18T00:00:01.000Z"
+  });
+
+  const workerRuntime = new InMemoryWorkerRuntime({
+    now: () => new Date("2026-05-18T00:00:02.000Z")
+  });
+  const queued = await workerRuntime.enqueue(
+    {
+      projectId: "project_1",
+      kind: "tool_command",
+      commandId: "publish_static",
+      command: "static-deploy",
+      args: ["--project", "project_1"],
+      env: { LP_PROJECT_ID: "project_1" },
+      timeoutMs: 30000
+    },
+    createSimulatedSandboxPolicy({
+      allowedCommands: ["static-deploy"],
+      allowedEnvNames: ["LP_PROJECT_ID"]
+    })
+  );
+
+  return {
+    repositories,
+    workerJob: {
+      ...queued,
+      state: "completed",
+      completedAt: "2026-05-18T00:00:03.000Z",
+      resultSummary: {
+        state: "completed",
+        exitCode: 0,
+        stdout: "published",
+        stderr: "",
+        stdoutBytes: 9,
+        stderrBytes: 0
+      }
+    }
+  };
+}
+
 describe("worker-backed skill command finalization", () => {
   it("finalizes a completed worker job into completed tool and run events", async () => {
     const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
@@ -351,6 +418,34 @@ describe("worker-backed skill command finalization", () => {
       },
       createdAt: "2026-05-18T00:00:03.000Z"
     });
+
+    const result = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "worker_job_finalization_failed"
+    });
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    const terminalEvents = (await repositories.runEvents.listForRun("run_skill_command_1"))
+      .filter((event) =>
+        event.type === "tool.completed" ||
+        event.type === "tool.failed" ||
+        event.type === "tool.cancelled" ||
+        event.type === "run.completed" ||
+        event.type === "run.failed" ||
+        event.type === "run.cancelled"
+      );
+    expect(terminalEvents).toHaveLength(0);
+  });
+
+  it("fails finalization without mutating state when worker job is not linked", async () => {
+    const { repositories, workerJob } = await unlinkedWorkerJob();
 
     const result = await finalizeWorkerBackedSkillCommand({
       repositories,
