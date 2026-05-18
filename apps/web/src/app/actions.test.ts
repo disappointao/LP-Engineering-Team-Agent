@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   currentProjectId: undefined as string | undefined,
+  currentTaskId: undefined as string | undefined,
   revalidatePath: vi.fn(),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   setCurrentProjectId: vi.fn(),
   setCurrentTaskId: vi.fn(),
   submitTaskPrompt: vi.fn(),
+  interruptCurrentTask: vi.fn(),
   createSkillDraft: vi.fn(),
   validateSkillVersion: vi.fn(),
   publishSkillVersion: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("../lib/workbench-session", () => ({
   getCurrentProjectId: vi.fn(async () => mocks.currentProjectId),
+  getCurrentTaskId: vi.fn(async () => mocks.currentTaskId),
   setCurrentProjectId: mocks.setCurrentProjectId,
   setCurrentTaskId: mocks.setCurrentTaskId
 }));
@@ -42,6 +45,7 @@ vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
     createProject: mocks.createProject,
     submitTaskPrompt: mocks.submitTaskPrompt,
+    interruptCurrentTask: mocks.interruptCurrentTask,
     createSkillDraft: mocks.createSkillDraft,
     validateSkillVersion: mocks.validateSkillVersion,
     publishSkillVersion: mocks.publishSkillVersion,
@@ -64,6 +68,7 @@ import {
   createProjectAction,
   createSkillDraftAction,
   executeSkillCommandAction,
+  interruptCurrentTaskAction,
   publishSkillVersionAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
@@ -134,6 +139,7 @@ async function expectRedirect(promise: Promise<void>, url: string) {
 describe("submitPromptAction", () => {
   beforeEach(() => {
     mocks.currentProjectId = "project_2";
+    mocks.currentTaskId = "task_1";
     mocks.revalidatePath.mockClear();
     mocks.redirect.mockClear();
     mocks.createProject.mockReset();
@@ -146,6 +152,12 @@ describe("submitPromptAction", () => {
       taskId: "task_1",
       taskType: "lp_generation",
       projectId: "project_2"
+    });
+    mocks.interruptCurrentTask.mockReset();
+    mocks.interruptCurrentTask.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      state: "interrupt_requested"
     });
     mocks.createSkillDraft.mockReset();
     mocks.validateSkillVersion.mockReset();
@@ -289,6 +301,45 @@ describe("submitPromptAction", () => {
 
     expect(mocks.setCurrentTaskId).toHaveBeenCalledWith("task_2");
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("interrupts the current task from the session cookie", async () => {
+    const formData = new FormData();
+    formData.set("workerJobId", "worker_job_from_client");
+
+    await expectRedirect(interruptCurrentTaskAction(formData), "/");
+
+    expect(mocks.interruptCurrentTask).toHaveBeenCalledWith({
+      taskId: "task_1",
+      reason: "User interrupted the task."
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects interrupt requests without a current task", async () => {
+    mocks.currentTaskId = undefined;
+
+    await expectRedirect(
+      interruptCurrentTaskAction(new FormData()),
+      "/?interruptError=task_not_found"
+    );
+
+    expect(mocks.interruptCurrentTask).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("redirects interrupt store errors with a bounded query code", async () => {
+    mocks.interruptCurrentTask.mockResolvedValue({
+      ok: false,
+      error: "interrupt_failed"
+    });
+
+    await expectRedirect(
+      interruptCurrentTaskAction(new FormData()),
+      "/?interruptError=interrupt_failed"
+    );
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("creates a skill draft and redirects to the skills view", async () => {

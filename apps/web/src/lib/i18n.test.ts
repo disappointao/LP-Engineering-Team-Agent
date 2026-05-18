@@ -43,6 +43,9 @@ describe("web i18n", () => {
       "Web MVP 状态会保存在这台电脑的 .lp-agent/ 本地状态目录中。"
     );
     expect(zh.projectFlow.errors.prompt_required).toBe("请输入 LP 需求。");
+    expect(zh.interruptFlow.errors.task_not_found).toBe("当前没有可打断的任务。");
+    expect(zh.chat.interruptStoppingLabel).toBe("正在停止...");
+    expect(zh.chat.toolStatusCancelled).toBe("已停止");
     expect(zh.projectFlow.createDescription).not.toContain("仓库");
     expect(zh.chat.suggestions.join(" ")).not.toContain("部署");
     expect(zh.collaboration.title).toBe("项目成员");
@@ -61,6 +64,9 @@ describe("web i18n", () => {
       "Local Web MVP state is saved on this machine under .lp-agent/."
     );
     expect(en.projectFlow.errors.prompt_required).toBe("Enter an LP request.");
+    expect(en.interruptFlow.errors.task_not_found).toBe("No current task to interrupt.");
+    expect(en.chat.interruptStoppingLabel).toBe("Stopping...");
+    expect(en.chat.toolStatusCancelled).toBe("Stopped");
     expect(en.projectFlow.createDescription).not.toContain("repository");
     expect(en.chat.suggestions.join(" ")).not.toContain("deployment");
     expect(en.collaboration.title).toBe("Project members");

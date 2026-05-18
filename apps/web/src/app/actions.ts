@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   getWebWorkbenchStore,
+  type InterruptFlowErrorCode,
   type MCPFlowErrorCode,
   type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode
 } from "../lib/workbench-store";
 import {
+  getCurrentTaskId,
   getCurrentProjectId,
   setCurrentProjectId,
   setCurrentTaskId
@@ -17,6 +19,10 @@ import {
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
+}
+
+function redirectToInterruptError(error: InterruptFlowErrorCode): never {
+  redirect(`/?interruptError=${encodeURIComponent(error)}`);
 }
 
 function redirectToSkillsWithError(error: SkillFlowErrorCode): never {
@@ -192,6 +198,24 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
   if (result.projectId) {
     await setCurrentProjectId(result.projectId);
   }
+  revalidatePath("/");
+  redirect("/");
+}
+
+export async function interruptCurrentTaskAction(_formData?: FormData): Promise<void> {
+  const currentTaskId = await getCurrentTaskId();
+  if (!currentTaskId) {
+    redirectToInterruptError("task_not_found");
+  }
+
+  const result = await getWebWorkbenchStore().interruptCurrentTask({
+    taskId: currentTaskId,
+    reason: "User interrupted the task."
+  });
+  if (!result.ok) {
+    redirectToInterruptError(result.error);
+  }
+
   revalidatePath("/");
   redirect("/");
 }

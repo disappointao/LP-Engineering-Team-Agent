@@ -1,4 +1,5 @@
 import type {
+  InterruptFlowErrorCode,
   MCPFlowErrorCode,
   ModelFlowErrorCode,
   ProjectFlowErrorCode,
@@ -66,6 +67,9 @@ export interface WorkbenchCopy {
     emptyDescription: string;
     promptLabel: string;
     errors: Record<ProjectFlowErrorCode, string>;
+  };
+  interruptFlow: {
+    errors: Record<InterruptFlowErrorCode, string>;
   };
   collaboration: {
     title: string;
@@ -232,8 +236,12 @@ export interface WorkbenchCopy {
     addAttachmentLabel: string;
     runtimeChip: string;
     interruptLabel: string;
+    interruptStoppingLabel: string;
+    interruptUnavailableLabel: string;
     sendLabel: string;
+    toolStatusRunning: string;
     toolStatusComplete: string;
+    toolStatusCancelled: string;
     branchLabel: string;
     findingsLabel: string;
     filesLabel: string;
@@ -343,6 +351,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         prompt_required: "Enter an LP request.",
         project_not_found: "The selected project is no longer available.",
         generation_failed: "The LP generation flow failed. Try again with a shorter request."
+      }
+    },
+    interruptFlow: {
+      errors: {
+        task_not_found: "No current task to interrupt.",
+        task_not_interruptible: "Nothing is running for this task.",
+        interrupt_target_not_found: "The running task could not be found.",
+        interrupt_failed: "Unable to interrupt this task."
       }
     },
     collaboration: {
@@ -629,8 +645,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       addAttachmentLabel: "Add context",
       runtimeChip: "Cloud runtime",
       interruptLabel: "Interrupt",
+      interruptStoppingLabel: "Stopping...",
+      interruptUnavailableLabel: "Nothing running",
       sendLabel: "Send",
+      toolStatusRunning: "Running",
       toolStatusComplete: "Complete",
+      toolStatusCancelled: "Stopped",
       branchLabel: "Branch",
       findingsLabel: "Findings",
       filesLabel: "Files",
@@ -716,6 +736,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         prompt_required: "请输入 LP 需求。",
         project_not_found: "当前项目已经不可用。",
         generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
+      }
+    },
+    interruptFlow: {
+      errors: {
+        task_not_found: "当前没有可打断的任务。",
+        task_not_interruptible: "当前任务没有正在运行的内容。",
+        interrupt_target_not_found: "没有找到正在运行的任务。",
+        interrupt_failed: "无法打断当前任务。"
       }
     },
     collaboration: {
@@ -1002,8 +1030,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       addAttachmentLabel: "添加上下文",
       runtimeChip: "云端运行时",
       interruptLabel: "打断",
+      interruptStoppingLabel: "正在停止...",
+      interruptUnavailableLabel: "当前没有可打断任务",
       sendLabel: "发送",
+      toolStatusRunning: "运行中",
       toolStatusComplete: "完成",
+      toolStatusCancelled: "已停止",
       branchLabel: "分支",
       findingsLabel: "问题",
       filesLabel: "文件",
