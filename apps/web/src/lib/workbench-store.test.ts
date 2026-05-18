@@ -1782,7 +1782,6 @@ describe("web workbench store", () => {
     expect(pageState.artifactDiff).toMatchObject({
       projectId: result.projectId,
       pageVersionId: pageState.snapshot?.currentPageVersion?.id,
-      previousPageVersionId: undefined,
       files: [
         {
           path: "index.html",
@@ -1804,6 +1803,7 @@ describe("web workbench store", () => {
         }
       ]
     });
+    expect(pageState.artifactDiff?.previousPageVersionId).toBeUndefined();
     expect(pageState.artifactDiff?.files.every((file) => file.shortSha256?.length === 12)).toBe(
       true
     );
@@ -1891,6 +1891,7 @@ describe("web workbench store", () => {
     if (pageState.kind !== "task_ready") {
       throw new Error("Expected task-ready state.");
     }
+    expect(pageState.artifactDiff?.previousPageVersionId).toBeUndefined();
     expect(pageState.artifactDiff?.files).toMatchObject([
       {
         path: "index.html",
