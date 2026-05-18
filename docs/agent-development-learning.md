@@ -752,6 +752,10 @@ pnpm --filter @lp-agent/model-gateway test
 - 第一版使用 server-rendered 查询参数方案，不新增独立 Artifacts 页面、不做客户端弹窗、不做文件编辑、不做 line-level diff。
 - 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射或完整源码默认展示。
 
+当前计划：
+
+- [2026-05-19-web-artifact-diff-cards.md](./superpowers/plans/2026-05-19-web-artifact-diff-cards.md)
+
 学习重点：
 
 - Web preview/export 和 Agent snippet preview 是两个不同场景：前者服务用户下载完整产物，后者必须经过 reader 边界并受路径、归属和大小限制。

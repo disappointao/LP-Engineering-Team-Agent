@@ -244,6 +244,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 16 Web artifact diff cards v0 design.
    - Read this after the Stage 15 plan when adding conversation-embedded artifact metadata diff cards and explicit 8KB snippet previews through the artifact reader boundary.
 
+61. `plans/2026-05-19-web-artifact-diff-cards.md`
+   - Stage 16 Web artifact diff cards v0 implementation plan.
+   - Read this after the Stage 16 design when implementing or auditing conversation-embedded artifact metadata cards, same-page snippet query handling, localization, and safety tests.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

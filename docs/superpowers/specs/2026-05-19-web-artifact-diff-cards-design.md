@@ -302,7 +302,8 @@ Stage 16 should cover:
 - First version shows `initial` cards for `index.html`, `styles.css`, and
   `script.js`.
 - When a previous page version exists, metadata-only diff states are rendered.
-- Default page state and rendered page do not contain artifact source content.
+- Default artifact diff state and rendered visible text do not contain artifact
+  source content.
 - Valid `artifactPath` reads one bounded snippet through the artifact reader.
 - Oversized files do not render content and show a size-limit omitted state.
 - Invalid `artifactPath` does not echo the raw value or any secret embedded in
