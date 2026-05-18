@@ -209,6 +209,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
 - Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
 - Stage 7 Collaboration Primitives v0：已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化、审批 actor 归属和 Web 项目成员只读展示。
+- Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file job persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once 和 Web 本地 worker queue 闭环。
+- Durable Artifact Workspace v0：已实现本地 artifact workspace/file repository、manifest/hash/summary、workspace-backed preview/export recovery 和 metadata-first context 注入。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
 - Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
@@ -219,7 +221,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
-- Worker/Sandbox Runtime Foundation 已进入 Stage 8 设计：先定义 worker job、sandbox policy、execution adapter 和 worker-backed `ToolCommandRunner` 接缝，不开放真实 shell 执行。
+- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel 和 Web run-once 闭环；后续还要补真实 runner、daemon、MCP execution、强 sandbox 和流式日志。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -228,8 +230,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
-- 文件系统 workspace 和 diff 注入。
-- Worker job persistence、真实 worker queue、真实本地命令 runner、强 sandbox adapter 仍未做；Stage 8 第一版只计划 contract-first 底座。
+- 受控 artifact reader、静态 diff、文件系统 workspace 和 diff 注入；artifact reader / static diff 已进入 Stage 15 设计。
+- 真实本地命令 runner、强 sandbox adapter、worker daemon、真实部署 runner、MCP worker execution 仍未做。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
 - 实时流式输出和真正的 interrupt/cancel。
@@ -709,6 +711,23 @@ pnpm --filter @lp-agent/model-gateway test
 - Context Pack 默认注入 metadata，不注入全文；需要全文时应通过受控 artifact reader 按路径、大小、项目归属和权限读取。
 - runtime adapter 和 model gateway 是模型请求边界，也要 whitelist artifact metadata 字段，不能把污染的 `content` 字段透传给模型。
 - 本地 JSON-file content snapshot 是 Web MVP 的过渡实现，未来可以用同一 repository contract 换成对象存储、Postgres 元数据或桌面本地目录。
+
+### 阶段 15：Artifact Reader and Static Diff v0
+
+当前设计：
+
+- [2026-05-18-artifact-reader-static-diff-design.md](./superpowers/specs/2026-05-18-artifact-reader-static-diff-design.md)
+- 这一阶段给 Stage 14 的 durable artifact workspace 补一个受控读取边界：调用方必须提供 project、workspace、允许的静态 LP 路径和可选 page version，系统校验归属、路径 allowlist、文件完整性和大小限制后，才允许读取单个文件。
+- 默认仍是 metadata-first：Context Pack、runtime context、model request、run event 和 worker payload 不应该默认携带完整 HTML/CSS/JS。
+- v0 diff 只做 metadata-only 静态 diff，比较 `index.html`、`styles.css`、`script.js` 的 hash、size 和 summary，不做行级文本 diff，也不显示完整源码。
+- 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射、文件编辑 UI、大文件 chunking 或二进制资产。
+
+学习重点：
+
+- artifact workspace 解决“产物在哪里”，artifact reader 解决“谁可以按什么规则读取产物”。
+- diff 先从 metadata-only 开始，比一开始做源码级 diff 更适合 Agent MVP：它能支持 Reviewer、部署 skill、MCP 和桌面版的安全边界，又不会把完整文件到处传播。
+- 未来 MCP/deployment/desktop 读取产物时，应该复用 reader 和 diff contract，而不是绕过 API 直接读 repository、JSON-file 或本机绝对路径。
+- 需要把 preview/export 这种用户下载场景和 context/model/snippet 这种 Agent 上下文场景分开：前者可以恢复完整产物，后者必须受路径、归属和大小限制。
 
 ## 5. 写代码时的维护原则
 

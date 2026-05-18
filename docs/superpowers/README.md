@@ -232,6 +232,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 14 durable artifact workspace v0 implementation plan.
    - Read this after the Stage 14 design when implementing or auditing artifact workspace helper types, local repository persistence, page-version workspace creation, workspace-backed artifact recovery, metadata-first context injection, and documentation updates.
 
+58. `specs/2026-05-18-artifact-reader-static-diff-design.md`
+   - Stage 15 artifact reader and static diff v0 design.
+   - Read this after the Stage 14 plan when adding controlled artifact workspace file reads, bounded snippet behavior, metadata-only static diffs, and future-safe read boundaries for Reviewer, MCP, deployment, and desktop workspace flows.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.
