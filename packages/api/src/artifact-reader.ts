@@ -18,6 +18,7 @@ export type ArtifactReaderErrorCode =
   | "artifact_workspace_file_project_mismatch"
   | "artifact_workspace_file_integrity_mismatch"
   | "artifact_workspace_file_path_not_allowed"
+  | "artifact_workspace_read_limit_invalid"
   | "artifact_workspace_diff_not_available";
 
 export class ArtifactReaderError extends Error {
@@ -60,6 +61,7 @@ export async function readRepositoryArtifactWorkspaceFile(
   input: ReadRepositoryArtifactWorkspaceFileInput
 ): Promise<ArtifactWorkspaceFileReadResult> {
   const path = normalizeReaderPath(input.path);
+  const maxBytes = normalizeReadMaxBytes(input.maxBytes);
   const workspace = await getWorkspaceOrThrow(input.repositories, input.workspaceId);
   validateWorkspaceScope(workspace, input.projectId, input.pageVersionId);
 
@@ -80,7 +82,7 @@ export async function readRepositoryArtifactWorkspaceFile(
     return readArtifactWorkspaceFileRecord({
       file,
       includeContent: input.includeContent,
-      maxBytes: input.maxBytes
+      maxBytes
     });
   } catch (error) {
     throw new ArtifactReaderError(
@@ -157,9 +159,24 @@ const normalizeReaderPath = (path: string): ArtifactWorkspaceFilePath => {
   } catch {
     throw new ArtifactReaderError(
       "artifact_workspace_file_path_not_allowed",
-      `Artifact workspace file path is not allowed: ${path}.`
+      "Artifact workspace file path is not allowed."
     );
   }
+};
+
+const normalizeReadMaxBytes = (maxBytes: number | undefined): number | undefined => {
+  if (maxBytes === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isFinite(maxBytes) || maxBytes < 0 || !Number.isInteger(maxBytes)) {
+    throw new ArtifactReaderError(
+      "artifact_workspace_read_limit_invalid",
+      "Artifact workspace read maxBytes must be a finite non-negative integer."
+    );
+  }
+
+  return maxBytes;
 };
 
 const getWorkspaceOrThrow = async (

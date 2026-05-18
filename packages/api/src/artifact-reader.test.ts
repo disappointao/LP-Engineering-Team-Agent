@@ -4,6 +4,7 @@ import { sampleBrief } from "@lp-agent/lp-schema";
 import { describe, expect, it } from "vitest";
 import {
   ArtifactReaderError,
+  type ArtifactReaderErrorCode,
   diffPageVersionArtifactWorkspaces,
   diffRepositoryArtifactWorkspaces,
   readRepositoryArtifactWorkspaceFile
@@ -80,7 +81,7 @@ const setupWorkspace = async (
 
 const expectArtifactReaderCode = async (
   action: Promise<unknown>,
-  code: ArtifactReaderError["code"]
+  code: ArtifactReaderErrorCode
 ) => {
   await expect(action).rejects.toMatchObject({
     name: "ArtifactReaderError",
@@ -116,6 +117,33 @@ describe("repository artifact reader", () => {
     });
   });
 
+  it("reads bounded content for every canonical static file", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspace = await setupWorkspace(repositories);
+
+    const cases = [
+      ["index.html", baseArtifacts.indexHtml],
+      ["styles.css", baseArtifacts.stylesCss],
+      ["script.js", baseArtifacts.scriptJs]
+    ] as const;
+
+    for (const [path, content] of cases) {
+      const result = await readRepositoryArtifactWorkspaceFile({
+        repositories,
+        projectId: workspace.projectId,
+        workspaceId: workspace.workspaceId,
+        pageVersionId: workspace.pageVersionId,
+        path,
+        includeContent: true,
+        maxBytes: content.length
+      });
+
+      expect(result.file.path).toBe(path);
+      expect(result.content).toBe(content);
+      expect(result.truncated).toBe(false);
+    }
+  });
+
   it("omits content from metadata-only reads by default", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workspace = await setupWorkspace(repositories);
@@ -137,6 +165,7 @@ describe("repository artifact reader", () => {
 
   it("rejects path traversal before repository access", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const secretPath = "../index.html?token=LOCAL_PATH_SECRET";
     let workspaceLookups = 0;
     const originalGetById = repositories.artifactWorkspaces.getById.bind(
       repositories.artifactWorkspaces
@@ -151,11 +180,66 @@ describe("repository artifact reader", () => {
         repositories,
         projectId: "project_1",
         workspaceId: "artifact_workspace_1",
-        path: "../index.html"
+        path: secretPath
       }),
       "artifact_workspace_file_path_not_allowed"
     );
+    await expect(
+      readRepositoryArtifactWorkspaceFile({
+        repositories,
+        projectId: "project_1",
+        workspaceId: "artifact_workspace_1",
+        path: secretPath
+      })
+    ).rejects.not.toThrow(secretPath);
     expect(workspaceLookups).toBe(0);
+  });
+
+  it("rejects missing artifact workspaces", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+
+    await expectArtifactReaderCode(
+      readRepositoryArtifactWorkspaceFile({
+        repositories,
+        projectId: "project_1",
+        workspaceId: "artifact_workspace_missing",
+        path: "styles.css"
+      }),
+      "artifact_workspace_not_found"
+    );
+  });
+
+  it("rejects missing artifact workspace files", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspace = await setupWorkspace(repositories);
+    repositories.artifactWorkspaceFiles.getByPath = async () => undefined;
+
+    await expectArtifactReaderCode(
+      readRepositoryArtifactWorkspaceFile({
+        repositories,
+        projectId: workspace.projectId,
+        workspaceId: workspace.workspaceId,
+        path: "styles.css"
+      }),
+      "artifact_workspace_file_not_found"
+    );
+  });
+
+  it("rejects invalid read byte limits as request errors", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workspace = await setupWorkspace(repositories);
+
+    await expectArtifactReaderCode(
+      readRepositoryArtifactWorkspaceFile({
+        repositories,
+        projectId: workspace.projectId,
+        workspaceId: workspace.workspaceId,
+        path: "styles.css",
+        includeContent: true,
+        maxBytes: -1
+      }),
+      "artifact_workspace_read_limit_invalid"
+    );
   });
 
   it("rejects project mismatches", async () => {

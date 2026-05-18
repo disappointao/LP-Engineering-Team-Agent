@@ -4010,6 +4010,42 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(parsedContextPack)).not.toContain("SNIPPET_HTML_SECRET");
   });
 
+  it("omits invalid artifact snippet paths without echoing raw input", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const rawPath = "../index.html?token=SNIPPET_PATH_SECRET";
+
+    const contextPack = await assembleContextPack({
+      repositories,
+      service,
+      projectId: project.id,
+      role: "builder",
+      input: {
+        prompt: "Create a sale LP",
+        brief: sampleBrief
+      },
+      artifactSnippetRequests: [
+        {
+          workspaceId: "artifact_workspace_1",
+          path: rawPath as never
+        }
+      ],
+      now: fixedClock()
+    });
+    const parsedContextPack = ContextPackSchema.parse(contextPack);
+
+    expect(parsedContextPack.artifactSnippets).toEqual([]);
+    expect(parsedContextPack.trace.omitted).toContain(
+      "artifactSnippet:invalid_path:artifact_workspace_file_path_not_allowed"
+    );
+    expect(JSON.stringify(parsedContextPack.trace)).not.toContain(rawPath);
+    expect(JSON.stringify(parsedContextPack)).not.toContain("SNIPPET_PATH_SECRET");
+  });
+
   it("injects bounded artifact snippets only when explicitly requested", async () => {
     const artifacts: StaticArtifacts = {
       indexHtml: "<!doctype html><html><body>SNIPPET_HTML_SECRET</body></html>",

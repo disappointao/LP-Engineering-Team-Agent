@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run src/task-interrupts.test.ts src/skill-command-worker-queue.test.ts src/structured-lp-brief.test.ts src/structured-static-artifacts.test.ts src/skill-command-execution.test.ts src/worker-backed-tool-command-runner.test.ts src/run-orchestrator.test.ts src/context-memory.test.ts src/agent-handoffs.test.ts src/services.test.ts",
+    "test": "vitest run src/task-interrupts.test.ts src/skill-command-worker-queue.test.ts src/structured-lp-brief.test.ts src/structured-static-artifacts.test.ts src/skill-command-execution.test.ts src/worker-backed-tool-command-runner.test.ts src/run-orchestrator.test.ts src/context-memory.test.ts src/agent-handoffs.test.ts src/artifact-reader.test.ts src/services.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

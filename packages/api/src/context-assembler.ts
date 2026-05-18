@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES,
+  normalizeArtifactWorkspaceFilePath,
   type ArtifactWorkspaceFilePath
 } from "@lp-agent/artifacts";
 import type { WorkbenchRepositories } from "@lp-agent/db";
@@ -273,6 +274,7 @@ async function assembleArtifactSnippetsSafely(input: {
   }
 
   for (const request of requests) {
+    const tracePath = toArtifactSnippetTracePath(request.path);
     try {
       const result = await readRepositoryArtifactWorkspaceFile({
         repositories: input.repositories,
@@ -289,7 +291,7 @@ async function assembleArtifactSnippetsSafely(input: {
 
       if (result.content === undefined) {
         omitted.push(
-          `artifactSnippet:${request.path}:${result.omittedReason ?? "content_omitted"}`
+          `artifactSnippet:${result.file.path}:${result.omittedReason ?? "content_omitted"}`
         );
         continue;
       }
@@ -305,7 +307,7 @@ async function assembleArtifactSnippetsSafely(input: {
       });
     } catch (error) {
       omitted.push(
-        `artifactSnippet:${request.path}:${
+        `artifactSnippet:${tracePath}:${
           error instanceof ArtifactReaderError ? error.code : "unexpected_error"
         }`
       );
@@ -316,4 +318,12 @@ async function assembleArtifactSnippetsSafely(input: {
     snippets,
     omitted
   };
+}
+
+function toArtifactSnippetTracePath(path: string): ArtifactWorkspaceFilePath | "invalid_path" {
+  try {
+    return normalizeArtifactWorkspaceFilePath(path);
+  } catch {
+    return "invalid_path";
+  }
 }
