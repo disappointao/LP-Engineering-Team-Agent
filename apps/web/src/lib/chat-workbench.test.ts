@@ -427,7 +427,70 @@ describe("chat workbench view model", () => {
     expect(thread.toolEvents.every((event) => event.statusLabel === "Stopped")).toBe(true);
   });
 
-  it("keeps worker-linked skill command timeline events running until cancellation", () => {
+  it("marks completed queued worker timeline events complete after terminal event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_skill_command_1_event_1",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "tool.started",
+          message: "Deployment skill command started.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        },
+        {
+          id: "run_skill_command_1_event_2",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 2,
+          type: "worker.job.linked",
+          message: "Worker job linked.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        },
+        {
+          id: "run_skill_command_1_event_3",
+          runId: "run_skill_command_1",
+          projectId: "project_1",
+          sequence: 3,
+          type: "tool.completed",
+          message: "Deployment skill command completed.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            workerJobId: "worker_job_1",
+            exitCode: 0
+          },
+          createdAt: "2026-05-18T00:00:03.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents.map((event) => event.status)).toEqual([
+      "complete",
+      "complete",
+      "complete"
+    ]);
+    expect(thread.toolEvents.map((event) => event.meta)).toContain(
+      "worker.job.linked - publish_static - worker_job_1"
+    );
+  });
+
+  it("marks cancelled queued worker timeline events cancelled after terminal event", () => {
     const thread = createChatWorkbenchThread({
       copy: getWorkbenchCopy("en"),
       prompt: "Create LP",
@@ -480,8 +543,8 @@ describe("chat workbench view model", () => {
     });
 
     expect(thread.toolEvents.map((event) => event.status)).toEqual([
-      "running",
-      "running",
+      "cancelled",
+      "cancelled",
       "cancelled"
     ]);
     expect(thread.toolEvents.map((event) => event.meta)).toContain(

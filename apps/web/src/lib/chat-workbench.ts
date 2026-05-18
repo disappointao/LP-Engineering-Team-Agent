@@ -57,9 +57,9 @@ export function createChatWorkbenchThread({
   downloadLinks,
   runEvents = []
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
-  const terminalRunIds = toTerminalRunIds(runEvents);
+  const terminalRunStatuses = toTerminalRunStatuses(runEvents);
   const toolEvents: ChatToolEvent[] = runEvents.length > 0
-    ? runEvents.map((event) => toChatToolEvent(event, copy, terminalRunIds))
+    ? runEvents.map((event) => toChatToolEvent(event, copy, terminalRunStatuses))
     : createFallbackToolEvents({ copy, objective, pageVersion, downloadLinks });
 
   const artifacts: ChatArtifactCard[] = downloadLinks.map((link, index) => ({
@@ -129,10 +129,10 @@ function createFallbackToolEvents(input: {
 function toChatToolEvent(
   event: RunEventRecord,
   copy: WorkbenchCopy,
-  terminalRunIds: ReadonlySet<string>
+  terminalRunStatuses: ReadonlyMap<string, ChatToolStatus>
 ): ChatToolEvent {
   const role = toChatToolRole(event);
-  const status = toChatToolStatus(event, terminalRunIds);
+  const status = toChatToolStatus(event, terminalRunStatuses);
   return {
     id: `${event.runId}:${event.sequence}`,
     role,
@@ -144,8 +144,12 @@ function toChatToolEvent(
   };
 }
 
-function toTerminalRunIds(events: RunEventRecord[]): Set<string> {
-  return new Set(events.filter(isTerminalRunEvent).map((event) => event.runId));
+function toTerminalRunStatuses(events: RunEventRecord[]): Map<string, ChatToolStatus> {
+  return new Map(
+    events
+      .filter(isTerminalRunEvent)
+      .map((event) => [event.runId, toTerminalRunStatus(event)])
+  );
 }
 
 function isTerminalRunEvent(event: RunEventRecord): boolean {
@@ -159,7 +163,7 @@ function isTerminalRunEvent(event: RunEventRecord): boolean {
 
 function toChatToolStatus(
   event: RunEventRecord,
-  terminalRunIds: ReadonlySet<string>
+  terminalRunStatuses: ReadonlyMap<string, ChatToolStatus>
 ): ChatToolStatus {
   if (event.type.endsWith(".failed")) {
     return "failed";
@@ -168,13 +172,23 @@ function toChatToolStatus(
     return "cancelled";
   }
   if (event.type === "task.interrupt.requested") {
-    return terminalRunIds.has(event.runId) ? "complete" : "running";
+    return terminalRunStatuses.has(event.runId) ? "complete" : "running";
   }
   if (event.type === "worker.job.linked" || event.type === "tool.started") {
-    return "running";
+    return terminalRunStatuses.get(event.runId) ?? "running";
   }
   if (event.type.endsWith(".started")) {
-    return terminalRunIds.has(event.runId) ? "complete" : "running";
+    return terminalRunStatuses.has(event.runId) ? "complete" : "running";
+  }
+  return "complete";
+}
+
+function toTerminalRunStatus(event: RunEventRecord): ChatToolStatus {
+  if (event.type.endsWith(".failed")) {
+    return "failed";
+  }
+  if (event.type.endsWith(".cancelled") || event.type === "task.interrupt.cancelled") {
+    return "cancelled";
   }
   return "complete";
 }
