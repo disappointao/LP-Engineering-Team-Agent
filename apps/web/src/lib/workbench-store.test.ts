@@ -187,6 +187,100 @@ describe("web workbench store", () => {
     });
   });
 
+  it("does not execute queued work for a missing local worker project id", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const project = await store.createProject({ name: "Project B" });
+    await savePublishedDeploymentSkill(repositories, project.id);
+    const queued = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static"
+    });
+    if (!queued.ok) {
+      throw new Error(`Expected command queueing to succeed, got ${queued.error}.`);
+    }
+
+    await expect(
+      store.runLocalWorkerOnce({ projectId: "project_missing" })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_job_finalization_failed"
+    });
+
+    await expect(workerRuntime.listJobsForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "worker_job_1",
+        state: "queued"
+      })
+    ]);
+    await expect(repositories.runs.getById(queued.value.run.id)).resolves.toMatchObject({
+      state: "running"
+    });
+  });
+
+  it("scopes local worker run-once claims to the requested project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter()
+    });
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const projectA = await store.createProject({ name: "Project A" });
+    const projectB = await store.createProject({ name: "Project B" });
+    await savePublishedDeploymentSkill(repositories, projectB.id);
+    const queued = await store.executeSkillCommand({
+      projectId: projectB.id,
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static"
+    });
+    if (!queued.ok) {
+      throw new Error(`Expected command queueing to succeed, got ${queued.error}.`);
+    }
+
+    await expect(store.runLocalWorkerOnce({ projectId: projectA.id })).resolves.toEqual({
+      ok: true,
+      state: "idle"
+    });
+    await expect(workerRuntime.listJobsForProject(projectB.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "worker_job_1",
+        state: "queued"
+      })
+    ]);
+    await expect(repositories.runs.getById(queued.value.run.id)).resolves.toMatchObject({
+      state: "running"
+    });
+
+    await expect(store.runLocalWorkerOnce({ projectId: projectB.id })).resolves.toEqual({
+      ok: true,
+      state: "completed",
+      workerJobId: "worker_job_1",
+      runId: queued.value.run.id
+    });
+    await expect(repositories.runs.getById(queued.value.run.id)).resolves.toMatchObject({
+      state: "completed"
+    });
+  });
+
   it("exposes a non-interruptible task interrupt view by default", async () => {
     const store = createWebWorkbenchStore();
     const result = await store.submitTaskPrompt({

@@ -21,6 +21,10 @@ export interface SkillCommandQueueRuntime {
   claimOldestQueued(input: {
     workerId: string;
   }): Promise<{ record: WorkerJobRecord; claimToken: string } | undefined>;
+  claimOldestQueuedForProject?(input: {
+    workerId: string;
+    projectId: string;
+  }): Promise<{ record: WorkerJobRecord; claimToken: string } | undefined>;
   runClaimedJob(claim: {
     record: WorkerJobRecord;
     claimToken: string;
@@ -50,6 +54,7 @@ export async function runLocalWorkerOnceAndFinalize(input: {
   repositories: WorkbenchRepositories;
   workerRuntime?: SkillCommandQueueRuntime;
   workerId: string;
+  projectId?: string;
   now?: () => Date;
   afterFinalize?: () => void;
 }): Promise<RunLocalWorkerOnceResult> {
@@ -59,9 +64,16 @@ export async function runLocalWorkerOnceAndFinalize(input: {
 
   let workerJob: WorkerJobRecord;
   try {
-    const claim = await input.workerRuntime.claimOldestQueued({
-      workerId: input.workerId
-    });
+    const claim =
+      input.projectId !== undefined
+        ? await claimOldestQueuedForProject({
+            workerRuntime: input.workerRuntime,
+            workerId: input.workerId,
+            projectId: input.projectId
+          })
+        : await input.workerRuntime.claimOldestQueued({
+            workerId: input.workerId
+          });
     if (!claim) {
       return { ok: true, state: "idle" };
     }
@@ -84,6 +96,20 @@ export async function runLocalWorkerOnceAndFinalize(input: {
   } catch {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
+}
+
+async function claimOldestQueuedForProject(input: {
+  workerRuntime: SkillCommandQueueRuntime;
+  workerId: string;
+  projectId: string;
+}): Promise<{ record: WorkerJobRecord; claimToken: string } | undefined> {
+  if (!input.workerRuntime.claimOldestQueuedForProject) {
+    throw new Error("worker_project_scoped_claim_not_supported");
+  }
+  return input.workerRuntime.claimOldestQueuedForProject({
+    workerId: input.workerId,
+    projectId: input.projectId
+  });
 }
 
 export async function finalizeWorkerBackedSkillCommand(input: {

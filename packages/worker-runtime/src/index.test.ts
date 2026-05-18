@@ -730,6 +730,46 @@ describe("InMemoryWorkerRuntime", () => {
     expect(stored).toEqual(claim?.record);
   });
 
+  it("claims the oldest safe queued job for a requested project only", async () => {
+    const repository = new InMemoryWorkerJobRepository();
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const runtime = new InMemoryWorkerRuntime({
+      repository,
+      payloadRepository,
+      claimTokenFactory: () => "claim_token_1",
+      now: createClock([
+        "2026-05-18T00:00:00.000Z",
+        "2026-05-18T00:00:01.000Z",
+        "2026-05-18T00:00:02.000Z"
+      ])
+    });
+    const projectBJob = await runtime.enqueueSafe(
+      baseSafeInput({ projectId: "project_b" }),
+      simulatedPolicy()
+    );
+
+    const projectAClaim = await runtime.claimOldestQueuedForProject({
+      workerId: "worker_a",
+      projectId: "project_a"
+    });
+    const projectBClaim = await runtime.claimOldestQueuedForProject({
+      workerId: "worker_b",
+      projectId: "project_b"
+    });
+
+    expect(projectAClaim).toBeUndefined();
+    expect(projectBClaim).toEqual({
+      record: expect.objectContaining({
+        id: projectBJob.id,
+        projectId: "project_b",
+        state: "running",
+        claimedByWorkerId: "worker_b",
+        claimToken: "claim_token_1"
+      }),
+      claimToken: "claim_token_1"
+    });
+  });
+
   it("does not claim the same queued job twice", async () => {
     const payloadRepository = new InMemoryWorkerJobPayloadRepository();
     const runtime = new InMemoryWorkerRuntime({

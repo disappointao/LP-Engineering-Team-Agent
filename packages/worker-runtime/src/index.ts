@@ -163,6 +163,10 @@ export interface WorkerRuntime {
   cancelJob(id: string, reason?: string): Promise<WorkerJobRecord | undefined>;
   getJob(id: string): Promise<WorkerJobRecord | undefined>;
   listJobsForProject(projectId: string): Promise<WorkerJobRecord[]>;
+  claimOldestQueuedForProject(input: {
+    workerId: string;
+    projectId: string;
+  }): Promise<WorkerJobClaim | undefined>;
 }
 
 export interface WorkerJobRepository {
@@ -190,6 +194,7 @@ export interface WorkerJobClaimOldestQueuedInput {
   startedAt: string;
   claimedByWorkerId?: string;
   claimToken?: string;
+  projectId?: string;
 }
 
 export interface WorkerJobCompleteClaimedInput {
@@ -459,6 +464,22 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return this.withRunLock(async () => this.claimOldestQueuedForWorker(workerId));
   }
 
+  async claimOldestQueuedForProject(input: {
+    workerId: string;
+    projectId: string;
+  }): Promise<WorkerJobClaim | undefined> {
+    const workerId = normalizeWorkerId(input.workerId);
+    if (!workerId) {
+      throw new Error("worker_id_required");
+    }
+    const projectId = input.projectId.trim();
+    if (!projectId) {
+      throw new Error("project_id_required");
+    }
+
+    return this.withRunLock(async () => this.claimOldestQueuedForWorker(workerId, projectId));
+  }
+
   async runClaimedJob(claim: WorkerJobClaim): Promise<WorkerJobRecord> {
     if (!this.payloadRepository) {
       throw new Error("worker_job_payload_repository_required");
@@ -558,14 +579,16 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
   }
 
   private async claimOldestQueuedForWorker(
-    workerId: string
+    workerId: string,
+    projectId?: string
   ): Promise<WorkerJobClaim | undefined> {
     const claimToken = this.claimTokenFactory();
     const claimed = await this.repository.claimOldestQueued({
       payloadSource: "safe_persisted",
       startedAt: this.nowIso(),
       claimedByWorkerId: workerId,
-      claimToken
+      claimToken,
+      projectId
     });
     if (!claimed) {
       return undefined;

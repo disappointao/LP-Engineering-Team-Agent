@@ -857,6 +857,32 @@ describe("worker-backed skill command finalization", () => {
       })
     ).resolves.toEqual({ ok: true, state: "idle" });
   });
+
+  it("requires project-scoped claim support for project-scoped local worker runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { workerJob } = await linkedWorkerJob({ state: "completed" });
+    const workerRuntime: SkillCommandQueueRuntime = {
+      enqueueSafe: async () => workerJob,
+      claimOldestQueued: async () => ({
+        record: workerJob,
+        claimToken: "claim_token_1"
+      }),
+      runClaimedJob: async () => workerJob,
+      getJob: async () => undefined
+    };
+
+    await expect(
+      runLocalWorkerOnceAndFinalize({
+        repositories,
+        workerRuntime,
+        workerId: "local-web-worker",
+        projectId: "project_1"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "worker_job_execution_failed"
+    });
+  });
 });
 
 describe("queued skill command enqueueing", () => {

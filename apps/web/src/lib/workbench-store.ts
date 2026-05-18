@@ -798,14 +798,19 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     },
 
     async runLocalWorkerOnce(input = {}) {
+      if (input.projectId) {
+        try {
+          await service.ensureProjectOwnerMembership(input.projectId, currentUser);
+        } catch {
+          return { ok: false, error: "worker_job_finalization_failed" };
+        }
+      }
       const result = await runLocalWorkerOnceAndFinalize({
         repositories,
         workerRuntime: workerQueueRuntime,
-        workerId
+        workerId,
+        ...(input.projectId ? { projectId: input.projectId } : {})
       });
-      if (result.ok && input.projectId) {
-        await service.ensureProjectOwnerMembership(input.projectId, currentUser);
-      }
       return result;
     },
 

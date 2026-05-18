@@ -55,7 +55,8 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     const record = this.sortedRecords().find(
       (job) =>
         job.state === "queued" &&
-        getPayloadSource(job) === input.payloadSource
+        getPayloadSource(job) === input.payloadSource &&
+        (!input.projectId || job.projectId === input.projectId)
     );
     if (!record) {
       return undefined;
@@ -183,7 +184,8 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
       const record = [...records].sort(compareRecords).find(
         (stored) =>
           stored.state === "queued" &&
-          getPayloadSource(stored) === input.payloadSource
+          getPayloadSource(stored) === input.payloadSource &&
+          (!input.projectId || stored.projectId === input.projectId)
       );
       if (!record) {
         return undefined;
