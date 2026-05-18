@@ -129,7 +129,7 @@ export const ContextPackSchema = z.object({
   role: z.enum(agentRoles),
   input: RuntimeRunInputSchema,
   runtimeContext: RuntimeRunContextSchema,
-  artifactSnippets: z.array(ArtifactSnippetSchema),
+  artifactSnippets: z.array(ArtifactSnippetSchema).default([]),
   trace: z.object({
     injected: z.array(z.string().min(1)),
     omitted: z.array(z.string().min(1))
