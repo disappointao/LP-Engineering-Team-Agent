@@ -271,6 +271,7 @@ async function findLatestInterruptTarget(input: {
     .filter((event) => event.type === "worker.job.linked")
     .reverse();
 
+  let latestCancelledTarget: InterruptTarget | undefined;
   let latestTerminalTarget: InterruptTarget | undefined;
   let sawLinkedWorkerJobId = false;
   for (const linkedEvent of linkedCandidates) {
@@ -295,7 +296,15 @@ async function findLatestInterruptTarget(input: {
       continue;
     }
 
-    if (!isTargetWorkerJob(workerJob)) {
+    if (workerJob.state === "cancelled") {
+      latestCancelledTarget ??= {
+        run,
+        workerJob
+      };
+      continue;
+    }
+
+    if (!isInterruptibleWorkerJob(workerJob)) {
       latestTerminalTarget ??= {
         run,
         workerJob
@@ -312,6 +321,12 @@ async function findLatestInterruptTarget(input: {
     };
   }
 
+  if (latestCancelledTarget) {
+    return {
+      kind: "target",
+      target: latestCancelledTarget
+    };
+  }
   if (latestTerminalTarget) {
     return {
       kind: "target",
@@ -330,10 +345,6 @@ function readWorkerJobId(event: RunEventRecord): string | undefined {
 
 function isInterruptibleWorkerJob(workerJob: WorkerJobRecord): boolean {
   return workerJob.state === "queued" || workerJob.state === "running";
-}
-
-function isTargetWorkerJob(workerJob: WorkerJobRecord): boolean {
-  return isInterruptibleWorkerJob(workerJob) || workerJob.state === "cancelled";
 }
 
 function toTaskInterruptState(workerJob: WorkerJobRecord): TaskInterruptState {
