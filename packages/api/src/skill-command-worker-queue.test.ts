@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createInMemoryWorkbenchRepositories,
   type RunRecord,
@@ -16,6 +20,7 @@ import {
 } from "@lp-agent/worker-runtime";
 import { DemoWorkbenchService } from "./index";
 import {
+  createLocalWorkerQueueRuntime,
   finalizeWorkerBackedSkillCommand,
   runLocalWorkerOnceAndFinalize,
   type SkillCommandQueueRuntime
@@ -235,6 +240,48 @@ function terminalEventTypes(events: Array<{ type: string }>): string[] {
     )
     .map((event) => event.type);
 }
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+async function tempQueueFiles() {
+  const dir = await mkdtemp(join(tmpdir(), "web-worker-queue-"));
+  tempDirs.push(dir);
+  return {
+    jobsFilePath: join(dir, "worker-jobs.json"),
+    payloadsFilePath: join(dir, "worker-payloads.json")
+  };
+}
+
+it("creates a shared JSON-file worker queue runtime", async () => {
+  const files = await tempQueueFiles();
+  const first = createLocalWorkerQueueRuntime(files);
+  await first.runtime.enqueueSafe(
+    {
+      projectId: "project_1",
+      kind: "tool_command",
+      commandId: "publish_static",
+      command: "static-deploy",
+      args: ["--project", "project_1"],
+      envNames: ["LP_PROJECT_ID"],
+      timeoutMs: 30000
+    },
+    createSimulatedSandboxPolicy({
+      allowedCommands: ["static-deploy"],
+      allowedEnvNames: ["LP_PROJECT_ID"]
+    })
+  );
+
+  const second = createLocalWorkerQueueRuntime(files);
+  const claim = await second.runtime.claimOldestQueued({ workerId: "worker_a" });
+
+  expect(claim?.record.id).toBe("worker_job_1");
+  expect(await readFile(files.jobsFilePath, "utf8")).toContain("worker_job_1");
+  expect(await readFile(files.payloadsFilePath, "utf8")).not.toContain("secret-token");
+});
 
 describe("worker-backed skill command finalization", () => {
   it("finalizes a completed worker job into completed tool and run events", async () => {

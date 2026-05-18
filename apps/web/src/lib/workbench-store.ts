@@ -1,5 +1,6 @@
 import {
   DemoWorkbenchService,
+  createLocalWorkerQueueRuntime,
   deriveTaskInterruptView,
   interruptTask,
   runLocalWorkerOnceAndFinalize,
@@ -1151,11 +1152,32 @@ function defaultWorkbenchStateFilePath(): string {
   return process.env.LP_AGENT_WORKBENCH_STATE_FILE ?? ".lp-agent/workbench-state.json";
 }
 
+function defaultWorkerJobsFilePath(): string {
+  return process.env.WORKER_JOBS_FILE ?? ".lp-agent/worker-jobs.json";
+}
+
+function defaultWorkerPayloadsFilePath(): string {
+  return process.env.WORKER_PAYLOADS_FILE ?? ".lp-agent/worker-payloads.json";
+}
+
+function defaultWorkerId(): string {
+  return process.env.WORKER_ID ?? "local-web-worker";
+}
+
 export function getWebWorkbenchStore(): WebWorkbenchStore {
-  globalStore.__lpAgentWebWorkbenchStore ??= createWebWorkbenchStore({
-    repositories: createJsonFileWorkbenchRepositories({
-      filePath: defaultWorkbenchStateFilePath()
-    })
-  });
+  if (!globalStore.__lpAgentWebWorkbenchStore) {
+    const workerQueue = createLocalWorkerQueueRuntime({
+      jobsFilePath: defaultWorkerJobsFilePath(),
+      payloadsFilePath: defaultWorkerPayloadsFilePath()
+    });
+    globalStore.__lpAgentWebWorkbenchStore = createWebWorkbenchStore({
+      repositories: createJsonFileWorkbenchRepositories({
+        filePath: defaultWorkbenchStateFilePath()
+      }),
+      workerQueueRuntime: workerQueue.runtime,
+      workerRuntime: workerQueue.runtime,
+      workerId: defaultWorkerId()
+    });
+  }
   return globalStore.__lpAgentWebWorkbenchStore;
 }

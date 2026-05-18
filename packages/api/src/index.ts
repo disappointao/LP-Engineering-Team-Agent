@@ -157,8 +157,10 @@ export {
   type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
 export {
+  createLocalWorkerQueueRuntime,
   finalizeWorkerBackedSkillCommand,
   runLocalWorkerOnceAndFinalize,
+  type LocalWorkerQueueRuntime,
   type RunLocalWorkerOnceResult,
   type SkillCommandQueueRuntime
 } from "./skill-command-worker-queue";

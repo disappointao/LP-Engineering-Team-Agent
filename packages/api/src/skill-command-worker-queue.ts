@@ -7,9 +7,17 @@ import type {
   WorkbenchRepositories
 } from "@lp-agent/db";
 import type {
+  WorkerJobPayloadRepository,
+  WorkerJobRepository,
   SafeWorkerJobInput,
   SandboxPolicy,
   WorkerJobRecord
+} from "@lp-agent/worker-runtime";
+import {
+  InMemoryWorkerRuntime,
+  SimulatedExecutionAdapter,
+  createJsonFileWorkerJobPayloadRepository,
+  createJsonFileWorkerJobRepository
 } from "@lp-agent/worker-runtime";
 import { nextRepositoryTimestamp } from "./run-orchestrator";
 
@@ -32,6 +40,12 @@ export interface SkillCommandQueueRuntime {
   getJob(id: string): Promise<WorkerJobRecord | undefined>;
 }
 
+export interface LocalWorkerQueueRuntime {
+  runtime: InMemoryWorkerRuntime;
+  jobRepository: WorkerJobRepository;
+  payloadRepository: WorkerJobPayloadRepository;
+}
+
 export type RunLocalWorkerOnceResult =
   | {
       ok: true;
@@ -49,6 +63,22 @@ export type RunLocalWorkerOnceResult =
 
 type WorkerFinalState = "completed" | "failed" | "rejected" | "cancelled";
 type TerminalRecordState = "completed" | "failed" | "cancelled";
+
+export function createLocalWorkerQueueRuntime(input: {
+  jobsFilePath: string;
+  payloadsFilePath: string;
+}): LocalWorkerQueueRuntime {
+  const jobRepository = createJsonFileWorkerJobRepository({ filePath: input.jobsFilePath });
+  const payloadRepository = createJsonFileWorkerJobPayloadRepository({
+    filePath: input.payloadsFilePath
+  });
+  const runtime = new InMemoryWorkerRuntime({
+    repository: jobRepository,
+    payloadRepository,
+    adapter: new SimulatedExecutionAdapter()
+  });
+  return { runtime, jobRepository, payloadRepository };
+}
 
 export async function runLocalWorkerOnceAndFinalize(input: {
   repositories: WorkbenchRepositories;
