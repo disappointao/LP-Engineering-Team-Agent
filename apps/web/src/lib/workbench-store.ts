@@ -32,6 +32,10 @@ import {
   type WorkbenchSnapshot
 } from "@lp-agent/api";
 import {
+  type ArtifactWorkspaceDiffFile,
+  type ArtifactWorkspaceFilePath
+} from "@lp-agent/artifacts";
+import {
   createInMemoryWorkbenchRepositories,
   createJsonFileWorkbenchRepositories,
   type WorkbenchMessageRecord,
@@ -241,6 +245,48 @@ export type ChatMessageRole = WorkbenchMessageRole;
 export type TaskRecord = WorkbenchTaskRecord;
 export type ChatMessageRecord = WorkbenchMessageRecord;
 
+export type WebArtifactDiffFileState =
+  | "initial"
+  | "added"
+  | "removed"
+  | "changed"
+  | "unchanged";
+
+export type WebArtifactSnippetOmittedReason =
+  | "content_not_requested"
+  | "size_limit_exceeded"
+  | "unavailable";
+
+export interface WebArtifactDiffFileView {
+  path: ArtifactWorkspaceFilePath;
+  state: WebArtifactDiffFileState;
+  sizeBytes?: number;
+  sha256?: string;
+  shortSha256?: string;
+  summary?: string;
+  canPreview: boolean;
+}
+
+export interface WebArtifactSnippetView {
+  path: ArtifactWorkspaceFilePath;
+  sizeBytes?: number;
+  sha256?: string;
+  shortSha256?: string;
+  content?: string;
+  omittedReason?: WebArtifactSnippetOmittedReason;
+  maxBytes: number;
+}
+
+export interface WebArtifactDiffState {
+  projectId: string;
+  pageVersionId: string;
+  artifactWorkspaceId?: string;
+  previousPageVersionId?: string;
+  files: WebArtifactDiffFileView[];
+  selectedSnippet?: WebArtifactSnippetView;
+  errorCode?: "artifact_diff_unavailable" | "artifact_snippet_unavailable";
+}
+
 export type SubmitTaskResult =
   | {
       ok: true;
@@ -276,6 +322,7 @@ export type WorkbenchPageState =
       runEvents: RunEventRecord[];
       interrupt: TaskInterrupt;
       snapshot?: WorkbenchSnapshot;
+      artifactDiff?: WebArtifactDiffState;
     };
 
 export interface WebWorkbenchStore {
@@ -285,6 +332,7 @@ export interface WebWorkbenchStore {
   getPageState(input?: {
     projectId?: string | null;
     taskId?: string | null;
+    artifactPath?: string | null;
   }): Promise<WorkbenchPageState>;
   submitTaskPrompt(input: {
     projectId?: string | null;
@@ -376,6 +424,7 @@ const lpKeywords = [
 
 const projectKeywords = ["创建项目", "new project", "create project"];
 const standaloneLpPattern = /\blp\b/;
+const artifactPreviewPaths = ["index.html", "styles.css", "script.js"] as const;
 
 export function classifyTaskPrompt(prompt: string): TaskType {
   const normalized = prompt.trim().toLowerCase();
@@ -622,6 +671,16 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             pageVersionId: snapshotRef.pageVersionId
           })
         : undefined;
+      const artifactDiff =
+        task.type === "lp_generation" && snapshot?.currentPageVersion
+          ? await buildWebArtifactDiffState({
+              service,
+              repositories,
+              projectId: snapshot.project.id,
+              currentPageVersion: snapshot.currentPageVersion,
+              selectedPath: input?.artifactPath
+            })
+          : undefined;
       const skills = await loadSkillState(activeProjectId);
       return {
         kind: "task_ready",
@@ -641,7 +700,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           workerRuntime,
           taskId: task.id
         }),
-        snapshot
+        snapshot,
+        artifactDiff
       };
     },
 
@@ -878,6 +938,139 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
     }
   };
+}
+
+async function buildWebArtifactDiffState(input: {
+  service: DemoWorkbenchService;
+  repositories: WorkbenchRepositories;
+  projectId: string;
+  currentPageVersion: NonNullable<WorkbenchSnapshot["currentPageVersion"]>;
+  selectedPath?: string | null;
+}): Promise<WebArtifactDiffState | undefined> {
+  const artifactWorkspaceId = input.currentPageVersion.artifactWorkspaceId;
+  if (!artifactWorkspaceId) {
+    return undefined;
+  }
+
+  const previousPageVersion = await findPreviousPageVersionForBrief({
+    repositories: input.repositories,
+    currentPageVersionId: input.currentPageVersion.id,
+    projectId: input.projectId,
+    briefId: input.currentPageVersion.briefId
+  });
+  const base: WebArtifactDiffState = {
+    projectId: input.projectId,
+    pageVersionId: input.currentPageVersion.id,
+    artifactWorkspaceId,
+    previousPageVersionId: previousPageVersion?.id,
+    files: previousPageVersion
+      ? await buildDiffFileViews({
+          service: input.service,
+          projectId: input.projectId,
+          fromPageVersionId: previousPageVersion.id,
+          toPageVersionId: input.currentPageVersion.id
+        })
+      : await buildInitialFileViews({
+          service: input.service,
+          projectId: input.projectId,
+          pageVersionId: input.currentPageVersion.id,
+          artifactWorkspaceId
+        })
+  };
+
+  return base.files.length > 0 ? base : { ...base, errorCode: "artifact_diff_unavailable" };
+}
+
+async function buildInitialFileViews(input: {
+  service: DemoWorkbenchService;
+  projectId: string;
+  pageVersionId: string;
+  artifactWorkspaceId: string;
+}): Promise<WebArtifactDiffFileView[]> {
+  const files: WebArtifactDiffFileView[] = [];
+
+  for (const path of artifactPreviewPaths) {
+    try {
+      const result = await input.service.readArtifactWorkspaceFile({
+        projectId: input.projectId,
+        workspaceId: input.artifactWorkspaceId,
+        pageVersionId: input.pageVersionId,
+        path
+      });
+      files.push({
+        path,
+        state: "initial",
+        sizeBytes: result.file.sizeBytes,
+        sha256: result.file.sha256,
+        shortSha256: toShortSha256(result.file.sha256),
+        summary: result.file.summary,
+        canPreview: true
+      });
+    } catch {
+      files.push({
+        path,
+        state: "initial",
+        canPreview: false
+      });
+    }
+  }
+
+  return files;
+}
+
+async function buildDiffFileViews(input: {
+  service: DemoWorkbenchService;
+  projectId: string;
+  fromPageVersionId: string;
+  toPageVersionId: string;
+}): Promise<WebArtifactDiffFileView[]> {
+  try {
+    const diff = await input.service.diffPageVersionArtifactWorkspaces({
+      projectId: input.projectId,
+      fromPageVersionId: input.fromPageVersionId,
+      toPageVersionId: input.toPageVersionId
+    });
+    return diff.files.map(toWebArtifactDiffFileView);
+  } catch {
+    return [];
+  }
+}
+
+function toWebArtifactDiffFileView(file: ArtifactWorkspaceDiffFile): WebArtifactDiffFileView {
+  const endpoint = file.to !== undefined ? file.to : file.from;
+  return {
+    path: file.path,
+    state: file.state,
+    ...(endpoint?.sizeBytes !== undefined ? { sizeBytes: endpoint.sizeBytes } : {}),
+    ...(endpoint?.sha256 ? { sha256: endpoint.sha256 } : {}),
+    ...(endpoint?.sha256 ? { shortSha256: toShortSha256(endpoint.sha256) } : {}),
+    ...(endpoint?.summary ? { summary: endpoint.summary } : {}),
+    canPreview: file.to !== undefined
+  };
+}
+
+async function findPreviousPageVersionForBrief(input: {
+  repositories: WorkbenchRepositories;
+  currentPageVersionId: string;
+  projectId: string;
+  briefId: string;
+}) {
+  const pageVersions = await input.repositories.pageVersions.listAll();
+  const currentIndex = pageVersions.findIndex(
+    (pageVersion) => pageVersion.id === input.currentPageVersionId
+  );
+  const candidates = (currentIndex >= 0 ? pageVersions.slice(0, currentIndex) : pageVersions)
+    .filter(
+      (pageVersion) =>
+        pageVersion.projectId === input.projectId &&
+        pageVersion.briefId === input.briefId &&
+        pageVersion.id !== input.currentPageVersionId
+    );
+  return candidates.at(-1);
+}
+
+function toShortSha256(sha256: string): string {
+  return sha256.slice(0, 12);
 }
 
 function filterRunEventsForSnapshot(

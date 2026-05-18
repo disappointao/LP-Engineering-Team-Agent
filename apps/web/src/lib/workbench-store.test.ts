@@ -3,6 +3,10 @@ import {
   createInMemoryWorkbenchRepositories,
   type WorkbenchRepositories
 } from "@lp-agent/db";
+import {
+  createStaticArtifactWorkspaceFiles,
+  type StaticArtifacts
+} from "@lp-agent/artifacts";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
   InMemoryWorkerJobPayloadRepository,
@@ -1647,6 +1651,30 @@ describe("web workbench store", () => {
     expect(pageState.snapshot).toBeUndefined();
   });
 
+  it("does not expose artifact diff state for general tasks", async () => {
+    const store = createWebWorkbenchStore();
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Help me write a campaign plan.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected task creation.");
+    }
+
+    const pageState = await store.getPageState({
+      taskId: result.taskId
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.artifactDiff).toBeUndefined();
+  });
+
   it("submits an LP task without a project by creating an implicit local project", async () => {
     const store = createWebWorkbenchStore();
 
@@ -1688,6 +1716,58 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
     expect(pageState.snapshot.deployment).toBeUndefined();
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
+  });
+
+  it("exposes metadata-only initial artifact diff state for completed LP tasks", async () => {
+    const store = createWebWorkbenchStore();
+
+    const result = await store.submitTaskPrompt({
+      prompt: "生成一个电商春季促销 LP，输出单文件 HTML",
+      implicitProjectName: "未命名 LP 项目"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected LP task creation.");
+    }
+
+    const pageState = await store.getPageState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageState.artifactDiff).toMatchObject({
+      projectId: result.projectId,
+      pageVersionId: pageState.snapshot?.currentPageVersion?.id,
+      previousPageVersionId: undefined,
+      files: [
+        {
+          path: "index.html",
+          state: "initial",
+          canPreview: true,
+          summary: "index.html static LP file"
+        },
+        {
+          path: "styles.css",
+          state: "initial",
+          canPreview: true,
+          summary: "styles.css static LP file"
+        },
+        {
+          path: "script.js",
+          state: "initial",
+          canPreview: true,
+          summary: "script.js static LP file"
+        }
+      ]
+    });
+    expect(pageState.artifactDiff?.files.every((file) => file.shortSha256?.length === 12)).toBe(
+      true
+    );
+    expect(JSON.stringify(pageState.artifactDiff)).not.toContain("<!doctype html>");
+    expect(JSON.stringify(pageState.artifactDiff)).not.toContain("window.lpAgent");
   });
 
   it("uses configured current user as the owner for implicit LP projects", async () => {
