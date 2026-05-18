@@ -257,10 +257,10 @@ describe("artifact workspace helpers", () => {
       sizeBytes: files[0]!.sizeBytes,
       sha256: files[0]!.sha256,
       summary: "index.html static LP file",
-      content: undefined,
       truncated: false,
       omittedReason: "content_not_requested"
     });
+    expect("content" in result).toBe(false);
     expect(JSON.stringify(result)).not.toContain(rawSecret);
   });
 
@@ -305,7 +305,7 @@ describe("artifact workspace helpers", () => {
       maxBytes: 1
     });
 
-    expect(result.content).toBeUndefined();
+    expect("content" in result).toBe(false);
     expect(result.truncated).toBe(true);
     expect(result.omittedReason).toBe("size_limit_exceeded");
   });

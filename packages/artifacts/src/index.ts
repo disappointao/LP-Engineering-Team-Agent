@@ -203,7 +203,6 @@ export function readArtifactWorkspaceFileRecord(
   if (!input.includeContent) {
     return {
       ...metadata,
-      content: undefined,
       truncated: false,
       omittedReason: "content_not_requested"
     };
@@ -214,7 +213,6 @@ export function readArtifactWorkspaceFileRecord(
   if (metadata.sizeBytes > maxBytes) {
     return {
       ...metadata,
-      content: undefined,
       truncated: true,
       omittedReason: "size_limit_exceeded"
     };
