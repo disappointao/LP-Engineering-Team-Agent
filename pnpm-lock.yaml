@@ -57,6 +57,9 @@ importers:
       '@lp-agent/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@lp-agent/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
       next:
         specifier: ^15.0.0
         version: 15.5.18(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
