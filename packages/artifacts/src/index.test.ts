@@ -251,12 +251,16 @@ describe("artifact workspace helpers", () => {
     const result = readArtifactWorkspaceFileRecord({ file: files[0]! });
 
     expect(result).toEqual({
-      path: "index.html",
-      kind: "html",
-      mimeType: "text/html",
-      sizeBytes: files[0]!.sizeBytes,
-      sha256: files[0]!.sha256,
-      summary: "index.html static LP file",
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      file: {
+        path: "index.html",
+        kind: "html",
+        mimeType: "text/html",
+        sizeBytes: files[0]!.sizeBytes,
+        sha256: files[0]!.sha256,
+        summary: "index.html static LP file"
+      },
       truncated: false,
       omittedReason: "content_not_requested"
     });
@@ -285,6 +289,30 @@ describe("artifact workspace helpers", () => {
     expect(result.content).toBe(files[0]!.content);
     expect(result.truncated).toBe(false);
     expect(result.omittedReason).toBeUndefined();
+  });
+
+  it("throws for invalid workspace file read byte limits", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: files[0]!,
+      includeContent: true,
+      maxBytes: Number.NaN
+    })).toThrow("Artifact workspace read maxBytes must be a finite non-negative integer.");
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: files[0]!,
+      includeContent: true,
+      maxBytes: Infinity
+    })).toThrow("Artifact workspace read maxBytes must be a finite non-negative integer.");
   });
 
   it("omits workspace file content when requested above the byte limit", () => {
@@ -370,11 +398,23 @@ describe("artifact workspace helpers", () => {
     });
 
     expect(diff.changedFileCount).toBe(2);
-    expect(diff.files.map((file) => [file.path, file.status])).toEqual([
+    expect(diff.files.map((file) => [file.path, file.state])).toEqual([
       ["index.html", "unchanged"],
       ["styles.css", "added"],
       ["script.js", "removed"]
     ]);
+    expect(diff.files[0]?.from).toEqual({
+      sizeBytes: fromFiles[0]!.sizeBytes,
+      sha256: fromFiles[0]!.sha256,
+      summary: "index.html static LP file"
+    });
+    expect(diff.files[0]?.to).toEqual({
+      sizeBytes: toFiles[0]!.sizeBytes,
+      sha256: toFiles[0]!.sha256,
+      summary: "index.html static LP file"
+    });
+    expect(JSON.stringify(diff)).not.toContain("mimeType");
+    expect(JSON.stringify(diff)).not.toContain("text/html");
     expect(JSON.stringify(diff)).not.toContain("<!doctype html>");
     expect(JSON.stringify(diff)).not.toContain("console.log");
   });

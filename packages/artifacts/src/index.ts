@@ -62,7 +62,11 @@ export type ArtifactWorkspaceFileReadOmittedReason =
   | "content_not_requested"
   | "size_limit_exceeded";
 
-export interface ArtifactWorkspaceFileReadResult extends ArtifactWorkspaceManifestFile {
+export interface ArtifactWorkspaceFileReadResult {
+  workspaceId: string;
+  projectId: string;
+  pageVersionId?: string;
+  file: ArtifactWorkspaceManifestFile;
   content?: string;
   truncated: boolean;
   omittedReason?: ArtifactWorkspaceFileReadOmittedReason;
@@ -74,13 +78,19 @@ export interface ReadArtifactWorkspaceFileRecordInput {
   maxBytes?: number;
 }
 
-export type ArtifactWorkspaceDiffFileStatus = "added" | "removed" | "changed" | "unchanged";
+export type ArtifactWorkspaceDiffFileState = "added" | "removed" | "changed" | "unchanged";
+
+export interface ArtifactWorkspaceDiffFileEndpoint {
+  sizeBytes: number;
+  sha256: string;
+  summary: string;
+}
 
 export interface ArtifactWorkspaceDiffFile {
   path: ArtifactWorkspaceFilePath;
-  status: ArtifactWorkspaceDiffFileStatus;
-  from?: ArtifactWorkspaceManifestFile;
-  to?: ArtifactWorkspaceManifestFile;
+  state: ArtifactWorkspaceDiffFileState;
+  from?: ArtifactWorkspaceDiffFileEndpoint;
+  to?: ArtifactWorkspaceDiffFileEndpoint;
 }
 
 export interface ArtifactWorkspaceDiffResult {
@@ -199,10 +209,16 @@ export function readArtifactWorkspaceFileRecord(
   input: ReadArtifactWorkspaceFileRecordInput
 ): ArtifactWorkspaceFileReadResult {
   const metadata = createArtifactWorkspaceFileMetadata(validateStaticWorkspaceFileRecord(input.file));
+  const resultBase = {
+    workspaceId: input.file.workspaceId,
+    projectId: input.file.projectId,
+    pageVersionId: input.file.pageVersionId,
+    file: metadata
+  };
 
   if (!input.includeContent) {
     return {
-      ...metadata,
+      ...resultBase,
       truncated: false,
       omittedReason: "content_not_requested"
     };
@@ -210,16 +226,20 @@ export function readArtifactWorkspaceFileRecord(
 
   const maxBytes = input.maxBytes ?? ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES;
 
+  if (!Number.isFinite(maxBytes) || maxBytes < 0 || !Number.isInteger(maxBytes)) {
+    throw new Error("Artifact workspace read maxBytes must be a finite non-negative integer.");
+  }
+
   if (metadata.sizeBytes > maxBytes) {
     return {
-      ...metadata,
+      ...resultBase,
       truncated: true,
       omittedReason: "size_limit_exceeded"
     };
   }
 
   return {
-    ...metadata,
+    ...resultBase,
     content: input.file.content,
     truncated: false
   };
@@ -249,29 +269,29 @@ export function diffArtifactWorkspaceFiles(
       if (!from) {
         return {
           path: spec.path,
-          status: "added",
-          to: createArtifactWorkspaceFileMetadata(to!)
+          state: "added",
+          to: createArtifactWorkspaceDiffFileEndpoint(to!)
         };
       }
 
       if (!to) {
         return {
           path: spec.path,
-          status: "removed",
-          from: createArtifactWorkspaceFileMetadata(from)
+          state: "removed",
+          from: createArtifactWorkspaceDiffFileEndpoint(from)
         };
       }
 
-      const fromMetadata = createArtifactWorkspaceFileMetadata(from);
-      const toMetadata = createArtifactWorkspaceFileMetadata(to);
+      const fromEndpoint = createArtifactWorkspaceDiffFileEndpoint(from);
+      const toEndpoint = createArtifactWorkspaceDiffFileEndpoint(to);
 
       return {
         path: spec.path,
-        status: areArtifactWorkspaceFileMetadataEqual(fromMetadata, toMetadata)
+        state: areArtifactWorkspaceDiffFileEndpointsEqual(fromEndpoint, toEndpoint)
           ? "unchanged"
           : "changed",
-        from: fromMetadata,
-        to: toMetadata
+        from: fromEndpoint,
+        to: toEndpoint
       };
     })
     .filter((file): file is ArtifactWorkspaceDiffFile => file !== undefined);
@@ -280,7 +300,7 @@ export function diffArtifactWorkspaceFiles(
     projectId: input.projectId,
     fromWorkspaceId: input.fromWorkspaceId,
     toWorkspaceId: input.toWorkspaceId,
-    changedFileCount: files.filter((file) => file.status !== "unchanged").length,
+    changedFileCount: files.filter((file) => file.state !== "unchanged").length,
     files
   };
 }
@@ -475,13 +495,22 @@ const createArtifactWorkspaceFileMetadata = (
   };
 };
 
-const areArtifactWorkspaceFileMetadataEqual = (
-  left: ArtifactWorkspaceManifestFile,
-  right: ArtifactWorkspaceManifestFile
+const createArtifactWorkspaceDiffFileEndpoint = (
+  file: ArtifactWorkspaceFileRecord
+): ArtifactWorkspaceDiffFileEndpoint => {
+  const metadata = createArtifactWorkspaceFileMetadata(file);
+
+  return {
+    sizeBytes: metadata.sizeBytes,
+    sha256: metadata.sha256,
+    summary: metadata.summary
+  };
+};
+
+const areArtifactWorkspaceDiffFileEndpointsEqual = (
+  left: ArtifactWorkspaceDiffFileEndpoint,
+  right: ArtifactWorkspaceDiffFileEndpoint
 ): boolean =>
-  left.path === right.path &&
-  left.kind === right.kind &&
-  left.mimeType === right.mimeType &&
   left.sizeBytes === right.sizeBytes &&
   left.sha256 === right.sha256 &&
   left.summary === right.summary;
