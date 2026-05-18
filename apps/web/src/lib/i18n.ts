@@ -260,6 +260,7 @@ export interface WorkbenchCopy {
     snippetPreviewTitle: string;
     snippetSizeLimitMessage: string;
     snippetUnavailableMessage: string;
+    bytesLabel: (bytes: number) => string;
     artifactDiffStateLabels: Record<"initial" | "added" | "removed" | "changed" | "unchanged", string>;
     artifactKinds: {
       handoff: string;
@@ -689,6 +690,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       snippetPreviewTitle: "Snippet preview",
       snippetSizeLimitMessage: "Content is over the 8 KB preview limit.",
       snippetUnavailableMessage: "Snippet is unavailable.",
+      bytesLabel: (bytes) => `${bytes.toLocaleString("en")} bytes`,
       artifactDiffStateLabels: {
         initial: "Initial",
         added: "Added",
@@ -1100,6 +1102,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       snippetPreviewTitle: "片段预览",
       snippetSizeLimitMessage: "内容超过 8 KB 预览限制。",
       snippetUnavailableMessage: "片段暂不可用。",
+      bytesLabel: (bytes) => `${bytes.toLocaleString("zh-CN")} 字节`,
       artifactDiffStateLabels: {
         initial: "初始",
         added: "新增",

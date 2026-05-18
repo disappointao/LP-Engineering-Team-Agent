@@ -33,6 +33,7 @@ import {
   type ProjectMCPState,
   type ProjectFlowErrorCode,
   type SkillFlowErrorCode,
+  type WebArtifactDiffState,
   type WebProjectModelState,
   type WorkerQueueFlowErrorCode,
   type WorkbenchPageState
@@ -40,17 +41,11 @@ import {
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 import { InterruptSubmitButton } from "./interrupt-submit-button";
 
+type PageSearchParamValue = string | string[] | undefined;
+type PageSearchParams = Record<string, PageSearchParamValue>;
+
 interface HomePageProps {
-  searchParams?: Promise<{
-    error?: string;
-    skillError?: string;
-    modelError?: string;
-    mcpError?: string;
-    interruptError?: string;
-    workerError?: string;
-    view?: string;
-    artifactPath?: string;
-  }>;
+  searchParams?: Promise<PageSearchParams>;
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -59,26 +54,29 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     resolveLocaleFromAcceptLanguage(requestHeaders.get("accept-language"))
   );
   const params = await searchParams;
+  const view = getFirstSearchParam(params?.view);
+  const artifactPath = getFirstSearchParam(params?.artifactPath);
+  const previewSearchParams = toURLSearchParams(params);
   const activeView =
-    params?.view === "skills"
+    view === "skills"
       ? "skills"
-      : params?.view === "mcp"
+      : view === "mcp"
         ? "mcp"
-        : params?.view === "models"
+        : view === "models"
           ? "models"
           : "workbench";
-  const errorCode = toProjectFlowError(params?.error);
-  const skillError = toSkillFlowError(params?.skillError);
-  const mcpError = toMCPFlowError(params?.mcpError);
-  const modelError = toModelFlowError(params?.modelError);
-  const interruptError = toInterruptFlowError(params?.interruptError);
-  const workerError = parseWorkerQueueError(params?.workerError);
+  const errorCode = toProjectFlowError(getFirstSearchParam(params?.error));
+  const skillError = toSkillFlowError(getFirstSearchParam(params?.skillError));
+  const mcpError = toMCPFlowError(getFirstSearchParam(params?.mcpError));
+  const modelError = toModelFlowError(getFirstSearchParam(params?.modelError));
+  const interruptError = toInterruptFlowError(getFirstSearchParam(params?.interruptError));
+  const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
     projectId: currentProjectId,
     taskId: currentTaskId,
-    artifactPath: params?.artifactPath
+    artifactPath
   });
   const modelState = getPageModelState(pageState);
   const mcpState = getPageMCPState(pageState);
@@ -898,7 +896,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               >
                                 <span>{artifact.kind}</span>
                                 <strong>{artifact.filename}</strong>
-                                <small>{artifact.bytes.toLocaleString(copy.locale)} bytes</small>
+                                <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
                               </a>
                             ))}
                           </div>
@@ -906,7 +904,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             ArtifactDiffBlock({
                               artifactDiff: pageState.artifactDiff,
                               copy: copy.chat,
-                              locale: copy.locale
+                              previewSearchParams
                             })
                           ) : null}
                         </section>
@@ -1061,11 +1059,11 @@ function ProjectMembersBlock({
 function ArtifactDiffBlock({
   artifactDiff,
   copy,
-  locale
+  previewSearchParams
 }: {
-  artifactDiff: NonNullable<Extract<WorkbenchPageState, { kind: "task_ready" }>["artifactDiff"]>;
+  artifactDiff: WebArtifactDiffState;
   copy: ReturnType<typeof getWorkbenchCopy>["chat"];
-  locale: string;
+  previewSearchParams: URLSearchParams;
 }) {
   return (
     <section className="artifactDiffBlock" aria-label={copy.artifactChangesTitle}>
@@ -1086,7 +1084,7 @@ function ArtifactDiffBlock({
             </div>
             <small>
               {file.sizeBytes !== undefined
-                ? `${file.sizeBytes.toLocaleString(locale)} bytes`
+                ? copy.bytesLabel(file.sizeBytes)
                 : copy.snippetUnavailableMessage}
             </small>
             {file.shortSha256 ? (
@@ -1096,7 +1094,7 @@ function ArtifactDiffBlock({
             ) : null}
             {file.summary ? <p>{file.summary}</p> : null}
             {file.canPreview ? (
-              <a href={`/?artifactPath=${encodeURIComponent(file.path)}`}>
+              <a href={createArtifactPreviewHref(previewSearchParams, file.path)}>
                 {copy.previewSnippetLabel}
               </a>
             ) : null}
@@ -1124,6 +1122,34 @@ function ArtifactDiffBlock({
       ) : null}
     </section>
   );
+}
+
+function getFirstSearchParam(value: PageSearchParamValue): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function toURLSearchParams(params: PageSearchParams | undefined): URLSearchParams {
+  const query = new URLSearchParams();
+  if (!params) {
+    return query;
+  }
+
+  for (const [key, value] of Object.entries(params)) {
+    const values = Array.isArray(value) ? value : [value];
+    for (const item of values) {
+      if (item !== undefined) {
+        query.append(key, item);
+      }
+    }
+  }
+
+  return query;
+}
+
+function createArtifactPreviewHref(searchParams: URLSearchParams, artifactPath: string): string {
+  const nextSearchParams = new URLSearchParams(searchParams);
+  nextSearchParams.set("artifactPath", artifactPath);
+  return `/?${nextSearchParams.toString()}`;
 }
 
 interface RenderableMCPTool {

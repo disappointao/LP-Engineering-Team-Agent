@@ -84,10 +84,12 @@ describe("web i18n", () => {
     expect(en.chat.artifactDiffStateLabels.changed).toBe("Changed");
     expect(en.chat.previewSnippetLabel).toBe("Preview snippet");
     expect(en.chat.snippetSizeLimitMessage).toContain("8 KB");
+    expect(en.chat.bytesLabel(1280)).toBe("1,280 bytes");
     expect(zh.chat.artifactChangesTitle).toBe("文件变化");
     expect(zh.chat.artifactDiffStateLabels.initial).toBe("初始");
     expect(zh.chat.previewSnippetLabel).toBe("预览片段");
     expect(zh.chat.snippetUnavailableMessage).toBe("片段暂不可用。");
+    expect(zh.chat.bytesLabel(1280)).toBe("1,280 字节");
   });
 
   it("has localized model provider protocol copy", () => {

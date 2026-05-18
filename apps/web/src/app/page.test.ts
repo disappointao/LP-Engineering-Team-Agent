@@ -77,7 +77,7 @@ async function renderHomePage({
   searchParams,
   acceptLanguage
 }: {
-  searchParams: Promise<{ [key: string]: string | undefined }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   acceptLanguage: string;
 }): Promise<string> {
   pageMocks.acceptLanguage = acceptLanguage;
@@ -2324,6 +2324,49 @@ describe("HomePage project flow errors", () => {
     });
   });
 
+  it("uses the first repeated artifactPath query value for page state loading", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [],
+      projectMembers: [],
+      tasks: [],
+      skills: { boundSkills: [], availableVersions: [] },
+      skillCommands: [],
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      mcp: {
+        connectors: [],
+        approvals: [],
+        visibleToolsByRole: {
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    };
+
+    await HomePage({
+      searchParams: Promise.resolve({ artifactPath: ["styles.css", "script.js"] })
+    });
+
+    expect(pageMocks.getPageStateMock).toHaveBeenCalledWith({
+      projectId: "project_1",
+      taskId: "task_1",
+      artifactPath: "styles.css"
+    });
+  });
+
   it("renders completed static artifacts without deployment UI", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
@@ -2501,5 +2544,64 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Changed");
     expect(text).toContain("Snippet preview");
     expect(text).toContain("body { color: #111827; }");
+  });
+
+  it("preserves existing query params when linking artifact preview snippets", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        interruptError: "interrupt_failed",
+        artifactPath: "styles.css"
+      })
+    });
+    const snippetLinks = collectElements(page, "a").filter(
+      (link) => collectText(link.props?.children).join("") === "Preview snippet"
+    );
+    const indexSnippetHref = snippetLinks.find((link) =>
+      String(link.props?.href).includes("artifactPath=index.html")
+    )?.props?.href;
+
+    expect(indexSnippetHref).toBeDefined();
+    const href = String(indexSnippetHref);
+    expect(href).toContain("interruptError=interrupt_failed");
+    expect(href).toContain("artifactPath=index.html");
+    expect(href.match(/artifactPath=/g)).toHaveLength(1);
   });
 });
