@@ -460,6 +460,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_command_not_published: "Publish the skill before running this command.",
         skill_command_permission_denied: "This skill command is not allowed.",
         skill_command_approval_required: "Approve this skill command before running it.",
+        skill_command_not_queueable: "This skill command cannot be queued.",
         skill_command_page_version_not_found: "The selected page version is no longer available.",
         skill_command_unknown_template_variable: "The skill command has an unknown template variable.",
         skill_command_execution_failed: "The skill command failed. Try again."
@@ -854,6 +855,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         skill_command_not_published: "请先发布技能再运行该命令。",
         skill_command_permission_denied: "该技能命令不允许执行。",
         skill_command_approval_required: "请先批准该技能命令再运行。",
+        skill_command_not_queueable: "该技能命令无法加入队列。",
         skill_command_page_version_not_found: "当前页面版本已经不可用。",
         skill_command_unknown_template_variable: "该技能命令包含未知模板变量。",
         skill_command_execution_failed: "技能命令执行失败，请重试。"

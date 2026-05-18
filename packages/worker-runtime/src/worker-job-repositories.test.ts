@@ -813,8 +813,55 @@ describe("JsonFileWorkerJobRepository", () => {
       cancelReason: "User interrupted the job.",
       resultSummary: {
         state: "cancelled",
-        stderr: "Worker job cancelled before execution."
+        stderr: "",
+        stderrBytes: 38
       }
+    });
+  });
+
+  it("json-file repository strips raw result output from durable records", async () => {
+    const filePath = await createTempFilePath();
+    const repository = createJsonFileWorkerJobRepository({ filePath });
+
+    await repository.save(
+      workerJobRecord({
+        id: "worker_job_output",
+        state: "running",
+        startedAt: "2026-05-17T12:00:10.000Z",
+        claimedByWorkerId: "worker_a",
+        claimToken: "claim_token_1"
+      })
+    );
+
+    const completed = await completeClaimed(repository, {
+      jobId: "worker_job_output",
+      claimToken: "claim_token_1",
+      state: "completed",
+      resultSummary: {
+        state: "completed",
+        exitCode: 0,
+        stdout: "raw simulated stdout text",
+        stderr: "raw simulated stderr text",
+        stdoutBytes: 25,
+        stderrBytes: 25
+      },
+      completedAt: "2026-05-17T12:01:00.000Z"
+    });
+    const persisted = await readFile(filePath, "utf8");
+    const reopened = createJsonFileWorkerJobRepository({ filePath });
+    const reloaded = await reopened.getById("worker_job_output");
+
+    expect(completed?.resultSummary?.stdout).toBe("raw simulated stdout text");
+    expect(completed?.resultSummary?.stderr).toBe("raw simulated stderr text");
+    expect(persisted).not.toContain("raw simulated stdout text");
+    expect(persisted).not.toContain("raw simulated stderr text");
+    expect(reloaded?.resultSummary).toMatchObject({
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      stdoutBytes: 25,
+      stderrBytes: 25
     });
   });
 
@@ -926,7 +973,8 @@ describe("JsonFileWorkerJobRepository", () => {
       completedAt: "2026-05-18T00:02:00.000Z",
       resultSummary: {
         state: "cancelled",
-        stderr: "Worker job cancelled.",
+        stderr: "",
+        stderrBytes: 21,
         errorName: "worker_job_cancelled"
       }
     });
@@ -971,7 +1019,8 @@ describe("JsonFileWorkerJobRepository", () => {
       completedAt: "2026-05-18T00:02:00.000Z",
       resultSummary: {
         state: "completed",
-        stdout: "ok"
+        stdout: "",
+        stdoutBytes: 2
       }
     });
     expect(reloaded).toEqual(completed);
@@ -1023,7 +1072,8 @@ describe("JsonFileWorkerJobRepository", () => {
       completedAt: "2026-05-18T00:02:00.000Z",
       resultSummary: {
         state: "completed",
-        stdout: "ok"
+        stdout: "",
+        stdoutBytes: 2
       }
     });
     expect(reloaded).toEqual(completed);

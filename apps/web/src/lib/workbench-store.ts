@@ -93,12 +93,12 @@ export type SkillCommandFlowErrorCode =
   | "skill_command_not_published"
   | "skill_command_permission_denied"
   | "skill_command_approval_required"
+  | "skill_command_not_queueable"
   | "skill_command_page_version_not_found"
   | "skill_command_unknown_template_variable"
   | "skill_command_execution_failed";
 
 export type SkillCommandQueueFlowErrorCode =
-  | "skill_command_not_queueable"
   | "worker_runtime_not_configured";
 
 type SkillCommandExecutionFlowErrorCode =

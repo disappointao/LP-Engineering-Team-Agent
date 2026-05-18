@@ -1144,6 +1144,7 @@ function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undef
     value === "skill_command_not_published" ||
     value === "skill_command_permission_denied" ||
     value === "skill_command_approval_required" ||
+    value === "skill_command_not_queueable" ||
     value === "skill_command_page_version_not_found" ||
     value === "skill_command_unknown_template_variable" ||
     value === "skill_command_execution_failed"

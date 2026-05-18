@@ -499,6 +499,20 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("该技能命令未绑定到当前项目。");
   });
 
+  it("renders a visible error for non-queueable skill commands", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({
+        view: "skills",
+        skillError: "skill_command_not_queueable"
+      }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("This skill command cannot be queued.");
+  });
+
   it("renders skill command queue controls and local worker form", async () => {
     setActiveEmptyProjectState();
     pageMocks.pageState = {

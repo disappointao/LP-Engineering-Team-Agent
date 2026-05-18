@@ -107,7 +107,18 @@ describe("worker queue handoff", () => {
           stdout: "Simulated build for project project_a."
         }
       });
-      expect(stored).toEqual(result);
+      expect(stored).toMatchObject({
+        id: queued.id,
+        state: "completed",
+        claimedByWorkerId: "worker_a",
+        resultSummary: {
+          state: "completed",
+          stdout: "",
+          stderr: "",
+          stdoutBytes: 38,
+          stderrBytes: 0
+        }
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

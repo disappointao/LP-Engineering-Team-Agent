@@ -342,7 +342,7 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
     const directory = dirname(this.filePath);
     const tempFilePath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
     const state: WorkerJobFileState = {
-      workerJobs: records.map((record) => copyRecord(record))
+      workerJobs: records.map((record) => sanitizeRecordForJsonFile(record))
     };
 
     await mkdir(directory, { recursive: true });
@@ -454,6 +454,22 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     cancelReason: record.cancelReason,
     claimedByWorkerId: record.claimedByWorkerId,
     claimToken: record.claimToken
+  };
+}
+
+function sanitizeRecordForJsonFile(record: WorkerJobRecord): WorkerJobRecord {
+  const copiedRecord = copyRecord(record);
+  if (!copiedRecord.resultSummary) {
+    return copiedRecord;
+  }
+
+  return {
+    ...copiedRecord,
+    resultSummary: {
+      ...copiedRecord.resultSummary,
+      stdout: "",
+      stderr: ""
+    }
   };
 }
 

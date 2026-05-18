@@ -866,7 +866,17 @@ describe("InMemoryWorkerRuntime", () => {
           stdout: "Simulated build for project project_a."
         }
       });
-      expect(apiVisibleJob).toEqual(completed);
+      expect(apiVisibleJob).toMatchObject({
+        id: queued.id,
+        state: "completed",
+        resultSummary: {
+          state: "completed",
+          stdout: "",
+          stderr: "",
+          stdoutBytes: 38,
+          stderrBytes: 0
+        }
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -1425,7 +1435,10 @@ describe("InMemoryWorkerRuntime", () => {
         state: "completed",
         resultSummary: {
           state: "completed",
-          stdout: "Simulated build for project project_a."
+          stdout: "",
+          stderr: "",
+          stdoutBytes: 38,
+          stderrBytes: 0
         }
       });
     } finally {
