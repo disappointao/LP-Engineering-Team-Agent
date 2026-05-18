@@ -936,10 +936,8 @@ async function readState(filePath: string): Promise<JsonFileWorkbenchState> {
       projectMembers: parsed.projectMembers ?? [],
       briefs: parsed.briefs ?? [],
       pageVersions: parsed.pageVersions ?? [],
-      artifactWorkspaces: arrayOrEmpty<ArtifactWorkspaceRecord>(parsed.artifactWorkspaces),
-      artifactWorkspaceFiles: arrayOrEmpty<ArtifactWorkspaceFileRecord>(
-        parsed.artifactWorkspaceFiles
-      ),
+      artifactWorkspaces: parseArtifactWorkspaces(parsed.artifactWorkspaces),
+      artifactWorkspaceFiles: parseArtifactWorkspaceFiles(parsed.artifactWorkspaceFiles),
       deployments: parsed.deployments ?? [],
       tasks: parsed.tasks ?? [],
       messages: parsed.messages ?? [],
@@ -1018,8 +1016,70 @@ function copyOptional<T>(record: T | undefined): T | undefined {
   return record ? copy(record) : undefined;
 }
 
-function arrayOrEmpty<T>(records: unknown): T[] {
-  return Array.isArray(records) ? records : [];
+function parseArtifactWorkspaces(records: unknown): ArtifactWorkspaceRecord[] {
+  return Array.isArray(records) ? records.filter(isArtifactWorkspaceRecord) : [];
+}
+
+function parseArtifactWorkspaceFiles(records: unknown): ArtifactWorkspaceFileRecord[] {
+  return Array.isArray(records) ? records.filter(isArtifactWorkspaceFileRecord) : [];
+}
+
+function isArtifactWorkspaceRecord(record: unknown): record is ArtifactWorkspaceRecord {
+  if (!isObjectRecord(record)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(record.id) &&
+    isNonEmptyString(record.projectId) &&
+    optionalString(record.pageVersionId) &&
+    optionalString(record.runId) &&
+    record.kind === "static_lp" &&
+    (record.state === "active" || record.state === "archived") &&
+    isNonEmptyString(record.createdAt) &&
+    isNonEmptyString(record.updatedAt)
+  );
+}
+
+function isArtifactWorkspaceFileRecord(record: unknown): record is ArtifactWorkspaceFileRecord {
+  if (!isObjectRecord(record)) {
+    return false;
+  }
+
+  const spec = getArtifactWorkspaceFileSpec(record.path);
+  return (
+    spec !== undefined &&
+    isNonEmptyString(record.id) &&
+    isNonEmptyString(record.workspaceId) &&
+    isNonEmptyString(record.projectId) &&
+    optionalString(record.pageVersionId) &&
+    record.kind === spec.kind &&
+    record.mimeType === spec.mimeType &&
+    typeof record.sizeBytes === "number" &&
+    Number.isInteger(record.sizeBytes) &&
+    record.sizeBytes >= 0 &&
+    isSha256Hex(record.sha256) &&
+    isNonEmptyString(record.summary) &&
+    typeof record.content === "string" &&
+    isNonEmptyString(record.createdAt) &&
+    isNonEmptyString(record.updatedAt)
+  );
+}
+
+function isObjectRecord(record: unknown): record is Record<string, unknown> {
+  return typeof record === "object" && record !== null && !Array.isArray(record);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
 
 function compareWorkspaceMembers(
@@ -1056,6 +1116,18 @@ const artifactWorkspaceFilePathOrder = new Map<ArtifactWorkspaceFilePath, number
   ["script.js", 2]
 ]);
 
+const artifactWorkspaceFileSpecs = new Map<
+  ArtifactWorkspaceFilePath,
+  {
+    kind: ArtifactWorkspaceFileRecord["kind"];
+    mimeType: ArtifactWorkspaceFileRecord["mimeType"];
+  }
+>([
+  ["index.html", { kind: "html", mimeType: "text/html" }],
+  ["styles.css", { kind: "css", mimeType: "text/css" }],
+  ["script.js", { kind: "js", mimeType: "text/javascript" }]
+]);
+
 function compareArtifactWorkspaceFiles(
   a: ArtifactWorkspaceFileRecord,
   b: ArtifactWorkspaceFileRecord
@@ -1068,6 +1140,17 @@ function compareArtifactWorkspaceFiles(
 
 function getArtifactWorkspaceFilePathOrder(path: ArtifactWorkspaceFilePath): number {
   return artifactWorkspaceFilePathOrder.get(path) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function getArtifactWorkspaceFileSpec(path: unknown):
+  | {
+    kind: ArtifactWorkspaceFileRecord["kind"];
+    mimeType: ArtifactWorkspaceFileRecord["mimeType"];
+  }
+  | undefined {
+  return typeof path === "string"
+    ? artifactWorkspaceFileSpecs.get(path as ArtifactWorkspaceFilePath)
+    : undefined;
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {

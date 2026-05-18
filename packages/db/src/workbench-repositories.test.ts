@@ -277,6 +277,16 @@ describe("in-memory workbench repositories", () => {
     await expect(repositories.briefs.getById("missing")).resolves.toBeUndefined();
     await expect(repositories.pageVersions.getById("missing")).resolves.toBeUndefined();
     await expect(repositories.deployments.getByPageVersionId("missing")).resolves.toBeUndefined();
+    await expect(repositories.artifactWorkspaces.getById("missing")).resolves.toBeUndefined();
+    await expect(
+      repositories.artifactWorkspaces.getForPageVersion("missing")
+    ).resolves.toBeUndefined();
+    await expect(
+      repositories.artifactWorkspaceFiles.getByPath({
+        workspaceId: "missing",
+        path: "index.html"
+      })
+    ).resolves.toBeUndefined();
   });
 
   it("lists projects in creation order and returns defensive copies", async () => {
