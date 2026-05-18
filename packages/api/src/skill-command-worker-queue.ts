@@ -317,7 +317,7 @@ function summarizeWorkerResult(workerJob: WorkerJobRecord): string {
 }
 
 function sanitizeWorkerErrorName(value: string | undefined): string | undefined {
-  if (!value) {
+  if (value === undefined) {
     return undefined;
   }
 

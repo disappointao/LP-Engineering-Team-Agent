@@ -223,6 +223,39 @@ describe("worker-backed skill command finalization", () => {
     ]);
   });
 
+  it("sanitizes empty worker error names when finalizing failed jobs", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({
+      state: "failed",
+      errorName: ""
+    });
+
+    await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "failed",
+        errorName: "worker_job_error"
+      })
+    ]);
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "tool.failed",
+          payload: expect.objectContaining({ errorName: "worker_job_error" })
+        }),
+        expect.objectContaining({
+          type: "run.failed",
+          payload: expect.objectContaining({ errorName: "worker_job_error" })
+        })
+      ])
+    );
+  });
+
   it("runs one safe queued worker job and finalizes the linked run", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.runs.save(runningRun());
