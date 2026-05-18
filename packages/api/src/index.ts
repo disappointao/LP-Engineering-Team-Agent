@@ -2,8 +2,10 @@ import {
   createArtifactWorkspaceManifest,
   createStaticArtifactWorkspaceFiles,
   staticArtifactsFromWorkspaceFiles,
+  type ArtifactWorkspaceFileRecord,
   type ArtifactWorkspaceKind,
   type ArtifactWorkspaceManifest,
+  type ArtifactWorkspaceRecord,
   type StaticArtifacts
 } from "@lp-agent/artifacts";
 import {
@@ -1412,16 +1414,61 @@ export class DemoWorkbenchService {
       return copiedPageVersion;
     }
 
+    const workspace = await this.repositories.artifactWorkspaces.getById(
+      copiedPageVersion.artifactWorkspaceId
+    );
+    if (!workspace) {
+      return copiedPageVersion;
+    }
+    this.assertArtifactWorkspaceOwnership(workspace, copiedPageVersion);
+
+    let files: ArtifactWorkspaceFileRecord[];
     try {
-      const files = await this.repositories.artifactWorkspaceFiles.listForWorkspace(
-        copiedPageVersion.artifactWorkspaceId
-      );
+      files = await this.repositories.artifactWorkspaceFiles.listForWorkspace(workspace.id);
+    } catch {
+      return copiedPageVersion;
+    }
+
+    this.assertArtifactWorkspaceFileOwnership(files, workspace, copiedPageVersion);
+
+    try {
       return {
         ...copiedPageVersion,
         artifacts: staticArtifactsFromWorkspaceFiles(files)
       };
     } catch {
       return copiedPageVersion;
+    }
+  }
+
+  private assertArtifactWorkspaceOwnership(
+    workspace: ArtifactWorkspaceRecord,
+    pageVersion: PageVersionRecord
+  ): void {
+    if (
+      workspace.projectId !== pageVersion.projectId ||
+      workspace.pageVersionId !== pageVersion.id
+    ) {
+      throw new Error(
+        `Artifact workspace ${workspace.id} does not belong to page version ${pageVersion.id}.`
+      );
+    }
+  }
+
+  private assertArtifactWorkspaceFileOwnership(
+    files: ArtifactWorkspaceFileRecord[],
+    workspace: ArtifactWorkspaceRecord,
+    pageVersion: PageVersionRecord
+  ): void {
+    const mismatchedFile = files.find((file) =>
+      file.workspaceId !== workspace.id ||
+      file.projectId !== pageVersion.projectId ||
+      file.pageVersionId !== pageVersion.id
+    );
+    if (mismatchedFile) {
+      throw new Error(
+        `Artifact workspace file ${mismatchedFile.path} does not belong to page version ${pageVersion.id}.`
+      );
     }
   }
 

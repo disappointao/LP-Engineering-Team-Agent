@@ -306,20 +306,67 @@ describe("demo workbench service", () => {
       findings: [],
       createdAt: "2026-05-11T00:00:01.000Z"
     });
-    const originalListForWorkspace = repositories.artifactWorkspaceFiles.listForWorkspace.bind(
-      repositories.artifactWorkspaceFiles
+    const originalGetWorkspaceById = repositories.artifactWorkspaces.getById.bind(
+      repositories.artifactWorkspaces
     );
-    let listAttempts = 0;
-    repositories.artifactWorkspaceFiles.listForWorkspace = async (workspaceId) => {
-      listAttempts += 1;
-      return originalListForWorkspace(workspaceId);
+    let workspaceLookupAttempts = 0;
+    repositories.artifactWorkspaces.getById = async (workspaceId) => {
+      workspaceLookupAttempts += 1;
+      return originalGetWorkspaceById(workspaceId);
     };
 
     const snapshot = await service.getSnapshot(project.id);
 
-    expect(listAttempts).toBe(1);
+    expect(workspaceLookupAttempts).toBe(1);
     expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe("missing_workspace");
     expect(snapshot.currentPageVersion?.artifacts).toEqual(embeddedArtifacts);
+  });
+
+  it("rejects snapshot hydration when workspace ownership does not match the page version", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_wrong_workspace_owner",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_wrong_owner",
+      artifacts: embeddedArtifacts,
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_wrong_owner",
+      projectId: "project_other",
+      pageVersionId: "version_other",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_wrong_owner",
+      projectId: project.id,
+      pageVersionId: "version_wrong_workspace_owner",
+      artifacts: {
+        ...embeddedArtifacts,
+        indexHtml: "<!doctype html><html><body>Wrong workspace owner</body></html>"
+      },
+      createdAt: "2026-05-11T00:01:00.000Z"
+    });
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    await expect(service.getSnapshot(project.id)).rejects.toThrow(
+      "Artifact workspace artifact_workspace_wrong_owner does not belong to page version version_wrong_workspace_owner."
+    );
   });
 
   it("recovers explicit record snapshots from workspace files", async () => {
@@ -362,6 +409,59 @@ describe("demo workbench service", () => {
 
     expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe(version.artifactWorkspaceId);
     expect(snapshot.currentPageVersion?.artifacts).toEqual(recoveredArtifacts);
+  });
+
+  it("rejects explicit record hydration when file ownership does not match the page version", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_wrong_file_owner",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_wrong_file_owner",
+      artifacts: embeddedArtifacts,
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_wrong_file_owner",
+      projectId: project.id,
+      pageVersionId: "version_wrong_file_owner",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_wrong_file_owner",
+      projectId: "project_other",
+      pageVersionId: "version_other",
+      artifacts: {
+        ...embeddedArtifacts,
+        stylesCss: "body { color: crimson; }"
+      },
+      createdAt: "2026-05-11T00:01:00.000Z"
+    });
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    await expect(
+      service.getSnapshotForRecords({
+        projectId: project.id,
+        briefId: brief.id,
+        pageVersionId: "version_wrong_file_owner"
+      })
+    ).rejects.toThrow(
+      "Artifact workspace file index.html does not belong to page version version_wrong_file_owner."
+    );
   });
 
   it("falls back to embedded artifacts when workspace files are incomplete", async () => {
@@ -409,6 +509,58 @@ describe("demo workbench service", () => {
     expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe(
       "artifact_workspace_incomplete"
     );
+    expect(snapshot.currentPageVersion?.artifacts).toEqual(embeddedArtifacts);
+  });
+
+  it("falls back to embedded artifacts when workspace file metadata is corrupt", async () => {
+    const embeddedArtifacts = completeArtifacts();
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    await repositories.pageVersions.save({
+      id: "version_corrupt_workspace",
+      projectId: project.id,
+      briefId: brief.id,
+      artifactWorkspaceId: "artifact_workspace_corrupt",
+      artifacts: embeddedArtifacts,
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: "2026-05-11T00:00:01.000Z"
+    });
+    await repositories.artifactWorkspaces.save({
+      id: "artifact_workspace_corrupt",
+      projectId: project.id,
+      pageVersionId: "version_corrupt_workspace",
+      kind: "static_lp",
+      state: "active",
+      createdAt: "2026-05-11T00:00:01.000Z",
+      updatedAt: "2026-05-11T00:00:01.000Z"
+    });
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_corrupt",
+      projectId: project.id,
+      pageVersionId: "version_corrupt_workspace",
+      artifacts: {
+        ...embeddedArtifacts,
+        scriptJs: "console.log('corrupt metadata should fallback');"
+      },
+      createdAt: "2026-05-11T00:01:00.000Z"
+    }).map((file) =>
+      file.path === "script.js"
+        ? { ...file, sha256: "not-the-content-hash" }
+        : file
+    );
+    for (const file of files) {
+      await repositories.artifactWorkspaceFiles.save(file);
+    }
+
+    const snapshot = await service.getSnapshot(project.id);
+
+    expect(snapshot.currentPageVersion?.artifactWorkspaceId).toBe("artifact_workspace_corrupt");
     expect(snapshot.currentPageVersion?.artifacts).toEqual(embeddedArtifacts);
   });
 
