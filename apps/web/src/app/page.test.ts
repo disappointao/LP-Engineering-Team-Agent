@@ -2546,6 +2546,80 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("body { color: #111827; }");
   });
 
+  it("does not render artifact source in visible diff cards by default", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "styles.css",
+            state: "initial",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ]
+      }
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const visibleText = collectText(page).join(" ");
+
+    expect(visibleText).toContain("Artifact changes");
+    expect(visibleText).toContain("styles.css static LP file");
+    expect(visibleText).not.toContain("body { color: #111827; }");
+    expect(visibleText).not.toContain("<!doctype html>");
+  });
+
+  it("renders safe snippet omitted messages without leaking invalid query values", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "styles.css",
+            state: "initial",
+            sizeBytes: 9001,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 9001,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          omittedReason: "size_limit_exceeded",
+          maxBytes: 8192
+        },
+        errorCode: "artifact_snippet_unavailable"
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        artifactPath: "../styles.css?token=ARTIFACT_QUERY_SECRET"
+      })
+    });
+    const visibleText = collectText(page).join(" ");
+
+    expect(visibleText).toContain("Content is over the 8 KB preview limit.");
+    expect(visibleText).not.toContain("ARTIFACT_QUERY_SECRET");
+    expect(visibleText).not.toContain("../styles.css");
+  });
+
   it("preserves existing query params when linking artifact preview snippets", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";

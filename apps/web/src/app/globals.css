@@ -1191,6 +1191,123 @@ button {
   overflow-wrap: anywhere;
 }
 
+.artifactDiffBlock {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 12px 13px 0;
+}
+
+.artifactDiffHeader,
+.artifactDiffTop,
+.artifactSnippetHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.artifactDiffHeader strong,
+.artifactSnippetHeader strong {
+  font-size: 0.84rem;
+  font-weight: 830;
+}
+
+.artifactDiffHeader span,
+.artifactSnippetHeader span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.artifactDiffGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.artifactDiffCard {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 10px;
+}
+
+.artifactDiffTop strong {
+  min-width: 0;
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.artifactDiffTop span {
+  flex: 0 0 auto;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  font-weight: 830;
+}
+
+.artifactDiffCard small,
+.artifactDiffCard p,
+.artifactDiffCard a,
+.artifactSnippetPanel p,
+.artifactSnippetNotice {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.artifactDiffCard small,
+.artifactDiffCard p,
+.artifactSnippetPanel p,
+.artifactSnippetNotice {
+  color: var(--muted);
+}
+
+.artifactDiffCard a {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.artifactSnippetPanel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #1f2328;
+  color: #f6f8fa;
+  padding: 10px;
+}
+
+.artifactSnippetPanel .artifactSnippetHeader span {
+  color: #c9d1d9;
+}
+
+.artifactSnippetPanel pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.artifactSnippetPanel code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .allFilesCard {
   display: flex;
   align-items: center;
@@ -1406,6 +1523,10 @@ button {
   }
 
   .artifactGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .artifactDiffGrid {
     grid-template-columns: 1fr;
   }
 
