@@ -121,6 +121,14 @@ import {
   type RunEventDraft
 } from "./agent-handoffs";
 import {
+  diffPageVersionArtifactWorkspaces,
+  diffRepositoryArtifactWorkspaces,
+  readRepositoryArtifactWorkspaceFile,
+  type DiffPageVersionArtifactWorkspacesInput,
+  type DiffRepositoryArtifactWorkspacesInput,
+  type ReadRepositoryArtifactWorkspaceFileInput
+} from "./artifact-reader";
+import {
   createProjectMemberId,
   defaultLocalWorkbenchUser,
   normalizeWorkbenchUserIdentity,
@@ -129,6 +137,16 @@ import {
   type WorkbenchUserIdentity
 } from "./collaboration";
 
+export {
+  ArtifactReaderError,
+  diffPageVersionArtifactWorkspaces,
+  diffRepositoryArtifactWorkspaces,
+  readRepositoryArtifactWorkspaceFile,
+  type ArtifactReaderErrorCode,
+  type DiffPageVersionArtifactWorkspacesInput,
+  type DiffRepositoryArtifactWorkspacesInput,
+  type ReadRepositoryArtifactWorkspaceFileInput
+} from "./artifact-reader";
 export {
   AgentHandoffArtifactRefsSchema,
   AgentHandoffRecordSchema,
@@ -1407,6 +1425,36 @@ export class DemoWorkbenchService {
         : undefined,
       deployment: deployment ? copyDeployment(deployment) : undefined
     };
+  }
+
+  async readArtifactWorkspaceFile(
+    input: Omit<ReadRepositoryArtifactWorkspaceFileInput, "repositories">
+  ) {
+    await this.getProjectOrThrow(input.projectId);
+    return readRepositoryArtifactWorkspaceFile({
+      ...input,
+      repositories: this.repositories
+    });
+  }
+
+  async diffArtifactWorkspaces(
+    input: Omit<DiffRepositoryArtifactWorkspacesInput, "repositories">
+  ) {
+    await this.getProjectOrThrow(input.projectId);
+    return diffRepositoryArtifactWorkspaces({
+      ...input,
+      repositories: this.repositories
+    });
+  }
+
+  async diffPageVersionArtifactWorkspaces(
+    input: Omit<DiffPageVersionArtifactWorkspacesInput, "repositories">
+  ) {
+    await this.getProjectOrThrow(input.projectId);
+    return diffPageVersionArtifactWorkspaces({
+      ...input,
+      repositories: this.repositories
+    });
   }
 
   private async hydratePageVersionArtifacts(
