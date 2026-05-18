@@ -211,6 +211,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 7 Collaboration Primitives v0：已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化、审批 actor 归属和 Web 项目成员只读展示。
 - Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file job persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once 和 Web 本地 worker queue 闭环。
 - Durable Artifact Workspace v0：已实现本地 artifact workspace/file repository、manifest/hash/summary、workspace-backed preview/export recovery 和 metadata-first context 注入。
+- Artifact Reader / Static Diff v0：已实现受控 artifact file 读取、8KB bounded snippet、metadata-only workspace/page-version diff 和 runtime/model no-content guard。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
 - Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
@@ -230,7 +231,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
-- 受控 artifact reader、静态 diff、文件系统 workspace 和 diff 注入；artifact reader / static diff 已进入 Stage 15 设计。
+- Web artifact diff cards 和安全 snippet preview 已进入 Stage 16 设计；行级 textual diff、文件编辑 UI、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、worker daemon、真实部署 runner、MCP worker execution 仍未做。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
@@ -739,6 +740,24 @@ pnpm --filter @lp-agent/model-gateway test
 - 未来 MCP/deployment/desktop 读取产物时，应该复用 reader 和 diff contract，而不是绕过 API 直接读 repository、JSON-file 或本机绝对路径。
 - 需要把 preview/export 这种用户下载场景和 context/model/snippet 这种 Agent 上下文场景分开：前者可以恢复完整产物，后者必须受路径、归属和大小限制。
 - 实现时要把 snippet 放在 Context Pack 的显式 opt-in 区域，不默认进入 runtime/model context；这样既能为 Reviewer/MCP 预留小片段读取能力，又能保持模型请求边界默认 metadata-only。
+
+### 阶段 16：Web Artifact Diff Cards v0
+
+当前设计：
+
+- [2026-05-19-web-artifact-diff-cards-design.md](./superpowers/specs/2026-05-19-web-artifact-diff-cards-design.md)
+- 这一阶段把 Stage 15 的 artifact reader / static diff 能力放到 Web 对话流里：LP 生成完成后，在 assistant 交付区域显示 `index.html`、`styles.css`、`script.js` 的文件变化卡片。
+- 默认只显示 metadata：路径、状态、大小、短 hash 和 summary，不展示完整源码。
+- 用户显式选择单个 canonical path 时，Web 通过 artifact reader 读取最多 8KB snippet 并展示只读预览；非法 path、超限、workspace 缺失或文件损坏都只显示安全错误，不回显原始输入。
+- 第一版使用 server-rendered 查询参数方案，不新增独立 Artifacts 页面、不做客户端弹窗、不做文件编辑、不做 line-level diff。
+- 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射或完整源码默认展示。
+
+学习重点：
+
+- Web preview/export 和 Agent snippet preview 是两个不同场景：前者服务用户下载完整产物，后者必须经过 reader 边界并受路径、归属和大小限制。
+- UI 默认 metadata-only 可以让用户理解文件变化，同时避免把 artifact content 扩散到页面、日志、上下文或模型请求。
+- 通过 URL query 触发 snippet preview 时，project/workspace/pageVersion 仍应由服务端会话和 repository 状态决定，不能信任浏览器传入这些归属字段。
+- 初始版本没有 previous workspace 时，不应该伪造 diff；可以显示 `initial` 文件摘要，让用户知道当前产物状态。
 
 ## 5. 写代码时的维护原则
 
