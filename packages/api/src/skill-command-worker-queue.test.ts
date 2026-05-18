@@ -333,6 +333,39 @@ describe("worker-backed skill command finalization", () => {
     ]);
   });
 
+  it("preserves rejected worker state across idempotent finalization retries", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({
+      state: "rejected",
+      errorName: "sandbox_policy_command_not_allowed"
+    });
+
+    const first = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+    const second = await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:05.000Z")
+    });
+
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(first).toMatchObject({ ok: true, state: "rejected" });
+    expect(second).toMatchObject({ ok: true, state: "rejected" });
+    expect(events.filter((event) => event.type === "tool.failed")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "run.failed")).toHaveLength(1);
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "failed"
+    });
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "failed",
+        errorName: "sandbox_policy_command_not_allowed"
+      })
+    ]);
+  });
+
   it("finalizes cancelled worker jobs as cancelled instead of failed", async () => {
     const { repositories, workerJob } = await linkedWorkerJob({
       state: "cancelled",

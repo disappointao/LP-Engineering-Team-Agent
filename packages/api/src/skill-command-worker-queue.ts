@@ -124,11 +124,7 @@ export async function finalizeWorkerBackedSkillCommand(input: {
     : terminalToolEvent
       ? terminalToolEventToRecordState(terminalToolEvent)
       : toRecordTerminalState(workerFinalState);
-  const resultState = terminalRunEvent
-    ? terminalRunEventToRecordState(terminalRunEvent)
-    : terminalToolEvent
-      ? terminalToolEventToRecordState(terminalToolEvent)
-      : workerFinalState;
+  const resultState = workerFinalState;
   let newTerminalEventCreatedAt: string | undefined;
   const getNewTerminalEventCreatedAt = (): string => {
     newTerminalEventCreatedAt ??= nextRepositoryTimestamp(
