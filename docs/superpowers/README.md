@@ -220,6 +220,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 13 Web worker queue integration v0 design.
    - Read this after the Web/API interrupt plan when adding the Web skill command queue path, local `Run local worker once` action, worker job finalization back into run/tool events, and safe queue visibility without enabling daemon workers, real shell execution, MCP execution, real deployment, streaming logs, or secret/artifact payload persistence.
 
+55. `plans/2026-05-18-web-worker-queue-integration.md`
+   - Stage 13 Web worker queue integration v0 implementation plan.
+   - Read this after the Stage 13 design when implementing or auditing queued Web skill command execution, local worker run-once action, worker result finalization, localized queue controls, and safe worker queue configuration.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

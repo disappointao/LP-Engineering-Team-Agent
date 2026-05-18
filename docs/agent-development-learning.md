@@ -663,7 +663,7 @@ pnpm --filter @lp-agent/model-gateway test
 
 当前计划：
 
-- 尚未生成；下一步应基于 Stage 13 spec 写 implementation plan。
+- [2026-05-18-web-worker-queue-integration.md](./superpowers/plans/2026-05-18-web-worker-queue-integration.md)
 
 学习重点：
 
