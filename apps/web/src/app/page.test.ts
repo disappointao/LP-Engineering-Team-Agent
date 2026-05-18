@@ -60,6 +60,15 @@ vi.mock("../lib/workbench-store", () => ({
   }))
 }));
 
+vi.mock("react-dom", () => ({
+  useFormStatus: vi.fn(() => ({
+    pending: false,
+    data: null,
+    method: null,
+    action: null
+  }))
+}));
+
 import HomePage from "./page";
 import { executeSkillCommandAction } from "./actions";
 
@@ -105,6 +114,14 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
   }
   if (typeof node === "object" && "type" in node && "props" in node) {
     const element = node as { type?: unknown; props?: { children?: unknown } };
+    if (typeof element.type === "function" && element.type.name === "InterruptSubmitButton") {
+      return collectElements(
+        (element.type as (props: Record<string, unknown>) => unknown)(
+          element.props as Record<string, unknown>
+        ),
+        type
+      );
+    }
     return [
       ...(element.type === type ? [element as { props?: Record<string, unknown> }] : []),
       ...collectElements(element.props?.children, type)
@@ -176,6 +193,10 @@ const localOwnerMember = {
 };
 
 const publishedProjectSkill = projectSkillState("published");
+const unavailableInterrupt = {
+  available: false,
+  state: "not_interruptible"
+};
 const deploymentBoundSkill = {
   ...publishedProjectSkill,
   skill: {
@@ -316,6 +337,62 @@ describe("HomePage project flow errors", () => {
     expect(
       inputs.some((input) => input.props?.name === "prompt" && input.props?.disabled === true)
     ).toBe(false);
+  });
+
+  it("renders an enabled interrupt button for interruptible task state", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      kind: "task_ready",
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Interruptible task",
+        type: "general_chat",
+        status: "complete",
+        createdAt: "2026-05-18T00:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Run something",
+          createdAt: "2026-05-18T00:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Working",
+          createdAt: "2026-05-18T00:00:01.000Z"
+        }
+      ],
+      runEvents: [],
+      interrupt: {
+        available: true,
+        state: "idle",
+        runId: "run_interrupt_1",
+        workerJobId: "worker_job_1"
+      }
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const buttons = collectElements(page, "button");
+    const interruptButton = buttons.find((button) =>
+      collectText(button).includes("Interrupt")
+    );
+
+    expect(interruptButton?.props?.disabled).toBe(false);
+  });
+
+  it("renders localized interrupt errors", async () => {
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ interruptError: "task_not_found" }),
+      acceptLanguage: "zh-CN,zh;q=0.9"
+    });
+
+    expect(html).toContain("当前没有可打断的任务。");
   });
 
   it("does not expose deployment navigation in the local web flow", async () => {
@@ -984,7 +1061,8 @@ describe("HomePage project flow errors", () => {
         projectId: "project_1",
         createdAt: "2026-05-12T08:02:00.000Z"
       },
-      messages: []
+      messages: [],
+      interrupt: unavailableInterrupt
     };
 
     const page = await HomePage({
@@ -1121,7 +1199,8 @@ describe("HomePage project flow errors", () => {
           content: "Create a project-bound landing page",
           createdAt: "2026-05-12T08:02:00.000Z"
         }
-      ]
+      ],
+      interrupt: unavailableInterrupt
     };
 
     const page = await HomePage({
@@ -1318,6 +1397,7 @@ describe("HomePage project flow errors", () => {
         }
       ],
       runEvents: [],
+      interrupt: unavailableInterrupt,
       snapshot: {
         project: {
           id: "project_1",
@@ -1675,7 +1755,8 @@ describe("HomePage project flow errors", () => {
           content: "I created a task thread and can continue from here.",
           createdAt: "2026-05-12T08:00:01.000Z"
         }
-      ]
+      ],
+      interrupt: unavailableInterrupt
     };
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
@@ -1739,6 +1820,7 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:02:01.000Z"
         }
       ],
+      interrupt: unavailableInterrupt,
       snapshot: {
         project: {
           id: "project_1",
@@ -1831,7 +1913,8 @@ describe("HomePage project flow errors", () => {
           content: "I created a task thread and can continue from here.",
           createdAt: "2026-05-12T08:03:01.000Z"
         }
-      ]
+      ],
+      interrupt: unavailableInterrupt
     };
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
@@ -1894,6 +1977,7 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:01.000Z"
         }
       ],
+      interrupt: unavailableInterrupt,
       runEvents: [
         {
           id: "run_skill_command_1_event_1",
@@ -2016,6 +2100,7 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:01.000Z"
         }
       ],
+      interrupt: unavailableInterrupt,
       snapshot: {
         project: {
           id: "project_1",

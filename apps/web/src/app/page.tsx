@@ -8,6 +8,7 @@ import {
   createModelProviderAction,
   createSkillDraftAction,
   publishSkillVersionAction,
+  interruptCurrentTaskAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
   setModelProviderEnabledAction,
@@ -25,6 +26,7 @@ import { createArtifactDownloadLinks } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import {
   getWebWorkbenchStore,
+  type InterruptFlowErrorCode,
   type MCPFlowErrorCode,
   type ModelFlowErrorCode,
   type ProjectMCPState,
@@ -34,6 +36,7 @@ import {
   type WorkbenchPageState
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
+import { InterruptSubmitButton } from "./interrupt-submit-button";
 
 interface HomePageProps {
   searchParams?: Promise<{
@@ -41,6 +44,7 @@ interface HomePageProps {
     skillError?: string;
     modelError?: string;
     mcpError?: string;
+    interruptError?: string;
     view?: string;
   }>;
 }
@@ -63,6 +67,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const skillError = toSkillFlowError(params?.skillError);
   const mcpError = toMCPFlowError(params?.mcpError);
   const modelError = toModelFlowError(params?.modelError);
+  const interruptError = toInterruptFlowError(params?.interruptError);
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const pageState = await getWebWorkbenchStore().getPageState({
@@ -85,6 +90,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     : modelState.resolutionError
       ? copy.modelsView.errors[modelState.resolutionError]
       : undefined;
+  const interruptErrorMessage = interruptError
+    ? copy.interruptFlow.errors[interruptError]
+    : undefined;
   const roleOrder = ["planner", "builder", "reviewer", "deployer"] as const;
   const builderModelRoute = modelState.resolvedPolicy.builder;
   const builderModelLabel = copy.chat.builderModelRoute(
@@ -791,6 +799,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <section className="entryPanel" aria-labelledby="entry-title">
                 <h1 id="entry-title">{copy.entry.title}</h1>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
+                {interruptErrorMessage ? (
+                  <div className="formError" role="alert">{interruptErrorMessage}</div>
+                ) : null}
                 <div className="entryComposerShell">
                   <p>{copy.entry.placeholder}</p>
                   <div className="entryChipRow">
@@ -805,6 +816,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             {activeView === "workbench" && chat ? (
               <>
                 {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
+                {interruptErrorMessage ? (
+                  <div className="formError" role="alert">{interruptErrorMessage}</div>
+                ) : null}
                 <div className="userTurn" aria-label={copy.chat.userLabel}>
                   <div className="messageBubble userMessage">{chat.userMessage}</div>
                 </div>
@@ -903,9 +917,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
               />
               <span>{composer.runtimeChip}</span>
-              <button type="button" className="interruptButton">
-                {composer.interruptLabel}
-              </button>
+              <InterruptSubmitButton
+                action={interruptCurrentTaskAction}
+                available={pageState.kind === "task_ready" && pageState.interrupt.available}
+                labels={{
+                  idle: composer.interruptLabel,
+                  stopping: copy.chat.interruptStoppingLabel,
+                  unavailable: copy.chat.interruptUnavailableLabel
+                }}
+              />
               <button type="submit" className="sendButton">
                 {composer.sendLabel}
               </button>
@@ -923,6 +943,18 @@ function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | u
     value === "prompt_required" ||
     value === "project_not_found" ||
     value === "generation_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toInterruptFlowError(value: string | undefined): InterruptFlowErrorCode | undefined {
+  if (
+    value === "task_not_found" ||
+    value === "task_not_interruptible" ||
+    value === "interrupt_target_not_found" ||
+    value === "interrupt_failed"
   ) {
     return value;
   }
