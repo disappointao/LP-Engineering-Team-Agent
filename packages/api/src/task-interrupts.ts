@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type {
   RunEventRecord,
   RunRecord,
@@ -159,21 +161,6 @@ export async function interruptTask(
     };
   }
 
-  await saveRunEvent({
-    repositories: input.repositories,
-    runId: target.run.id,
-    projectId: target.run.projectId,
-    taskId: target.run.taskId,
-    type: "task.interrupt.requested",
-    message: "Task interrupt requested.",
-    payload: {
-      taskId: input.taskId,
-      runId: target.run.id,
-      workerJobId: workerJob.id
-    },
-    now: input.now
-  });
-
   let cancelledJob: WorkerJobRecord | undefined;
   try {
     cancelledJob = await input.workerRuntime.cancelJob(workerJob.id, input.reason);
@@ -189,6 +176,31 @@ export async function interruptTask(
       error: "interrupt_target_not_found"
     };
   }
+
+  if (!isInterruptibleWorkerJob(cancelledJob) && cancelledJob.state !== "cancelled") {
+    return {
+      ok: true,
+      taskId: input.taskId,
+      state: "not_interruptible",
+      runId: target.run.id,
+      workerJobId: workerJob.id
+    };
+  }
+
+  await saveRunEvent({
+    repositories: input.repositories,
+    runId: target.run.id,
+    projectId: target.run.projectId,
+    taskId: target.run.taskId,
+    type: "task.interrupt.requested",
+    message: "Task interrupt requested.",
+    payload: {
+      taskId: input.taskId,
+      runId: target.run.id,
+      workerJobId: workerJob.id
+    },
+    now: input.now
+  });
 
   if (cancelledJob.state === "cancelled") {
     await markRunCancelled({
@@ -390,7 +402,7 @@ async function saveRunEvent(input: {
   const nextSequence =
     events.reduce((max, event) => Math.max(max, event.sequence), 0) + 1;
   const record: RunEventRecord = {
-    id: `${input.runId}_event_${nextSequence}`,
+    id: `${input.runId}_event_${nextSequence}_${randomUUID()}`,
     runId: input.runId,
     projectId: input.projectId,
     taskId: input.taskId,

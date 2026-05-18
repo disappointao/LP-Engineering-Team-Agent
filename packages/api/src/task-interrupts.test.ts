@@ -5,6 +5,7 @@ import {
   SimulatedExecutionAdapter,
   createRejectSandboxPolicy,
   createSimulatedSandboxPolicy,
+  type WorkerJobRecord,
   type ExecutionAdapter,
   type ExecutionContext,
   type ExecutionInput,
@@ -244,7 +245,7 @@ describe("task interrupts", () => {
       state: "stopping",
       runId,
       workerJobId: workerJob.id,
-      requestedAt: "2026-05-18T00:01:05.000Z"
+      requestedAt: "2026-05-18T00:01:04.000Z"
     });
     await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
       state: "running"
@@ -304,6 +305,73 @@ describe("task interrupts", () => {
     });
   });
 
+  it("returns not interruptible when a worker job becomes terminal during cancellation", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId, runId } = await saveTaskAndRun({ repositories });
+    const baseJob: WorkerJobRecord = {
+      id: "worker_job_stale",
+      projectId,
+      kind: "tool_command",
+      state: "running",
+      policy: createRejectSandboxPolicy(),
+      inputSummary: {
+        projectId,
+        kind: "tool_command",
+        command: "static-deploy",
+        argCount: 0,
+        envNames: [],
+        timeoutMs: 1000
+      },
+      createdAt: "2026-05-18T00:04:00.000Z"
+    };
+    const workerRuntime: TaskInterruptWorkerRuntime = {
+      getJob: async () => baseJob,
+      cancelJob: async () => ({
+        ...baseJob,
+        state: "completed",
+        completedAt: "2026-05-18T00:04:01.000Z",
+        resultSummary: {
+          state: "completed",
+          exitCode: 0,
+          stdout: "done",
+          stderr: "",
+          stdoutBytes: 4,
+          stderrBytes: 0
+        }
+      })
+    };
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId,
+      workerJobId: baseJob.id,
+      now: fixedNow()
+    });
+
+    const result = await interruptTask({
+      repositories,
+      workerRuntime,
+      taskId,
+      reason: "Stop stale job",
+      now: fixedNow()
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId,
+      state: "not_interruptible",
+      runId,
+      workerJobId: baseJob.id
+    });
+    await expect(repositories.runs.getById(runId)).resolves.toMatchObject({
+      state: "running"
+    });
+    await expect(repositories.runEvents.listForRun(runId)).resolves.toEqual([
+      expect.objectContaining({ type: "worker.job.linked" })
+    ]);
+  });
+
   it("returns not interruptible without events when a task has no active target", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const { taskId } = await saveTaskAndRun({ repositories });
@@ -323,6 +391,46 @@ describe("task interrupts", () => {
       state: "not_interruptible"
     });
     await expect(repositories.runEvents.listForTask(taskId)).resolves.toEqual([]);
+  });
+
+  it("does not overwrite an existing event with the same next sequence id", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { taskId, projectId, runId } = await saveTaskAndRun({ repositories });
+    await repositories.runEvents.save({
+      id: `${runId}_event_1`,
+      runId,
+      projectId,
+      taskId,
+      sequence: 0,
+      type: "manual.event",
+      message: "Manual event.",
+      payload: {},
+      createdAt: "2026-05-18T00:05:00.000Z"
+    });
+
+    await linkWorkerJobToTask({
+      repositories,
+      taskId,
+      projectId,
+      runId,
+      workerJobId: "worker_job_collision",
+      now: fixedNow(["2026-05-18T00:05:01.000Z"])
+    });
+
+    await expect(repositories.runEvents.listForRun(runId)).resolves.toEqual([
+      expect.objectContaining({
+        id: `${runId}_event_1`,
+        type: "manual.event"
+      }),
+      expect.objectContaining({
+        type: "worker.job.linked",
+        payload: {
+          taskId,
+          runId,
+          workerJobId: "worker_job_collision"
+        }
+      })
+    ]);
   });
 
   it("derives exact idle, cancelled, and not interruptible view states", async () => {
