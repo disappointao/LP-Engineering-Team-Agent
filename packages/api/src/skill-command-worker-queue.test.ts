@@ -6,6 +6,7 @@ import {
   type ToolObservationRecord,
   type WorkbenchRepositories
 } from "@lp-agent/db";
+import type { SkillManifest } from "@lp-agent/skills";
 import {
   InMemoryWorkerJobPayloadRepository,
   InMemoryWorkerRuntime,
@@ -13,6 +14,7 @@ import {
   createSimulatedSandboxPolicy,
   type WorkerJobRecord
 } from "@lp-agent/worker-runtime";
+import { DemoWorkbenchService } from "./index";
 import {
   finalizeWorkerBackedSkillCommand,
   runLocalWorkerOnceAndFinalize,
@@ -857,6 +859,135 @@ describe("worker-backed skill command finalization", () => {
   });
 });
 
+describe("queued skill command enqueueing", () => {
+  it("enqueues a safe worker job and leaves the run running", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await savePublishedBoundDeploymentSkill(repositories, deploymentSkillManifest());
+    const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository,
+      adapter: new SimulatedExecutionAdapter(),
+      now: () => new Date("2026-05-18T00:00:02.000Z")
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      workerQueueRuntime: workerRuntime,
+      now: () => new Date("2026-05-18T00:00:01.000Z")
+    });
+
+    const result = await service.enqueueProjectSkillCommand({
+      projectId: "project_1",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      approvedByUserId: "local-web-user",
+      taskId: "task_1"
+    });
+
+    expect(result.workerJobId).toBe("worker_job_1");
+    expect(result.run).toMatchObject({
+      id: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "deployer",
+      state: "running",
+      startedAt: "2026-05-18T00:00:01.000Z",
+      contextSummary: {
+        injected: [
+          "skillCommand:skill_static_deploy:publish_static",
+          "workerQueue:safe"
+        ],
+        omitted: []
+      }
+    });
+    expect(result.observation).toMatchObject({
+      id: "tool_observation_1",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      toolName: "skill:skill_static_deploy:publish_static",
+      outputSummary: "",
+      state: "running",
+      input: {
+        skillId: "skill_static_deploy",
+        skillVersionId: "skill_version_1",
+        commandId: "publish_static",
+        permission: "deploy:simulate",
+        approvedByUserId: "local-web-user",
+        argCount: 2,
+        envNames: ["LP_PROJECT_ID"]
+      }
+    });
+
+    const workerJob = await workerRuntime.getJob(result.workerJobId);
+    const persistedPayload = await payloadRepository.getByJobId(result.workerJobId);
+    expect(workerJob).toMatchObject({
+      id: result.workerJobId,
+      state: "queued",
+      payloadSource: "safe_persisted",
+      inputSummary: {
+        projectId: "project_1",
+        commandId: "publish_static",
+        command: "static-deploy",
+        argCount: 2,
+        envNames: ["LP_PROJECT_ID"]
+      }
+    });
+    expect(persistedPayload).toMatchObject({
+      jobId: result.workerJobId,
+      command: "static-deploy",
+      args: ["--project", "project_1"],
+      envNames: ["LP_PROJECT_ID"]
+    });
+
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "worker.job.linked"
+    ]);
+    expect(events[2]).toMatchObject({
+      sequence: 3,
+      message: "Worker job linked to task.",
+      payload: {
+        skillId: "skill_static_deploy",
+        skillVersionId: "skill_version_1",
+        commandId: "publish_static",
+        permission: "deploy:simulate",
+        approvedByUserId: "local-web-user",
+        taskId: "task_1",
+        runId: result.run.id,
+        workerJobId: result.workerJobId,
+        observationId: result.observation.id
+      }
+    });
+  });
+
+  it("rejects non-queueable commands that require secrets", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await savePublishedBoundDeploymentSkill(
+      repositories,
+      deploymentSkillManifest({
+        requiredSecrets: ["DEPLOY_TOKEN"],
+        env: [{ name: "DEPLOY_TOKEN", secretRef: "DEPLOY_TOKEN" }]
+      })
+    );
+    const service = new DemoWorkbenchService({
+      repositories,
+      workerQueueRuntime: new InMemoryWorkerRuntime()
+    });
+
+    await expect(
+      service.enqueueProjectSkillCommand({
+        projectId: "project_1",
+        skillVersionId: "skill_version_1",
+        commandId: "publish_static",
+        approvedByUserId: "local-web-user",
+        taskId: "task_1"
+      })
+    ).rejects.toThrow("skill_command_not_queueable");
+  });
+});
+
 function withThrowingRunEventListAll(
   repositories: WorkbenchRepositories
 ): WorkbenchRepositories {
@@ -874,4 +1005,75 @@ function withThrowingRunEventListAll(
       }
     }
   };
+}
+
+function deploymentSkillManifest(
+  overrides: Partial<SkillManifest> & {
+    env?: NonNullable<NonNullable<SkillManifest["commands"]>[number]["env"]>;
+  } = {}
+): SkillManifest {
+  const { env, ...manifestOverrides } = overrides;
+  return {
+    id: "skill_static_deploy",
+    name: "Static deploy",
+    version: "1.0.0",
+    type: "deployment",
+    scope: "project",
+    description: "Deploys static LP artifacts.",
+    permissions: ["deploy:simulate"],
+    requiredSecrets: [],
+    entrypoints: [],
+    reviewState: "published",
+    commands: [
+      {
+        id: "publish_static",
+        name: "Publish static artifacts",
+        permission: "deploy:simulate",
+        requiresApproval: true,
+        command: "static-deploy",
+        args: ["--project", "{{projectId}}"],
+        env: env ?? [{ name: "LP_PROJECT_ID", value: "{{projectId}}" }],
+        timeoutMs: 30000
+      }
+    ],
+    ...manifestOverrides
+  };
+}
+
+async function savePublishedBoundDeploymentSkill(
+  repositories: ReturnType<typeof createInMemoryWorkbenchRepositories>,
+  manifest: SkillManifest
+): Promise<void> {
+  await repositories.projects.save({
+    id: "project_1",
+    name: "Demo project",
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.skills.save({
+    id: manifest.id,
+    name: manifest.name,
+    type: manifest.type,
+    scope: manifest.scope,
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.skillVersions.save({
+    id: "skill_version_1",
+    skillId: manifest.id,
+    version: manifest.version,
+    manifest,
+    content: "Deploy static LP artifacts.",
+    contentType: "text/markdown",
+    reviewState: "published",
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
+  await repositories.skillBindings.save({
+    id: "skill_binding_1",
+    skillVersionId: "skill_version_1",
+    scope: "project",
+    targetKey: "project_1",
+    projectId: "project_1",
+    enabled: true,
+    createdAt: "2026-05-18T00:00:00.000Z",
+    updatedAt: "2026-05-18T00:00:00.000Z"
+  });
 }

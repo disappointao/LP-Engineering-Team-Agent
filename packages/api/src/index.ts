@@ -62,6 +62,11 @@ import {
   type SkillManifest
 } from "@lp-agent/skills";
 import {
+  createSimulatedSandboxPolicy,
+  type SafeWorkerJobInput,
+  type SandboxPolicy
+} from "@lp-agent/worker-runtime";
+import {
   nextRepositoryTimestamp,
   runAgentStep
 } from "./run-orchestrator";
@@ -99,6 +104,7 @@ import {
   type ToolCommandRunInput,
   type ToolCommandRunResult
 } from "./tool-command-runner";
+import type { SkillCommandQueueRuntime } from "./skill-command-worker-queue";
 import {
   createAgentHandoffRecord,
   markInboundHandoffsConsumed,
@@ -228,9 +234,17 @@ export interface ExecuteProjectSkillCommandInput {
   approvedByUserId: string;
 }
 
+export interface EnqueueProjectSkillCommandInput extends ExecuteProjectSkillCommandInput {
+  taskId?: string;
+}
+
 export interface SkillCommandExecutionResult {
   run: RunRecord;
   observation: ToolObservationRecord;
+}
+
+export interface QueuedSkillCommandExecutionResult extends SkillCommandExecutionResult {
+  workerJobId: string;
 }
 
 export interface CreateSkillDraftInput {
@@ -346,6 +360,7 @@ export interface DemoWorkbenchServiceOptions {
   deployerRuntime?: AgentRuntimeAdapter;
   deploymentAdapter?: GitDeploymentAdapter;
   toolCommandRunner?: ToolCommandRunner;
+  workerQueueRuntime?: SkillCommandQueueRuntime;
   env?: RuntimeEnvironment;
   modelFetch?: ModelFetch;
   currentUser?: WorkbenchUserIdentity;
@@ -360,6 +375,7 @@ export class DemoWorkbenchService {
   private readonly deployerRuntime: AgentRuntimeAdapter;
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly toolCommandRunner: ToolCommandRunner;
+  private readonly workerQueueRuntime?: SkillCommandQueueRuntime;
   private readonly env: RuntimeEnvironment;
   private readonly currentUser: WorkbenchUserIdentity;
   private readonly now: () => Date;
@@ -383,6 +399,7 @@ export class DemoWorkbenchService {
     this.deployerRuntime = options.deployerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
     this.toolCommandRunner = options.toolCommandRunner ?? new RejectingToolCommandRunner();
+    this.workerQueueRuntime = options.workerQueueRuntime;
     this.currentUser = normalizeWorkbenchUserIdentity(options.currentUser);
     this.now = options.now ?? (() => new Date());
   }
@@ -1041,6 +1058,197 @@ export class DemoWorkbenchService {
       }
       if (workspace) {
         await cleanupCommandWorkspace(workspace);
+      }
+    }
+  }
+
+  async enqueueProjectSkillCommand(
+    input: EnqueueProjectSkillCommandInput
+  ): Promise<QueuedSkillCommandExecutionResult> {
+    if (!this.workerQueueRuntime) {
+      throw new Error("worker_runtime_not_configured");
+    }
+    await this.getProjectOrThrow(input.projectId);
+    if (input.approvedByUserId.trim().length === 0) {
+      throw new Error("skill_command_approval_required");
+    }
+    const version = await this.getSkillVersionOrThrow(input.skillVersionId);
+    const bindings = await this.repositories.skillBindings.listForProject(input.projectId);
+    const binding = bindings.find(
+      (candidate) =>
+        isProjectSkillBindingForProject(candidate, input.projectId) &&
+        candidate.skillVersionId === input.skillVersionId &&
+        candidate.enabled
+    );
+    if (!binding) {
+      throw new Error("skill_command_not_bound");
+    }
+    if (version.manifest.type !== "deployment") {
+      throw new Error("skill_command_not_deployment");
+    }
+    if (version.reviewState !== "published" || version.manifest.reviewState !== "published") {
+      throw new Error("skill_command_not_published");
+    }
+
+    const command = (version.manifest.commands ?? []).find(
+      (candidate) => candidate.id === input.commandId
+    );
+    if (!command) {
+      throw new Error("skill_command_not_found");
+    }
+    if (!version.manifest.permissions.includes(command.permission)) {
+      throw new Error("skill_command_permission_denied");
+    }
+    assertSkillCommandSecretRefsDeclared(version.manifest, command);
+
+    const pageVersion = input.pageVersionId
+      ? await this.repositories.pageVersions.getById(input.pageVersionId)
+      : undefined;
+    if (input.pageVersionId && (!pageVersion || pageVersion.projectId !== input.projectId)) {
+      throw new Error("skill_command_page_version_not_found");
+    }
+    assertSkillCommandQueueable(command);
+
+    const runId = await reserveRepositoryId(this.repositories, "run_skill_command", async () => {
+      const existingRuns = await this.repositories.runs.listAll();
+      return existingRuns.map((record) => record.id);
+    });
+    let observationId: string | undefined;
+
+    try {
+      preflightSkillCommandTemplates({
+        command,
+        hasPageVersion: Boolean(pageVersion)
+      });
+      observationId = await reserveRepositoryId(
+        this.repositories,
+        "tool_observation",
+        async () => {
+          const observations = await this.repositories.toolObservations.listAll();
+          return observations.map((record) => record.id);
+        }
+      );
+
+      const variables: CommandTemplateVariables = {
+        projectId: input.projectId,
+        skillId: version.skillId,
+        skillVersionId: version.id,
+        commandId: command.id,
+        runId,
+        ...(pageVersion ? { pageVersionId: pageVersion.id } : {})
+      };
+      const env = resolveSkillCommandEnvironment({
+        manifest: version.manifest,
+        command,
+        runtimeEnv: this.env,
+        variables
+      });
+      const args = command.args.map((arg) => resolveCommandTemplate(arg, variables));
+      const envNames = Object.keys(env).sort();
+
+      const startedAt = this.timestamp();
+      const run: RunRecord = {
+        id: runId,
+        projectId: input.projectId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        role: "deployer",
+        state: "running",
+        startedAt,
+        contextSummary: {
+          injected: [
+            `skillCommand:${version.skillId}:${command.id}`,
+            "workerQueue:safe"
+          ],
+          omitted: []
+        }
+      };
+      await this.repositories.runs.save(run);
+
+      const observation: ToolObservationRecord = {
+        id: observationId,
+        runId,
+        projectId: input.projectId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        toolName: `skill:${version.skillId}:${command.id}`,
+        input: {
+          skillId: version.skillId,
+          skillVersionId: version.id,
+          commandId: command.id,
+          permission: command.permission,
+          approvedByUserId: input.approvedByUserId,
+          ...(pageVersion ? { pageVersionId: pageVersion.id } : {}),
+          argCount: args.length,
+          envNames
+        },
+        outputSummary: "",
+        state: "running",
+        createdAt: startedAt
+      };
+      await this.repositories.toolObservations.save(observation);
+
+      let sequence = 1;
+      const saveEvent = async (
+        type: string,
+        message: string,
+        payload: Record<string, unknown>
+      ): Promise<void> => {
+        await this.repositories.runEvents.save({
+          id: `${runId}_event_${sequence}`,
+          runId,
+          projectId: input.projectId,
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          sequence,
+          type,
+          message,
+          payload,
+          createdAt: this.timestamp()
+        });
+        sequence += 1;
+      };
+      const basePayload = {
+        skillId: version.skillId,
+        skillVersionId: version.id,
+        commandId: command.id,
+        permission: command.permission,
+        approvedByUserId: input.approvedByUserId,
+        ...(pageVersion ? { pageVersionId: pageVersion.id } : {})
+      };
+      await saveEvent("run.started", "Deployment skill command run started.", basePayload);
+      await saveEvent("tool.started", "Deployment skill command queued.", {
+        ...basePayload,
+        observationId
+      });
+
+      const workerJob = await this.workerQueueRuntime.enqueueSafe(
+        createSafeWorkerJobInput({
+          projectId: input.projectId,
+          commandId: command.id,
+          command,
+          args,
+          envNames
+        }),
+        createQueueSandboxPolicy({
+          command,
+          envNames
+        })
+      );
+      await saveEvent("worker.job.linked", "Worker job linked to task.", {
+        ...basePayload,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        runId,
+        workerJobId: workerJob.id,
+        observationId
+      });
+
+      return {
+        run: copyRunRecord(run),
+        observation: copyToolObservationRecord(observation),
+        workerJobId: workerJob.id
+      };
+    } finally {
+      releaseRepositoryId(this.repositories, runId);
+      if (observationId) {
+        releaseRepositoryId(this.repositories, observationId);
       }
     }
   }
@@ -2415,6 +2623,58 @@ function assertSkillCommandSecretRefsDeclared(
       throw new Error("skill_command_secret_not_declared");
     }
   }
+}
+
+function assertSkillCommandQueueable(
+  command: NonNullable<SkillManifest["commands"]>[number]
+): void {
+  if ((command.env ?? []).some((binding) => binding.secretRef)) {
+    throw new Error("skill_command_not_queueable");
+  }
+  if (command.workingDirectory) {
+    throw new Error("skill_command_not_queueable");
+  }
+  const templateValues = collectSkillCommandTemplateValues(command).join("\n");
+  if (
+    templateValues.includes("artifactDir") ||
+    templateValues.includes("artifact.indexHtmlPath") ||
+    templateValues.includes("artifact.stylesCssPath") ||
+    templateValues.includes("artifact.scriptJsPath")
+  ) {
+    throw new Error("skill_command_not_queueable");
+  }
+}
+
+function createSafeWorkerJobInput(input: {
+  projectId: string;
+  commandId: string;
+  command: NonNullable<SkillManifest["commands"]>[number];
+  args: string[];
+  envNames: string[];
+}): SafeWorkerJobInput {
+  return {
+    projectId: input.projectId,
+    kind: "tool_command",
+    commandId: input.commandId,
+    command: input.command.command,
+    args: [...input.args],
+    envNames: [...input.envNames].sort(),
+    timeoutMs: resolveSkillCommandTimeout(input.command)
+  };
+}
+
+function createQueueSandboxPolicy(input: {
+  command: NonNullable<SkillManifest["commands"]>[number];
+  envNames: string[];
+}): SandboxPolicy {
+  return createSimulatedSandboxPolicy({
+    allowedCommands: [input.command.command],
+    allowedEnvNames: [...input.envNames].sort(),
+    timeoutMs: resolveSkillCommandTimeout(input.command),
+    maxStdoutBytes: 300,
+    maxStderrBytes: 300,
+    network: "disabled"
+  });
 }
 
 function preflightSkillCommandTemplates(input: {
