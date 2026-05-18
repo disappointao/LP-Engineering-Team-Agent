@@ -3,7 +3,7 @@ import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
 export type ChatToolRole = "planner" | "builder" | "reviewer" | "deployer" | "assistant";
-export type ChatToolStatus = "complete" | "failed";
+export type ChatToolStatus = "complete" | "failed" | "running" | "cancelled";
 
 export interface ChatToolEvent {
   id: string;
@@ -127,16 +127,46 @@ function createFallbackToolEvents(input: {
 
 function toChatToolEvent(event: RunEventRecord, copy: WorkbenchCopy): ChatToolEvent {
   const role = toChatToolRole(event);
-  const status: ChatToolStatus = event.type.endsWith(".failed") ? "failed" : "complete";
+  const status = toChatToolStatus(event);
   return {
     id: `${event.runId}:${event.sequence}`,
     role,
     label: role === "assistant" ? copy.chat.generalToolLabel : copy.run[role][0],
     operation: event.message,
     status,
-    statusLabel: status === "failed" ? copy.status.failed : copy.chat.toolStatusComplete,
+    statusLabel: toStatusLabel(status, copy),
     meta: formatRunEventMeta(event)
   };
+}
+
+function toChatToolStatus(event: RunEventRecord): ChatToolStatus {
+  if (event.type.endsWith(".failed")) {
+    return "failed";
+  }
+  if (event.type.endsWith(".cancelled") || event.type === "task.interrupt.cancelled") {
+    return "cancelled";
+  }
+  if (
+    event.type.endsWith(".started") ||
+    event.type === "task.interrupt.requested" ||
+    event.type === "worker.job.linked"
+  ) {
+    return "running";
+  }
+  return "complete";
+}
+
+function toStatusLabel(status: ChatToolStatus, copy: WorkbenchCopy): string {
+  if (status === "failed") {
+    return copy.status.failed;
+  }
+  if (status === "running") {
+    return copy.chat.toolStatusRunning;
+  }
+  if (status === "cancelled") {
+    return copy.chat.toolStatusCancelled;
+  }
+  return copy.chat.toolStatusComplete;
 }
 
 function toChatToolRole(event: RunEventRecord): ChatToolRole {

@@ -229,6 +229,85 @@ describe("chat workbench view model", () => {
     expect(thread.toolEvents[0]?.meta).toContain("simulated_command_failed");
   });
 
+  it("marks task interrupt requested events as running timeline state", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_interrupt_1_event_2",
+          runId: "run_interrupt_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          sequence: 2,
+          type: "task.interrupt.requested",
+          message: "Task interrupt requested.",
+          payload: {
+            role: "deployer",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      status: "running",
+      statusLabel: "Running"
+    });
+  });
+
+  it("marks cancelled tool and task events as cancelled timeline state", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_interrupt_1_event_3",
+          runId: "run_interrupt_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          sequence: 3,
+          type: "task.interrupt.cancelled",
+          message: "Task interrupted.",
+          payload: {
+            role: "deployer",
+            workerJobId: "worker_job_1"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        },
+        {
+          id: "run_interrupt_1_event_4",
+          runId: "run_interrupt_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          sequence: 4,
+          type: "tool.cancelled",
+          message: "Deployment skill command cancelled.",
+          payload: {
+            role: "deployer",
+            commandId: "publish_static",
+            errorName: "worker_job_cancelled",
+            outputSummary: "stdout: 0 chars\nstderr: 21 chars"
+          },
+          createdAt: "2026-05-18T00:00:03.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents.map((event) => event.status)).toEqual([
+      "cancelled",
+      "cancelled"
+    ]);
+    expect(thread.toolEvents.every((event) => event.statusLabel === "Stopped")).toBe(true);
+  });
+
   it("includes single html and three static file artifact cards", async () => {
     const copy = getWorkbenchCopy("en");
     const snapshot = await createDemoWorkbenchSnapshot();

@@ -1078,6 +1078,16 @@ button {
   background: var(--accent);
 }
 
+.toolEvent[data-status="running"] .toolStatusDot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+.toolEvent[data-status="cancelled"] .toolStatusDot {
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.14);
+}
+
 .toolEventTop {
   display: flex;
   align-items: center;

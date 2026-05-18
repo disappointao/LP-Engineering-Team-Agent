@@ -840,7 +840,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       </div>
                       <div className="toolTimeline">
                         {chat.toolEvents.map((event) => (
-                          <div className="toolEvent" key={event.id}>
+                          <div className="toolEvent" data-status={event.status} key={event.id}>
                             <div className="toolStatusDot" aria-hidden="true" />
                             <div>
                               <div className="toolEventTop">
