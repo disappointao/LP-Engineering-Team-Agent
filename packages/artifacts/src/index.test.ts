@@ -291,6 +291,28 @@ describe("artifact workspace helpers", () => {
     expect(result.omittedReason).toBeUndefined();
   });
 
+  it("reads workspace file content using the default byte limit", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const result = readArtifactWorkspaceFileRecord({
+      file: files[0]!,
+      includeContent: true
+    });
+
+    expect(result.content).toBe(files[0]!.content);
+    expect(result.truncated).toBe(false);
+    expect(result.omittedReason).toBeUndefined();
+  });
+
   it("throws for invalid workspace file read byte limits", () => {
     const files = createStaticArtifactWorkspaceFiles({
       workspaceId: "artifact_workspace_1",
@@ -345,6 +367,26 @@ describe("artifact workspace helpers", () => {
     expect(() => normalizeArtifactWorkspaceFilePath("../index.html")).toThrow(
       "Unsupported artifact workspace file path: ../index.html."
     );
+  });
+
+  it("throws when reading a file with a forged path", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[0]!,
+        path: "../index.html"
+      } as unknown as ArtifactWorkspaceFileRecord
+    })).toThrow("Unsupported artifact workspace file path: ../index.html.");
   });
 
   it("throws when reading a file with stale size metadata", () => {
@@ -488,6 +530,59 @@ describe("artifact workspace helpers", () => {
     expect(JSON.stringify(diff)).not.toContain("text/html");
     expect(JSON.stringify(diff)).not.toContain("<!doctype html>");
     expect(JSON.stringify(diff)).not.toContain("console.log");
+  });
+
+  it("diffs changed files alongside unchanged, added, and removed files", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { color: red; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const diff = diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles: fromFiles.filter((file) => file.path !== "styles.css"),
+      toFiles: toFiles.filter((file) => file.path !== "script.js")
+    });
+
+    expect(diff.changedFileCount).toBe(2);
+    expect(diff.files.map((file) => [file.path, file.state])).toEqual([
+      ["index.html", "unchanged"],
+      ["styles.css", "added"],
+      ["script.js", "removed"]
+    ]);
+
+    const changedDiff = diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles,
+      toFiles
+    });
+
+    expect(changedDiff.changedFileCount).toBe(1);
+    expect(changedDiff.files.map((file) => [file.path, file.state])).toEqual([
+      ["index.html", "unchanged"],
+      ["styles.css", "changed"],
+      ["script.js", "unchanged"]
+    ]);
   });
 
   it("throws when diffing workspace files with project id mismatches", () => {
