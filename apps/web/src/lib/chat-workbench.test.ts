@@ -260,6 +260,76 @@ describe("chat workbench view model", () => {
     });
   });
 
+  it("marks started events as complete when the run has a terminal event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_builder_1_event_1",
+          runId: "run_builder_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "run.started",
+          message: "Builder run started.",
+          payload: {
+            role: "builder"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        },
+        {
+          id: "run_builder_1_event_2",
+          runId: "run_builder_1",
+          projectId: "project_1",
+          sequence: 2,
+          type: "run.completed",
+          message: "Builder run completed.",
+          payload: {
+            role: "builder"
+          },
+          createdAt: "2026-05-18T00:00:02.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      status: "complete",
+      statusLabel: "Complete"
+    });
+  });
+
+  it("marks started events as running when the run has no terminal event", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_builder_1_event_1",
+          runId: "run_builder_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "run.started",
+          message: "Builder run started.",
+          payload: {
+            role: "builder"
+          },
+          createdAt: "2026-05-18T00:00:01.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]).toMatchObject({
+      status: "running",
+      statusLabel: "Running"
+    });
+  });
+
   it("marks cancelled tool and task events as cancelled timeline state", () => {
     const thread = createChatWorkbenchThread({
       copy: getWorkbenchCopy("en"),

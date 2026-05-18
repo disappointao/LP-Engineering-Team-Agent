@@ -57,8 +57,9 @@ export function createChatWorkbenchThread({
   downloadLinks,
   runEvents = []
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
+  const terminalRunIds = toTerminalRunIds(runEvents);
   const toolEvents: ChatToolEvent[] = runEvents.length > 0
-    ? runEvents.map((event) => toChatToolEvent(event, copy))
+    ? runEvents.map((event) => toChatToolEvent(event, copy, terminalRunIds))
     : createFallbackToolEvents({ copy, objective, pageVersion, downloadLinks });
 
   const artifacts: ChatArtifactCard[] = downloadLinks.map((link, index) => ({
@@ -125,9 +126,13 @@ function createFallbackToolEvents(input: {
   ];
 }
 
-function toChatToolEvent(event: RunEventRecord, copy: WorkbenchCopy): ChatToolEvent {
+function toChatToolEvent(
+  event: RunEventRecord,
+  copy: WorkbenchCopy,
+  terminalRunIds: ReadonlySet<string>
+): ChatToolEvent {
   const role = toChatToolRole(event);
-  const status = toChatToolStatus(event);
+  const status = toChatToolStatus(event, terminalRunIds);
   return {
     id: `${event.runId}:${event.sequence}`,
     role,
@@ -139,19 +144,34 @@ function toChatToolEvent(event: RunEventRecord, copy: WorkbenchCopy): ChatToolEv
   };
 }
 
-function toChatToolStatus(event: RunEventRecord): ChatToolStatus {
+function toTerminalRunIds(events: RunEventRecord[]): Set<string> {
+  return new Set(events.filter(isTerminalRunEvent).map((event) => event.runId));
+}
+
+function isTerminalRunEvent(event: RunEventRecord): boolean {
+  return (
+    event.type.endsWith(".completed") ||
+    event.type.endsWith(".failed") ||
+    event.type.endsWith(".cancelled") ||
+    event.type === "task.interrupt.cancelled"
+  );
+}
+
+function toChatToolStatus(
+  event: RunEventRecord,
+  terminalRunIds: ReadonlySet<string>
+): ChatToolStatus {
   if (event.type.endsWith(".failed")) {
     return "failed";
   }
   if (event.type.endsWith(".cancelled") || event.type === "task.interrupt.cancelled") {
     return "cancelled";
   }
-  if (
-    event.type.endsWith(".started") ||
-    event.type === "task.interrupt.requested" ||
-    event.type === "worker.job.linked"
-  ) {
+  if (event.type === "task.interrupt.requested") {
     return "running";
+  }
+  if (event.type === "worker.job.linked" || event.type.endsWith(".started")) {
+    return terminalRunIds.has(event.runId) ? "complete" : "running";
   }
   return "complete";
 }
