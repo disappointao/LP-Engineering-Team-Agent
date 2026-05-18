@@ -367,6 +367,77 @@ describe("artifact workspace helpers", () => {
     })).toThrow("Artifact workspace file sizeBytes mismatch for index.html.");
   });
 
+  it("reads canonical summaries instead of forged file summaries", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    const result = readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[0]!,
+        summary: "forged secret summary"
+      }
+    });
+
+    expect(result.file.summary).toBe("index.html static LP file");
+    expect(JSON.stringify(result)).not.toContain("forged secret summary");
+  });
+
+  it("throws when reading files with stale sha metadata", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[0]!,
+        sha256: "0".repeat(64)
+      }
+    })).toThrow("Artifact workspace file sha256 mismatch for index.html.");
+  });
+
+  it("throws when reading files with kind and mime metadata mismatches", () => {
+    const files = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_1",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[0]!,
+        kind: "css"
+      } as ArtifactWorkspaceFileRecord
+    })).toThrow("Artifact workspace file kind mismatch for index.html: expected html, received css.");
+    expect(() => readArtifactWorkspaceFileRecord({
+      file: {
+        ...files[2]!,
+        mimeType: "text/css"
+      } as ArtifactWorkspaceFileRecord
+    })).toThrow(
+      "Artifact workspace file mimeType mismatch for script.js: expected text/javascript, received text/css."
+    );
+  });
+
   it("diffs workspace files using metadata only in canonical order", () => {
     const fromFiles = createStaticArtifactWorkspaceFiles({
       workspaceId: "artifact_workspace_from",
@@ -417,6 +488,162 @@ describe("artifact workspace helpers", () => {
     expect(JSON.stringify(diff)).not.toContain("text/html");
     expect(JSON.stringify(diff)).not.toContain("<!doctype html>");
     expect(JSON.stringify(diff)).not.toContain("console.log");
+  });
+
+  it("throws when diffing workspace files with project id mismatches", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles: fromFiles.map((file) => file.path === "index.html"
+        ? { ...file, projectId: "project_2" }
+        : file),
+      toFiles
+    })).toThrow(
+      "Artifact workspace file set projectId mismatch: expected project_1, received project_2."
+    );
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles,
+      toFiles: toFiles.map((file) => file.path === "styles.css"
+        ? { ...file, projectId: "project_2" }
+        : file)
+    })).toThrow(
+      "Artifact workspace file set projectId mismatch: expected project_1, received project_2."
+    );
+  });
+
+  it("throws when diffing workspace files with workspace id mismatches", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles: fromFiles.map((file) => file.path === "index.html"
+        ? { ...file, workspaceId: "artifact_workspace_other" }
+        : file),
+      toFiles
+    })).toThrow(
+      "Artifact workspace file set workspaceId mismatch: expected artifact_workspace_from, received artifact_workspace_other."
+    );
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles,
+      toFiles: toFiles.map((file) => file.path === "script.js"
+        ? { ...file, workspaceId: "artifact_workspace_other" }
+        : file)
+    })).toThrow(
+      "Artifact workspace file set workspaceId mismatch: expected artifact_workspace_to, received artifact_workspace_other."
+    );
+  });
+
+  it("throws when diffing workspace files with duplicate paths", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles: [...fromFiles, { ...fromFiles[0]!, id: "duplicate_index_file" }],
+      toFiles
+    })).toThrow("Artifact workspace has duplicate file path: index.html.");
+  });
+
+  it("throws when diffing workspace files with stale metadata", () => {
+    const fromFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_from",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+    const toFiles = createStaticArtifactWorkspaceFiles({
+      workspaceId: "artifact_workspace_to",
+      projectId: "project_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>LP</body></html>",
+        stylesCss: "body { margin: 0; }",
+        scriptJs: "console.log('ready');"
+      },
+      createdAt
+    });
+
+    expect(() => diffArtifactWorkspaceFiles({
+      projectId: "project_1",
+      fromWorkspaceId: "artifact_workspace_from",
+      toWorkspaceId: "artifact_workspace_to",
+      fromFiles,
+      toFiles: toFiles.map((file) => file.path === "index.html"
+        ? { ...file, sha256: "0".repeat(64) }
+        : file)
+    })).toThrow("Artifact workspace file sha256 mismatch for index.html.");
   });
 
   it("derives manifest summaries from the static file allowlist", () => {
