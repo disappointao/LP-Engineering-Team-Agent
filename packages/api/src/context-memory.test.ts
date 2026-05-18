@@ -745,7 +745,7 @@ describe("context memory", () => {
               kind: "html",
               mimeType: "text/html",
               sizeBytes: 128,
-              sha256: "hash-index",
+              sha256: "a".repeat(64),
               summary: "index.html static LP file",
               content: "RAW_RUNTIME_CONTEXT_SECRET"
             }
@@ -770,7 +770,7 @@ describe("context memory", () => {
           kind: "html",
           mimeType: "text/html",
           sizeBytes: 128,
-          sha256: "hash-index",
+          sha256: "a".repeat(64),
           summary: "index.html static LP file"
         }
       ]

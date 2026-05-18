@@ -33,6 +33,7 @@ export interface RunAgentStepInput {
   runId: string;
   projectId: string;
   taskId?: string;
+  pageVersionId?: string;
   role: "planner" | "builder" | "reviewer" | "deployer";
   input: ContextPack["input"];
   now?: () => Date;
@@ -81,6 +82,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     service: input.service,
     projectId: input.projectId,
     taskId: input.taskId,
+    pageVersionId: input.pageVersionId,
     role: input.role,
     input: input.input,
     now

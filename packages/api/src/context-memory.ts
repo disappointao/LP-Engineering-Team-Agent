@@ -42,6 +42,7 @@ const FAILED_SCORE = 50;
 const RECENCY_SCORE_DIVISOR = 1_000_000_000_000_000;
 const CONTEXT_MEMORY_REDACTION = "[REDACTED]";
 const TOTAL_BUDGET_EXCEEDED_REASON = "memory:total:budget_exceeded";
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 const StaticArtifactFilePathSchema = z.enum(["index.html", "styles.css", "script.js"]);
 
@@ -50,7 +51,7 @@ const ContextMemoryFileSchema = z.object({
   path: StaticArtifactFilePathSchema.optional(),
   characterCount: z.number().int().min(0),
   sizeBytes: z.number().int().min(0).optional(),
-  sha256: z.string().min(1).optional(),
+  sha256: z.string().regex(SHA256_HEX_PATTERN).optional(),
   summary: z.string().min(1).optional()
 });
 

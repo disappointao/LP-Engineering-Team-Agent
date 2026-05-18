@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type {
@@ -1061,9 +1061,15 @@ function isArtifactWorkspaceFileRecord(record: unknown): record is ArtifactWorks
     isSha256Hex(record.sha256) &&
     isNonEmptyString(record.summary) &&
     typeof record.content === "string" &&
+    record.sizeBytes === Buffer.byteLength(record.content, "utf8") &&
+    record.sha256 === sha256(record.content) &&
     isNonEmptyString(record.createdAt) &&
     isNonEmptyString(record.updatedAt)
   );
+}
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function isObjectRecord(record: unknown): record is Record<string, unknown> {

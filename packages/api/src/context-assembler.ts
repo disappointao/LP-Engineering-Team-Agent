@@ -43,13 +43,14 @@ const ArtifactWorkspaceMimeTypeSchema = z.enum([
   "text/css",
   "text/javascript"
 ]);
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 const RuntimeArtifactWorkspaceFileSchema = z.object({
   path: ArtifactWorkspaceFilePathSchema,
   kind: ArtifactWorkspaceFileKindSchema,
   mimeType: ArtifactWorkspaceMimeTypeSchema,
   sizeBytes: z.number().int().min(0),
-  sha256: z.string().min(1),
+  sha256: z.string().regex(SHA256_HEX_PATTERN),
   summary: z.string().min(1)
 });
 
@@ -125,6 +126,7 @@ export interface AssembleContextPackInput {
   service: Pick<DemoWorkbenchService, "createRuntimeContextForRole">;
   projectId: string;
   taskId?: string;
+  pageVersionId?: string;
   role: AgentRole;
   input: RuntimeRunInput;
   now?: () => Date;
@@ -134,6 +136,7 @@ export async function assembleContextPack(input: AssembleContextPackInput): Prom
   const createdAt = (input.now ?? (() => new Date()))().toISOString();
   const runtimeContext = await input.service.createRuntimeContextForRole({
     projectId: input.projectId,
+    pageVersionId: input.pageVersionId,
     role: input.role
   });
   const memory = await assembleContextMemory({

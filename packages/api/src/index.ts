@@ -321,6 +321,7 @@ export interface ListVisibleMCPToolsInput {
 
 export interface CreateRuntimeContextForRoleInput {
   projectId: string;
+  pageVersionId?: string;
   role: AgentRole;
 }
 
@@ -767,6 +768,7 @@ export class DemoWorkbenchService {
       runtime: this.reviewerRuntime,
       runId: `run_reviewer_${pageVersion.id}`,
       projectId: input.projectId,
+      pageVersionId: pageVersion.id,
       role: "reviewer",
       input: {
         brief: copyBrief(brief.brief),
@@ -849,6 +851,7 @@ export class DemoWorkbenchService {
       runtime: this.deployerRuntime,
       runId: `run_deployer_${pageVersion.id}`,
       projectId: input.projectId,
+      pageVersionId: pageVersion.id,
       role: "deployer",
       input: {
         prompt: "Prepare deployment handoff."
@@ -1813,7 +1816,7 @@ export class DemoWorkbenchService {
   ): Promise<RuntimeRunContext> {
     await this.getProjectOrThrow(input.projectId);
     const role = normalizeAgentRole(input.role);
-    return this.createRuntimeContext(input.projectId, role);
+    return this.createRuntimeContext(input.projectId, role, input.pageVersionId);
   }
 
   async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {
@@ -2152,13 +2155,14 @@ export class DemoWorkbenchService {
   private async createRuntimeContext(
     projectId: string,
     role: "planner" | "builder" | "reviewer" | "deployer",
+    pageVersionId?: string,
     approvalState: ApprovalState = "not_required"
   ): Promise<RuntimeRunContext> {
     const skillVersions = await this.listRuntimeSkillsForProject(projectId);
     const [mcpTools, modelRoutingPolicy, artifactWorkspace] = await Promise.all([
       this.resolveVisibleMCPTools({ projectId, role, skillVersions }),
       this.resolveModelRoutingPolicyForProject(projectId),
-      this.createRuntimeArtifactWorkspaceContext(projectId)
+      this.createRuntimeArtifactWorkspaceContext(projectId, pageVersionId)
     ]);
     return createWorkbenchRuntimeContext({
       role,
@@ -2171,10 +2175,13 @@ export class DemoWorkbenchService {
   }
 
   private async createRuntimeArtifactWorkspaceContext(
-    projectId: string
+    projectId: string,
+    pageVersionId?: string
   ): Promise<RuntimeRunContext["artifactWorkspace"]> {
     const legacyWorkspace = createLegacyRuntimeArtifactWorkspace();
-    const pageVersion = await this.repositories.pageVersions.findLatestForProject(projectId);
+    const pageVersion = pageVersionId
+      ? await this.getPageVersionForProjectOrThrow(projectId, pageVersionId)
+      : await this.repositories.pageVersions.findLatestForProject(projectId);
     if (!pageVersion?.artifactWorkspaceId) {
       return legacyWorkspace;
     }

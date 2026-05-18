@@ -697,12 +697,14 @@ pnpm --filter @lp-agent/model-gateway test
 - Stage 14 v0 已实现本地 durable artifact workspace：`@lp-agent/artifacts` 提供 manifest/hash/summary 纯 helper，`@lp-agent/db` 持久化 workspace/file repository，API 在 page version 生成时创建 workspace 并发出 metadata-only 事件。
 - Web/API snapshot 会优先从 workspace files 恢复静态 LP 产物；workspace 缺失、不完整或损坏时回退到 page version 内嵌 artifacts。
 - Context Memory、Context Pack、runtime context 和 model request 只注入 workspace id、file manifest、hash、size、summary，不注入完整 HTML/CSS/JS 内容。
+- reviewer/deployer 这类以明确 page version 为目标的 run，会把 runtime artifact workspace 绑定到目标 page version，而不是项目最新版本。
 
 学习重点：
 
 - artifact workspace 是“产物状态边界”，不是执行权限边界。
 - 产物恢复必须校验 ownership：workspace 和 files 的 `projectId` / `pageVersionId` 不匹配时要 fail closed，不能 silent fallback 到错误内容。
 - 在没有跨 repository 事务的 v0 中，写入顺序要避免危险引用：先保存 workspace/files，最后保存指向它们的 page version。
+- 本地 JSON-file 载入 artifact file record 时也要重算 `sizeBytes` 和 `sha256`，避免损坏的 metadata 被当成可信 manifest 继续传播。
 - worker 或部署系统以后应该拿 `artifactWorkspaceId` 和 file manifest，而不是拿 raw artifact 内容或本机绝对路径。
 - Context Pack 默认注入 metadata，不注入全文；需要全文时应通过受控 artifact reader 按路径、大小、项目归属和权限读取。
 - runtime adapter 和 model gateway 是模型请求边界，也要 whitelist artifact metadata 字段，不能把污染的 `content` 字段透传给模型。

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,10 +13,14 @@ import {
 } from "./index";
 
 const createdAt = "2026-05-13T00:00:00.000Z";
-const indexSha256 = "a".repeat(64);
-const stylesSha256 = "b".repeat(64);
-const scriptSha256 = "c".repeat(64);
+const indexSha256 = sha256("<h1>Spring</h1>");
+const stylesSha256 = sha256("body { color: red; }");
+const scriptSha256 = sha256("console.log('ready');");
 const tempDirs: string[] = [];
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 async function tempStateFile(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "lp-agent-db-"));
@@ -277,7 +282,7 @@ describe("json-file workbench repositories", () => {
       path: "styles.css",
       kind: "css",
       mimeType: "text/css",
-      sizeBytes: 19,
+      sizeBytes: 20,
       sha256: stylesSha256,
       summary: "styles file",
       content: "body { color: red; }",
@@ -302,6 +307,7 @@ describe("json-file workbench repositories", () => {
       id: "artifact_workspace_c_file_index_html",
       workspaceId: "artifact_workspace_c",
       pageVersionId: "version_2",
+      sha256: sha256("<h1>Summer</h1>"),
       content: "<h1>Summer</h1>",
       createdAt: "2026-05-13T00:01:00.000Z",
       updatedAt: "2026-05-13T00:01:00.000Z"
@@ -512,7 +518,7 @@ describe("json-file workbench repositories", () => {
       path: "styles.css",
       kind: "css",
       mimeType: "text/css",
-      sizeBytes: 19,
+      sizeBytes: 20,
       sha256: stylesSha256,
       summary: "styles file",
       content: "body { color: red; }",
@@ -537,7 +543,9 @@ describe("json-file workbench repositories", () => {
           { ...validFile, sha256: "not-a-sha" },
           validFile,
           { ...validFile, path: "styles.css", kind: "html" },
-          { ...validFile, sizeBytes: -1 }
+          { ...validFile, sizeBytes: -1 },
+          { ...validFile, sizeBytes: validFile.sizeBytes + 1 },
+          { ...validFile, sha256: "0".repeat(64) }
         ],
         deployments: [],
         tasks: [],

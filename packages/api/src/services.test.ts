@@ -3971,6 +3971,47 @@ describe("demo workbench service", () => {
     );
   });
 
+  it("binds runtime artifact workspace metadata to the target page version", async () => {
+    const reviewerRuntime = new RecordingRuntime({ state: "completed", findings: [] });
+    const deployerRuntime = new RecordingRuntime({ state: "completed" });
+    const service = new DemoWorkbenchService({
+      reviewerRuntime,
+      deployerRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a static LP"
+    });
+    const firstVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+    const secondVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    await service.reviewPageVersion({
+      projectId: project.id,
+      pageVersionId: firstVersion.id
+    });
+    await service.approveAndCreateDeployment({
+      projectId: project.id,
+      pageVersionId: firstVersion.id,
+      reviewerUserId: "reviewer_1"
+    });
+
+    expect(secondVersion.artifactWorkspaceId).not.toBe(firstVersion.artifactWorkspaceId);
+    expect(reviewerRuntime.requests[0]?.context?.artifactWorkspace.workspaceId).toBe(
+      firstVersion.artifactWorkspaceId
+    );
+    expect(deployerRuntime.requests[0]?.context?.artifactWorkspace.workspaceId).toBe(
+      firstVersion.artifactWorkspaceId
+    );
+  });
+
   it("falls back to legacy runtime artifact workspace when the latest workspace is missing", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
