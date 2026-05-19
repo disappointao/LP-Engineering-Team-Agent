@@ -186,11 +186,15 @@ export {
 export * from "./run-lifecycle";
 export {
   createLocalWorkerQueueRuntime,
+  createWorkerQueueSnapshot,
   finalizeWorkerBackedSkillCommand,
   runLocalWorkerOnceAndFinalize,
   type LocalWorkerQueueRuntime,
   type RunLocalWorkerOnceResult,
-  type SkillCommandQueueRuntime
+  type SkillCommandQueueRuntime,
+  type WorkerHeartbeatStatus,
+  type WorkerQueueSnapshot,
+  type WorkerQueueSnapshotLog
 } from "./skill-command-worker-queue";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();

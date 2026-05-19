@@ -12,14 +12,19 @@ import {
 } from "@lp-agent/db";
 import type { SkillManifest } from "@lp-agent/skills";
 import {
+  InMemoryWorkerJobRepository,
+  InMemoryWorkerLogRepository,
   InMemoryWorkerJobPayloadRepository,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createSimulatedSandboxPolicy,
+  type SandboxPolicy,
+  type WorkerJobState,
   type WorkerJobRecord
 } from "@lp-agent/worker-runtime";
 import { DemoWorkbenchService } from "./index";
 import {
+  createWorkerQueueSnapshot,
   createLocalWorkerQueueRuntime,
   finalizeWorkerBackedSkillCommand,
   runLocalWorkerOnceAndFinalize,
@@ -241,6 +246,39 @@ function terminalEventTypes(events: Array<{ type: string }>): string[] {
     .map((event) => event.type);
 }
 
+function workerJobRecord(
+  overrides: Partial<WorkerJobRecord> & {
+    id: string;
+    state: WorkerJobState;
+    policy: SandboxPolicy;
+  }
+): WorkerJobRecord {
+  return {
+    id: overrides.id,
+    projectId: overrides.projectId ?? "project_1",
+    kind: "tool_command",
+    state: overrides.state,
+    policy: overrides.policy,
+    inputSummary: {
+      projectId: overrides.projectId ?? "project_1",
+      kind: "tool_command",
+      command: "static-deploy",
+      argCount: 0,
+      envNames: [],
+      timeoutMs: 30000
+    },
+    createdAt: overrides.createdAt ?? "2026-05-19T00:00:00.000Z",
+    startedAt: overrides.startedAt,
+    completedAt: overrides.completedAt,
+    claimedByWorkerId: overrides.claimedByWorkerId,
+    claimToken: overrides.claimToken,
+    lastHeartbeatAt: overrides.lastHeartbeatAt,
+    heartbeatExpiresAt: overrides.heartbeatExpiresAt,
+    resultSummary: overrides.resultSummary,
+    errorName: overrides.errorName
+  };
+}
+
 const tempDirs: string[] = [];
 
 afterEach(async () => {
@@ -252,7 +290,8 @@ async function tempQueueFiles() {
   tempDirs.push(dir);
   return {
     jobsFilePath: join(dir, "worker-jobs.json"),
-    payloadsFilePath: join(dir, "worker-payloads.json")
+    payloadsFilePath: join(dir, "worker-payloads.json"),
+    logsFilePath: join(dir, "custom-worker-logs.json")
   };
 }
 
@@ -281,6 +320,185 @@ it("creates a shared JSON-file worker queue runtime", async () => {
   expect(claim?.record.id).toBe("worker_job_1");
   expect(await readFile(files.jobsFilePath, "utf8")).toContain("worker_job_1");
   expect(await readFile(files.payloadsFilePath, "utf8")).not.toContain("secret-token");
+});
+
+it("creates a shared JSON-file worker log repository with default and explicit paths", async () => {
+  const files = await tempQueueFiles();
+  const defaultRuntime = createLocalWorkerQueueRuntime({
+    jobsFilePath: files.jobsFilePath,
+    payloadsFilePath: files.payloadsFilePath
+  });
+  await defaultRuntime.workerLogRepository.append({
+    id: "worker_log_1",
+    type: "worker.daemon.idle",
+    message: "Worker idle.",
+    workerId: "worker_a",
+    projectId: "project_1",
+    payload: { projectId: "project_1" },
+    createdAt: "2026-05-19T00:00:00.000Z"
+  });
+  expect(await readFile(join(files.jobsFilePath, "..", "worker-logs.json"), "utf8")).toContain(
+    "worker_log_1"
+  );
+
+  const explicitRuntime = createLocalWorkerQueueRuntime(files);
+  await explicitRuntime.workerLogRepository.append({
+    id: "worker_log_2",
+    type: "worker.daemon.idle",
+    message: "Worker idle.",
+    workerId: "worker_b",
+    projectId: "project_1",
+    payload: { projectId: "project_1" },
+    createdAt: "2026-05-19T00:00:01.000Z"
+  });
+  expect(await readFile(files.logsFilePath, "utf8")).toContain("worker_log_2");
+});
+
+describe("worker queue snapshots", () => {
+  it("summarizes project-scoped counts, stale jobs, active heartbeat, and recent logs", async () => {
+    const jobRepository = new InMemoryWorkerJobRepository();
+    const workerLogRepository = new InMemoryWorkerLogRepository();
+    const policy = createSimulatedSandboxPolicy();
+    await Promise.all([
+      jobRepository.save(workerJobRecord({ id: "job_queued", state: "queued", policy })),
+      jobRepository.save(
+        workerJobRecord({
+          id: "job_running_active",
+          state: "running",
+          policy,
+          startedAt: "2026-05-19T00:00:00.000Z",
+          claimedByWorkerId: "worker_active",
+          lastHeartbeatAt: "2026-05-19T00:00:06.000Z",
+          heartbeatExpiresAt: "2026-05-19T00:00:20.000Z"
+        })
+      ),
+      jobRepository.save(
+        workerJobRecord({
+          id: "job_running_stale_heartbeat",
+          state: "running",
+          policy,
+          startedAt: "2026-05-19T00:00:01.000Z",
+          claimedByWorkerId: "worker_stale",
+          lastHeartbeatAt: "2026-05-19T00:00:02.000Z",
+          heartbeatExpiresAt: "2026-05-19T00:00:05.000Z"
+        })
+      ),
+      jobRepository.save(
+        workerJobRecord({
+          id: "job_running_stale_started",
+          state: "running",
+          policy,
+          startedAt: "2026-05-19T00:00:00.000Z"
+        })
+      ),
+      jobRepository.save(workerJobRecord({ id: "job_completed", state: "completed", policy })),
+      jobRepository.save(workerJobRecord({ id: "job_failed", state: "failed", policy })),
+      jobRepository.save(workerJobRecord({ id: "job_rejected", state: "rejected", policy })),
+      jobRepository.save(workerJobRecord({ id: "job_cancelled", state: "cancelled", policy })),
+      jobRepository.save(
+        workerJobRecord({
+          id: "job_other_project",
+          projectId: "project_2",
+          state: "failed",
+          policy
+        })
+      )
+    ]);
+    await Promise.all([
+      workerLogRepository.append({
+        id: "worker_log_1",
+        type: "worker.daemon.idle",
+        message: "Worker idle.",
+        workerId: "worker_a",
+        projectId: "project_1",
+        payload: { projectId: "project_1" },
+        createdAt: "2026-05-19T00:00:01.000Z"
+      }),
+      workerLogRepository.append({
+        id: "worker_log_2",
+        type: "worker.job.completed",
+        message: "Worker job completed.",
+        workerId: "worker_a",
+        workerJobId: "job_completed",
+        projectId: "project_1",
+        payload: { workerJobId: "job_completed", projectId: "project_1", outputSummary: "ok" },
+        createdAt: "2026-05-19T00:00:02.000Z"
+      }),
+      workerLogRepository.append({
+        id: "worker_log_other",
+        type: "worker.job.failed",
+        message: "Other project failed.",
+        projectId: "project_2",
+        payload: { projectId: "project_2" },
+        createdAt: "2026-05-19T00:00:03.000Z"
+      })
+    ]);
+
+    const snapshot = await createWorkerQueueSnapshot({
+      jobRepository,
+      workerLogRepository,
+      projectId: "project_1",
+      now: () => new Date("2026-05-19T00:00:10.000Z"),
+      staleClaimTimeoutMs: 5000,
+      recentLogLimit: 2
+    });
+
+    expect(snapshot.counts).toEqual({
+      queued: 1,
+      running: 3,
+      stale: 2,
+      completed: 1,
+      failed: 1,
+      rejected: 1,
+      cancelled: 1
+    });
+    expect(snapshot.heartbeat).toMatchObject({
+      status: "active",
+      workerId: "worker_active",
+      workerJobId: "job_running_active",
+      lastHeartbeatAt: "2026-05-19T00:00:06.000Z",
+      heartbeatExpiresAt: "2026-05-19T00:00:20.000Z"
+    });
+    expect(snapshot.logs.map((log) => log.id)).toEqual(["worker_log_2", "worker_log_1"]);
+  });
+
+  it("uses project-scoped logs for idle heartbeat and ignores other projects", async () => {
+    const jobRepository = new InMemoryWorkerJobRepository();
+    const workerLogRepository = new InMemoryWorkerLogRepository();
+    await workerLogRepository.append({
+      id: "worker_log_other",
+      type: "worker.job.completed",
+      message: "Other project completed.",
+      workerId: "worker_other",
+      projectId: "project_2",
+      payload: { projectId: "project_2" },
+      createdAt: "2026-05-19T00:00:02.000Z"
+    });
+    await workerLogRepository.append({
+      id: "worker_log_idle",
+      type: "worker.daemon.idle",
+      message: "Worker idle.",
+      workerId: "worker_idle",
+      projectId: "project_1",
+      payload: { projectId: "project_1" },
+      createdAt: "2026-05-19T00:00:01.000Z"
+    });
+
+    const snapshot = await createWorkerQueueSnapshot({
+      jobRepository,
+      workerLogRepository,
+      projectId: "project_1",
+      now: () => new Date("2026-05-19T00:00:10.000Z")
+    });
+
+    expect(snapshot.counts.failed).toBe(0);
+    expect(snapshot.heartbeat).toMatchObject({
+      status: "idle",
+      workerId: "worker_idle",
+      lastLogAt: "2026-05-19T00:00:01.000Z"
+    });
+    expect(snapshot.logs.map((log) => log.id)).toEqual(["worker_log_idle"]);
+  });
 });
 
 describe("worker-backed skill command finalization", () => {
@@ -1104,6 +1322,92 @@ describe("worker-backed skill command finalization", () => {
     }
     expect(result.state).toBe("completed");
     expect(finalizeSpy).toHaveBeenCalledOnce();
+  });
+
+  it("writes safe worker logs during a local run-once", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.runs.save(runningRun());
+    await repositories.toolObservations.save(runningObservation());
+    const workerLogRepository = new InMemoryWorkerLogRepository();
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter(),
+      now: () => new Date("2026-05-18T00:00:02.000Z")
+    });
+    const workerJob = await workerRuntime.enqueueSafe(
+      {
+        projectId: "project_1",
+        kind: "tool_command",
+        commandId: "publish_static",
+        command: "static-deploy",
+        args: ["--project", "project_1"],
+        envNames: ["LP_PROJECT_ID"],
+        timeoutMs: 30000
+      },
+      createSimulatedSandboxPolicy({
+        allowedCommands: ["static-deploy"],
+        allowedEnvNames: ["LP_PROJECT_ID"]
+      })
+    );
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_1",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 1,
+      type: "worker.job.linked",
+      message: "Worker job linked to task.",
+      payload: {
+        taskId: "task_1",
+        runId: "run_skill_command_1",
+        workerJobId: workerJob.id,
+        observationId: "tool_observation_1"
+      },
+      createdAt: "2026-05-18T00:00:02.000Z"
+    });
+
+    const result = await runLocalWorkerOnceAndFinalize({
+      repositories,
+      workerRuntime,
+      workerLogRepository,
+      heartbeatTimeoutMs: 30000,
+      workerId: "local-web-worker",
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    expect(result).toMatchObject({ ok: true, state: "completed" });
+    const logs = await workerLogRepository.list({ projectId: "project_1" });
+    expect(logs.map((log) => log.type)).toEqual([
+      "worker.job.completed",
+      "worker.job.heartbeat",
+      "worker.job.claimed"
+    ]);
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "worker.job.claimed",
+          workerId: "local-web-worker",
+          workerJobId: workerJob.id,
+          projectId: "project_1"
+        }),
+        expect.objectContaining({
+          type: "worker.job.heartbeat",
+          workerId: "local-web-worker",
+          workerJobId: workerJob.id,
+          projectId: "project_1"
+        }),
+        expect.objectContaining({
+          type: "worker.job.completed",
+          workerId: "local-web-worker",
+          workerJobId: workerJob.id,
+          projectId: "project_1",
+          payload: expect.objectContaining({
+            outputSummary: expect.stringMatching(/^stdout: \d+ bytes\nstderr: \d+ bytes$/)
+          })
+        })
+      ])
+    );
+    expect(JSON.stringify(logs)).not.toContain("Simulated command output");
   });
 
   it("returns worker runtime not configured when no runtime is available", async () => {

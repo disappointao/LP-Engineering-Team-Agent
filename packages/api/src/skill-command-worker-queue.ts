@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
 
 import type {
   RunEventRecord,
@@ -11,13 +12,17 @@ import type {
   WorkerJobRepository,
   SafeWorkerJobInput,
   SandboxPolicy,
+  WorkerLogRecord,
+  WorkerLogRepository,
+  WorkerLogType,
   WorkerJobRecord
 } from "@lp-agent/worker-runtime";
 import {
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createJsonFileWorkerJobPayloadRepository,
-  createJsonFileWorkerJobRepository
+  createJsonFileWorkerJobRepository,
+  createJsonFileWorkerLogRepository
 } from "@lp-agent/worker-runtime";
 import { nextRepositoryTimestamp } from "./run-orchestrator";
 
@@ -37,6 +42,12 @@ export interface SkillCommandQueueRuntime {
     record: WorkerJobRecord;
     claimToken: string;
   }): Promise<WorkerJobRecord>;
+  heartbeatClaimedJob?(input: {
+    jobId: string;
+    claimToken: string;
+    workerId: string;
+    heartbeatTimeoutMs: number;
+  }): Promise<WorkerJobRecord | undefined>;
   getJob(id: string): Promise<WorkerJobRecord | undefined>;
 }
 
@@ -44,6 +55,42 @@ export interface LocalWorkerQueueRuntime {
   runtime: InMemoryWorkerRuntime;
   jobRepository: WorkerJobRepository;
   payloadRepository: WorkerJobPayloadRepository;
+  workerLogRepository: WorkerLogRepository;
+}
+
+export type WorkerHeartbeatStatus = "active" | "idle" | "stale" | "unknown";
+
+export interface WorkerQueueSnapshotLog {
+  id: string;
+  type: WorkerLogType;
+  message: string;
+  workerId?: string;
+  workerJobId?: string;
+  projectId?: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface WorkerQueueSnapshot {
+  projectId: string;
+  counts: {
+    queued: number;
+    running: number;
+    stale: number;
+    completed: number;
+    failed: number;
+    rejected: number;
+    cancelled: number;
+  };
+  heartbeat: {
+    status: WorkerHeartbeatStatus;
+    workerId?: string;
+    workerJobId?: string;
+    lastHeartbeatAt?: string;
+    heartbeatExpiresAt?: string;
+    lastLogAt?: string;
+  };
+  logs: WorkerQueueSnapshotLog[];
 }
 
 export type RunLocalWorkerOnceResult =
@@ -70,28 +117,35 @@ type WorkerTerminalPayload = {
   exitCode?: number;
   errorName?: string;
 };
+const workerLogClockMsBySource = new WeakMap<() => Date, number>();
 
 export function createLocalWorkerQueueRuntime(input: {
   jobsFilePath: string;
   payloadsFilePath: string;
+  logsFilePath?: string;
 }): LocalWorkerQueueRuntime {
   const jobRepository = createJsonFileWorkerJobRepository({ filePath: input.jobsFilePath });
   const payloadRepository = createJsonFileWorkerJobPayloadRepository({
     filePath: input.payloadsFilePath
+  });
+  const workerLogRepository = createJsonFileWorkerLogRepository({
+    filePath: input.logsFilePath ?? defaultWorkerLogsFilePath(input.jobsFilePath)
   });
   const runtime = new InMemoryWorkerRuntime({
     repository: jobRepository,
     payloadRepository,
     adapter: new SimulatedExecutionAdapter()
   });
-  return { runtime, jobRepository, payloadRepository };
+  return { runtime, jobRepository, payloadRepository, workerLogRepository };
 }
 
 export async function runLocalWorkerOnceAndFinalize(input: {
   repositories: WorkbenchRepositories;
   workerRuntime?: SkillCommandQueueRuntime;
+  workerLogRepository?: WorkerLogRepository;
   workerId: string;
   projectId?: string;
+  heartbeatTimeoutMs?: number;
   now?: () => Date;
   afterFinalize?: () => void;
 }): Promise<RunLocalWorkerOnceResult> {
@@ -114,7 +168,41 @@ export async function runLocalWorkerOnceAndFinalize(input: {
     if (!claim) {
       return { ok: true, state: "idle" };
     }
+    await appendWorkerLog({
+      repository: input.workerLogRepository,
+      type: "worker.job.claimed",
+      message: "Worker job claimed.",
+      workerId: input.workerId,
+      workerJob: claim.record,
+      now: input.now
+    });
+    if (input.workerRuntime.heartbeatClaimedJob) {
+      const heartbeat = await input.workerRuntime.heartbeatClaimedJob({
+        jobId: claim.record.id,
+        claimToken: claim.claimToken,
+        workerId: input.workerId,
+        heartbeatTimeoutMs: input.heartbeatTimeoutMs ?? 30000
+      });
+      if (heartbeat) {
+        await appendWorkerLog({
+          repository: input.workerLogRepository,
+          type: "worker.job.heartbeat",
+          message: "Worker job heartbeat recorded.",
+          workerId: input.workerId,
+          workerJob: heartbeat,
+          now: input.now
+        });
+      }
+    }
     workerJob = await input.workerRuntime.runClaimedJob(claim);
+    await appendWorkerLog({
+      repository: input.workerLogRepository,
+      type: toTerminalWorkerLogType(workerJob),
+      message: "Worker job reached a terminal state.",
+      workerId: input.workerId,
+      workerJob,
+      now: input.now
+    });
   } catch {
     return { ok: false, error: "worker_job_execution_failed" };
   }
@@ -133,6 +221,207 @@ export async function runLocalWorkerOnceAndFinalize(input: {
   } catch {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
+}
+
+export async function createWorkerQueueSnapshot(input: {
+  jobRepository: WorkerJobRepository;
+  workerLogRepository?: WorkerLogRepository;
+  projectId: string;
+  now?: () => Date;
+  staleClaimTimeoutMs?: number;
+  recentLogLimit?: number;
+}): Promise<WorkerQueueSnapshot> {
+  const now = input.now?.() ?? new Date();
+  const jobs = await input.jobRepository.listForProject(input.projectId);
+  const logs = input.workerLogRepository
+    ? await input.workerLogRepository.list({
+        projectId: input.projectId,
+        limit: input.recentLogLimit ?? 10
+      })
+    : [];
+  const counts: WorkerQueueSnapshot["counts"] = {
+    queued: 0,
+    running: 0,
+    stale: 0,
+    completed: 0,
+    failed: 0,
+    rejected: 0,
+    cancelled: 0
+  };
+
+  for (const job of jobs) {
+    counts[job.state] += 1;
+    if (
+      job.state === "running" &&
+      isStaleRunningWorkerJob({
+        job,
+        now,
+        staleClaimTimeoutMs: input.staleClaimTimeoutMs
+      })
+    ) {
+      counts.stale += 1;
+    }
+  }
+
+  return {
+    projectId: input.projectId,
+    counts,
+    heartbeat: deriveWorkerHeartbeat({
+      jobs,
+      logs,
+      now,
+      staleClaimTimeoutMs: input.staleClaimTimeoutMs
+    }),
+    logs: logs.map(toWorkerQueueSnapshotLog)
+  };
+}
+
+function defaultWorkerLogsFilePath(jobsFilePath: string): string {
+  const workerJobsFileName = "worker-jobs.json";
+  if (jobsFilePath.endsWith(workerJobsFileName)) {
+    return `${jobsFilePath.slice(0, -workerJobsFileName.length)}worker-logs.json`;
+  }
+  return join(dirname(jobsFilePath), "worker-logs.json");
+}
+
+function isStaleRunningWorkerJob(input: {
+  job: WorkerJobRecord;
+  now: Date;
+  staleClaimTimeoutMs?: number;
+}): boolean {
+  if (input.job.state !== "running") {
+    return false;
+  }
+  const nowMs = input.now.getTime();
+  if (input.job.heartbeatExpiresAt) {
+    return new Date(input.job.heartbeatExpiresAt).getTime() < nowMs;
+  }
+  if (!input.job.startedAt || input.staleClaimTimeoutMs === undefined) {
+    return false;
+  }
+  return (
+    new Date(input.job.startedAt).getTime() + input.staleClaimTimeoutMs < nowMs
+  );
+}
+
+function deriveWorkerHeartbeat(input: {
+  jobs: WorkerJobRecord[];
+  logs: WorkerLogRecord[];
+  now: Date;
+  staleClaimTimeoutMs?: number;
+}): WorkerQueueSnapshot["heartbeat"] {
+  const latestRunningHeartbeat = input.jobs
+    .filter((job) => job.state === "running" && job.lastHeartbeatAt)
+    .sort(compareWorkerJobsLatestHeartbeatFirst)
+    .at(0);
+  if (latestRunningHeartbeat) {
+    return {
+      status: isStaleRunningWorkerJob({
+        job: latestRunningHeartbeat,
+        now: input.now,
+        staleClaimTimeoutMs: input.staleClaimTimeoutMs
+      })
+        ? "stale"
+        : "active",
+      workerId: latestRunningHeartbeat.claimedByWorkerId,
+      workerJobId: latestRunningHeartbeat.id,
+      lastHeartbeatAt: latestRunningHeartbeat.lastHeartbeatAt,
+      heartbeatExpiresAt: latestRunningHeartbeat.heartbeatExpiresAt
+    };
+  }
+
+  const latestLog = input.logs.at(0);
+  if (!latestLog) {
+    return { status: "unknown" };
+  }
+  return {
+    status: latestLog.type === "worker.daemon.idle" ? "idle" : "active",
+    workerId: latestLog.workerId,
+    workerJobId: latestLog.workerJobId,
+    lastLogAt: latestLog.createdAt
+  };
+}
+
+function compareWorkerJobsLatestHeartbeatFirst(
+  left: WorkerJobRecord,
+  right: WorkerJobRecord
+): number {
+  const heartbeatCompare = (right.lastHeartbeatAt ?? "").localeCompare(
+    left.lastHeartbeatAt ?? ""
+  );
+  return heartbeatCompare !== 0 ? heartbeatCompare : right.id.localeCompare(left.id);
+}
+
+function toWorkerQueueSnapshotLog(
+  record: WorkerLogRecord
+): WorkerQueueSnapshotLog {
+  return {
+    id: record.id,
+    type: record.type,
+    message: record.message,
+    workerId: record.workerId,
+    workerJobId: record.workerJobId,
+    projectId: record.projectId,
+    payload: structuredClone(record.payload),
+    createdAt: record.createdAt
+  };
+}
+
+async function appendWorkerLog(input: {
+  repository?: WorkerLogRepository;
+  type: WorkerLogType;
+  message: string;
+  workerId: string;
+  workerJob: WorkerJobRecord;
+  now?: () => Date;
+}): Promise<void> {
+  if (!input.repository) {
+    return;
+  }
+  const createdAt = nextWorkerLogTimestamp(input.now);
+  await input.repository.append({
+    id: `${input.workerJob.id}_${input.type}_${createdAt}`,
+    type: input.type,
+    message: input.message,
+    workerId: input.workerId,
+    workerJobId: input.workerJob.id,
+    projectId: input.workerJob.projectId,
+    payload: {
+      workerId: input.workerId,
+      workerJobId: input.workerJob.id,
+      projectId: input.workerJob.projectId,
+      state: input.workerJob.state,
+      errorName: input.workerJob.errorName,
+      exitCode: input.workerJob.resultSummary?.exitCode,
+      outputSummary: summarizeWorkerResult(input.workerJob),
+      createdAt
+    },
+    createdAt
+  });
+}
+
+function nextWorkerLogTimestamp(now: (() => Date) | undefined): string {
+  const clock = now ?? systemClock;
+  const currentMs = clock().getTime();
+  const previousMs = workerLogClockMsBySource.get(clock);
+  const createdAtMs =
+    previousMs === undefined || currentMs > previousMs ? currentMs : previousMs + 1;
+  workerLogClockMsBySource.set(clock, createdAtMs);
+  return new Date(createdAtMs).toISOString();
+}
+
+function systemClock(): Date {
+  return new Date();
+}
+
+function toTerminalWorkerLogType(record: WorkerJobRecord): WorkerLogType {
+  if (record.state === "cancelled") {
+    return "worker.job.cancelled";
+  }
+  if (record.state === "completed") {
+    return "worker.job.completed";
+  }
+  return "worker.job.failed";
 }
 
 async function claimOldestQueuedForProject(input: {
