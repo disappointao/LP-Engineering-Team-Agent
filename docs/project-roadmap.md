@@ -38,7 +38,7 @@
 
 ### Stage 18：Agent Run Lifecycle & Recovery v0
 
-**状态：** 设计已确认，等待 implementation plan。
+**状态：** implementation plan 已写，等待执行。
 
 **为什么现在做：** run records、run events、handoffs、worker jobs、tool observations 都已有 v0，但缺一个更正式的 lifecycle/recovery 层。这个阶段会把真正 Agent 系统需要的失败诊断、恢复、retry/resume、blocked state 和幂等 finalizer 打牢。
 

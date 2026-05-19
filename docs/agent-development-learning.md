@@ -780,6 +780,10 @@ pnpm --filter @lp-agent/model-gateway test
 - recovery 只做 contract：`retry_run`、`resume_worker_finalization`、`request_approval`、`resolve_blocker`、`inspect_manually`。本阶段不做 Web retry 按钮、不自动重跑 agent chain，也不实现通用 scheduler。
 - worker-backed skill command finalizer 要补幂等语义，让 local worker run-once、未来 daemon 和人工 resume finalization 可以安全重复调用。
 
+当前计划：
+
+- [2026-05-19-agent-run-lifecycle-recovery.md](./superpowers/plans/2026-05-19-agent-run-lifecycle-recovery.md)
+
 学习重点：
 
 - Agent run 状态不是单个字段能表达完整事实；它通常由 run record、event timeline、tool observation、worker job 和 handoff 一起决定。
