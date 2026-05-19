@@ -105,12 +105,12 @@ describe("deriveRunLifecycleView core states", () => {
   );
 
   it.each([
-    ["running", "running", []],
-    ["needs_approval", "waiting_for_approval", ["request_approval"]],
-    ["needs_input", "blocked", ["resolve_blocker"]]
+    ["running", "running", [], undefined],
+    ["needs_approval", "waiting_for_approval", ["request_approval"], undefined],
+    ["needs_input", "blocked", ["resolve_blocker"], "input_required"]
   ] as const)(
     "maps run record state %s to lifecycle state %s",
-    async (recordState, expectedState, recoveryActions) => {
+    async (recordState, expectedState, recoveryActions, expectedDiagnosticCode) => {
       const repositories = createInMemoryWorkbenchRepositories();
       await saveRun(repositories, { state: recordState });
 
@@ -124,6 +124,13 @@ describe("deriveRunLifecycleView core states", () => {
         view: {
           state: expectedState,
           runRecordState: recordState,
+          ...(expectedDiagnosticCode
+            ? {
+                diagnosticSummary: {
+                  code: expectedDiagnosticCode
+                }
+              }
+            : {}),
           recoveryActions
         }
       });
@@ -166,6 +173,46 @@ describe("deriveRunLifecycleView core states", () => {
         state: "failed",
         diagnosticSummary: {
           code: "invalid_json",
+          message: "Model output could not be parsed safely.",
+          source: "model_parse",
+          eventType: "model.output.parse_failed"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
+  it("sanitizes invalid model parse diagnostic codes without exposing raw output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      sequence: 1,
+      type: "model.output.parse_failed",
+      message: "Planner output could not be parsed RAW_MODEL_OUTPUT_SECRET",
+      payload: {
+        reason: "bad code with spaces"
+      }
+    });
+    await saveEvent(repositories, {
+      sequence: 2,
+      type: "run.failed",
+      message: "Planner run failed RAW_MODEL_OUTPUT_SECRET"
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "unknown",
           message: "Model output could not be parsed safely.",
           source: "model_parse",
           eventType: "model.output.parse_failed"
