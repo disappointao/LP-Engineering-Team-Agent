@@ -286,6 +286,10 @@
    - Stage 21 Model Repair、Retry 和 Fallback v0 design。
    - 在 Stage 20 plan 后阅读，用于添加 Planner/Builder one-shot structured output repair、provider 临时错误 bounded retry 和 fallback route 安全 metadata，同时不做 streaming、tool-call conversion、自动 fallback execution 或 provider marketplace。
 
+71. `plans/2026-05-19-model-repair-retry-fallback.md`
+   - Stage 21 Model Repair、Retry 和 Fallback v0 implementation plan。
+   - 在 Stage 21 design 后阅读，用于按 TDD 实现 runtime provider retry、fallback metadata resolution、Planner/Builder one-shot repair、lifecycle diagnostics 和文档收尾。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

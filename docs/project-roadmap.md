@@ -69,7 +69,7 @@ Stage 20 v0 已实现 read-only MCP tool execution：API 侧校验 project、con
 
 ### Stage 21：Model Repair、Retry 和 Fallback v0
 
-**状态：** design 已确认，待写 implementation plan。
+**状态：** design 和 implementation plan 已确认，待实现。
 
 **为什么在 Stage 18 之后：** Planner/Builder parse 当前 fail closed，这是正确的。下一步模型能力应增加受控 repair/retry，同时不能让 failed runs 不可见，也不能静默 fallback 到 deterministic output。
 
@@ -88,6 +88,8 @@ Stage 20 v0 已实现 read-only MCP tool execution：API 侧校验 project、con
 - 不自动调用 fallback provider；v0 只暴露 fallback metadata 和安全事件。
 
 **当前设计：** `docs/superpowers/specs/2026-05-19-model-repair-retry-fallback-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-19-model-repair-retry-fallback.md`。
 
 ### Stage 22：Postgres Repository v0
 

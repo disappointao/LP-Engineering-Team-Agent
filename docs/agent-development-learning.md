@@ -366,6 +366,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 已确认的 Stage 21 Model Repair、Retry 和 Fallback v0 设计：
 
 - [2026-05-19-model-repair-retry-fallback-design.md](./superpowers/specs/2026-05-19-model-repair-retry-fallback-design.md)
+- 当前实现计划：[2026-05-19-model-repair-retry-fallback.md](./superpowers/plans/2026-05-19-model-repair-retry-fallback.md)
 - 这一阶段只在 `REAL_MODEL_RUNTIME=1` 的真实模型路径上增加 Planner / Builder one-shot repair、provider 临时错误 bounded retry 和 fallback route 安全 metadata。
 - repair 由 API 拥有，因为 `LPBriefSchema` 和 `StaticArtifactsSchema` 是业务边界；`model-gateway` 只负责一次模型请求和 provider 错误表达。
 - repair prompt 不包含首次 raw model output；它只包含原始业务输入、schema guide 和 parse / policy failure 的安全摘要。
