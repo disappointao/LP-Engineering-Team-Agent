@@ -117,6 +117,19 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
           omitted: []
         }
       });
+      await repositories.runs.save({
+        id: "run_contract_builder_distractor_task",
+        projectId: "project_contract_1",
+        taskId: "task_contract_distractor",
+        role: "builder",
+        state: "completed",
+        startedAt: "2026-05-14T00:00:30.000Z",
+        completedAt: "2026-05-14T00:03:30.000Z",
+        contextSummary: {
+          injected: ["brief"],
+          omitted: []
+        }
+      });
       await repositories.runEvents.save({
         id: "run_event_contract_2",
         runId: "run_contract_builder_1",
@@ -158,6 +171,21 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
         createdAt: "2026-05-14T00:02:30.000Z",
         completedAt: "2026-05-14T00:02:31.000Z"
       });
+      await repositories.toolObservations.save({
+        id: "tool_observation_contract_distractor_task",
+        runId: "run_contract_builder_distractor_task",
+        projectId: "project_contract_1",
+        taskId: "task_contract_distractor",
+        toolName: "writeFile",
+        input: {
+          path: "distractor.html"
+        },
+        outputSummary: "Wrote distractor.html.",
+        state: "completed",
+        exitCode: 0,
+        createdAt: "2026-05-14T00:02:45.000Z",
+        completedAt: "2026-05-14T00:02:46.000Z"
+      });
       await repositories.agentHandoffs.save({
         id: "handoff_contract_1",
         projectId: "project_contract_1",
@@ -173,10 +201,42 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
         createdAt: "2026-05-14T00:04:00.000Z",
         updatedAt: "2026-05-14T00:04:00.000Z"
       });
+      await repositories.agentHandoffs.save({
+        id: "handoff_contract_distractor_role",
+        projectId: "project_contract_1",
+        taskId: "task_contract_1",
+        fromRunId: "run_contract_reviewer_2",
+        fromRole: "reviewer",
+        toRole: "planner",
+        state: "ready",
+        summary: "Planner should not appear in builder inbox.",
+        artifactRefs: {
+          pageVersionId: "version_contract_1"
+        },
+        createdAt: "2026-05-14T00:04:30.000Z",
+        updatedAt: "2026-05-14T00:04:30.000Z"
+      });
+      await repositories.agentHandoffs.save({
+        id: "handoff_contract_distractor_scope",
+        projectId: "project_contract_distractor",
+        taskId: "task_contract_distractor",
+        fromRunId: "run_contract_reviewer_3",
+        fromRole: "reviewer",
+        toRole: "builder",
+        state: "ready",
+        summary: "Builder handoff for a different project and task.",
+        artifactRefs: {
+          pageVersionId: "version_contract_distractor"
+        },
+        createdAt: "2026-05-14T00:04:45.000Z",
+        updatedAt: "2026-05-14T00:04:45.000Z"
+      });
 
       await expect(repositories.runs.listForTask("task_contract_1")).resolves.toEqual([
         expect.objectContaining({
           id: "run_contract_builder_1",
+          projectId: "project_contract_1",
+          taskId: "task_contract_1",
           role: "builder",
           state: "completed"
         })
@@ -196,6 +256,8 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
       await expect(repositories.toolObservations.listForTask("task_contract_1")).resolves.toEqual([
         expect.objectContaining({
           id: "tool_observation_contract_1",
+          projectId: "project_contract_1",
+          taskId: "task_contract_1",
           toolName: "writeFile",
           state: "completed"
         })
@@ -209,6 +271,8 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
       ).resolves.toEqual([
         expect.objectContaining({
           id: "handoff_contract_1",
+          projectId: "project_contract_1",
+          taskId: "task_contract_1",
           fromRole: "reviewer",
           toRole: "builder",
           state: "ready"
