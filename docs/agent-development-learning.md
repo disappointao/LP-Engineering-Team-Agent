@@ -230,7 +230,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 ### 还没做
 
-- 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
+- 真实模型结构化输出的 repair loop、重试和自我修正还没实现；Stage 21 design 已确认 one-shot repair、bounded provider retry 和 fallback metadata 范围，Planner `LPBriefSchema` parse 与 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
@@ -362,6 +362,15 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - API 已在 `REAL_MODEL_RUNTIME=1` 下把 Builder `modelOutputText` 解析为 canonical `StaticArtifacts`，成功时记录脱敏的 `model.output.parsed` 事件，失败时记录脱敏的 `model.output.parse_failed` 和 `run.failed` 事件。
 - 失败路径不会静默回退到 deterministic artifacts，也不会保存 page version；默认未开启真实 runtime 时仍保留 deterministic Builder，保证本地开发和测试稳定。
 - 学习重点：模型生成代码后不能直接落库或展示，必须先经过结构、资源策略、安全和框架无关校验。
+
+已确认的 Stage 21 Model Repair、Retry 和 Fallback v0 设计：
+
+- [2026-05-19-model-repair-retry-fallback-design.md](./superpowers/specs/2026-05-19-model-repair-retry-fallback-design.md)
+- 这一阶段只在 `REAL_MODEL_RUNTIME=1` 的真实模型路径上增加 Planner / Builder one-shot repair、provider 临时错误 bounded retry 和 fallback route 安全 metadata。
+- repair 由 API 拥有，因为 `LPBriefSchema` 和 `StaticArtifactsSchema` 是业务边界；`model-gateway` 只负责一次模型请求和 provider 错误表达。
+- repair prompt 不包含首次 raw model output；它只包含原始业务输入、schema guide 和 parse / policy failure 的安全摘要。
+- fallback v0 只暴露 metadata 和事件，不自动调用 fallback provider，也不静默回退到 deterministic `sampleBrief` 或 deterministic artifacts。
+- 学习重点：模型可靠性增强不能削弱 fail-closed 和可审计性。parse failure、repair attempt、retry attempt 和 fallback availability 都应该作为 timeline 事实出现，而不是藏在 adapter 内部。
 
 已实现的 Stage 4 Skill Command MVP：
 
