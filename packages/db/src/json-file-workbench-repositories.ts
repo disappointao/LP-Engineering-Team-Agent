@@ -873,7 +873,10 @@ class JsonFileWorkbenchMessageRepository implements WorkbenchMessageRepository {
 
   async listForTask(taskId: string): Promise<WorkbenchMessageRecord[]> {
     const state = await readState(this.filePath);
-    return state.messages.filter((message) => message.taskId === taskId).map(copy);
+    return state.messages
+      .filter((message) => message.taskId === taskId)
+      .sort(compareWorkbenchMessagesByTimeline)
+      .map(copy);
   }
 
   async listAll(): Promise<WorkbenchMessageRecord[]> {
@@ -1146,6 +1149,13 @@ function compareArtifactWorkspaceFiles(
 
 function getArtifactWorkspaceFilePathOrder(path: ArtifactWorkspaceFilePath): number {
   return artifactWorkspaceFilePathOrder.get(path) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function compareWorkbenchMessagesByTimeline(
+  a: WorkbenchMessageRecord,
+  b: WorkbenchMessageRecord
+): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 
 function getArtifactWorkspaceFileSpec(path: unknown):

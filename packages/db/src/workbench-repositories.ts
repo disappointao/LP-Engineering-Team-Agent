@@ -1076,6 +1076,7 @@ class InMemoryWorkbenchMessageRepository implements WorkbenchMessageRepository {
   async listForTask(taskId: string): Promise<WorkbenchMessageRecord[]> {
     return [...this.messages.values()]
       .filter((message) => message.taskId === taskId)
+      .sort(compareWorkbenchMessagesByTimeline)
       .map(copyWorkbenchMessage);
   }
 
@@ -1205,6 +1206,13 @@ function compareArtifactWorkspaceFiles(
 
 function getArtifactWorkspaceFilePathOrder(path: ArtifactWorkspaceFilePath): number {
   return artifactWorkspaceFilePathOrder.get(path) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function compareWorkbenchMessagesByTimeline(
+  a: WorkbenchMessageRecord,
+  b: WorkbenchMessageRecord
+): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 
 function compareRunEventsBySequence(a: RunEventRecord, b: RunEventRecord): number {

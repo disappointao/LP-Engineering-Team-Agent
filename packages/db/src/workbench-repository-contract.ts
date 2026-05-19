@@ -39,14 +39,14 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
         taskId: "task_contract_1",
         role: "assistant",
         content: "LP artifacts are ready for review.",
-        createdAt: "2026-05-14T00:01:00.000Z"
+        createdAt: "2026-05-14T00:02:00.000Z"
       });
       await repositories.messages.save({
         id: "message_contract_1",
         taskId: "task_contract_1",
         role: "user",
         content: "Create a landing page",
-        createdAt: "2026-05-14T00:02:00.000Z"
+        createdAt: "2026-05-14T00:01:00.000Z"
       });
       await repositories.taskSnapshots.save({
         taskId: "task_contract_1",
@@ -78,17 +78,17 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
       });
       await expect(repositories.messages.listForTask("task_contract_1")).resolves.toEqual([
         {
-          id: "message_contract_2",
-          taskId: "task_contract_1",
-          role: "assistant",
-          content: "LP artifacts are ready for review.",
-          createdAt: "2026-05-14T00:01:00.000Z"
-        },
-        {
           id: "message_contract_1",
           taskId: "task_contract_1",
           role: "user",
           content: "Create a landing page",
+          createdAt: "2026-05-14T00:01:00.000Z"
+        },
+        {
+          id: "message_contract_2",
+          taskId: "task_contract_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
           createdAt: "2026-05-14T00:02:00.000Z"
         }
       ]);
