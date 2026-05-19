@@ -830,6 +830,7 @@ pnpm --filter @lp-agent/model-gateway test
 当前设计：
 
 - [2026-05-19-mcp-execution-v0-design.md](./superpowers/specs/2026-05-19-mcp-execution-v0-design.md)
+- 实现计划：[2026-05-19-mcp-execution-v0.md](./superpowers/plans/2026-05-19-mcp-execution-v0.md)
 - 这一阶段先做 read-only MCP tool execution，不接真实 MCP SDK、不做 write tools、不开放 filesystem / shell / Git / deployment side effects。
 - API 应拥有执行用例：校验 project、connector、tool、role、permission、approval 和 read-only 边界，然后写入 run events 与 `ToolObservationRecord`。
 - 默认 executor 必须是 deterministic local executor。真实 MCP server adapter、worker-backed MCP client 和 write-tool approval 留到后续阶段。

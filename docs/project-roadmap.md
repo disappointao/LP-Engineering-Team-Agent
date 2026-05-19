@@ -59,11 +59,13 @@ daemon 配置 workbench repository 时会复用 Stage 18 的幂等 finalizer，�
 
 ### Stage 20：MCP Execution v0
 
-**状态：** design 已确认，待 implementation plan。
+**状态：** design 和 implementation plan 已确认，待实现。
 
 **为什么在 Stage 19 之后：** MCP execution 应复用 worker job、approval、observation、artifact reader、cancellation 和 finalizer 边界，不应该在 API 进程里直接调用工具。
 
 **当前设计：** `docs/superpowers/specs/2026-05-19-mcp-execution-v0-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-19-mcp-execution-v0.md`。
 
 **建议范围：**
 
