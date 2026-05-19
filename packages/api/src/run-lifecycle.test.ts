@@ -615,6 +615,7 @@ describe("deriveRunLifecycleView recovery safety", () => {
       ok: true,
       view: {
         state: "failed",
+        terminalEventType: "run.failed",
         diagnosticSummary: {
           code: "inconsistent_terminal_events",
           source: "lifecycle"
@@ -697,5 +698,45 @@ describe("deriveRunLifecycleView recovery safety", () => {
       "run_builder_1"
     ]);
     expect(views.map((view) => view.state)).toEqual(["completed", "completed"]);
+  });
+
+  it("uses run id as a deterministic tiebreaker when task runs have the same start time", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.runs.save(runRecord({
+      id: "run_builder_2",
+      role: "builder",
+      startedAt: "2026-05-19T00:00:01.000Z",
+      state: "completed",
+      completedAt: "2026-05-19T00:00:03.000Z"
+    }));
+    await repositories.runs.save(runRecord({
+      id: "run_builder_1",
+      role: "builder",
+      startedAt: "2026-05-19T00:00:01.000Z",
+      state: "completed",
+      completedAt: "2026-05-19T00:00:02.000Z"
+    }));
+    await saveEvent(repositories, {
+      runId: "run_builder_2",
+      sequence: 1,
+      type: "run.completed",
+      payload: { state: "completed" }
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_1",
+      sequence: 1,
+      type: "run.completed",
+      payload: { state: "completed" }
+    });
+
+    const views = await listRunLifecycleViewsForTask({
+      repositories,
+      taskId: "task_1"
+    });
+
+    expect(views.map((view) => view.runId)).toEqual([
+      "run_builder_1",
+      "run_builder_2"
+    ]);
   });
 });

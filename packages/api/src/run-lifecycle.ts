@@ -132,7 +132,10 @@ export async function listRunLifecycleViewsForTask(
     })
   );
 
-  return views.sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  return views.sort((left, right) => {
+    const startedAtOrder = left.startedAt.localeCompare(right.startedAt);
+    return startedAtOrder || left.runId.localeCompare(right.runId);
+  });
 }
 
 async function buildRunLifecycleView(input: {
