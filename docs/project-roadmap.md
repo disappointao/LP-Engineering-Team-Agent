@@ -59,19 +59,24 @@ daemon 配置 workbench repository 时会复用 Stage 18 的幂等 finalizer，�
 
 ### Stage 20：MCP Execution v0
 
-**状态：** 推荐下一阶段。
+**状态：** design 已确认，待 implementation plan。
 
 **为什么在 Stage 19 之后：** MCP execution 应复用 worker job、approval、observation、artifact reader、cancellation 和 finalizer 边界，不应该在 API 进程里直接调用工具。
 
+**当前设计：** `docs/superpowers/specs/2026-05-19-mcp-execution-v0-design.md`。
+
 **建议范围：**
 
-- 通过 worker/tool observation 边界执行 allowlisted MCP tools。
-- 要求 project-scoped connector、tool approval、role/permission visibility，并对写工具要求显式用户 approval。
+- 先实现 read-only MCP tool execution v0。
+- 通过 API-owned executor seam、run events 和 tool observation 边界执行 allowlisted MCP tools。
+- 要求 project-scoped connector、tool approval、role/permission visibility。
 - 保存 bounded/redacted metadata 形式的 tool observations。
 - raw MCP output 不直接进入 chat messages 或 model context，除非经过显式 summarization。
 
 **非目标：**
 
+- 不做 write tools。
+- 不接真实 MCP SDK 或远端 MCP server。
 - 不允许浏览器任意安装 MCP server。
 - 不开放不安全的 filesystem access。
 - 不把 raw output 注入 model context。

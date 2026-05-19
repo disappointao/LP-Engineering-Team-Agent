@@ -274,6 +274,10 @@
    - Stage 19 Worker Daemon、Heartbeat 和 Streaming Logs v0 implementation plan。
    - 在 Stage 19 design 后阅读，用于按 TDD 实现 worker heartbeat/stale recovery 状态机、bounded worker log repository、`apps/agent-worker` daemon loop、API worker queue snapshot、Web Skills 只读 worker visibility 和文档收尾。
 
+68. `specs/2026-05-19-mcp-execution-v0-design.md`
+   - Stage 20 MCP Execution v0 design。
+   - 在 Stage 19 plan 后阅读，用于添加 read-only MCP tool execution contract、deterministic local executor、API run/tool observation 闭环和最小 Web/API 执行入口，同时不引入真实 MCP SDK、write tools、filesystem/shell access、raw output 注入或 streaming MCP output。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

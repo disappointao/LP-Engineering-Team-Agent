@@ -231,7 +231,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
-- MCP execution。
+- MCP execution 尚未实现；Stage 20 已确认 read-only MCP execution v0 design，优先打通 executor seam、run events 和 safe `ToolObservationRecord`，不接真实 MCP SDK 或 write tools。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
@@ -824,6 +824,22 @@ pnpm --filter @lp-agent/model-gateway test
 - stale recovery 要依赖 claim token 和条件更新，避免过期 worker 覆盖新结果。
 - worker logs 必须默认 summary-only、bounded、allowlisted；不能为了可观察性把 secret、raw args、raw stdout/stderr、artifact content 或本机路径扩散到 UI、context 或模型请求。
 - Web 的 worker visibility 应先做只读健康状态，让用户理解 queue/daemon 状态；长期 daemon process management 应留给专门阶段。
+
+### 阶段 20：MCP Execution v0
+
+当前设计：
+
+- [2026-05-19-mcp-execution-v0-design.md](./superpowers/specs/2026-05-19-mcp-execution-v0-design.md)
+- 这一阶段先做 read-only MCP tool execution，不接真实 MCP SDK、不做 write tools、不开放 filesystem / shell / Git / deployment side effects。
+- API 应拥有执行用例：校验 project、connector、tool、role、permission、approval 和 read-only 边界，然后写入 run events 与 `ToolObservationRecord`。
+- 默认 executor 必须是 deterministic local executor。真实 MCP server adapter、worker-backed MCP client 和 write-tool approval 留到后续阶段。
+- MCP execution 结果必须是 bounded / redacted summary；raw output、raw arguments、secret、完整 artifact 内容和本机绝对路径不能进入 chat messages、model context 或 Web UI。
+
+学习重点：
+
+- MCP registry 只回答“哪些工具可见”，MCP execution 还必须回答“这次调用是否被授权、是否只读、如何审计、失败如何表达”。
+- read-only 是第一版 MCP execution 的安全阀；写工具需要更强 approval、side-effect audit、rollback/retry 语义，不能和第一版混做。
+- `ToolObservationRecord` 是工具执行事实边界，不是 raw output 仓库。保存摘要而不是原文，后续模型上下文再通过显式 summarization 读取。
 
 ## 5. 写代码时的维护原则
 
