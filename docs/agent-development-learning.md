@@ -769,6 +769,25 @@ pnpm --filter @lp-agent/model-gateway test
 - 通过 URL query 触发 snippet preview 时，project/workspace/pageVersion 仍应由服务端会话和 repository 状态决定，不能信任浏览器传入这些归属字段。
 - 初始版本没有 previous workspace 时，不应该伪造 diff；可以显示 `initial` 文件摘要，让用户知道当前产物状态。
 
+### 阶段 18：Agent Run Lifecycle and Recovery v0
+
+当前设计：
+
+- [2026-05-19-agent-run-lifecycle-recovery-design.md](./superpowers/specs/2026-05-19-agent-run-lifecycle-recovery-design.md)
+- 这一阶段给已有 run records、run events、worker jobs、tool observations 和 handoff records 补一个统一 lifecycle / recovery 派生层。
+- 核心产物是 API 侧 `RunLifecycleView`：从 repository state 派生 `queued`、`running`、`waiting_for_approval`、`blocked`、`cancelling`、`cancelled`、`failed` 和 `completed`。
+- 第一版不新增数据库表，不迁移 JSON-file state，也不把所有派生状态写回 `RunRecord`；它先让状态推断和失败诊断有一个单一、可测试的边界。
+- recovery 只做 contract：`retry_run`、`resume_worker_finalization`、`request_approval`、`resolve_blocker`、`inspect_manually`。本阶段不做 Web retry 按钮、不自动重跑 agent chain，也不实现通用 scheduler。
+- worker-backed skill command finalizer 要补幂等语义，让 local worker run-once、未来 daemon 和人工 resume finalization 可以安全重复调用。
+
+学习重点：
+
+- Agent run 状态不是单个字段能表达完整事实；它通常由 run record、event timeline、tool observation、worker job 和 handoff 一起决定。
+- 派生 view 和持久化事实要分开。`RunRecord` 保存当前事实，`RunLifecycleView` 负责为 UI、context、daemon 和 future retry 提供一致解释。
+- recovery action contract 先表达“可以做什么”，不要急着自动执行。失败原因、approval、blocked handoff、missing worker 和 terminal event 冲突需要不同恢复路径。
+- 失败诊断必须是安全摘要，不能为了方便排查把 raw stdout/stderr、raw model text、secret、完整 artifact 或本机路径注入 UI、context memory 或模型请求。
+- finalizer 幂等性是 worker daemon、MCP execution 和真实工具执行的前置条件；否则重复 claim、重启恢复或人工 resume 都可能制造重复 terminal events。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。

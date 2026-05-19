@@ -258,6 +258,10 @@
    - Stage 17 Web V1 smoke and acceptance implementation plan。
    - 在 Stage 17 design 后阅读，用于实现或审计 deterministic smoke command、startup README 和 manual Web V1 acceptance checklist。
 
+64. `specs/2026-05-19-agent-run-lifecycle-recovery-design.md`
+   - Stage 18 Agent Run Lifecycle and Recovery v0 design。
+   - 在 Stage 17 plan 后阅读，用于添加 run lifecycle 派生、失败诊断、最小 recovery action contract 和 worker finalization 幂等语义，同时不引入 Web UI overhaul、worker daemon、MCP execution、真实 shell execution 或通用 DAG scheduler。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

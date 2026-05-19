@@ -38,7 +38,7 @@
 
 ### Stage 18：Agent Run Lifecycle & Recovery v0
 
-**状态：** 推荐下一阶段。
+**状态：** 设计已确认，等待 implementation plan。
 
 **为什么现在做：** run records、run events、handoffs、worker jobs、tool observations 都已有 v0，但缺一个更正式的 lifecycle/recovery 层。这个阶段会把真正 Agent 系统需要的失败诊断、恢复、retry/resume、blocked state 和幂等 finalizer 打牢。
 
@@ -63,13 +63,15 @@
 **可能涉及文件：**
 
 - `packages/api/src/run-orchestrator.ts`
+- `packages/api/src/run-lifecycle.ts`
 - `packages/api/src/task-interrupts.ts`
 - `packages/api/src/skill-command-worker-queue.ts`
 - `packages/db/src/workbench-repositories.ts`
 - `packages/db/src/json-file-workbench-repositories.ts`
 - `packages/runtime-adapters/src/index.ts`
 - `docs/agent-development-learning.md`
-- `docs/superpowers/` 下新增 spec/plan
+- `docs/superpowers/specs/2026-05-19-agent-run-lifecycle-recovery-design.md`
+- `docs/superpowers/` 下新增 plan
 
 ### Stage 19：Worker Daemon、Heartbeat 和 Streaming Logs v0
 
