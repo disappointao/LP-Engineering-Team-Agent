@@ -4790,7 +4790,7 @@ describe("demo workbench service", () => {
         role: "builder",
         permission: "assets:read",
         requiresApproval: false,
-        argumentKeys: ["limit", "query"],
+        argumentKeys: ["argument_1", "argument_2"],
         argumentCount: 2
       },
       outputSummary:
@@ -4806,6 +4806,61 @@ describe("demo workbench service", () => {
     ]);
     expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
     expect(JSON.stringify(events)).not.toContain("SECRET_PRODUCT");
+  });
+
+  it("does not persist raw MCP argument keys", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    });
+    const unsafeKey = "SECRET_KEY_/Users/ao/site/.env";
+
+    const result = await service.executeProjectMCPTool({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "searchAssets",
+      role: "builder",
+      arguments: {
+        [unsafeKey]: "safe",
+        alpha: 1,
+        beta: 2,
+        gamma: 3,
+        delta: 4,
+        epsilon: 5,
+        zeta: 6,
+        eta: 7,
+        theta: 8,
+        iota: 9
+      }
+    });
+
+    expect(result.observation.input).toMatchObject({
+      argumentKeys: [
+        "argument_1",
+        "argument_2",
+        "argument_3",
+        "argument_4",
+        "argument_5",
+        "argument_6",
+        "argument_7",
+        "argument_8"
+      ],
+      argumentCount: 10
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    const serializedRecords = JSON.stringify({ result, events });
+    expect(serializedRecords).not.toContain(unsafeKey);
+    expect(serializedRecords).not.toContain("/Users/ao/site/.env");
+    expect(serializedRecords).not.toContain("SECRET_KEY");
   });
 
   it("rejects disabled, unauthorized, and unapproved MCP tool execution", async () => {

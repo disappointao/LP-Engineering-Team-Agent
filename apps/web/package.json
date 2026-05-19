@@ -14,6 +14,7 @@
     "@lp-agent/db": "workspace:*",
     "@lp-agent/git-deployment": "workspace:*",
     "@lp-agent/lp-schema": "workspace:*",
+    "@lp-agent/mcp-gateway": "workspace:*",
     "@lp-agent/model-gateway": "workspace:*",
     "@lp-agent/worker-runtime": "workspace:*",
     "next": "^15.0.0",

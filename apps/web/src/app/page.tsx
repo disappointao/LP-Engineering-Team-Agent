@@ -1,5 +1,6 @@
 import React from "react";
 import { headers } from "next/headers";
+import { isReadOnlyMCPTool } from "@lp-agent/mcp-gateway";
 import {
   bindSkillVersionAction,
   createMCPConnectorAction,
@@ -1318,26 +1319,20 @@ function toMCPRoleLabels(roles: unknown, roleLabels: Record<string, string>): st
 }
 
 function isReadOnlyVisibleMCPTool(tool: {
+  name: string;
   permission: string;
+  requiresApproval: boolean;
   readOnly?: boolean;
   sideEffect?: "read" | "write";
 }): boolean {
-  const permission = tool.permission.trim().toLowerCase();
-  if (
-    permission.endsWith(":write") ||
-    permission.endsWith(":deploy") ||
-    permission.endsWith(":delete") ||
-    permission.endsWith(":admin")
-  ) {
-    return false;
-  }
-  if (tool.readOnly === false || tool.sideEffect === "write") {
-    return false;
-  }
-  if (tool.readOnly === true || tool.sideEffect === "read") {
-    return true;
-  }
-  return permission.endsWith(":read");
+  return isReadOnlyMCPTool({
+    name: tool.name,
+    permission: tool.permission,
+    roles: [],
+    requiresApproval: tool.requiresApproval,
+    readOnly: tool.readOnly,
+    sideEffect: tool.sideEffect
+  });
 }
 
 function normalizeDisplayString(value: unknown): string {

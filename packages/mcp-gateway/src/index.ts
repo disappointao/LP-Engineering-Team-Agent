@@ -58,6 +58,8 @@ export interface MCPToolArgumentSummary {
   argumentCount: number;
 }
 
+const maxMCPArgumentKeyLabels = 8;
+
 export interface MCPToolExecutionInput {
   projectId: string;
   connectorId: string;
@@ -121,10 +123,14 @@ export const computeVisibleTools = (
 export function summarizeMCPToolArguments(
   value: Record<string, unknown>
 ): MCPToolArgumentSummary {
-  const argumentKeys = Object.keys(value).sort();
+  const argumentCount = Object.keys(value).length;
+  const argumentKeys = Array.from(
+    { length: Math.min(argumentCount, maxMCPArgumentKeyLabels) },
+    (_, index) => `argument_${index + 1}`
+  );
   return {
     argumentKeys,
-    argumentCount: argumentKeys.length
+    argumentCount
   };
 }
 

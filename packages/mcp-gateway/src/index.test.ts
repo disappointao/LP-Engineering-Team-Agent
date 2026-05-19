@@ -209,7 +209,7 @@ describe("MCP gateway policy", () => {
     ).toBe(false);
   });
 
-  it("summarizes MCP tool arguments without values", () => {
+  it("summarizes MCP tool arguments with safe labels instead of raw keys", () => {
     const summary = summarizeMCPToolArguments({
       query: "SECRET_PRODUCT",
       limit: 3,
@@ -217,11 +217,45 @@ describe("MCP gateway policy", () => {
     });
 
     expect(summary).toEqual({
-      argumentKeys: ["filters", "limit", "query"],
+      argumentKeys: ["argument_1", "argument_2", "argument_3"],
       argumentCount: 3
     });
+    expect(JSON.stringify(summary)).not.toContain("query");
+    expect(JSON.stringify(summary)).not.toContain("filters");
     expect(JSON.stringify(summary)).not.toContain("SECRET_PRODUCT");
     expect(JSON.stringify(summary)).not.toContain("private");
+  });
+
+  it("bounds MCP argument key summaries without leaking unsafe key text", () => {
+    const unsafeKey = "SECRET_KEY_/Users/ao/site/.env";
+    const summary = summarizeMCPToolArguments({
+      [unsafeKey]: "value",
+      alpha: 1,
+      beta: 2,
+      gamma: 3,
+      delta: 4,
+      epsilon: 5,
+      zeta: 6,
+      eta: 7,
+      theta: 8,
+      iota: 9
+    });
+
+    expect(summary).toEqual({
+      argumentKeys: [
+        "argument_1",
+        "argument_2",
+        "argument_3",
+        "argument_4",
+        "argument_5",
+        "argument_6",
+        "argument_7",
+        "argument_8"
+      ],
+      argumentCount: 10
+    });
+    expect(JSON.stringify(summary)).not.toContain(unsafeKey);
+    expect(JSON.stringify(summary)).not.toContain("/Users/ao/site/.env");
   });
 
   it("returns safe deterministic MCP execution output", async () => {
@@ -244,7 +278,7 @@ describe("MCP gateway policy", () => {
       outputSummary:
         "Read-only MCP tool connector_assets.searchAssets completed with 1 argument key.",
       metadata: {
-        argumentKeys: ["query"],
+        argumentKeys: ["argument_1"],
         argumentCount: 1
       },
       durationMs: 0
