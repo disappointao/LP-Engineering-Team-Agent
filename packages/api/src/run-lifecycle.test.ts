@@ -587,3 +587,115 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
     });
   });
 });
+
+describe("deriveRunLifecycleView recovery safety", () => {
+  it("marks conflicting terminal run events for manual inspection", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      sequence: 1,
+      type: "run.completed",
+      payload: { state: "completed" }
+    });
+    await saveEvent(repositories, {
+      sequence: 2,
+      type: "run.failed",
+      payload: { state: "failed", errorName: "PlannerError" }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "inconsistent_terminal_events",
+          source: "lifecycle"
+        },
+        recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
+  it("keeps run failed diagnostics short and generic when event messages contain sensitive data", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      type: "run.failed",
+      message: "Planner failed with SECRET_TOKEN=secret-token and raw stack",
+      payload: {
+        state: "failed",
+        errorName: "PlannerError"
+      }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        diagnosticSummary: {
+          code: "run_failed",
+          message: "Run failed.",
+          errorName: "PlannerError"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-token");
+    expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN");
+  });
+
+  it("lists lifecycle views for a task in started order", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.runs.save(runRecord({
+      id: "run_builder_1",
+      role: "builder",
+      startedAt: "2026-05-19T00:00:02.000Z",
+      state: "completed",
+      completedAt: "2026-05-19T00:00:03.000Z"
+    }));
+    await repositories.runs.save(runRecord({
+      id: "run_planner_1",
+      role: "planner",
+      startedAt: "2026-05-19T00:00:01.000Z",
+      state: "completed",
+      completedAt: "2026-05-19T00:00:02.000Z"
+    }));
+    await saveEvent(repositories, {
+      runId: "run_builder_1",
+      sequence: 1,
+      type: "run.completed",
+      payload: { state: "completed" }
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_1",
+      sequence: 1,
+      type: "run.completed",
+      payload: { state: "completed" }
+    });
+
+    const views = await listRunLifecycleViewsForTask({
+      repositories,
+      taskId: "task_1"
+    });
+
+    expect(views.map((view) => view.runId)).toEqual([
+      "run_planner_1",
+      "run_builder_1"
+    ]);
+    expect(views.map((view) => view.state)).toEqual(["completed", "completed"]);
+  });
+});

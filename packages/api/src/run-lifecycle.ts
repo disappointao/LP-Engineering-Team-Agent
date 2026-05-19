@@ -132,7 +132,7 @@ export async function listRunLifecycleViewsForTask(
     })
   );
 
-  return views;
+  return views.sort((left, right) => left.startedAt.localeCompare(right.startedAt));
 }
 
 async function buildRunLifecycleView(input: {
@@ -142,8 +142,24 @@ async function buildRunLifecycleView(input: {
   events: RunEventRecord[];
 }): Promise<RunLifecycleView> {
   const { events, run } = input;
+  const terminalConflict = findTerminalRunEventConflict(events);
   const terminalEvent = findLatestTerminalRunEvent(events);
   const modelParseDiagnostic = deriveModelParseDiagnostic(events);
+
+  if (terminalConflict) {
+    return {
+      ...baseRunLifecycleView(run),
+      state: "failed",
+      terminalEventType: terminalConflict.latestTerminal.type,
+      diagnosticSummary: {
+        code: "inconsistent_terminal_events",
+        message: "Run has conflicting terminal events.",
+        source: "lifecycle",
+        eventType: terminalConflict.latestTerminal.type
+      },
+      recoveryActions: ["inspect_manually"]
+    };
+  }
 
   if (terminalEvent) {
     const state = terminalEventStateByType[terminalEvent.type as TerminalRunEventType];
@@ -152,7 +168,9 @@ async function buildRunLifecycleView(input: {
       ...baseRunLifecycleView(run),
       state,
       terminalEventType: terminalEvent.type,
-      diagnosticSummary: modelParseDiagnostic,
+      diagnosticSummary:
+        modelParseDiagnostic ??
+        (state === "failed" ? deriveRunFailedDiagnostic(terminalEvent) : undefined),
       recoveryActions: state === "failed" ? ["retry_run"] : []
     };
   }
@@ -438,8 +456,34 @@ function findLatestTerminalRunEvent(
     .at(-1);
 }
 
+function findTerminalRunEventConflict(
+  events: RunEventRecord[]
+): { latestTerminal: RunEventRecord } | undefined {
+  const terminalEvents = events.filter((event) => isTerminalRunEventType(event.type));
+  const terminalEventTypes = new Set(terminalEvents.map((event) => event.type));
+  const latestTerminal = terminalEvents.at(-1);
+
+  if (!latestTerminal || terminalEventTypes.size <= 1) {
+    return undefined;
+  }
+
+  return { latestTerminal };
+}
+
 function isTerminalRunEventType(type: string): type is TerminalRunEventType {
   return type in terminalEventStateByType;
+}
+
+function deriveRunFailedDiagnostic(event: RunEventRecord): RunDiagnosticSummary {
+  const errorName = sanitizeOptionalDiagnosticCode(event.payload.errorName);
+
+  return {
+    code: "run_failed",
+    message: "Run failed.",
+    source: "run_event",
+    eventType: event.type,
+    ...(errorName ? { errorName } : {})
+  };
 }
 
 function mapRunRecordState(state: RunRecordState): {
