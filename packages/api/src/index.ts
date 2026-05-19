@@ -1934,8 +1934,9 @@ export class DemoWorkbenchService {
 
     const normalizedArguments = normalizeMCPToolExecutionArguments(input.arguments);
     const argumentSummary = summarizeMCPToolArguments(normalizedArguments);
+    const argumentStrings = collectMCPArgumentStringValues(normalizedArguments);
     const sensitiveValues = [
-      ...collectMCPArgumentStringValues(normalizedArguments),
+      ...argumentStrings.values,
       ...collectMCPSecretEnvValues(this.env)
     ].filter((value): value is string => typeof value === "string" && value.length > 0);
     const runId = await reserveRepositoryId(this.repositories, "run_mcp_tool", async () => {
@@ -2018,11 +2019,13 @@ export class DemoWorkbenchService {
       const outputSummary = sanitizeMCPOutputSummary(
         executorResult.outputSummary,
         sensitiveValues,
+        argumentStrings.complete,
         observationState
       );
       const errorName = sanitizeMCPExecutorErrorName(
         executorResult.errorName,
         sensitiveValues,
+        argumentStrings.complete,
         observationState
       );
       const durationMs = normalizeMCPDurationMs(executorResult.durationMs);
@@ -3176,6 +3179,7 @@ function toMCPRunState(state: MCPToolExecutionResult["state"]): RunRecord["state
 function sanitizeMCPOutputSummary(
   value: string,
   sensitiveValues: string[],
+  redactionComplete: boolean,
   state: ToolObservationRecord["state"]
 ): string {
   const fallback =
@@ -3184,6 +3188,9 @@ function sanitizeMCPOutputSummary(
       : state === "cancelled"
         ? "MCP tool cancelled."
         : "Read-only MCP tool failed.";
+  if (!redactionComplete) {
+    return fallback;
+  }
   const normalized =
     typeof value === "string" && value.trim().length > 0
       ? value.trim()
@@ -3203,9 +3210,11 @@ function sanitizeMCPOutputSummary(
 function containsUnsafeMCPOutputSummary(value: string): boolean {
   const normalized = value.toLowerCase();
   return (
-    /(^|[\s"'(])(?:\/Users\/|\/private\/|\/tmp\/|\/var\/folders\/)/.test(value) ||
+    /(^|[\s"'(])\/(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+/.test(value) ||
+    /(^|[\s"'(])(?:\.{1,2}\/)(?:[^\s/]+\/)*[^\s/]+/.test(value) ||
     /[A-Za-z]:\\/.test(value) ||
     /<!doctype\s+html/i.test(value) ||
+    /<\s*\/?\s*[a-zA-Z][^>]*>/.test(value) ||
     /<\/?(?:html|head|body|script|style|main|section|article|div|span|p|a|img|link|meta|h[1-6]|ul|ol|li|button|form|input|label|header|footer|nav)\b/i.test(
       value
     ) ||
@@ -3221,38 +3230,48 @@ function containsUnsafeMCPOutputSummary(value: string): boolean {
   );
 }
 
-function collectMCPArgumentStringValues(value: unknown): string[] {
+function collectMCPArgumentStringValues(value: unknown): {
+  values: string[];
+  complete: boolean;
+} {
+  const maxDepth = 5;
+  const maxValues = 100;
   const strings: string[] = [];
   const seen = new Set<object>();
-  const visit = (candidate: unknown, depth: number): void => {
-    if (strings.length >= 100 || depth > 5) {
-      return;
+  const visit = (candidate: unknown, depth: number): boolean => {
+    if (depth > maxDepth || strings.length >= maxValues) {
+      return false;
     }
     if (typeof candidate === "string") {
       if (candidate.length > 0) {
         strings.push(candidate);
       }
-      return;
+      return true;
     }
     if (typeof candidate !== "object" || candidate === null) {
-      return;
+      return true;
     }
     if (seen.has(candidate)) {
-      return;
+      return false;
     }
     seen.add(candidate);
     const values = Array.isArray(candidate)
       ? candidate
       : Object.values(candidate as Record<string, unknown>);
-    for (const nested of values) {
-      visit(nested, depth + 1);
-      if (strings.length >= 100) {
-        return;
+    for (let index = 0; index < values.length; index += 1) {
+      if (!visit(values[index], depth + 1)) {
+        return false;
+      }
+      if (strings.length >= maxValues && index < values.length - 1) {
+        return false;
       }
     }
+    return true;
   };
-  visit(value, 0);
-  return strings;
+  return {
+    values: strings,
+    complete: visit(value, 0)
+  };
 }
 
 function collectMCPSecretEnvValues(env: RuntimeEnvironment): string[] {
@@ -3265,12 +3284,13 @@ function collectMCPSecretEnvValues(env: RuntimeEnvironment): string[] {
 function sanitizeMCPExecutorErrorName(
   errorName: string | undefined,
   sensitiveValues: string[],
+  redactionComplete: boolean,
   state: ToolObservationRecord["state"]
 ): string | undefined {
   if (state !== "failed") {
     return undefined;
   }
-  if (errorName === undefined) {
+  if (errorName === undefined || !redactionComplete) {
     return "mcp_executor_error";
   }
   const trimmed = errorName.trim();

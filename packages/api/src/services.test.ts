@@ -5083,6 +5083,54 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("NESTED_ARGUMENT_SECRET");
   });
 
+  it("falls back when MCP argument traversal exceeds depth limits", async () => {
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: "Failed while reading DEEP_ARGUMENT_SECRET",
+      arguments: {
+        level1: {
+          level2: {
+            level3: {
+              level4: {
+                level5: {
+                  level6: {
+                    secret: "DEEP_ARGUMENT_SECRET"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain("DEEP_ARGUMENT_SECRET");
+    expect(JSON.stringify(events)).not.toContain("DEEP_ARGUMENT_SECRET");
+  });
+
+  it("falls back when MCP argument traversal exceeds collection limits", async () => {
+    const manyArguments = Object.fromEntries(
+      Array.from({ length: 101 }, (_, index) => [
+        `value_${index}`,
+        index === 100 ? "OVER_LIMIT_ARGUMENT_SECRET" : `safe_${index}`
+      ])
+    );
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: "Failed while reading OVER_LIMIT_ARGUMENT_SECRET",
+      arguments: manyArguments
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain("OVER_LIMIT_ARGUMENT_SECRET");
+    expect(JSON.stringify(events)).not.toContain("OVER_LIMIT_ARGUMENT_SECRET");
+  });
+
   it("does not persist HTML tag snippets from failed MCP executor summaries", async () => {
     const artifactContent = "<h1>SECRET_ARTIFACT</h1>";
     const { result, events } = await executeMCPFailureWithSummary({
@@ -5114,6 +5162,40 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(result)).not.toContain(cssSnippet);
     expect(JSON.stringify(events)).not.toContain("SECRET_ARTIFACT");
     expect(JSON.stringify(events)).not.toContain(cssSnippet);
+  });
+
+  it("does not persist broad local paths from failed MCP executor summaries", async () => {
+    const localPaths = [
+      "/home/user/site/index.html",
+      "/etc/passwd",
+      "../site/index.html"
+    ];
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${localPaths.join(" ")}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    for (const localPath of localPaths) {
+      expect(JSON.stringify(result)).not.toContain(localPath);
+      expect(JSON.stringify(events)).not.toContain(localPath);
+    }
+  });
+
+  it("does not persist SVG markup from failed MCP executor summaries", async () => {
+    const svgMarkup = '<svg><path d="M0 0" /></svg>';
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${svgMarkup}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain(svgMarkup);
+    expect(JSON.stringify(events)).not.toContain(svgMarkup);
   });
 
   it("uses the configured current user for mcp approval actor defaults", async () => {
