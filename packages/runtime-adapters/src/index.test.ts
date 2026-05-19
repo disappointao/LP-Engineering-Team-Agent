@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { sampleBrief, type LPBrief } from "@lp-agent/lp-schema";
 import {
   InMemoryModelGateway,
+  ModelProviderConfigurationError,
+  ModelProviderRequestError,
   createDefaultModelPolicy,
   type ModelGateway,
   type ModelRequest,
@@ -84,6 +86,143 @@ describe("local agent runtime adapter", () => {
     expect(result.state).toBe("completed");
     expect(result.modelOutputText).toBe("RAW_MODEL_OUTPUT_SECRET");
     expect(JSON.stringify(result.events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
+  it("retries retryable provider request failures once before succeeding", async () => {
+    const gateway = new SequencedModelGateway([
+      new ModelProviderRequestError(
+        "model_provider_request_timeout",
+        "timeout with SECRET_MODEL_ERROR",
+        undefined
+      ),
+      {
+        provider: "provider_primary",
+        model: "gpt-5.4",
+        text: "recovered text",
+        usage: { inputTokens: 2, outputTokens: 3 }
+      }
+    ]);
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await adapter.run({
+      runId: "run_retry_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan" }
+    });
+
+    expect(result.state).toBe("completed");
+    expect(gateway.calls).toBe(2);
+    expect(result.modelOutputText).toBe("recovered text");
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "model.retry.scheduled",
+      "model.completed",
+      "run.completed"
+    ]);
+    expect(result.events[1]).toMatchObject({
+      type: "model.retry.scheduled",
+      role: "planner",
+      attempt: 1,
+      maxAttempts: 2,
+      errorCode: "model_provider_request_timeout",
+      retryable: true
+    });
+    expect(JSON.stringify(result.events)).not.toContain("SECRET_MODEL_ERROR");
+  });
+
+  it("does not retry provider configuration errors", async () => {
+    const gateway = new SequencedModelGateway([
+      new ModelProviderConfigurationError(
+        "model_provider_config_missing",
+        "missing config SECRET_MODEL_ERROR"
+      )
+    ]);
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await adapter.run({
+      runId: "run_retry_config_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan" }
+    });
+
+    expect(result.state).toBe("failed");
+    expect(gateway.calls).toBe(1);
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "model.fallback.not_configured",
+      "run.failed"
+    ]);
+    expect(JSON.stringify(result.events)).not.toContain("SECRET_MODEL_ERROR");
+  });
+
+  it("emits fallback availability metadata without executing fallback provider", async () => {
+    const gateway = new SequencedModelGateway([
+      new ModelProviderRequestError(
+        "model_provider_http_error",
+        "HTTP 503 SECRET_MODEL_ERROR",
+        503
+      ),
+      new ModelProviderRequestError(
+        "model_provider_http_error",
+        "HTTP 503 SECRET_MODEL_ERROR",
+        503
+      )
+    ]);
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+    const context: RuntimeRunContext = {
+      ...createDefaultRuntimeContext(),
+      modelRoutingPolicy: {
+        ...createDefaultModelPolicy(),
+        planner: {
+          provider: "provider_primary",
+          providerName: "Primary",
+          api: "openai-completions",
+          model: "gpt-5.4",
+          baseUrlConfigured: true,
+          apiKeyEnvConfigured: true,
+          fallback: {
+            provider: "provider_backup",
+            providerName: "Backup",
+            api: "openai-completions",
+            model: "gpt-5.4-mini",
+            baseUrlConfigured: true,
+            apiKeyEnvConfigured: true
+          }
+        }
+      }
+    };
+
+    const result = await adapter.run({
+      runId: "run_fallback_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan" },
+      context
+    });
+
+    expect(result.state).toBe("failed");
+    expect(gateway.calls).toBe(2);
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.retry.scheduled",
+      "model.retry.exhausted",
+      "model.fallback.available",
+      "run.failed"
+    ]);
+    expect(result.events[4]).toMatchObject({
+      type: "model.fallback.available",
+      role: "planner",
+      provider: "provider_backup",
+      providerName: "Backup",
+      api: "openai-completions",
+      model: "gpt-5.4-mini",
+      baseUrlConfigured: true,
+      apiKeyEnvConfigured: true
+    });
+    expect(JSON.stringify(result.events)).not.toContain("SECRET_MODEL_ERROR");
   });
 
   it("runs a builder flow through the model gateway and creates static artifacts", async () => {
@@ -887,6 +1026,24 @@ class FailingModelGateway extends InMemoryModelGateway {
 
   override async complete(): Promise<ModelResponse> {
     throw new Error("Model gateway unavailable");
+  }
+}
+
+class SequencedModelGateway implements ModelGateway {
+  calls = 0;
+
+  constructor(private readonly outcomes: Array<ModelResponse | Error>) {}
+
+  async complete(_request: ModelRequest): Promise<ModelResponse> {
+    this.calls += 1;
+    const outcome = this.outcomes.shift();
+    if (!outcome) {
+      throw new Error("unexpected_model_call");
+    }
+    if (outcome instanceof Error) {
+      throw outcome;
+    }
+    return outcome;
   }
 }
 

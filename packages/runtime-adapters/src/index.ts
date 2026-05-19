@@ -6,12 +6,17 @@ import {
 import type { LPBrief, ReviewFinding, RunState } from "@lp-agent/lp-schema";
 import {
   InMemoryModelGateway,
+  ModelProviderConfigurationError,
+  ModelProviderRequestError,
+  ModelProviderResponseError,
   createDefaultModelPolicy,
   type AgentRole,
   type ModelAgentHandoffSummary,
+  type ModelFallbackRouteMetadata,
   type ModelGateway,
   type ModelContextMemory,
   type ModelContextMemoryArtifactFile,
+  type ModelRequest,
   type ModelRequestContext,
   type ModelRoutingPolicy,
   type ModelResponse
@@ -108,6 +113,44 @@ export type RuntimeEvent =
       usage: ModelResponse["usage"];
     }
   | {
+      type: "model.retry.scheduled";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      attempt: number;
+      maxAttempts: number;
+      errorCode: string;
+      retryable: boolean;
+      status?: number;
+    }
+  | {
+      type: "model.retry.exhausted";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      attempts: number;
+      errorCode: string;
+      status?: number;
+    }
+  | {
+      type: "model.fallback.available";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      provider: string;
+      providerName?: string;
+      api?: ModelResponse["api"];
+      model: string;
+      baseUrlConfigured: boolean;
+      apiKeyEnvConfigured: boolean;
+    }
+  | {
+      type: "model.fallback.not_configured";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+    }
+  | {
       type: "model.output.parsed";
       message: string;
       runId?: string;
@@ -176,6 +219,7 @@ export type RuntimeEvent =
       role?: AgentRole;
       state: "failed";
       errorName?: string;
+      errorCode?: string;
     };
 
 export interface RuntimeRunResult {
@@ -216,12 +260,18 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
       events.push(toRuntimeContextLoadedEvent(request, context));
     }
     try {
-      const modelResponse = await this.modelGateway.complete({
+      const modelRequest: ModelRequest = {
         role: request.role,
         projectId: request.projectId,
         prompt: toModelPrompt(request),
         context: toModelRequestContext(context),
         ...(context.modelRoutingPolicy ? { routingPolicy: context.modelRoutingPolicy } : {})
+      };
+      const modelResponse = await completeModelWithRetry({
+        gateway: this.modelGateway,
+        request: modelRequest,
+        runRequest: request,
+        events
       });
       events.push(toModelCompletedEvent(request, modelResponse));
 
@@ -267,6 +317,19 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         modelOutputText: modelResponse.text
       };
     } catch (error) {
+      if (isModelProviderError(error)) {
+        const fallback = context.modelRoutingPolicy?.[request.role]?.fallback;
+        events.push(
+          fallback
+            ? toFallbackAvailableEvent(request, fallback)
+            : {
+                type: "model.fallback.not_configured",
+                message: `${request.role} model fallback not configured`,
+                runId: request.runId,
+                role: request.role
+              }
+        );
+      }
       events.push(toRunFailedEvent(request, error));
       return {
         runId: request.runId,
@@ -332,6 +395,97 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
   };
 }
 
+const maxModelProviderAttempts = 2;
+
+async function completeModelWithRetry(input: {
+  gateway: ModelGateway;
+  request: ModelRequest;
+  runRequest: RuntimeRunRequest;
+  events: RuntimeEvent[];
+}): Promise<ModelResponse> {
+  let attempt = 1;
+  while (true) {
+    try {
+      return await input.gateway.complete(input.request);
+    } catch (error) {
+      const summary = summarizeProviderError(error);
+      if (!summary.retryable || attempt >= maxModelProviderAttempts) {
+        if (summary.retryable) {
+          input.events.push({
+            type: "model.retry.exhausted",
+            message: `${input.runRequest.role} model retry exhausted`,
+            runId: input.runRequest.runId,
+            role: input.runRequest.role,
+            attempts: attempt,
+            errorCode: summary.errorCode,
+            ...(summary.status !== undefined ? { status: summary.status } : {})
+          });
+        }
+        throw error;
+      }
+      input.events.push({
+        type: "model.retry.scheduled",
+        message: `${input.runRequest.role} model retry scheduled`,
+        runId: input.runRequest.runId,
+        role: input.runRequest.role,
+        attempt,
+        maxAttempts: maxModelProviderAttempts,
+        errorCode: summary.errorCode,
+        retryable: true,
+        ...(summary.status !== undefined ? { status: summary.status } : {})
+      });
+      attempt += 1;
+    }
+  }
+}
+
+function summarizeProviderError(error: unknown): {
+  errorCode: string;
+  retryable: boolean;
+  status?: number;
+} {
+  if (error instanceof ModelProviderRequestError) {
+    const retryable =
+      error.code === "model_provider_request_timeout" ||
+      error.code === "model_provider_request_failed" ||
+      (error.code === "model_provider_http_error" &&
+        (error.status === 429 || (error.status !== undefined && error.status >= 500)));
+    return {
+      errorCode: error.code,
+      retryable,
+      ...(error.status !== undefined ? { status: error.status } : {})
+    };
+  }
+  if (error instanceof ModelProviderResponseError) {
+    return {
+      errorCode: error.code,
+      retryable: error.code === "model_provider_response_json_invalid"
+    };
+  }
+  if (error instanceof ModelProviderConfigurationError) {
+    return { errorCode: error.code, retryable: false };
+  }
+  return { errorCode: "model_provider_unknown_error", retryable: false };
+}
+
+function toFallbackAvailableEvent(
+  request: RuntimeRunRequest,
+  fallback: ModelFallbackRouteMetadata
+): RuntimeEvent {
+  return {
+    type: "model.fallback.available",
+    message: `${request.role} model fallback available`,
+    runId: request.runId,
+    role: request.role,
+    provider: fallback.provider,
+    ...(fallback.providerName ? { providerName: fallback.providerName } : {}),
+    ...(fallback.api ? { api: fallback.api } : {}),
+    model: fallback.model,
+    baseUrlConfigured: fallback.baseUrlConfigured,
+    apiKeyEnvConfigured: fallback.apiKeyEnvConfigured
+  };
+}
+
 function toRuntimeContextLoadedEvent(
   request: RuntimeRunRequest,
   context: RuntimeRunContext
@@ -363,14 +517,29 @@ function toModelRequestContext(context: RuntimeRunContext): ModelRequestContext 
 }
 
 function toRunFailedEvent(request: RuntimeRunRequest, error: unknown): RuntimeEvent {
+  const providerSummary = summarizeProviderError(error);
+  const isProviderError = isModelProviderError(error);
   return {
     type: "run.failed",
-    message: error instanceof Error ? error.message : "Runtime run failed.",
+    message: isProviderError
+      ? `${request.role} model provider failed`
+      : error instanceof Error
+        ? error.message
+        : "Runtime run failed.",
     runId: request.runId,
     role: request.role,
     state: "failed",
-    errorName: error instanceof Error ? error.name : undefined
+    errorName: error instanceof Error ? error.name : undefined,
+    ...(isProviderError ? { errorCode: providerSummary.errorCode } : {})
   };
+}
+
+function isModelProviderError(error: unknown): boolean {
+  return (
+    error instanceof ModelProviderConfigurationError ||
+    error instanceof ModelProviderRequestError ||
+    error instanceof ModelProviderResponseError
+  );
 }
 
 function reviewHeroCta(brief: LPBrief): ReviewFinding[] {

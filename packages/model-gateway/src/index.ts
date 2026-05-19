@@ -80,6 +80,16 @@ export interface ModelRoute {
   modelCapabilities?: Omit<ModelProviderModelConfig, "id" | "name"> & {
     name?: string;
   };
+  fallback?: ModelFallbackRouteMetadata;
+}
+
+export interface ModelFallbackRouteMetadata {
+  provider: string;
+  providerName?: string;
+  api?: ModelProviderApi;
+  model: string;
+  baseUrlConfigured: boolean;
+  apiKeyEnvConfigured: boolean;
 }
 
 export type ModelRoutingPolicy = Record<AgentRole, ModelRoute>;
@@ -572,7 +582,8 @@ function cloneRoute(route: ModelRoute): ModelRoute {
       : {}),
     ...(route.modelCapabilities
       ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
-      : {})
+      : {}),
+    ...(route.fallback ? { fallback: { ...route.fallback } } : {})
   };
 }
 
