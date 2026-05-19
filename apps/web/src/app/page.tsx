@@ -120,6 +120,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? pageState.snapshot?.currentPageVersion?.id
       : undefined;
   const skillCommands = pageState.skillCommands ?? [];
+  const workerQueue = getPageWorkerQueueState(pageState);
+  const workerQueueCountItems = (
+    Object.keys(copy.skillsView.workerQueueCounts) as Array<
+      keyof typeof copy.skillsView.workerQueueCounts
+    >
+  ).map((key) => ({
+    key,
+    label: copy.skillsView.workerQueueCounts[key],
+    value: workerQueue.counts[key]
+  }));
+  const workerHeartbeat = workerQueue.heartbeat;
   const completedSnapshot =
     pageState.kind === "task_ready" &&
     activeTask?.type === "lp_generation" &&
@@ -468,14 +479,63 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </section>
 
                     <section className="localWorkerPanel" aria-labelledby="local-worker-title">
-                      <div>
-                        <h2 id="local-worker-title">{copy.skillsView.commandQueueLabel}</h2>
-                        <p>{copy.skillsView.localWorkerIdle}</p>
+                      <div className="localWorkerHeader">
+                        <div>
+                          <h2 id="local-worker-title">{copy.skillsView.commandQueueLabel}</h2>
+                          <p>{copy.skillsView.localWorkerIdle}</p>
+                        </div>
+                        <form action={runLocalWorkerOnceAction}>
+                          <input type="hidden" name="projectId" value={activeProject.id} />
+                          <button type="submit">{copy.skillsView.runLocalWorkerOnce}</button>
+                        </form>
                       </div>
-                      <form action={runLocalWorkerOnceAction}>
-                        <input type="hidden" name="projectId" value={activeProject.id} />
-                        <button type="submit">{copy.skillsView.runLocalWorkerOnce}</button>
-                      </form>
+
+                      <dl className="workerQueueCounts">
+                        {workerQueueCountItems.map((item) => (
+                          <div key={item.key}>
+                            <dt>{item.label}</dt>
+                            <dd>{item.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      <div className="workerHeartbeat">
+                        <strong>{copy.skillsView.workerHeartbeatLabel}</strong>
+                        <span data-status={workerHeartbeat.status}>
+                          {copy.skillsView.workerHeartbeatStatuses[workerHeartbeat.status]}
+                        </span>
+                        {workerHeartbeat.workerId ? (
+                          <small>
+                            {copy.skillsView.workerHeartbeatWorkerLabel}: {workerHeartbeat.workerId}
+                          </small>
+                        ) : null}
+                        {workerHeartbeat.workerJobId ? (
+                          <small>
+                            {copy.skillsView.workerHeartbeatJobLabel}: {workerHeartbeat.workerJobId}
+                          </small>
+                        ) : null}
+                      </div>
+
+                      <div className="workerRecentLogs">
+                        <h3>{copy.skillsView.workerRecentLogsTitle}</h3>
+                        {workerQueue.logs.length > 0 ? (
+                          <ul>
+                            {workerQueue.logs.map((log) => (
+                              <li key={log.id}>
+                                <span>{log.type}</span>
+                                <strong>{log.message}</strong>
+                                <small>
+                                  {[log.workerId, log.workerJobId, log.createdAt]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </small>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>{copy.skillsView.workerNoRecentLogs}</p>
+                        )}
+                      </div>
                     </section>
 
                     {workerErrorMessage ? (
@@ -1023,6 +1083,27 @@ function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState 
       reviewer: [],
       deployer: []
     }
+  };
+}
+
+function getPageWorkerQueueState(pageState: {
+  workerQueue?: WorkbenchPageState["workerQueue"];
+}): WorkbenchPageState["workerQueue"] {
+  return pageState.workerQueue ?? {
+    projectId: "",
+    counts: {
+      queued: 0,
+      running: 0,
+      stale: 0,
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+      cancelled: 0
+    },
+    heartbeat: {
+      status: "unknown"
+    },
+    logs: []
   };
 }
 

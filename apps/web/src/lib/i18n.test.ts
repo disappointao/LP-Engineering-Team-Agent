@@ -125,6 +125,14 @@ describe("web i18n", () => {
     expect(zh.skillsView.runLocalWorkerOnce).toBe("运行一次本地 Worker");
     expect(en.skillsView.localWorkerIdle).toBe("Run the local worker to process queued jobs.");
     expect(zh.skillsView.localWorkerIdle).toBe("运行本地 Worker 来处理排队任务。");
+    expect(en.skillsView.workerQueueCounts.queued).toBe("Queued");
+    expect(zh.skillsView.workerQueueCounts.running).toBe("运行中");
+    expect(en.skillsView.workerHeartbeatLabel).toBe("Heartbeat");
+    expect(zh.skillsView.workerHeartbeatLabel).toBe("心跳");
+    expect(en.skillsView.workerHeartbeatStatuses.stale).toBe("Stale");
+    expect(zh.skillsView.workerHeartbeatStatuses.unknown).toBe("未知");
+    expect(en.skillsView.workerRecentLogsTitle).toBe("Recent worker logs");
+    expect(zh.skillsView.workerNoRecentLogs).toBe("暂无 Worker 日志。");
     expect(en.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
     expect(zh.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
   });

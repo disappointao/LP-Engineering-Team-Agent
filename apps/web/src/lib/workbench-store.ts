@@ -1,6 +1,7 @@
 import {
   DemoWorkbenchService,
   createLocalWorkerQueueRuntime,
+  createWorkerQueueSnapshot,
   deriveTaskInterruptView,
   interruptTask,
   runLocalWorkerOnceAndFinalize,
@@ -27,6 +28,7 @@ import {
   type TaskInterruptView,
   type TaskInterruptWorkerRuntime,
   type ToolCommandRunner,
+  type WorkerQueueSnapshot,
   normalizeWorkbenchUserIdentity,
   type WorkbenchUserIdentity,
   type WorkbenchSnapshot
@@ -49,6 +51,10 @@ import {
   type WorkbenchTaskType
 } from "@lp-agent/db";
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import type {
+  WorkerJobRepository,
+  WorkerLogRepository
+} from "@lp-agent/worker-runtime";
 import { getLocalWorkbenchUser } from "./local-identity";
 import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
 
@@ -308,6 +314,7 @@ export type WorkbenchPageState =
       skillCommands: ProjectSkillCommandView[];
       models: WebProjectModelState;
       mcp: ProjectMCPState;
+      workerQueue: WorkerQueueSnapshot;
     }
   | {
       kind: "task_ready";
@@ -318,6 +325,7 @@ export type WorkbenchPageState =
       skillCommands: ProjectSkillCommandView[];
       models: WebProjectModelState;
       mcp: ProjectMCPState;
+      workerQueue: WorkerQueueSnapshot;
       activeTaskId: string;
       task: TaskRecord;
       messages: ChatMessageRecord[];
@@ -387,6 +395,8 @@ export interface WebWorkbenchStoreOptions {
   toolCommandRunner?: ToolCommandRunner;
   workerRuntime?: TaskInterruptWorkerRuntime;
   workerQueueRuntime?: SkillCommandQueueRuntime;
+  workerJobRepository?: WorkerJobRepository;
+  workerLogRepository?: WorkerLogRepository;
   workerId?: string;
   currentUser?: WorkbenchUserIdentity;
 }
@@ -496,6 +506,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
   const workerRuntime = options.workerRuntime;
   const workerQueueRuntime = options.workerQueueRuntime;
+  const workerJobRepository = options.workerJobRepository;
+  const workerLogRepository = options.workerLogRepository;
   const workerId = options.workerId ?? "local-web-worker";
   const currentUser = normalizeWorkbenchUserIdentity(
     options.currentUser ?? getLocalWorkbenchUser()
@@ -534,6 +546,23 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
   });
 
   const emptyProjectMembers = (): ProjectMemberSummary[] => [];
+
+  const emptyWorkerQueueSnapshot = (projectId = ""): WorkerQueueSnapshot => ({
+    projectId,
+    counts: {
+      queued: 0,
+      running: 0,
+      stale: 0,
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+      cancelled: 0
+    },
+    heartbeat: {
+      status: "unknown"
+    },
+    logs: []
+  });
 
   function createEmptyVisibleToolsByRole(): ProjectMCPState["visibleToolsByRole"] {
     return {
@@ -613,6 +642,24 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     }
   };
 
+  const loadWorkerQueueSnapshot = async (
+    projectId?: string | null
+  ): Promise<WorkerQueueSnapshot> => {
+    if (!projectId || !workerJobRepository) {
+      return emptyWorkerQueueSnapshot(projectId ?? "");
+    }
+    try {
+      return await createWorkerQueueSnapshot({
+        jobRepository: workerJobRepository,
+        workerLogRepository,
+        projectId,
+        recentLogLimit: 10
+      });
+    } catch {
+      return emptyWorkerQueueSnapshot(projectId);
+    }
+  };
+
   return {
     async createProject(input) {
       const validation = validateProjectInput(input);
@@ -654,7 +701,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           skills,
           skillCommands: deriveProjectSkillCommands(skills),
           models: await loadModelState(requestedProject?.id),
-          mcp: await loadMCPState(requestedProject?.id)
+          mcp: await loadMCPState(requestedProject?.id),
+          workerQueue: await loadWorkerQueueSnapshot(requestedProject?.id)
         };
       }
 
@@ -693,6 +741,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         skillCommands: deriveProjectSkillCommands(skills),
         models: await loadModelState(activeProjectId),
         mcp: await loadMCPState(activeProjectId),
+        workerQueue: await loadWorkerQueueSnapshot(activeProjectId),
         activeTaskId: task.id,
         task: { ...task },
         messages: await listMessages(task.id),
@@ -871,6 +920,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const result = await runLocalWorkerOnceAndFinalize({
         repositories,
         workerRuntime: workerQueueRuntime,
+        workerLogRepository,
         workerId,
         ...(input.projectId ? { projectId: input.projectId } : {})
       });
@@ -1435,6 +1485,10 @@ function defaultWorkerPayloadsFilePath(): string {
   return process.env.WORKER_PAYLOADS_FILE ?? ".lp-agent/worker-payloads.json";
 }
 
+function defaultWorkerLogsFilePath(): string {
+  return process.env.WORKER_LOGS_FILE ?? ".lp-agent/worker-logs.json";
+}
+
 function defaultWorkerId(): string {
   return process.env.WORKER_ID ?? "local-web-worker";
 }
@@ -1443,7 +1497,8 @@ export function getWebWorkbenchStore(): WebWorkbenchStore {
   if (!globalStore.__lpAgentWebWorkbenchStore) {
     const workerQueue = createLocalWorkerQueueRuntime({
       jobsFilePath: defaultWorkerJobsFilePath(),
-      payloadsFilePath: defaultWorkerPayloadsFilePath()
+      payloadsFilePath: defaultWorkerPayloadsFilePath(),
+      logsFilePath: defaultWorkerLogsFilePath()
     });
     globalStore.__lpAgentWebWorkbenchStore = createWebWorkbenchStore({
       repositories: createJsonFileWorkbenchRepositories({
@@ -1451,6 +1506,8 @@ export function getWebWorkbenchStore(): WebWorkbenchStore {
       }),
       workerQueueRuntime: workerQueue.runtime,
       workerRuntime: workerQueue.runtime,
+      workerJobRepository: workerQueue.jobRepository,
+      workerLogRepository: workerQueue.workerLogRepository,
       workerId: defaultWorkerId()
     });
   }

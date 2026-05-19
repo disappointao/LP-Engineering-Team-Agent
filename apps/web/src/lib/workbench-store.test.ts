@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createInMemoryWorkbenchRepositories,
   type WorkbenchRepositories
@@ -10,9 +14,12 @@ import {
 import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
 import {
   InMemoryWorkerJobPayloadRepository,
+  InMemoryWorkerLogRepository,
   InMemoryWorkerRuntime,
-  SimulatedExecutionAdapter
+  SimulatedExecutionAdapter,
+  createSimulatedSandboxPolicy
 } from "@lp-agent/worker-runtime";
+import { createLocalWorkerQueueRuntime } from "@lp-agent/api";
 import {
   classifyTaskPrompt,
   createWebWorkbenchStore,
@@ -31,6 +38,35 @@ const emptyMCPState = {
     deployer: []
   }
 };
+
+const emptyWorkerQueueSnapshot = {
+  projectId: "",
+  counts: {
+    queued: 0,
+    running: 0,
+    stale: 0,
+    completed: 0,
+    failed: 0,
+    rejected: 0,
+    cancelled: 0
+  },
+  heartbeat: {
+    status: "unknown"
+  },
+  logs: []
+};
+
+const tempDirs: string[] = [];
+
+async function tempQueueFiles() {
+  const dir = await mkdtemp(join(tmpdir(), "web-store-worker-queue-"));
+  tempDirs.push(dir);
+  return {
+    jobsFilePath: join(dir, "worker-jobs.json"),
+    payloadsFilePath: join(dir, "worker-payloads.json"),
+    logsFilePath: join(dir, "worker-logs.json")
+  };
+}
 
 function brandSkillManifestJson(): string {
   return JSON.stringify({
@@ -151,6 +187,12 @@ async function saveManualPageVersion(input: {
 }
 
 describe("web workbench store", () => {
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+    );
+  });
+
   it("queues deployment skill commands through the worker queue runtime", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workerRuntime = new InMemoryWorkerRuntime({
@@ -194,8 +236,46 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("exposes a project-scoped worker queue snapshot in page state", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerQueueRuntime = createLocalWorkerQueueRuntime(await tempQueueFiles());
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerQueueRuntime.runtime,
+      workerRuntime: workerQueueRuntime.runtime,
+      workerJobRepository: workerQueueRuntime.jobRepository,
+      workerLogRepository: workerQueueRuntime.workerLogRepository,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const project = await store.createProject({ name: "Project" });
+    await workerQueueRuntime.runtime.enqueueSafe(
+      {
+        projectId: project.id,
+        kind: "tool_command",
+        commandId: "publish_static",
+        command: "static-deploy",
+        args: ["--project", project.id],
+        envNames: ["LP_PROJECT_ID"],
+        timeoutMs: 30000
+      },
+      createSimulatedSandboxPolicy({
+        allowedCommands: ["static-deploy"],
+        allowedEnvNames: ["LP_PROJECT_ID"]
+      })
+    );
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.workerQueue.counts.queued).toBe(1);
+    expect(state.workerQueue.projectId).toBe(project.id);
+  });
+
   it("runs one local worker job and finalizes the queued command", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const workerLogRepository = new InMemoryWorkerLogRepository();
     const workerRuntime = new InMemoryWorkerRuntime({
       payloadRepository: new InMemoryWorkerJobPayloadRepository(),
       adapter: new SimulatedExecutionAdapter()
@@ -203,6 +283,7 @@ describe("web workbench store", () => {
     const store = createWebWorkbenchStore({
       repositories,
       workerQueueRuntime: workerRuntime,
+      workerLogRepository,
       currentUser: {
         id: "web-reviewer",
         displayName: "Reviewer"
@@ -230,6 +311,14 @@ describe("web workbench store", () => {
     await expect(repositories.runs.getById(queued.value.run.id)).resolves.toMatchObject({
       state: "completed"
     });
+    await expect(workerLogRepository.list({ projectId: project.id })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "worker.job.completed",
+          workerJobId: "worker_job_1"
+        })
+      ])
+    );
   });
 
   it("does not execute queued work for a missing local worker project id", async () => {
@@ -575,7 +664,8 @@ describe("web workbench store", () => {
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
       },
-      mcp: emptyMCPState
+      mcp: emptyMCPState,
+      workerQueue: emptyWorkerQueueSnapshot
     });
   });
 
@@ -609,7 +699,8 @@ describe("web workbench store", () => {
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
       },
-      mcp: emptyMCPState
+      mcp: emptyMCPState,
+      workerQueue: emptyWorkerQueueSnapshot
     });
   });
 
@@ -940,7 +1031,11 @@ describe("web workbench store", () => {
         routes: [],
         resolvedPolicy: createDefaultModelPolicy()
       },
-      mcp: emptyMCPState
+      mcp: emptyMCPState,
+      workerQueue: {
+        ...emptyWorkerQueueSnapshot,
+        projectId: secondProject.id
+      }
     });
   });
 

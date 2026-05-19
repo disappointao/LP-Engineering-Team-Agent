@@ -115,6 +115,16 @@ export interface WorkbenchCopy {
     commandQueueLabel: string;
     runLocalWorkerOnce: string;
     localWorkerIdle: string;
+    workerQueueCounts: Record<
+      "queued" | "running" | "stale" | "completed" | "failed" | "rejected" | "cancelled",
+      string
+    >;
+    workerHeartbeatLabel: string;
+    workerHeartbeatWorkerLabel: string;
+    workerHeartbeatJobLabel: string;
+    workerHeartbeatStatuses: Record<"active" | "idle" | "stale" | "unknown", string>;
+    workerRecentLogsTitle: string;
+    workerNoRecentLogs: string;
     emptyCommands: string;
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
@@ -441,6 +451,26 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       commandQueueLabel: "Local worker queue",
       runLocalWorkerOnce: "Run local worker once",
       localWorkerIdle: "Run the local worker to process queued jobs.",
+      workerQueueCounts: {
+        queued: "Queued",
+        running: "Running",
+        stale: "Stale",
+        completed: "Completed",
+        failed: "Failed",
+        rejected: "Rejected",
+        cancelled: "Cancelled"
+      },
+      workerHeartbeatLabel: "Heartbeat",
+      workerHeartbeatWorkerLabel: "Worker",
+      workerHeartbeatJobLabel: "Job",
+      workerHeartbeatStatuses: {
+        active: "Active",
+        idle: "Idle",
+        stale: "Stale",
+        unknown: "Unknown"
+      },
+      workerRecentLogsTitle: "Recent worker logs",
+      workerNoRecentLogs: "No recent worker logs.",
       emptyCommands: "No executable deployment skill commands are bound to this project.",
       statusLabels: {
         draft: "Draft",
@@ -853,6 +883,26 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       commandQueueLabel: "本地 Worker 队列",
       runLocalWorkerOnce: "运行一次本地 Worker",
       localWorkerIdle: "运行本地 Worker 来处理排队任务。",
+      workerQueueCounts: {
+        queued: "排队中",
+        running: "运行中",
+        stale: "已过期",
+        completed: "已完成",
+        failed: "失败",
+        rejected: "已拒绝",
+        cancelled: "已取消"
+      },
+      workerHeartbeatLabel: "心跳",
+      workerHeartbeatWorkerLabel: "Worker",
+      workerHeartbeatJobLabel: "任务",
+      workerHeartbeatStatuses: {
+        active: "活跃",
+        idle: "空闲",
+        stale: "已过期",
+        unknown: "未知"
+      },
+      workerRecentLogsTitle: "最近 Worker 日志",
+      workerNoRecentLogs: "暂无 Worker 日志。",
       emptyCommands: "当前项目暂无已绑定的可执行部署技能命令。",
       statusLabels: {
         draft: "草稿",

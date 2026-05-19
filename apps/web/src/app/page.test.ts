@@ -34,6 +34,22 @@ const pageMocks = vi.hoisted(() => ({
         reviewer: [],
         deployer: []
       }
+    },
+    workerQueue: {
+      projectId: "",
+      counts: {
+        queued: 0,
+        running: 0,
+        stale: 0,
+        completed: 0,
+        failed: 0,
+        rejected: 0,
+        cancelled: 0
+      },
+      heartbeat: {
+        status: "unknown"
+      },
+      logs: []
     }
   } as unknown
 }));
@@ -199,6 +215,23 @@ const unavailableInterrupt = {
   state: "not_interruptible"
 };
 
+const emptyWorkerQueue = {
+  projectId: "",
+  counts: {
+    queued: 0,
+    running: 0,
+    stale: 0,
+    completed: 0,
+    failed: 0,
+    rejected: 0,
+    cancelled: 0
+  },
+  heartbeat: {
+    status: "unknown"
+  },
+  logs: []
+};
+
 function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
   return {
     kind: "task_ready",
@@ -245,6 +278,7 @@ function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
         deployer: []
       }
     },
+    workerQueue: emptyWorkerQueue,
     activeTaskId: "task_1",
     task: {
       id: "task_1",
@@ -388,7 +422,8 @@ function setActiveEmptyProjectState() {
         reviewer: [],
         deployer: []
       }
-    }
+    },
+    workerQueue: emptyWorkerQueue
   };
 }
 
@@ -426,7 +461,8 @@ beforeEach(() => {
         reviewer: [],
         deployer: []
       }
-    }
+    },
+    workerQueue: emptyWorkerQueue
   };
 });
 
@@ -680,6 +716,56 @@ describe("HomePage project flow errors", () => {
     });
 
     expect(html).toContain("Local worker runtime is not configured.");
+  });
+
+  it("renders read-only worker queue counts, stale heartbeat, and recent logs", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      workerQueue: {
+        projectId: "project_1",
+        counts: {
+          queued: 2,
+          running: 1,
+          stale: 1,
+          completed: 3,
+          failed: 1,
+          rejected: 0,
+          cancelled: 0
+        },
+        heartbeat: {
+          status: "stale",
+          workerId: "worker_alpha",
+          workerJobId: "worker_job_long_identifier_that_should_wrap",
+          lastHeartbeatAt: "2026-05-19T00:00:00.000Z"
+        },
+        logs: [
+          {
+            id: "worker_log_1",
+            type: "worker.job.stale_recovered",
+            message: "Worker job recovered from stale claim.",
+            workerId: "worker_alpha",
+            workerJobId: "worker_job_long_identifier_that_should_wrap",
+            projectId: "project_1",
+            payload: {},
+            createdAt: "2026-05-19T00:00:05.000Z"
+          }
+        ]
+      }
+    };
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "skills" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Queued");
+    expect(html).toContain("2");
+    expect(html).toContain("Heartbeat");
+    expect(html).toContain("Stale");
+    expect(html).toContain("worker_alpha");
+    expect(html).toContain("Recent worker logs");
+    expect(html).toContain("worker.job.stale_recovered");
   });
 
   it("renders project members in the sidebar", async () => {
