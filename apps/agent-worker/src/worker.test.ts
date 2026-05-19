@@ -124,6 +124,39 @@ describe("worker queue handoff", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("rejects invalid heartbeat timeout before claiming a queued worker job", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-"));
+    const jobsFilePath = join(directory, "worker-jobs.json");
+    const payloadsFilePath = join(directory, "worker-job-payloads.json");
+    try {
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        now: () => new Date("2026-05-19T00:00:00.000Z")
+      });
+      const queued = await apiRuntime.enqueueSafe(safeInput(), simulatedPolicy());
+
+      await expect(
+        runWorkerOnce({
+          workerId: "worker_a",
+          jobRepository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+          payloadRepository: createJsonFileWorkerJobPayloadRepository({
+            filePath: payloadsFilePath
+          }),
+          heartbeatTimeoutMs: 0
+        })
+      ).rejects.toThrow("worker_heartbeat_timeout_invalid");
+      await expect(apiRuntime.getJob(queued.id)).resolves.toMatchObject({
+        id: queued.id,
+        state: "queued"
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("worker daemon", () => {
@@ -164,6 +197,34 @@ describe("worker daemon", () => {
         expect.objectContaining({ type: "worker.daemon.idle" }),
         expect.objectContaining({ type: "worker.daemon.idle" })
       ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not sleep after the final idle iteration", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    try {
+      const sleep = vi.fn(async () => undefined);
+
+      await runWorkerDaemon({
+        workerId: "worker_a",
+        jobRepository: createJsonFileWorkerJobRepository({
+          filePath: join(directory, "worker-jobs.json")
+        }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: join(directory, "worker-payloads.json")
+        }),
+        maxIterations: 2,
+        pollIntervalMs: 10,
+        heartbeatTimeoutMs: 1000,
+        staleClaimTimeoutMs: 1000,
+        maxStaleRecoveryCount: 1,
+        sleep
+      });
+
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(10);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -280,6 +341,117 @@ describe("worker daemon", () => {
         expect.objectContaining({ type: "worker.job.heartbeat" }),
         expect.objectContaining({ type: "worker.job.claimed" })
       ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers a stale running job, logs recovery, and processes the requeued job", async () => {
+    const logs = new InMemoryWorkerLogRepository();
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    const jobsFilePath = join(directory, "worker-jobs.json");
+    const payloadsFilePath = join(directory, "worker-payloads.json");
+    try {
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        claimTokenFactory: () => "stale_claim_token",
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z"
+        ])
+      });
+      const queued = await apiRuntime.enqueueSafe(safeInput(), simulatedPolicy());
+      const staleClaim = await apiRuntime.claimOldestQueued({ workerId: "worker_stale" });
+      if (!staleClaim) {
+        throw new Error("Expected stale claim.");
+      }
+      await apiRuntime.heartbeatClaimedJob({
+        jobId: staleClaim.record.id,
+        claimToken: staleClaim.claimToken,
+        workerId: "worker_stale",
+        heartbeatTimeoutMs: 1000
+      });
+
+      const result = await runWorkerDaemon({
+        workerId: "worker_a",
+        jobRepository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        workerLogRepository: logs,
+        adapter: new SimulatedExecutionAdapter(),
+        claimTokenFactory: () => "fresh_claim_token",
+        maxIterations: 1,
+        pollIntervalMs: 10,
+        heartbeatTimeoutMs: 1000,
+        staleClaimTimeoutMs: 1000,
+        maxStaleRecoveryCount: 1,
+        sleep: async () => undefined,
+        now: createClock([
+          "2026-05-19T00:00:04.000Z",
+          "2026-05-19T00:00:05.000Z",
+          "2026-05-19T00:00:06.000Z",
+          "2026-05-19T00:00:07.000Z",
+          "2026-05-19T00:00:08.000Z"
+        ])
+      });
+      const stored = await apiRuntime.getJob(queued.id);
+
+      expect(result).toMatchObject({ processedJobs: 1, idleIterations: 0 });
+      expect(stored).toMatchObject({
+        id: queued.id,
+        state: "completed",
+        staleRecoveryCount: 1,
+        claimedByWorkerId: "worker_a"
+      });
+      await expect(logs.list({ limit: 10 })).resolves.toEqual([
+        expect.objectContaining({ type: "worker.job.completed" }),
+        expect.objectContaining({ type: "worker.job.heartbeat" }),
+        expect.objectContaining({ type: "worker.job.claimed" }),
+        expect.objectContaining({ type: "worker.job.stale_recovered" })
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid daemon numbers before claiming a queued worker job", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    const jobsFilePath = join(directory, "worker-jobs.json");
+    const payloadsFilePath = join(directory, "worker-payloads.json");
+    try {
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        now: () => new Date("2026-05-19T00:00:00.000Z")
+      });
+      const queued = await apiRuntime.enqueueSafe(safeInput(), simulatedPolicy());
+
+      await expect(
+        runWorkerDaemon({
+          workerId: "worker_a",
+          jobRepository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+          payloadRepository: createJsonFileWorkerJobPayloadRepository({
+            filePath: payloadsFilePath
+          }),
+          maxIterations: 1,
+          pollIntervalMs: 10,
+          heartbeatTimeoutMs: Number.NaN,
+          staleClaimTimeoutMs: 1000,
+          maxStaleRecoveryCount: 1,
+          sleep: async () => undefined
+        })
+      ).rejects.toThrow("worker_heartbeat_timeout_invalid");
+      await expect(apiRuntime.getJob(queued.id)).resolves.toMatchObject({
+        id: queued.id,
+        state: "queued"
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

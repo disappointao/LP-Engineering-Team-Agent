@@ -84,6 +84,7 @@ export interface RunWorkerDaemonResult {
 export async function runWorkerOnce(
   input: RunWorkerOnceInput
 ): Promise<WorkerJobRecord | undefined> {
+  validateRunWorkerOnceInput(input);
   const runtime = createWorkerRuntime(input);
   const claim = await runtime.claimOldestQueued({
     workerId: input.workerId
@@ -130,6 +131,7 @@ export async function runWorkerOnce(
 export async function runWorkerDaemon(
   input: RunWorkerDaemonInput
 ): Promise<RunWorkerDaemonResult> {
+  validateRunWorkerDaemonInput(input);
   const sleep =
     input.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const runtime = createWorkerRuntime(input);
@@ -164,7 +166,9 @@ export async function runWorkerDaemon(
         workerId: input.workerId,
         now: input.now
       });
-      await sleep(input.pollIntervalMs);
+      if (iteration < input.maxIterations - 1) {
+        await sleep(input.pollIntervalMs);
+      }
       continue;
     }
 
@@ -194,6 +198,35 @@ export async function runWorkerDaemon(
     idleIterations,
     stoppedReason: "max_iterations"
   };
+}
+
+function validateRunWorkerOnceInput(input: RunWorkerOnceInput): void {
+  if (input.heartbeatTimeoutMs !== undefined) {
+    assertPositiveInteger(input.heartbeatTimeoutMs, "worker_heartbeat_timeout_invalid");
+  }
+}
+
+function validateRunWorkerDaemonInput(input: RunWorkerDaemonInput): void {
+  assertPositiveInteger(input.maxIterations, "worker_daemon_max_iterations_invalid");
+  assertPositiveInteger(input.pollIntervalMs, "worker_poll_interval_invalid");
+  assertPositiveInteger(input.heartbeatTimeoutMs, "worker_heartbeat_timeout_invalid");
+  assertPositiveInteger(input.staleClaimTimeoutMs, "worker_stale_claim_timeout_invalid");
+  assertNonNegativeInteger(
+    input.maxStaleRecoveryCount,
+    "worker_max_stale_recovery_count_invalid"
+  );
+}
+
+function assertPositiveInteger(value: number, errorCode: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(errorCode);
+  }
+}
+
+function assertNonNegativeInteger(value: number, errorCode: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(errorCode);
+  }
 }
 
 function createWorkerRuntime(input: RunWorkerOnceInput): InMemoryWorkerRuntime {
