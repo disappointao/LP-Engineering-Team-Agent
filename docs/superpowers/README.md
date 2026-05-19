@@ -252,6 +252,10 @@ This directory contains Superpowers-generated specs and implementation plans. Re
    - Stage 17 Web V1 smoke and acceptance design.
    - Read this after the Stage 16 plan when adding README onboarding, deterministic smoke testing, and a manual Web V1 acceptance checklist without adding browser E2E, MCP execution, shell execution, or deployment.
 
+63. `plans/2026-05-19-web-v1-smoke-acceptance.md`
+   - Stage 17 Web V1 smoke and acceptance implementation plan.
+   - Read this after the Stage 17 design when implementing or auditing the deterministic smoke command, startup README, and manual Web V1 acceptance checklist.
+
 ## Maintenance Rule
 
 Whenever a Superpowers workflow creates, renames, replaces, or materially updates a spec or plan under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update this index in the same change.

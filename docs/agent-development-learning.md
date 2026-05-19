@@ -776,6 +776,13 @@ pnpm --filter @lp-agent/model-gateway test
 当前设计：
 
 - [2026-05-19-web-v1-smoke-acceptance-design.md](./superpowers/specs/2026-05-19-web-v1-smoke-acceptance-design.md)
+
+当前计划：
+
+- [2026-05-19-web-v1-smoke-acceptance.md](./superpowers/plans/2026-05-19-web-v1-smoke-acceptance.md)
+
+当前范围：
+
 - 这一阶段不新增复杂 Agent 能力，而是给当前 Web V1 增加 README、本地启动说明、手动验收清单和 deterministic smoke command。
 - smoke test 走 Web store / API service 边界，不启动浏览器，不依赖真实模型 key，不需要网络，也不替代完整测试套件。
 - 手动验收文档覆盖普通任务、LP 生成、artifact diff/snippet、Skills/Models/MCP 当前边界和明确不做项。
