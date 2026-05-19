@@ -289,7 +289,7 @@ describe("deriveRunLifecycleView core states", () => {
       view: {
         state: "failed",
         diagnosticSummary: {
-          code: "unknown",
+          code: "model_output_parse_failed",
           message: "Model output could not be parsed safely.",
           source: "model_parse",
           eventType: "model.output.parse_failed"
@@ -330,6 +330,45 @@ describe("deriveRunLifecycleView core states", () => {
         state: "failed",
         diagnosticSummary: {
           code: "model_schema_policy_violation",
+          source: "model_parse"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
+  it("uses a safe model parse reason when the policy code is unsafe", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      sequence: 1,
+      type: "model.output.parse_failed",
+      message: "Planner output could not be parsed RAW_MODEL_OUTPUT_SECRET",
+      payload: {
+        policyCode: "unsafe policy code",
+        reason: "invalid_json"
+      }
+    });
+    await saveEvent(repositories, {
+      sequence: 2,
+      type: "run.failed",
+      message: "Planner run failed RAW_MODEL_OUTPUT_SECRET"
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "invalid_json",
           source: "model_parse"
         }
       }
@@ -552,6 +591,40 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
         linkedWorkerJobId: "worker_job_1",
         linkedObservationId: "tool_observation_1",
         recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
+  it("preserves linked worker fields when terminal run events decide state without worker runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      role: "deployer",
+      state: "completed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveWorkerLink(repositories);
+    await saveEvent(repositories, {
+      sequence: 2,
+      type: "run.completed",
+      payload: {
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_1"
+      }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "completed",
+        terminalEventType: "run.completed",
+        linkedWorkerJobId: "worker_job_1",
+        linkedObservationId: "tool_observation_1",
+        recoveryActions: []
       }
     });
   });

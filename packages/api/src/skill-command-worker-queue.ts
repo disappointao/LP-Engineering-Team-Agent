@@ -196,19 +196,21 @@ export async function finalizeWorkerBackedSkillCommand(input: {
     return { ok: false, error: "worker_job_finalization_failed" };
   }
 
-  const terminalToolEvent = terminalEvents
-    .filter(
-      (event) =>
-        isTerminalToolEvent(event.type) &&
-        isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
-    )
+  const matchingTerminalEvents = terminalEvents.filter((event) =>
+    isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
+  );
+  const matchingTerminalStates = new Set(
+    matchingTerminalEvents.map((event) => terminalEventToRecordState(event))
+  );
+  if (matchingTerminalStates.size > 1) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
+
+  const terminalToolEvent = matchingTerminalEvents
+    .filter((event) => isTerminalToolEvent(event.type))
     .at(-1);
-  const terminalRunEvent = terminalEvents
-    .filter(
-      (event) =>
-        isTerminalRunEvent(event.type) &&
-        isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
-    )
+  const terminalRunEvent = matchingTerminalEvents
+    .filter((event) => isTerminalRunEvent(event.type))
     .at(-1);
   if (
     terminalToolEvent &&
@@ -440,6 +442,12 @@ function terminalToolEventToRecordState(
     return "cancelled";
   }
   return "failed";
+}
+
+function terminalEventToRecordState(event: RunEventRecord): TerminalRecordState {
+  return isTerminalToolEvent(event.type)
+    ? terminalToolEventToRecordState(event)
+    : terminalRunEventToRecordState(event);
 }
 
 function toTerminalToolEventType(state: TerminalRecordState): string {

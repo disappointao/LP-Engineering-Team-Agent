@@ -173,10 +173,13 @@ async function buildRunLifecycleView(input: {
   const terminalConflict = findTerminalRunEventConflict(events);
   const terminalEvent = findLatestTerminalRunEvent(events);
   const diagnosticSummary = deriveDiagnostic({ events, observations });
+  const workerLink = findLatestWorkerJobLink(events);
+  let linkedFields = workerLink ? toLinkedWorkerFields(workerLink) : undefined;
 
   if (terminalConflict) {
     return {
       ...baseRunLifecycleView(run),
+      ...(linkedFields ?? {}),
       state: "failed",
       terminalEventType: terminalConflict.latestTerminal.type,
       diagnosticSummary: {
@@ -194,6 +197,7 @@ async function buildRunLifecycleView(input: {
 
     return {
       ...baseRunLifecycleView(run),
+      ...(linkedFields ?? {}),
       state,
       terminalEventType: terminalEvent.type,
       diagnosticSummary: state === "failed" ? diagnosticSummary : undefined,
@@ -201,8 +205,6 @@ async function buildRunLifecycleView(input: {
     };
   }
 
-  const workerLink = findLatestWorkerJobLink(events);
-  let linkedFields: LinkedWorkerFields | undefined;
   let terminalWorkerJob: WorkerJobRecord | undefined;
   let workerRuntimeOmitted = false;
 
@@ -657,9 +659,11 @@ function deriveModelParseDiagnostic(
 
   return {
     code: sanitizeDiagnosticCode(
-      parseFailedEvent.payload.policyCode ??
-        parseFailedEvent.payload.reason ??
+      firstSafeDiagnosticCode(
+        parseFailedEvent.payload.policyCode,
+        parseFailedEvent.payload.reason,
         "model_output_parse_failed"
+      )
     ),
     message: "Model output could not be parsed safely.",
     source: "model_parse",
@@ -706,6 +710,16 @@ function sanitizeDiagnosticCode(value: unknown): string {
   }
 
   return value;
+}
+
+function firstSafeDiagnosticCode(...values: unknown[]): string {
+  for (const value of values) {
+    const code = sanitizeOptionalDiagnosticCode(value);
+    if (code) {
+      return code;
+    }
+  }
+  return "unknown";
 }
 
 function sanitizeOptionalDiagnosticCode(value: unknown): string | undefined {
