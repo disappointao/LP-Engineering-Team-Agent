@@ -48,3 +48,5 @@ Before editing, inspect the current tree and preserve unrelated user changes. Ke
 When creating, renaming, replacing, or materially updating Superpowers specs or plans under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update `docs/superpowers/README.md` in the same change so the reading order and document purpose remain accurate for future agents and developers.
 
 When adding or materially changing agent runtime, run orchestration, context assembly, skills, model routing, MCP/tool execution, artifact workspace, multi-agent coordination, or related learning-relevant specs/plans, update `docs/agent-development-learning.md` in the same change so the Chinese Agent development notes stay current.
+
+When a stage is completed, a new stage is planned, or the recommended next-stage priority changes, update `docs/project-roadmap.md` in the same change. Future agents should read that roadmap before choosing the next stage instead of inferring priority only from the latest commit history.

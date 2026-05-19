@@ -131,6 +131,7 @@ The smoke command verifies deterministic behavior quickly. The manual checklist 
 
 ## Documentation Map
 
+- `docs/project-roadmap.md` - current roadmap, next-stage queue, and backlog maintenance rules.
 - `docs/development.md` - local development notes.
 - `docs/web-v1-acceptance.md` - manual Web V1 acceptance checklist.
 - `docs/agent-development-learning.md` - Chinese learning notes for Agent development concepts and project decisions.

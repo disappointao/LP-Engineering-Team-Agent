@@ -828,6 +828,7 @@ pnpm --filter @lp-agent/model-gateway test
 - 文件系统 workspace、artifact workspace、diff 注入。
 - 多 agent handoff、协作、审批。
 - 与 Agent 学习路径相关的 specs/plans。
+- 后续阶段优先级、推荐队列或 backlog 发生变化时，同步更新 `docs/project-roadmap.md`。
 
 更新方式：
 
@@ -835,3 +836,4 @@ pnpm --filter @lp-agent/model-gateway test
 - 如果实现了一个能力，在“本项目当前怎么处理”中把它从“还没做”移动到“已完成或基本成型”。
 - 如果发现一个新的工程难点，在“Agent 开发核心难点”中新增小节。
 - 如果某个旧判断过时，直接改成当前事实，不保留误导性历史描述。
+- 如果用户调整下一阶段方向，先更新 roadmap，再进入对应 spec/plan。
