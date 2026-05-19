@@ -409,6 +409,42 @@ describe("worker-backed skill command finalization", () => {
     expect(events.filter((event) => event.type === "run.completed")).toHaveLength(1);
   });
 
+  it("keeps terminal observation metadata stable across repeated finalization", async () => {
+    const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
+
+    await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob,
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+    const staleWorkerJob: WorkerJobRecord = {
+      ...workerJob,
+      resultSummary: workerJob.resultSummary
+        ? {
+            ...workerJob.resultSummary,
+            stdout: "changed output",
+            stdoutBytes: 999
+          }
+        : undefined
+    };
+    await finalizeWorkerBackedSkillCommand({
+      repositories,
+      workerJob: staleWorkerJob,
+      now: () => new Date("2026-05-18T00:00:05.000Z")
+    });
+
+    await expect(repositories.toolObservations.listForRun("run_skill_command_1")).resolves.toEqual([
+      expect.objectContaining({
+        state: "completed",
+        outputSummary: "stdout: 9 bytes\nstderr: 0 bytes",
+        completedAt: "2026-05-18T00:00:04.000Z"
+      })
+    ]);
+    const events = await repositories.runEvents.listForRun("run_skill_command_1");
+    expect(events.filter((event) => event.type === "tool.completed")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "run.completed")).toHaveLength(1);
+  });
+
   it("fails finalization when matching terminal tool and run events disagree", async () => {
     const { repositories, workerJob } = await linkedWorkerJob({ state: "completed" });
     await repositories.runEvents.save({

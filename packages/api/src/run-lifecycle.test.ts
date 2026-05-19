@@ -4,6 +4,7 @@ import {
   type RunEventRecord,
   type RunRecord,
   type RunRecordState,
+  type ToolObservationRecord,
   type WorkbenchRepositories
 } from "@lp-agent/db";
 import {
@@ -61,6 +62,26 @@ async function saveEvent(
   };
   await repositories.runEvents.save(event);
   return event;
+}
+
+async function saveToolObservation(
+  repositories: WorkbenchRepositories,
+  overrides: Partial<ToolObservationRecord> = {}
+): Promise<ToolObservationRecord> {
+  const observation: ToolObservationRecord = {
+    id: "tool_observation_1",
+    runId: "run_planner_1",
+    projectId: "project_1",
+    taskId: "task_1",
+    toolName: "skill:skill_static_deploy:publish_static",
+    input: {},
+    outputSummary: "",
+    state: "running",
+    createdAt: "2026-05-19T00:00:01.000Z",
+    ...overrides
+  };
+  await repositories.toolObservations.save(observation);
+  return observation;
 }
 
 describe("deriveRunLifecycleView core states", () => {
@@ -277,6 +298,44 @@ describe("deriveRunLifecycleView core states", () => {
     });
     expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
   });
+
+  it("uses model parse policy codes when reason is absent", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      sequence: 1,
+      type: "model.output.parse_failed",
+      message: "Planner output could not be parsed RAW_MODEL_OUTPUT_SECRET",
+      payload: {
+        policyCode: "model_schema_policy_violation"
+      }
+    });
+    await saveEvent(repositories, {
+      sequence: 2,
+      type: "run.failed",
+      message: "Planner run failed RAW_MODEL_OUTPUT_SECRET"
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "model_schema_policy_violation",
+          source: "model_parse"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
 });
 
 function workerJob(
@@ -476,6 +535,27 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
     });
   });
 
+  it("preserves linked worker fields and derives from run state when worker runtime is omitted", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer", state: "running" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "running",
+        linkedWorkerJobId: "worker_job_1",
+        linkedObservationId: "tool_observation_1",
+        recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
   it("derives rejected linked worker jobs as failed without exposing raw output", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveRun(repositories, { role: "deployer" });
@@ -553,6 +633,81 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
       }
     });
     expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
+
+  it("prefers active linked worker state over blocked handoffs and approval waits", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      role: "deployer",
+      state: "needs_approval"
+    });
+    await saveWorkerLink(repositories);
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "blocked",
+        summary: "Reviewer blocked deployment",
+        blockingReason: "Deployment blocked",
+        now: () => new Date("2026-05-19T00:00:02.000Z")
+      })
+    );
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () => workerJob({ state: "running" })
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "running",
+        linkedWorkerJobId: "worker_job_1",
+        recoveryActions: []
+      }
+    });
+  });
+
+  it("prefers approval waits over blocked handoffs when no active worker state is available", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      role: "deployer",
+      state: "needs_approval"
+    });
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "blocked",
+        summary: "Reviewer blocked deployment",
+        blockingReason: "Deployment blocked",
+        now: () => new Date("2026-05-19T00:00:02.000Z")
+      })
+    );
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "waiting_for_approval",
+        recoveryActions: ["request_approval"]
+      }
+    });
   });
 
   it("does not attach a task-scoped blocked handoff to a taskless run", async () => {
@@ -657,6 +812,72 @@ describe("deriveRunLifecycleView recovery safety", () => {
     });
     expect(JSON.stringify(result)).not.toContain("secret-token");
     expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN");
+  });
+
+  it("uses failed tool observation diagnostics without exposing raw output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { state: "failed" });
+    await saveToolObservation(repositories, {
+      state: "failed",
+      outputSummary: "secret tool output",
+      errorName: "ToolExecutionFailed",
+      completedAt: "2026-05-19T00:00:04.000Z"
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "ToolExecutionFailed",
+          message: "Tool execution failed.",
+          source: "tool_observation",
+          errorName: "ToolExecutionFailed"
+        },
+        recoveryActions: ["retry_run"]
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("secret tool output");
+  });
+
+  it("uses terminal tool event diagnostics without exposing event messages", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { state: "failed" });
+    await saveEvent(repositories, {
+      type: "tool.failed",
+      message: "Tool failed with SECRET_TOKEN=secret-token",
+      payload: {
+        observationId: "tool_observation_1",
+        outputSummary: "raw output secret",
+        errorName: "Unsafe Tool Error"
+      }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "tool_failed",
+          message: "Tool execution failed.",
+          source: "tool_observation",
+          eventType: "tool.failed"
+        },
+        recoveryActions: ["retry_run"]
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-token");
+    expect(JSON.stringify(result)).not.toContain("raw output secret");
   });
 
   it("lists lifecycle views for a task in started order", async () => {

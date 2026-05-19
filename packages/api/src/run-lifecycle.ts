@@ -3,6 +3,7 @@ import type {
   RunEventRecord,
   RunRecord,
   RunRecordState,
+  ToolObservationRecord,
   WorkbenchRepositories
 } from "@lp-agent/db";
 import type { AgentRole } from "@lp-agent/model-gateway";
@@ -91,6 +92,25 @@ type TerminalRunEventType = keyof typeof terminalEventStateByType;
 
 const safeDiagnosticCodePattern = /^[A-Za-z0-9_.:-]{1,80}$/;
 
+interface LinkedWorkerFields {
+  linkedWorkerJobId: string;
+  linkedObservationId?: string;
+}
+
+type LinkedWorkerJobResult =
+  | {
+      status: "not_configured";
+    }
+  | {
+      status: "loaded";
+      workerJob: WorkerJobRecord | undefined;
+    }
+  | {
+      status: "unavailable";
+      code: string;
+      message: string;
+    };
+
 export async function deriveRunLifecycleView(
   input: DeriveRunLifecycleViewInput
 ): Promise<DeriveRunLifecycleViewResult> {
@@ -104,6 +124,7 @@ export async function deriveRunLifecycleView(
   }
 
   const events = await input.repositories.runEvents.listForRun(run.id);
+  const observations = await input.repositories.toolObservations.listForRun(run.id);
 
   return {
     ok: true,
@@ -111,7 +132,8 @@ export async function deriveRunLifecycleView(
       repositories: input.repositories,
       workerRuntime: input.workerRuntime,
       run,
-      events
+      events,
+      observations
     })
   };
 }
@@ -123,11 +145,13 @@ export async function listRunLifecycleViewsForTask(
   const views = await Promise.all(
     runs.map(async (run) => {
       const events = await input.repositories.runEvents.listForRun(run.id);
+      const observations = await input.repositories.toolObservations.listForRun(run.id);
       return buildRunLifecycleView({
         repositories: input.repositories,
         workerRuntime: input.workerRuntime,
         run,
-        events
+        events,
+        observations
       });
     })
   );
@@ -143,11 +167,12 @@ async function buildRunLifecycleView(input: {
   workerRuntime?: RunLifecycleWorkerRuntime;
   run: RunRecord;
   events: RunEventRecord[];
+  observations: ToolObservationRecord[];
 }): Promise<RunLifecycleView> {
-  const { events, run } = input;
+  const { events, observations, run } = input;
   const terminalConflict = findTerminalRunEventConflict(events);
   const terminalEvent = findLatestTerminalRunEvent(events);
-  const modelParseDiagnostic = deriveModelParseDiagnostic(events);
+  const diagnosticSummary = deriveDiagnostic({ events, observations });
 
   if (terminalConflict) {
     return {
@@ -171,10 +196,63 @@ async function buildRunLifecycleView(input: {
       ...baseRunLifecycleView(run),
       state,
       terminalEventType: terminalEvent.type,
-      diagnosticSummary:
-        modelParseDiagnostic ??
-        (state === "failed" ? deriveRunFailedDiagnostic(terminalEvent) : undefined),
+      diagnosticSummary: state === "failed" ? diagnosticSummary : undefined,
       recoveryActions: state === "failed" ? ["retry_run"] : []
+    };
+  }
+
+  const workerLink = findLatestWorkerJobLink(events);
+  let linkedFields: LinkedWorkerFields | undefined;
+  let terminalWorkerJob: WorkerJobRecord | undefined;
+  let workerRuntimeOmitted = false;
+
+  if (workerLink) {
+    const workerLinkedFields = toLinkedWorkerFields(workerLink);
+    linkedFields = workerLinkedFields;
+    const workerJobResult = await getLinkedWorkerJob(
+      input.workerRuntime,
+      workerLink.workerJobId
+    );
+
+    if (workerJobResult.status === "unavailable") {
+      return unavailableWorkerJobLifecycleView({
+        run,
+        linkedFields: workerLinkedFields,
+        code: workerJobResult.code,
+        message: workerJobResult.message
+      });
+    }
+
+    if (workerJobResult.status === "not_configured") {
+      workerRuntimeOmitted = true;
+    } else if (!workerJobResult.workerJob) {
+      return missingWorkerJobLifecycleView({
+        run,
+        linkedFields: workerLinkedFields
+      });
+    } else if (isActiveWorkerJob(workerJobResult.workerJob)) {
+      return deriveActiveLinkedWorkerJobView({
+        run,
+        linkedFields: workerLinkedFields,
+        workerJob: workerJobResult.workerJob
+      });
+    } else {
+      terminalWorkerJob = workerJobResult.workerJob;
+    }
+  }
+
+  const mapped = mapRunRecordState(run.state);
+
+  if (run.state === "needs_approval" || run.state === "needs_input") {
+    return {
+      ...baseRunLifecycleView(run),
+      ...(linkedFields ?? {}),
+      state: mapped.state,
+      diagnosticSummary: mapped.diagnosticSummary,
+      recoveryActions: withOmittedWorkerRuntimeAction(
+        mapped.recoveryActions,
+        workerRuntimeOmitted
+      )
     };
   }
 
@@ -183,6 +261,7 @@ async function buildRunLifecycleView(input: {
   if (blockedHandoff) {
     return {
       ...baseRunLifecycleView(run),
+      ...(linkedFields ?? {}),
       state: "blocked",
       blockedReason: summarizeBlockedReason(blockedHandoff.blockingReason),
       diagnosticSummary: {
@@ -194,24 +273,23 @@ async function buildRunLifecycleView(input: {
     };
   }
 
-  const workerLink = findLatestWorkerJobLink(events);
-
-  if (workerLink) {
-    return deriveLinkedWorkerJobView({
-      workerRuntime: input.workerRuntime,
+  if (terminalWorkerJob && linkedFields) {
+    return deriveTerminalLinkedWorkerJobView({
       run,
-      workerJobId: workerLink.workerJobId,
-      observationId: workerLink.observationId
+      linkedFields,
+      workerJob: terminalWorkerJob
     });
   }
 
-  const mapped = mapRunRecordState(run.state);
-
   return {
     ...baseRunLifecycleView(run),
+    ...(linkedFields ?? {}),
     state: mapped.state,
-    diagnosticSummary: modelParseDiagnostic ?? mapped.diagnosticSummary,
-    recoveryActions: mapped.recoveryActions
+    diagnosticSummary: diagnosticSummary ?? mapped.diagnosticSummary,
+    recoveryActions: withOmittedWorkerRuntimeAction(
+      mapped.recoveryActions,
+      workerRuntimeOmitted
+    )
   };
 }
 
@@ -276,52 +354,41 @@ function findLatestWorkerJobLink(events: RunEventRecord[]): {
     .at(-1);
 }
 
-async function deriveLinkedWorkerJobView(input: {
-  workerRuntime?: RunLifecycleWorkerRuntime;
-  run: RunRecord;
+function toLinkedWorkerFields(input: {
   workerJobId: string;
   observationId?: string;
-}): Promise<RunLifecycleView> {
-  const linkedFields = {
+}): LinkedWorkerFields {
+  return {
     linkedWorkerJobId: input.workerJobId,
     ...(input.observationId ? { linkedObservationId: input.observationId } : {})
   };
-  const workerJobResult = await getLinkedWorkerJob(
-    input.workerRuntime,
-    input.workerJobId
-  );
+}
 
-  if (!workerJobResult.ok) {
-    return unavailableWorkerJobLifecycleView({
-      run: input.run,
-      linkedFields,
-      code: workerJobResult.code,
-      message: workerJobResult.message
-    });
+function isActiveWorkerJob(workerJob: WorkerJobRecord): boolean {
+  return workerJob.state === "queued" || workerJob.state === "running";
+}
+
+function withOmittedWorkerRuntimeAction(
+  actions: RunRecoveryAction[],
+  workerRuntimeOmitted: boolean
+): RunRecoveryAction[] {
+  if (!workerRuntimeOmitted || actions.includes("inspect_manually")) {
+    return actions;
   }
+  return [...actions, "inspect_manually"];
+}
 
-  const workerJob = workerJobResult.workerJob;
-  if (!workerJob) {
-    return {
-      ...baseRunLifecycleView(input.run),
-      ...linkedFields,
-      state: "failed",
-      diagnosticSummary: {
-        code: "worker_job_missing",
-        message: "Linked worker job could not be found.",
-        source: "lifecycle",
-        eventType: "worker.job.linked"
-      },
-      recoveryActions: ["inspect_manually"]
-    };
-  }
-
+function deriveActiveLinkedWorkerJobView(input: {
+  run: RunRecord;
+  linkedFields: LinkedWorkerFields;
+  workerJob: WorkerJobRecord;
+}): RunLifecycleView {
   const base = {
     ...baseRunLifecycleView(input.run),
-    ...linkedFields
+    ...input.linkedFields
   };
 
-  if (workerJob.state === "queued") {
+  if (input.workerJob.state === "queued") {
     return {
       ...base,
       state: "queued",
@@ -329,15 +396,42 @@ async function deriveLinkedWorkerJobView(input: {
     };
   }
 
-  if (workerJob.state === "running") {
-    return {
-      ...base,
-      state: workerJob.cancelRequestedAt ? "cancelling" : "running",
-      recoveryActions: []
-    };
-  }
+  return {
+    ...base,
+    state: input.workerJob.cancelRequestedAt ? "cancelling" : "running",
+    recoveryActions: []
+  };
+}
 
-  if (workerJob.state === "completed") {
+function missingWorkerJobLifecycleView(input: {
+  run: RunRecord;
+  linkedFields: LinkedWorkerFields;
+}): RunLifecycleView {
+  return {
+    ...baseRunLifecycleView(input.run),
+    ...input.linkedFields,
+    state: "failed",
+    diagnosticSummary: {
+      code: "worker_job_missing",
+      message: "Linked worker job could not be found.",
+      source: "lifecycle",
+      eventType: "worker.job.linked"
+    },
+    recoveryActions: ["inspect_manually"]
+  };
+}
+
+function deriveTerminalLinkedWorkerJobView(input: {
+  run: RunRecord;
+  linkedFields: LinkedWorkerFields;
+  workerJob: WorkerJobRecord;
+}): RunLifecycleView {
+  const base = {
+    ...baseRunLifecycleView(input.run),
+    ...input.linkedFields
+  };
+
+  if (input.workerJob.state === "completed") {
     return {
       ...base,
       state: "completed",
@@ -351,13 +445,13 @@ async function deriveLinkedWorkerJobView(input: {
     };
   }
 
-  if (workerJob.state === "cancelled") {
+  if (input.workerJob.state === "cancelled") {
     return {
       ...base,
       state: "cancelled",
       diagnosticSummary: workerJobDiagnostic(
-        workerJob,
-        sanitizeOptionalDiagnosticCode(workerJob.errorName) ?? "worker_job_cancelled"
+        input.workerJob,
+        sanitizeOptionalDiagnosticCode(input.workerJob.errorName) ?? "worker_job_cancelled"
       ),
       recoveryActions: ["resume_worker_finalization"]
     };
@@ -367,9 +461,9 @@ async function deriveLinkedWorkerJobView(input: {
     ...base,
     state: "failed",
     diagnosticSummary: workerJobDiagnostic(
-      workerJob,
-      sanitizeOptionalDiagnosticCode(workerJob.errorName) ??
-        sanitizeOptionalDiagnosticCode(workerJob.resultSummary?.errorName) ??
+      input.workerJob,
+      sanitizeOptionalDiagnosticCode(input.workerJob.errorName) ??
+        sanitizeOptionalDiagnosticCode(input.workerJob.resultSummary?.errorName) ??
         "worker_job_failed"
     ),
     recoveryActions: ["resume_worker_finalization"]
@@ -379,22 +473,19 @@ async function deriveLinkedWorkerJobView(input: {
 async function getLinkedWorkerJob(
   workerRuntime: RunLifecycleWorkerRuntime | undefined,
   workerJobId: string
-): Promise<
-  | { ok: true; workerJob: WorkerJobRecord | undefined }
-  | { ok: false; code: string; message: string }
-> {
+): Promise<LinkedWorkerJobResult> {
   if (!workerRuntime) {
-    return { ok: true, workerJob: undefined };
+    return { status: "not_configured" };
   }
 
   try {
     return {
-      ok: true,
+      status: "loaded",
       workerJob: await workerRuntime.getJob(workerJobId)
     };
   } catch {
     return {
-      ok: false,
+      status: "unavailable",
       code: "worker_job_unavailable",
       message: "Linked worker job state is unavailable."
     };
@@ -489,6 +580,33 @@ function deriveRunFailedDiagnostic(event: RunEventRecord): RunDiagnosticSummary 
   };
 }
 
+function deriveToolEventDiagnostic(event: RunEventRecord): RunDiagnosticSummary {
+  const failed = event.type === "tool.failed";
+  const errorName = sanitizeOptionalDiagnosticCode(event.payload.errorName);
+
+  return {
+    code: failed ? "tool_failed" : "tool_cancelled",
+    message: failed ? "Tool execution failed." : "Tool execution cancelled.",
+    source: "tool_observation",
+    eventType: event.type,
+    ...(errorName ? { errorName } : {})
+  };
+}
+
+function deriveToolObservationDiagnostic(
+  observation: ToolObservationRecord
+): RunDiagnosticSummary {
+  const failed = observation.state === "failed";
+  const errorName = sanitizeOptionalDiagnosticCode(observation.errorName);
+
+  return {
+    code: errorName ?? (failed ? "tool_failed" : "tool_cancelled"),
+    message: failed ? "Tool execution failed." : "Tool execution cancelled.",
+    source: "tool_observation",
+    ...(errorName ? { errorName } : {})
+  };
+}
+
 function mapRunRecordState(state: RunRecordState): {
   state: RunLifecycleState;
   diagnosticSummary?: RunDiagnosticSummary;
@@ -538,11 +656,48 @@ function deriveModelParseDiagnostic(
   }
 
   return {
-    code: sanitizeDiagnosticCode(parseFailedEvent.payload.reason),
+    code: sanitizeDiagnosticCode(
+      parseFailedEvent.payload.policyCode ??
+        parseFailedEvent.payload.reason ??
+        "model_output_parse_failed"
+    ),
     message: "Model output could not be parsed safely.",
     source: "model_parse",
     eventType: parseFailedEvent.type
   };
+}
+
+function deriveDiagnostic(input: {
+  events: RunEventRecord[];
+  observations: ToolObservationRecord[];
+}): RunDiagnosticSummary | undefined {
+  const modelParseDiagnostic = deriveModelParseDiagnostic(input.events);
+  if (modelParseDiagnostic) {
+    return modelParseDiagnostic;
+  }
+
+  const failedRun = input.events
+    .filter((event) => event.type === "run.failed")
+    .at(-1);
+  if (failedRun) {
+    return deriveRunFailedDiagnostic(failedRun);
+  }
+
+  const terminalToolEvent = input.events
+    .filter((event) => event.type === "tool.failed" || event.type === "tool.cancelled")
+    .at(-1);
+  if (terminalToolEvent) {
+    return deriveToolEventDiagnostic(terminalToolEvent);
+  }
+
+  const terminalObservation = input.observations
+    .filter((observation) => observation.state === "failed" || observation.state === "cancelled")
+    .at(-1);
+  if (terminalObservation) {
+    return deriveToolObservationDiagnostic(terminalObservation);
+  }
+
+  return undefined;
 }
 
 function sanitizeDiagnosticCode(value: unknown): string {

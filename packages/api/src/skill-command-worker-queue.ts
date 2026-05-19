@@ -63,6 +63,13 @@ export type RunLocalWorkerOnceResult =
 
 type WorkerFinalState = "completed" | "failed" | "rejected" | "cancelled";
 type TerminalRecordState = "completed" | "failed" | "cancelled";
+type WorkerTerminalPayload = {
+  workerJobId: string;
+  observationId?: string;
+  outputSummary: string;
+  exitCode?: number;
+  errorName?: string;
+};
 
 export function createLocalWorkerQueueRuntime(input: {
   jobsFilePath: string;
@@ -235,13 +242,17 @@ export async function finalizeWorkerBackedSkillCommand(input: {
   const exitCode = input.workerJob.resultSummary?.exitCode;
   let nextSequence =
     existingEvents.reduce((max, event) => Math.max(max, event.sequence), 0) + 1;
-  const terminalPayload = {
+  const fallbackTerminalPayload: WorkerTerminalPayload = {
     workerJobId: input.workerJob.id,
     ...(observationId ? { observationId } : {}),
     outputSummary,
     ...(exitCode !== undefined ? { exitCode } : {}),
     ...(errorName ? { errorName } : {})
   };
+  const terminalPayload = stableTerminalPayload({
+    existingPayload: terminalRunEvent?.payload ?? terminalToolEvent?.payload,
+    fallbackPayload: fallbackTerminalPayload
+  });
 
   if (!terminalToolEvent) {
     await input.repositories.runEvents.save(
@@ -274,9 +285,9 @@ export async function finalizeWorkerBackedSkillCommand(input: {
     repositories: input.repositories,
     observation,
     state: terminalRecordState,
-    outputSummary,
-    exitCode,
-    errorName,
+    outputSummary: terminalPayload.outputSummary,
+    exitCode: terminalPayload.exitCode,
+    errorName: terminalPayload.errorName,
     completedAt: reconciledRunEvent.createdAt
   });
 
@@ -331,6 +342,39 @@ async function updateLinkedObservation(input: {
     ...(input.errorName !== undefined ? { errorName: input.errorName } : {}),
     completedAt: input.completedAt
   });
+}
+
+function stableTerminalPayload(input: {
+  existingPayload: Record<string, unknown> | undefined;
+  fallbackPayload: WorkerTerminalPayload;
+}): WorkerTerminalPayload {
+  if (!input.existingPayload) {
+    return input.fallbackPayload;
+  }
+
+  const workerJobId =
+    toOptionalString(input.existingPayload.workerJobId) ??
+    input.fallbackPayload.workerJobId;
+  const observationId =
+    toOptionalString(input.existingPayload.observationId) ??
+    input.fallbackPayload.observationId;
+  const outputSummary =
+    toOptionalString(input.existingPayload.outputSummary) ??
+    input.fallbackPayload.outputSummary;
+  const exitCode =
+    toOptionalNumber(input.existingPayload.exitCode) ??
+    input.fallbackPayload.exitCode;
+  const errorName =
+    toOptionalString(input.existingPayload.errorName) ??
+    input.fallbackPayload.errorName;
+
+  return {
+    workerJobId,
+    ...(observationId ? { observationId } : {}),
+    outputSummary,
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(errorName ? { errorName } : {})
+  };
 }
 
 function toTerminalRunEventRecord(input: {
@@ -507,4 +551,8 @@ function compareRunEventsLatestFirst(
 
 function toOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
