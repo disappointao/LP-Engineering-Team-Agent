@@ -445,6 +445,78 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
     });
   });
 
+  it("reports unavailable linked worker job state when getJob throws", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () => {
+          throw new Error("worker runtime unavailable");
+        }
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        linkedWorkerJobId: "worker_job_1",
+        linkedObservationId: "tool_observation_1",
+        diagnosticSummary: {
+          code: "worker_job_unavailable",
+          source: "lifecycle",
+          eventType: "worker.job.linked"
+        },
+        recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
+  it("derives rejected linked worker jobs as failed without exposing raw output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () =>
+          workerJob({
+            state: "rejected",
+            completedAt: "2026-05-19T00:00:04.000Z",
+            resultSummary: {
+              state: "rejected",
+              exitCode: 1,
+              stdout: "raw stdout secret",
+              stderr: "raw stderr secret",
+              stdoutBytes: 17,
+              stderrBytes: 17,
+              errorName: "WorkerPolicyRejected"
+            }
+          })
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "WorkerPolicyRejected",
+          source: "worker_job"
+        },
+        recoveryActions: ["resume_worker_finalization"]
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("raw stdout secret");
+    expect(JSON.stringify(result)).not.toContain("raw stderr secret");
+  });
+
   it("derives blocked from an inbound blocked handoff and redacts the blocking reason", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveRun(repositories, { role: "deployer" });
@@ -481,5 +553,37 @@ describe("deriveRunLifecycleView worker and handoff states", () => {
       }
     });
     expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
+
+  it("does not attach a task-scoped blocked handoff to a taskless run", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer", taskId: undefined });
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "blocked",
+        summary: "Reviewer blocked deployment",
+        blockingReason: "Deployment blocked",
+        now: () => new Date("2026-05-19T00:00:02.000Z")
+      })
+    );
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "running",
+        recoveryActions: []
+      }
+    });
   });
 });

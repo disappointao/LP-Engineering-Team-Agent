@@ -204,7 +204,21 @@ async function findBlockedInboundHandoff(
     toRole: run.role
   });
 
-  return inbound.filter((handoff) => handoff.state === "blocked").at(-1);
+  return inbound
+    .filter(
+      (handoff) =>
+        handoff.state === "blocked" && matchesRunTaskScope(handoff, run.taskId)
+    )
+    .at(-1);
+}
+
+function matchesRunTaskScope(
+  handoff: AgentHandoffRecord,
+  runTaskId: string | undefined
+): boolean {
+  return runTaskId === undefined
+    ? handoff.taskId === undefined
+    : handoff.taskId === runTaskId;
 }
 
 function summarizeBlockedReason(value: string | undefined): string | undefined {
@@ -251,10 +265,21 @@ async function deriveLinkedWorkerJobView(input: {
     linkedWorkerJobId: input.workerJobId,
     ...(input.observationId ? { linkedObservationId: input.observationId } : {})
   };
-  const workerJob = input.workerRuntime
-    ? await input.workerRuntime.getJob(input.workerJobId)
-    : undefined;
+  const workerJobResult = await getLinkedWorkerJob(
+    input.workerRuntime,
+    input.workerJobId
+  );
 
+  if (!workerJobResult.ok) {
+    return unavailableWorkerJobLifecycleView({
+      run: input.run,
+      linkedFields,
+      code: workerJobResult.code,
+      message: workerJobResult.message
+    });
+  }
+
+  const workerJob = workerJobResult.workerJob;
   if (!workerJob) {
     return {
       ...baseRunLifecycleView(input.run),
@@ -327,6 +352,54 @@ async function deriveLinkedWorkerJobView(input: {
         "worker_job_failed"
     ),
     recoveryActions: ["resume_worker_finalization"]
+  };
+}
+
+async function getLinkedWorkerJob(
+  workerRuntime: RunLifecycleWorkerRuntime | undefined,
+  workerJobId: string
+): Promise<
+  | { ok: true; workerJob: WorkerJobRecord | undefined }
+  | { ok: false; code: string; message: string }
+> {
+  if (!workerRuntime) {
+    return { ok: true, workerJob: undefined };
+  }
+
+  try {
+    return {
+      ok: true,
+      workerJob: await workerRuntime.getJob(workerJobId)
+    };
+  } catch {
+    return {
+      ok: false,
+      code: "worker_job_unavailable",
+      message: "Linked worker job state is unavailable."
+    };
+  }
+}
+
+function unavailableWorkerJobLifecycleView(input: {
+  run: RunRecord;
+  linkedFields: {
+    linkedWorkerJobId: string;
+    linkedObservationId?: string;
+  };
+  code: string;
+  message: string;
+}): RunLifecycleView {
+  return {
+    ...baseRunLifecycleView(input.run),
+    ...input.linkedFields,
+    state: "failed",
+    diagnosticSummary: {
+      code: input.code,
+      message: input.message,
+      source: "lifecycle",
+      eventType: "worker.job.linked"
+    },
+    recoveryActions: ["inspect_manually"]
   };
 }
 
