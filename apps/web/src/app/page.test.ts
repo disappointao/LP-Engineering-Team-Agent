@@ -743,7 +743,7 @@ describe("HomePage project flow errors", () => {
           {
             id: "worker_log_1",
             type: "worker.job.stale_recovered",
-            message: "Worker job recovered from stale claim.",
+            message: "raw stdout leaked secret-token",
             workerId: "worker_alpha",
             workerJobId: "worker_job_long_identifier_that_should_wrap",
             projectId: "project_1",
@@ -766,6 +766,8 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("worker_alpha");
     expect(html).toContain("Recent worker logs");
     expect(html).toContain("worker.job.stale_recovered");
+    expect(html).not.toContain("secret-token");
+    expect(html).not.toContain("raw stdout");
   });
 
   it("renders project members in the sidebar", async () => {

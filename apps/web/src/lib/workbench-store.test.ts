@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,12 +17,14 @@ import {
   InMemoryWorkerLogRepository,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
-  createSimulatedSandboxPolicy
+  createSimulatedSandboxPolicy,
+  type WorkerJobRepository
 } from "@lp-agent/worker-runtime";
 import { createLocalWorkerQueueRuntime } from "@lp-agent/api";
 import {
   classifyTaskPrompt,
   createWebWorkbenchStore,
+  getWebWorkbenchStore,
   deriveImplicitProjectName,
   validateProjectInput,
   validatePromptInput
@@ -57,6 +59,15 @@ const emptyWorkerQueueSnapshot = {
 };
 
 const tempDirs: string[] = [];
+const originalEnv = {
+  LP_AGENT_WORKBENCH_STATE_FILE: process.env.LP_AGENT_WORKBENCH_STATE_FILE,
+  WORKER_JOBS_FILE: process.env.WORKER_JOBS_FILE,
+  WORKER_PAYLOADS_FILE: process.env.WORKER_PAYLOADS_FILE,
+  WORKER_LOGS_FILE: process.env.WORKER_LOGS_FILE
+};
+const webStoreGlobal = globalThis as typeof globalThis & {
+  __lpAgentWebWorkbenchStore?: unknown;
+};
 
 async function tempQueueFiles() {
   const dir = await mkdtemp(join(tmpdir(), "web-store-worker-queue-"));
@@ -66,6 +77,16 @@ async function tempQueueFiles() {
     payloadsFilePath: join(dir, "worker-payloads.json"),
     logsFilePath: join(dir, "worker-logs.json")
   };
+}
+
+function restoreWorkerEnv() {
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
 }
 
 function brandSkillManifestJson(): string {
@@ -188,6 +209,8 @@ async function saveManualPageVersion(input: {
 
 describe("web workbench store", () => {
   afterEach(async () => {
+    restoreWorkerEnv();
+    delete webStoreGlobal.__lpAgentWebWorkbenchStore;
     await Promise.all(
       tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
     );
@@ -271,6 +294,94 @@ describe("web workbench store", () => {
 
     expect(state.workerQueue.counts.queued).toBe(1);
     expect(state.workerQueue.projectId).toBe(project.id);
+  });
+
+  it("returns an empty worker queue snapshot when worker job listing fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerJobRepository = {
+      save: vi.fn(),
+      getById: vi.fn(),
+      listForProject: vi.fn(async () => {
+        throw new Error("worker queue unavailable");
+      }),
+      listAll: vi.fn(),
+      findOldestQueued: vi.fn(),
+      claimOldestQueued: vi.fn(),
+      heartbeatClaimed: vi.fn(),
+      completeClaimed: vi.fn(),
+      failClaimed: vi.fn(),
+      rejectClaimed: vi.fn(),
+      cancelQueued: vi.fn(),
+      cancelRunning: vi.fn(),
+      requeueStaleRunning: vi.fn()
+    } as unknown as WorkerJobRepository;
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerJobRepository
+    });
+    const project = await store.createProject({ name: "Project" });
+
+    const state = await store.getPageState({ projectId: project.id });
+
+    expect(state.workerQueue).toEqual({
+      ...emptyWorkerQueueSnapshot,
+      projectId: project.id
+    });
+  });
+
+  it("derives default worker logs path from a custom worker jobs file", async () => {
+    const files = await tempQueueFiles();
+    process.env.LP_AGENT_WORKBENCH_STATE_FILE = join(
+      files.jobsFilePath,
+      "..",
+      "workbench-state.json"
+    );
+    process.env.WORKER_JOBS_FILE = files.jobsFilePath;
+    process.env.WORKER_PAYLOADS_FILE = files.payloadsFilePath;
+    delete process.env.WORKER_LOGS_FILE;
+    delete webStoreGlobal.__lpAgentWebWorkbenchStore;
+    const store = getWebWorkbenchStore();
+    const project = await store.createProject({ name: "Project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+    const command = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.value.id,
+      commandId: "publish_static"
+    });
+    if (!command.ok) {
+      throw new Error(`Expected command queueing to succeed, got ${command.error}.`);
+    }
+
+    await expect(store.runLocalWorkerOnce({ projectId: project.id })).resolves.toMatchObject({
+      ok: true,
+      state: "completed"
+    });
+
+    await expect(readFile(files.logsFilePath, "utf8")).resolves.toContain(
+      "worker.job.completed"
+    );
   });
 
   it("runs one local worker job and finalizes the queued command", async () => {

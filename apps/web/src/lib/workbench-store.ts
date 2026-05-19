@@ -1485,8 +1485,8 @@ function defaultWorkerPayloadsFilePath(): string {
   return process.env.WORKER_PAYLOADS_FILE ?? ".lp-agent/worker-payloads.json";
 }
 
-function defaultWorkerLogsFilePath(): string {
-  return process.env.WORKER_LOGS_FILE ?? ".lp-agent/worker-logs.json";
+function defaultWorkerLogsFilePath(): string | undefined {
+  return process.env.WORKER_LOGS_FILE;
 }
 
 function defaultWorkerId(): string {
@@ -1495,10 +1495,11 @@ function defaultWorkerId(): string {
 
 export function getWebWorkbenchStore(): WebWorkbenchStore {
   if (!globalStore.__lpAgentWebWorkbenchStore) {
+    const workerLogsFilePath = defaultWorkerLogsFilePath();
     const workerQueue = createLocalWorkerQueueRuntime({
       jobsFilePath: defaultWorkerJobsFilePath(),
       payloadsFilePath: defaultWorkerPayloadsFilePath(),
-      logsFilePath: defaultWorkerLogsFilePath()
+      ...(workerLogsFilePath !== undefined ? { logsFilePath: workerLogsFilePath } : {})
     });
     globalStore.__lpAgentWebWorkbenchStore = createWebWorkbenchStore({
       repositories: createJsonFileWorkbenchRepositories({

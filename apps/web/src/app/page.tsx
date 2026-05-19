@@ -523,7 +523,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             {workerQueue.logs.map((log) => (
                               <li key={log.id}>
                                 <span>{log.type}</span>
-                                <strong>{log.message}</strong>
                                 <small>
                                   {[log.workerId, log.workerJobId, log.createdAt]
                                     .filter(Boolean)
