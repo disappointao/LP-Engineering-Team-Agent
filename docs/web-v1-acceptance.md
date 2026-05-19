@@ -23,7 +23,8 @@ Use this checklist before treating the current web workbench as a usable local M
 - [ ] The task appears in the task list.
 - [ ] The conversation detail opens in a chat-style layout.
 - [ ] Tool or process rows, when present, render as progress/process information rather than final user content.
-- [ ] The task can be interrupted or continued through the visible conversation control.
+- [ ] The composer remains available after the ordinary task result and can submit a follow-up message in the same conversation.
+- [ ] When there is no running worker job, the interrupt control is unavailable or fails gracefully without blocking the conversation.
 - [ ] No LP artifact preview is shown for a normal chat task.
 
 ## LP Generation Flow
@@ -38,18 +39,18 @@ Use this checklist before treating the current web workbench as a usable local M
 ## Artifact Diff And Source Snippets
 
 - [ ] The artifact diff list shows file-level metadata for `index.html`, `styles.css`, and `script.js`.
-- [ ] Large file contents are not embedded directly into the default task payload.
-- [ ] Selecting `artifactPath=index.html` returns a bounded source snippet for `index.html`.
-- [ ] Selecting `artifactPath=styles.css` returns a bounded source snippet for `styles.css`.
-- [ ] Selecting `artifactPath=script.js` returns a bounded source snippet for `script.js`.
+- [ ] Default artifact diff cards only show metadata; full source is shown only after clicking `Preview snippet`.
+- [ ] Click `Preview snippet` for `index.html` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=index.html`.
+- [ ] Click `Preview snippet` for `styles.css` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=styles.css`.
+- [ ] Click `Preview snippet` for `script.js` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=script.js`.
 - [ ] Unknown artifact paths fail gracefully without breaking the task page.
 
 ## Skills, Models, And MCP Boundaries
 
-- [ ] Skills are presented as managed workflow capabilities rather than ad hoc prompt text.
-- [ ] The model configuration surface supports deterministic local mode and real provider configuration surfaces.
+- [ ] Click `Skills` in the sidebar and confirm the view opens with managed workflow capabilities rather than ad hoc prompt text.
+- [ ] Click `Models` in the sidebar and confirm the view opens with deterministic/mock resolved routes and real provider configuration form fields.
 - [ ] Real model provider tests are opt-in and do not run during `pnpm smoke`.
-- [ ] MCP capabilities are documented or represented as a gateway surface, but real MCP tool execution is not required for this Web V1 checklist.
+- [ ] Click `MCP` in the sidebar and confirm the view opens with registry, approval, and visible tools surfaces, without executing a real MCP tool.
 - [ ] Deployment is not required for the current flow. Deployment can later be provided by skills or a dedicated deployment module.
 
 ## Regression Commands
