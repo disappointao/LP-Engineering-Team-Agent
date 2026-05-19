@@ -226,13 +226,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
 - Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
-- Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但明显落后于当前 `WorkbenchRepositories` contract；Stage 22 design 已确认先做 Postgres Repository Foundation v0。
+- Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但明显落后于当前 `WorkbenchRepositories` contract；Stage 22 design 和 implementation plan 已确认先做 Postgres Repository Foundation v0。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
 - 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
-- Postgres repository foundation 还没实现；Stage 22 design 已确认先对齐 Prisma schema、显式 opt-in Prisma repository adapter 和 Agent runtime 核心状态，不切换默认 Web backend。
+- Postgres repository foundation 还没实现；Stage 22 design 和 implementation plan 已确认先对齐 Prisma schema、显式 opt-in Prisma repository adapter 和 Agent runtime 核心状态，不切换默认 Web backend。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
@@ -378,12 +378,14 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - lifecycle view 把已修复完成的 run 视为 completed，同时保留 parse failure history；fallback availability 只作为失败 run 的恢复提示，不把失败 run 标成成功。
 - 学习重点：模型可靠性增强不能削弱 fail-closed 和可审计性。parse failure、repair attempt、retry attempt 和 fallback availability 都应该作为 timeline 事实出现，而不是藏在 adapter 内部。
 
-已确认的 Stage 22 Postgres Repository Foundation v0 设计：
+已确认的 Stage 22 Postgres Repository Foundation v0 设计和实施计划：
 
 - [2026-05-19-postgres-repository-foundation-design.md](./superpowers/specs/2026-05-19-postgres-repository-foundation-design.md)
+- 当前实现计划：[2026-05-19-postgres-repository-foundation.md](./superpowers/plans/2026-05-19-postgres-repository-foundation.md)
 - 这一阶段不是把整个 app 立即切到 Postgres，而是先让 Prisma schema 和当前核心 `WorkbenchRepositories` contract 对齐。
 - 第一批 Postgres repository 应覆盖 Agent runtime 可观察性闭环：project/task/message、run timeline、tool observation、handoff、artifact workspace metadata。
 - `in-memory` 和 `JSON-file` repositories 仍是 deterministic tests 和本地 MVP 的默认路径；Prisma/Postgres backend 必须显式 opt-in。
+- plan 默认先用 schema contract、shared repository contract、mapper/unit tests 和 opt-in integration test 分层推进，避免把 Prisma 细节泄漏到 runtime、context assembler 或 Web timeline。
 - 学习重点：数据层迁移不能削弱 Agent 的可观察性和安全边界。更 durable 的 Postgres 只应该保存安全摘要和受控 artifact 数据，不应该让 raw model output、raw tool output、secret 或完整 artifact 内容扩散到 timeline/context。
 
 已实现的 Stage 4 Skill Command MVP：

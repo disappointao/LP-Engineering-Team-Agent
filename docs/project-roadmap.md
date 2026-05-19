@@ -93,7 +93,7 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 ### Stage 22：Postgres Repository v0
 
-**状态：** design 已确认，待 implementation plan。
+**状态：** design 和 implementation plan 已确认，待实现。
 
 **为什么现在做：** Stage 18-21 已经把 run lifecycle、worker queue、MCP execution 和真实模型可靠性做到本地 MVP 可审计状态。下一步如果要支持严肃多人/公司内部使用，Postgres repository 是项目共享、auth、durable background workers 和 audit 的基础。
 
@@ -113,6 +113,8 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 - 不一次性实现 Skills、MCP connector、model provider、deployment 等所有 repository 的 Prisma backend。
 
 **当前设计：** `docs/superpowers/specs/2026-05-19-postgres-repository-foundation-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-19-postgres-repository-foundation.md`。
 
 ## Backlog 分组
 

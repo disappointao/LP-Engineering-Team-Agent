@@ -294,6 +294,10 @@
    - Stage 22 Postgres Repository Foundation v0 design。
    - 在 Stage 21 plan 后阅读，用于把 Prisma schema 和当前核心 `WorkbenchRepositories` contract 对齐，并规划显式 opt-in 的 Prisma/Postgres repository adapter，同时不做完整 hosted auth、object storage、production rollout 或默认 Web backend 切换。
 
+73. `plans/2026-05-19-postgres-repository-foundation.md`
+   - Stage 22 Postgres Repository Foundation v0 implementation plan。
+   - 在 Stage 22 design 后阅读，用于按 TDD 对齐 Prisma schema、提取 shared repository contract tests、实现 Prisma mappers、显式 opt-in Prisma-backed repository adapter、opt-in Postgres integration test 和文档收尾。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
