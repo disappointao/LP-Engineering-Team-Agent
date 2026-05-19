@@ -18,6 +18,7 @@
 - Skills：manifest、version、validation、publish、project binding、runtime context injection、受控 deployment skill command 边界。
 - MCP registry：connector、tool approval、role/permission visible tools；MCP execution 尚未实现。
 - Run orchestration：deterministic Planner/Builder/Reviewer/Deployer run records、ordered run events、tool observations。
+- Agent run lifecycle / recovery v0：从 run events、worker jobs、tool observations 和 handoffs 派生 lifecycle view、diagnostic summary 和 recovery action contract，并强化 worker finalization 幂等性。
 - Agent handoff v0：固定 LP 链路 `Planner -> Builder -> Reviewer -> Deployer` 的结构化 handoff state。
 - Worker runtime / queue：job contract、sandbox policy、JSON-file persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once、安全 simulated payload。
 - Artifact workspace：durable artifact workspace、manifest/hash/summary、controlled artifact reader、metadata-only static diff、bounded snippet。
@@ -38,7 +39,7 @@
 
 ### Stage 18：Agent Run Lifecycle & Recovery v0
 
-**状态：** implementation plan 已写，等待执行。
+**状态：** 已实现。
 
 **为什么现在做：** run records、run events、handoffs、worker jobs、tool observations 都已有 v0，但缺一个更正式的 lifecycle/recovery 层。这个阶段会把真正 Agent 系统需要的失败诊断、恢复、retry/resume、blocked state 和幂等 finalizer 打牢。
 
@@ -153,10 +154,9 @@
 
 ### Agent Runtime / Run Lifecycle
 
-- Run lifecycle state derivation。
-- failed 或 blocked runs 的 retry/resume。
-- Blocking question records。
-- Failure diagnostics 和用户可见 recovery hints。
+- Web-facing retry/recovery UI wired to recovery action contract。
+- Executable retry/resume flows for failed 或 blocked runs。
+- Blocking question records and blocker resolution workflow。
 - 固定 LP 链路稳定后的 general dependency graph。
 
 ### Context / Memory / Retrieval

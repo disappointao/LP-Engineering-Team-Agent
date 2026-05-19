@@ -784,6 +784,12 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-19-agent-run-lifecycle-recovery.md](./superpowers/plans/2026-05-19-agent-run-lifecycle-recovery.md)
 
+当前实现状态：
+
+- Stage 18 v0 已实现 API 侧 `RunLifecycleView`，从 run record、run event、worker job、tool observation 和 handoff 派生统一 lifecycle state。
+- failed、blocked、missing worker、terminal event conflict 和 incomplete worker finalization 会返回安全 `diagnosticSummary` 与 recovery action contract。
+- worker-backed skill command finalizer 已强化幂等性，重复 finalization 不重复写 terminal events，冲突 terminal state 会 fail closed。
+
 学习重点：
 
 - Agent run 状态不是单个字段能表达完整事实；它通常由 run record、event timeline、tool observation、worker job 和 handoff 一起决定。
