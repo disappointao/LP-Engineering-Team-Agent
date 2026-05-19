@@ -918,6 +918,61 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("可见工具");
   });
 
+  it("renders execution controls only for visible read-only MCP tools", async () => {
+    setActiveEmptyProjectState();
+    (pageMocks.pageState as {
+      mcp: {
+        connectors: unknown[];
+        approvals: unknown[];
+        visibleToolsByRole: Record<string, unknown[]>;
+      };
+    }).mcp = {
+      connectors: [],
+      approvals: [],
+      visibleToolsByRole: {
+        planner: [],
+        builder: [
+          {
+            connectorId: "connector_assets",
+            name: "searchAssets",
+            permission: "assets:read",
+            requiresApproval: false
+          },
+          {
+            connectorId: "connector_git",
+            name: "createPullRequest",
+            permission: "git:write",
+            requiresApproval: true,
+            readOnly: true
+          }
+        ],
+        reviewer: [],
+        deployer: []
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "mcp" })
+    });
+    const text = collectText(page).join(" ");
+    const formPayloads = collectElements(page, "form").map(collectFormPayload);
+
+    expect(text).toContain("Run read-only check");
+    expect(text).toContain("Arguments JSON");
+    expect(text).toContain("Write tools are blocked in this stage.");
+    expect(formPayloads).toContainEqual({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      role: "builder"
+    });
+    expect(formPayloads).not.toContainEqual(
+      expect.objectContaining({
+        toolName: "createPullRequest"
+      })
+    );
+  });
+
   it("renders Chinese MCP tool summaries with localized punctuation", async () => {
     pageMocks.pageState = {
       kind: "empty",

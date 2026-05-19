@@ -4,6 +4,7 @@ import {
   bindSkillVersionAction,
   createMCPConnectorAction,
   createProjectAction,
+  executeMCPToolAction,
   executeSkillCommandAction,
   runLocalWorkerOnceAction,
   createModelProviderAction,
@@ -674,11 +675,35 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         <div className="mcpVisibleRole" key={role}>
                           <strong>{copy.mcpView.roleLabels[role]}</strong>
                           {(mcpState.visibleToolsByRole[role] ?? []).length > 0 ? (
-                            <span>
-                              {mcpState.visibleToolsByRole[role]
-                                .map((tool) => `${tool.connectorId}.${tool.name}`)
-                                .join(", ")}
-                            </span>
+                            <div className="mcpVisibleToolList">
+                              {(mcpState.visibleToolsByRole[role] ?? []).map((tool) => {
+                                const label = `${tool.connectorId}.${tool.name}`;
+                                return (
+                                  <div className="mcpVisibleToolItem" key={label}>
+                                    <span>{label}</span>
+                                    {isReadOnlyVisibleMCPTool(tool) ? (
+                                      <form action={executeMCPToolAction} className="mcpExecutionForm">
+                                        <input name="projectId" type="hidden" value={activeProject.id} />
+                                        <input name="connectorId" type="hidden" value={tool.connectorId} />
+                                        <input name="toolName" type="hidden" value={tool.name} />
+                                        <input name="role" type="hidden" value={role} />
+                                        <label>
+                                          {copy.mcpView.argumentsLabel}
+                                          <textarea
+                                            name="argumentsJson"
+                                            placeholder={copy.mcpView.argumentsPlaceholder}
+                                            defaultValue="{}"
+                                          />
+                                        </label>
+                                        <button type="submit">{copy.mcpView.executeReadOnly}</button>
+                                      </form>
+                                    ) : (
+                                      <small>{copy.mcpView.writeToolUnavailable}</small>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <span>{copy.mcpView.emptyVisibleTools}</span>
                           )}
@@ -1290,6 +1315,29 @@ function toMCPRoleLabels(roles: unknown, roleLabels: Record<string, string>): st
     const label = roleLabels[role];
     return label ? [label] : [];
   });
+}
+
+function isReadOnlyVisibleMCPTool(tool: {
+  permission: string;
+  readOnly?: boolean;
+  sideEffect?: "read" | "write";
+}): boolean {
+  const permission = tool.permission.trim().toLowerCase();
+  if (
+    permission.endsWith(":write") ||
+    permission.endsWith(":deploy") ||
+    permission.endsWith(":delete") ||
+    permission.endsWith(":admin")
+  ) {
+    return false;
+  }
+  if (tool.readOnly === false || tool.sideEffect === "write") {
+    return false;
+  }
+  if (tool.readOnly === true || tool.sideEffect === "read") {
+    return true;
+  }
+  return permission.endsWith(":read");
 }
 
 function normalizeDisplayString(value: unknown): string {
