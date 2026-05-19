@@ -1,5 +1,11 @@
 export type AgentRole = "planner" | "builder" | "reviewer" | "deployer";
 export type ApprovalState = "not_required" | "pending" | "approved";
+export type MCPToolSideEffect = "read" | "write";
+export type MCPToolExecutionState =
+  | "completed"
+  | "failed"
+  | "rejected"
+  | "cancelled";
 
 export const mcpAgentRoles = Object.freeze([
   "planner",
@@ -14,6 +20,8 @@ export interface MCPToolDefinition {
   permission: string;
   roles: AgentRole[];
   requiresApproval: boolean;
+  readOnly?: boolean;
+  sideEffect?: MCPToolSideEffect;
 }
 
 export interface MCPConnectorDefinition {
@@ -43,6 +51,33 @@ export interface VisibleToolInput {
   agentRole: AgentRole;
   approvalState?: ApprovalState;
   approvalStates?: readonly MCPToolApprovalState[];
+}
+
+export interface MCPToolArgumentSummary {
+  argumentKeys: string[];
+  argumentCount: number;
+}
+
+export interface MCPToolExecutionInput {
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  role: AgentRole;
+  permission: string;
+  arguments: Record<string, unknown>;
+  timeoutMs: number;
+}
+
+export interface MCPToolExecutionResult {
+  state: MCPToolExecutionState;
+  outputSummary: string;
+  metadata?: Record<string, unknown>;
+  errorName?: string;
+  durationMs?: number;
+}
+
+export interface MCPToolExecutor {
+  execute(input: MCPToolExecutionInput): Promise<MCPToolExecutionResult>;
 }
 
 export const sampleConnector: MCPConnectorDefinition = {
@@ -82,6 +117,54 @@ export const computeVisibleTools = (
       ...tool,
       roles: [...tool.roles]
     }));
+
+export function summarizeMCPToolArguments(
+  value: Record<string, unknown>
+): MCPToolArgumentSummary {
+  const argumentKeys = Object.keys(value).sort();
+  return {
+    argumentKeys,
+    argumentCount: argumentKeys.length
+  };
+}
+
+export function isReadOnlyMCPTool(tool: MCPToolDefinition): boolean {
+  const permission = tool.permission.trim().toLowerCase();
+  if (
+    permission.endsWith(":write") ||
+    permission.endsWith(":deploy") ||
+    permission.endsWith(":delete") ||
+    permission.endsWith(":admin")
+  ) {
+    return false;
+  }
+  if (tool.readOnly === true || tool.sideEffect === "read") {
+    return true;
+  }
+  if (tool.readOnly === false || tool.sideEffect === "write") {
+    return false;
+  }
+  return permission.endsWith(":read");
+}
+
+export class DeterministicMCPToolExecutor implements MCPToolExecutor {
+  async execute(input: MCPToolExecutionInput): Promise<MCPToolExecutionResult> {
+    const startedAt = Date.now();
+    const argumentSummary = summarizeMCPToolArguments(input.arguments);
+    const keyNoun = argumentSummary.argumentCount === 1 ? "key" : "keys";
+    return {
+      state: "completed",
+      outputSummary:
+        `Read-only MCP tool ${input.connectorId}.${input.toolName} completed with ` +
+        `${argumentSummary.argumentCount} argument ${keyNoun}.`,
+      metadata: {
+        argumentKeys: argumentSummary.argumentKeys,
+        argumentCount: argumentSummary.argumentCount
+      },
+      durationMs: Math.max(0, Date.now() - startedAt)
+    };
+  }
+}
 
 export function normalizeMCPConnectorDefinition(
   input: unknown
@@ -139,12 +222,19 @@ function normalizeToolDefinition(input: unknown): MCPToolDefinition {
     typeof input.description === "string" && input.description.trim().length > 0
       ? input.description.trim()
       : undefined;
+  const readOnly = typeof input.readOnly === "boolean" ? input.readOnly : undefined;
+  const sideEffect =
+    input.sideEffect === "read" || input.sideEffect === "write"
+      ? input.sideEffect
+      : undefined;
   return {
     name,
     ...(description ? { description } : {}),
     permission,
     roles: [...new Set(roles)],
-    requiresApproval: input.requiresApproval
+    requiresApproval: input.requiresApproval,
+    ...(readOnly !== undefined ? { readOnly } : {}),
+    ...(sideEffect ? { sideEffect } : {})
   };
 }
 

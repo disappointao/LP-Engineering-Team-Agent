@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  DeterministicMCPToolExecutor,
   computeVisibleTools,
+  isReadOnlyMCPTool,
   normalizeMCPConnectorDefinition,
   sampleConnector,
+  summarizeMCPToolArguments,
   type MCPConnectorDefinition
 } from "./index";
 
@@ -100,6 +103,130 @@ describe("MCP gateway policy", () => {
 
     connector.tools[0]!.roles.push("reviewer");
     expect(inputRoles).toEqual(["planner", " builder "]);
+  });
+
+  it("normalizes read-only tool metadata", () => {
+    const connector = normalizeMCPConnectorDefinition({
+      id: " connector_assets ",
+      name: " Assets ",
+      tools: [
+        {
+          name: " searchAssets ",
+          permission: " assets:list ",
+          roles: ["builder"],
+          requiresApproval: false,
+          readOnly: true,
+          sideEffect: "read"
+        }
+      ]
+    });
+
+    expect(connector.tools[0]).toEqual({
+      name: "searchAssets",
+      permission: "assets:list",
+      roles: ["builder"],
+      requiresApproval: false,
+      readOnly: true,
+      sideEffect: "read"
+    });
+  });
+
+  it("identifies read-only tools conservatively", () => {
+    expect(
+      isReadOnlyMCPTool({
+        name: "searchAssets",
+        permission: "assets:read",
+        roles: ["builder"],
+        requiresApproval: false
+      })
+    ).toBe(true);
+    expect(
+      isReadOnlyMCPTool({
+        name: "listAssets",
+        permission: "assets:list",
+        roles: ["builder"],
+        requiresApproval: false,
+        readOnly: true
+      })
+    ).toBe(true);
+    expect(
+      isReadOnlyMCPTool({
+        name: "inspectAssets",
+        permission: "assets:inspect",
+        roles: ["reviewer"],
+        requiresApproval: false,
+        sideEffect: "read"
+      })
+    ).toBe(true);
+    expect(
+      isReadOnlyMCPTool({
+        name: "createPullRequest",
+        permission: "git:write",
+        roles: ["deployer"],
+        requiresApproval: true,
+        readOnly: true
+      })
+    ).toBe(false);
+    expect(
+      isReadOnlyMCPTool({
+        name: "deployPreview",
+        permission: "deploy:deploy",
+        roles: ["deployer"],
+        requiresApproval: true,
+        sideEffect: "read"
+      })
+    ).toBe(false);
+    expect(
+      isReadOnlyMCPTool({
+        name: "unknown",
+        permission: "assets:list",
+        roles: ["builder"],
+        requiresApproval: false
+      })
+    ).toBe(false);
+  });
+
+  it("summarizes MCP tool arguments without values", () => {
+    const summary = summarizeMCPToolArguments({
+      query: "SECRET_PRODUCT",
+      limit: 3,
+      filters: { channel: "private" }
+    });
+
+    expect(summary).toEqual({
+      argumentKeys: ["filters", "limit", "query"],
+      argumentCount: 3
+    });
+    expect(JSON.stringify(summary)).not.toContain("SECRET_PRODUCT");
+    expect(JSON.stringify(summary)).not.toContain("private");
+  });
+
+  it("returns safe deterministic MCP execution output", async () => {
+    const executor = new DeterministicMCPToolExecutor();
+
+    const result = await executor.execute({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      role: "builder",
+      permission: "assets:read",
+      arguments: {
+        query: "SECRET_PRODUCT"
+      },
+      timeoutMs: 1000
+    });
+
+    expect(result).toEqual({
+      state: "completed",
+      outputSummary:
+        "Read-only MCP tool connector_assets.searchAssets completed with 1 argument key.",
+      metadata: {
+        argumentKeys: ["query"],
+        argumentCount: 1
+      },
+      durationMs: expect.any(Number)
+    });
+    expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
   });
 
   it("rejects invalid connector definitions", () => {
