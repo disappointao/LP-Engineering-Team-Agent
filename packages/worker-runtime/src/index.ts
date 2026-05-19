@@ -552,20 +552,43 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     maxStaleRecoveryCount: number;
     projectId?: string;
   }): Promise<WorkerJobStaleRecoveryResult[]> {
+    const staleBefore = new Date(input.staleBefore);
+    if (Number.isNaN(staleBefore.getTime())) {
+      throw new Error("worker_stale_before_invalid");
+    }
+    if (
+      input.staleClaimTimeoutMs !== undefined &&
+      (!Number.isInteger(input.staleClaimTimeoutMs) ||
+        input.staleClaimTimeoutMs < 0)
+    ) {
+      throw new Error("worker_stale_claim_timeout_invalid");
+    }
     if (
       !Number.isInteger(input.maxStaleRecoveryCount) ||
       input.maxStaleRecoveryCount < 0
     ) {
       throw new Error("worker_stale_recovery_limit_invalid");
     }
+    const projectId = input.projectId?.trim();
+    if (input.projectId !== undefined && !projectId) {
+      throw new Error("project_id_required");
+    }
 
-    return this.repository.recoverStale({
-      staleBefore: input.staleBefore,
+    const results = await this.repository.recoverStale({
+      staleBefore: staleBefore.toISOString(),
       staleClaimTimeoutMs: input.staleClaimTimeoutMs,
       maxStaleRecoveryCount: input.maxStaleRecoveryCount,
-      projectId: input.projectId,
+      projectId,
       recoveredAt: this.nowIso()
     });
+
+    await Promise.all(
+      results
+        .filter((result) => result.type === "cancelled" || result.type === "failed")
+        .map((result) => this.deletePersistedPayloadBestEffort(result.jobId))
+    );
+
+    return results;
   }
 
   async runClaimedJob(claim: WorkerJobClaim): Promise<WorkerJobRecord> {

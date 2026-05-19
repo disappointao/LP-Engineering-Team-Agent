@@ -1675,6 +1675,331 @@ describe("InMemoryWorkerRuntime", () => {
         })
       ]);
     });
+
+    it("validates stale recovery inputs before repository recovery", async () => {
+      const runtime = new InMemoryWorkerRuntime({
+        repository: new InMemoryWorkerJobRepository(),
+        payloadRepository: new InMemoryWorkerJobPayloadRepository()
+      });
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "zzz",
+          maxStaleRecoveryCount: 1
+        })
+      ).rejects.toThrow("worker_stale_before_invalid");
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:00.000Z",
+          staleClaimTimeoutMs: -1,
+          maxStaleRecoveryCount: 1
+        })
+      ).rejects.toThrow("worker_stale_claim_timeout_invalid");
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:00.000Z",
+          staleClaimTimeoutMs: 1.5,
+          maxStaleRecoveryCount: 1
+        })
+      ).rejects.toThrow("worker_stale_claim_timeout_invalid");
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:00.000Z",
+          maxStaleRecoveryCount: 1,
+          projectId: "   "
+        })
+      ).rejects.toThrow("project_id_required");
+    });
+
+    it("persists heartbeat updates after reopening JSON-file repositories", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+      const jobsFilePath = join(directory, "worker-jobs.json");
+      const payloadsFilePath = join(directory, "worker-job-payloads.json");
+
+      try {
+        const runtime = new InMemoryWorkerRuntime({
+          repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+          payloadRepository: createJsonFileWorkerJobPayloadRepository({
+            filePath: payloadsFilePath
+          }),
+          claimTokenFactory: () => "claim_token_1",
+          now: createClock([
+            "2026-05-19T00:00:00.000Z",
+            "2026-05-19T00:00:01.000Z",
+            "2026-05-19T00:00:02.000Z"
+          ])
+        });
+        await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+        const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+        if (!claim) {
+          throw new Error("Expected claim.");
+        }
+
+        await runtime.heartbeatClaimedJob({
+          jobId: claim.record.id,
+          claimToken: claim.claimToken,
+          workerId: "worker_a",
+          heartbeatTimeoutMs: 30000
+        });
+
+        const reopenedRepository = createJsonFileWorkerJobRepository({
+          filePath: jobsFilePath
+        });
+        await expect(reopenedRepository.getById(claim.record.id)).resolves.toMatchObject({
+          id: claim.record.id,
+          state: "running",
+          lastHeartbeatAt: "2026-05-19T00:00:02.000Z",
+          heartbeatExpiresAt: "2026-05-19T00:00:32.000Z"
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("persists stale requeue claim and heartbeat cleanup through JSON-file repositories", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+      const jobsFilePath = join(directory, "worker-jobs.json");
+      const payloadsFilePath = join(directory, "worker-job-payloads.json");
+
+      try {
+        const runtime = new InMemoryWorkerRuntime({
+          repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+          payloadRepository: createJsonFileWorkerJobPayloadRepository({
+            filePath: payloadsFilePath
+          }),
+          claimTokenFactory: () => "claim_token_1",
+          now: createClock([
+            "2026-05-19T00:00:00.000Z",
+            "2026-05-19T00:00:01.000Z",
+            "2026-05-19T00:00:02.000Z",
+            "2026-05-19T00:00:04.000Z"
+          ])
+        });
+        await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+        const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+        if (!claim) {
+          throw new Error("Expected claim.");
+        }
+        await runtime.heartbeatClaimedJob({
+          jobId: claim.record.id,
+          claimToken: claim.claimToken,
+          workerId: "worker_a",
+          heartbeatTimeoutMs: 1000
+        });
+
+        await runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:04.000Z",
+          maxStaleRecoveryCount: 1
+        });
+
+        const reopenedRepository = createJsonFileWorkerJobRepository({
+          filePath: jobsFilePath
+        });
+        await expect(reopenedRepository.getById(claim.record.id)).resolves.toMatchObject({
+          id: claim.record.id,
+          state: "queued",
+          claimToken: undefined,
+          claimedByWorkerId: undefined,
+          lastHeartbeatAt: undefined,
+          heartbeatExpiresAt: undefined
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("recovers old JSON-file records without heartbeat using startedAt fallback", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+      const jobsFilePath = join(directory, "worker-jobs.json");
+
+      try {
+        const repository = createJsonFileWorkerJobRepository({
+          filePath: jobsFilePath
+        });
+        await repository.save(
+          workerJobRecord({
+            state: "running",
+            payloadSource: "safe_persisted",
+            startedAt: "2026-05-19T00:00:00.000Z",
+            claimedByWorkerId: "worker_a",
+            claimToken: "claim_token_1"
+          })
+        );
+        const runtime = new InMemoryWorkerRuntime({
+          repository,
+          payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+          now: () => new Date("2026-05-19T00:00:06.000Z")
+        });
+
+        await expect(
+          runtime.recoverStaleJobs({
+            staleBefore: "2026-05-19T00:00:05.000Z",
+            staleClaimTimeoutMs: 1000,
+            maxStaleRecoveryCount: 1
+          })
+        ).resolves.toEqual([
+          expect.objectContaining({
+            type: "requeued",
+            jobId: "worker_job_1"
+          })
+        ]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("respects stale recovery project filters for JSON-file repositories", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+      const jobsFilePath = join(directory, "worker-jobs.json");
+
+      try {
+        const repository = createJsonFileWorkerJobRepository({
+          filePath: jobsFilePath
+        });
+        await repository.save(
+          workerJobRecord({
+            id: "worker_job_1",
+            projectId: "project_a",
+            inputSummary: {
+              ...workerJobRecord().inputSummary,
+              projectId: "project_a"
+            },
+            state: "running",
+            payloadSource: "safe_persisted",
+            startedAt: "2026-05-19T00:00:00.000Z",
+            claimedByWorkerId: "worker_a",
+            claimToken: "claim_token_1"
+          })
+        );
+        await repository.save(
+          workerJobRecord({
+            id: "worker_job_2",
+            projectId: "project_b",
+            inputSummary: {
+              ...workerJobRecord().inputSummary,
+              projectId: "project_b"
+            },
+            state: "running",
+            payloadSource: "safe_persisted",
+            startedAt: "2026-05-19T00:00:00.000Z",
+            claimedByWorkerId: "worker_b",
+            claimToken: "claim_token_2"
+          })
+        );
+        const runtime = new InMemoryWorkerRuntime({
+          repository,
+          payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+          now: () => new Date("2026-05-19T00:00:06.000Z")
+        });
+
+        const results = await runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:05.000Z",
+          staleClaimTimeoutMs: 1000,
+          maxStaleRecoveryCount: 1,
+          projectId: " project_a "
+        });
+        const projectBRecord = await repository.getById("worker_job_2");
+
+        expect(results.map((result) => result.jobId)).toEqual(["worker_job_1"]);
+        expect(projectBRecord).toMatchObject({
+          id: "worker_job_2",
+          state: "running",
+          claimToken: "claim_token_2"
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("ignores stale process-memory jobs during JSON-file stale recovery", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "worker-runtime-"));
+      const jobsFilePath = join(directory, "worker-jobs.json");
+
+      try {
+        const repository = createJsonFileWorkerJobRepository({
+          filePath: jobsFilePath
+        });
+        await repository.save(
+          workerJobRecord({
+            state: "running",
+            payloadSource: "process_memory",
+            startedAt: "2026-05-19T00:00:00.000Z"
+          })
+        );
+        const runtime = new InMemoryWorkerRuntime({
+          repository,
+          payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+          now: () => new Date("2026-05-19T00:00:06.000Z")
+        });
+
+        await expect(
+          runtime.recoverStaleJobs({
+            staleBefore: "2026-05-19T00:00:05.000Z",
+            staleClaimTimeoutMs: 1000,
+            maxStaleRecoveryCount: 1
+          })
+        ).resolves.toEqual([]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("deletes terminal stale payloads and keeps requeued stale payloads", async () => {
+      const repository = new InMemoryWorkerJobRepository();
+      const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+      const runtime = new InMemoryWorkerRuntime({
+        repository,
+        payloadRepository,
+        claimTokenFactory: createTokenFactory(["claim_token_1", "claim_token_2"]),
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z",
+          "2026-05-19T00:00:05.000Z"
+        ])
+      });
+
+      const requeued = await runtime.enqueueSafe(
+        baseSafeInput({ commandId: "requeue_me" }),
+        simulatedPolicy()
+      );
+      const requeuedClaim = await runtime.claimOldestQueued({
+        workerId: "worker_a"
+      });
+      if (!requeuedClaim) {
+        throw new Error("Expected requeued claim.");
+      }
+      const terminal = await runtime.enqueueSafe(
+        baseSafeInput({ commandId: "fail_me" }),
+        simulatedPolicy()
+      );
+      const terminalClaim = await runtime.claimOldestQueued({
+        workerId: "worker_a"
+      });
+      if (!terminalClaim) {
+        throw new Error("Expected terminal claim.");
+      }
+      await repository.save({
+        ...terminalClaim.record,
+        staleRecoveryCount: 1,
+        startedAt: "2026-05-19T00:00:00.000Z"
+      });
+
+      await runtime.recoverStaleJobs({
+        staleBefore: "2026-05-19T00:00:05.000Z",
+        staleClaimTimeoutMs: 1,
+        maxStaleRecoveryCount: 1
+      });
+
+      await expect(payloadRepository.getByJobId(requeued.id)).resolves.toMatchObject({
+        jobId: requeued.id
+      });
+      await expect(payloadRepository.getByJobId(terminal.id)).resolves.toBeUndefined();
+    });
   });
 
   it("preserves the original job save error when safe enqueue payload cleanup fails", async () => {
