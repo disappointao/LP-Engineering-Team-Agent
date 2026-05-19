@@ -22,6 +22,21 @@ interface FakeDelegate {
   findMany(input?: FakeFindManyArgs): Promise<FakeRow[]>;
 }
 
+interface FakeDelegateOptions {
+  beforeUpsert?: (context: { input: FakeUpsertInput; rows: FakeRow[] }) => void;
+  onUpsert?: (input: FakeUpsertInput) => void;
+  enforceUniqueId?: boolean;
+  uniqueIdError?: (id: string) => string;
+  rejectPlainNullJsonKeys?: string[];
+}
+
+interface FakePrismaClientOptions {
+  project?: FakeDelegateOptions;
+  agentHandoff?: FakeDelegateOptions;
+}
+
+type FakeUpsertInput = { where: FakeWhere; create: FakeRow; update: FakeRow };
+
 runCoreWorkbenchRepositoryContractTests({
   name: "prisma fake",
   createRepositories: () =>
@@ -69,6 +84,110 @@ describe("createPrismaWorkbenchRepositories", () => {
       id: "project_shared",
       name: "Workspace A project",
       createdAt
+    });
+  });
+
+  it("rejects project save when a competing workspace creates the same id after ownership preflight", async () => {
+    let injectedRaceRow = false;
+    const prisma = createFakePrismaClient({
+      project: {
+        beforeUpsert({ input, rows }) {
+          if (input.create.id !== "project_race" || injectedRaceRow) {
+            return;
+          }
+
+          injectedRaceRow = true;
+          rows.push(
+            cloneRow({
+              id: "project_race",
+              workspaceId: "workspace_a",
+              name: "Workspace A project",
+              createdAt: new Date(createdAt)
+            })
+          );
+        }
+      }
+    });
+    const workspaceA = createPrismaWorkbenchRepositories({
+      prisma,
+      workspaceId: "workspace_a"
+    });
+    const workspaceB = createPrismaWorkbenchRepositories({
+      prisma,
+      workspaceId: "workspace_b"
+    });
+
+    await expect(
+      workspaceB.projects.save({
+        id: "project_race",
+        name: "Workspace B attempted mutation",
+        createdAt: "2026-05-14T00:01:00.000Z"
+      })
+    ).rejects.toThrow("project_race");
+    await expect(workspaceA.projects.getById("project_race")).resolves.toEqual({
+      id: "project_race",
+      name: "Workspace A project",
+      createdAt
+    });
+  });
+
+  it("clears agent handoff artifact refs without writing a plain JSON null", async () => {
+    const agentHandoffWrites: FakeUpsertInput[] = [];
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient({
+        agentHandoff: {
+          onUpsert(input) {
+            agentHandoffWrites.push(cloneRow(input) as FakeUpsertInput);
+          },
+          rejectPlainNullJsonKeys: ["artifactRefs"]
+        }
+      }),
+      workspaceId: "workspace_default"
+    });
+
+    await repositories.agentHandoffs.save({
+      id: "handoff_json_clear",
+      projectId: "project_json_clear",
+      taskId: "task_json_clear",
+      fromRunId: "run_reviewer",
+      fromRole: "reviewer",
+      toRole: "builder",
+      state: "blocked",
+      summary: "Need a fix.",
+      artifactRefs: {
+        briefId: "brief_json_clear",
+        pageVersionId: "version_json_clear"
+      },
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await expect(
+      repositories.agentHandoffs.save({
+        id: "handoff_json_clear",
+        projectId: "project_json_clear",
+        fromRunId: "run_reviewer",
+        fromRole: "reviewer",
+        toRole: "builder",
+        state: "ready",
+        summary: "Ready to continue.",
+        createdAt,
+        updatedAt: "2026-05-14T00:04:00.000Z"
+      })
+    ).resolves.toBeUndefined();
+
+    const clearWrite = agentHandoffWrites.at(-1);
+    expect(clearWrite?.update.artifactRefs).toEqual({});
+    await expect(repositories.agentHandoffs.getById("handoff_json_clear")).resolves.toEqual({
+      id: "handoff_json_clear",
+      projectId: "project_json_clear",
+      fromRunId: "run_reviewer",
+      fromRole: "reviewer",
+      toRole: "builder",
+      state: "ready",
+      summary: "Ready to continue.",
+      createdAt,
+      updatedAt: "2026-05-14T00:04:00.000Z"
     });
   });
 
@@ -354,9 +473,13 @@ describe("createUnsupportedPrismaRepository", () => {
   });
 });
 
-function createFakePrismaClient() {
+function createFakePrismaClient(options: FakePrismaClientOptions = {}) {
   return {
-    project: createFakeDelegate(),
+    project: createFakeDelegate({
+      enforceUniqueId: true,
+      uniqueIdError: (id) => `Prisma project ${id} belongs to a different workspace`,
+      ...options.project
+    }),
     workbenchTask: createFakeDelegate(),
     workbenchMessage: createFakeDelegate(),
     workbenchTaskSnapshot: createFakeDelegate(),
@@ -367,15 +490,20 @@ function createFakePrismaClient() {
     run: createFakeDelegate(),
     runEvent: createFakeDelegate(),
     toolObservation: createFakeDelegate(),
-    agentHandoff: createFakeDelegate()
+    agentHandoff: createFakeDelegate(options.agentHandoff)
   };
 }
 
-function createFakeDelegate(): FakeDelegate {
+function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
   const rows: FakeRow[] = [];
 
   return {
     async upsert(input) {
+      options.beforeUpsert?.({ input, rows });
+      options.onUpsert?.(input);
+      rejectPlainJsonNulls(input.create, options.rejectPlainNullJsonKeys ?? []);
+      rejectPlainJsonNulls(input.update, options.rejectPlainNullJsonKeys ?? []);
+
       const existingIndex = rows.findIndex((row) => matchesWhere(row, input.where));
       if (existingIndex >= 0) {
         const existing = rows[existingIndex];
@@ -384,6 +512,15 @@ function createFakeDelegate(): FakeDelegate {
           ...input.update
         });
         return cloneRow(rows[existingIndex]);
+      }
+
+      if (options.enforceUniqueId && typeof input.create.id === "string") {
+        const duplicateId = rows.some((row) => row.id === input.create.id);
+        if (duplicateId) {
+          throw new Error(
+            options.uniqueIdError?.(input.create.id) ?? `Duplicate id ${input.create.id}`
+          );
+        }
       }
 
       const created = cloneRow(input.create);
@@ -408,6 +545,14 @@ function createFakeDelegate(): FakeDelegate {
       return limitedRows.map(cloneRow);
     }
   };
+}
+
+function rejectPlainJsonNulls(row: FakeRow, keys: string[]): void {
+  for (const key of keys) {
+    if (row[key] === null) {
+      throw new Error(`Plain JSON null write is not supported for ${key}`);
+    }
+  }
 }
 
 function matchesWhere(row: FakeRow, where: FakeWhere): boolean {

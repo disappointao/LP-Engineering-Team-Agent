@@ -173,12 +173,7 @@ function createProjectRepository(delegate: PrismaDelegate, workspaceId: string):
   return {
     async save(project) {
       const data = toPrismaProjectCreate(project, workspaceId);
-      const existing = await delegate.findUnique({ where: { id: project.id } });
-      if (existing && existing.workspaceId !== workspaceId) {
-        throw new Error(`Prisma project ${project.id} belongs to a different workspace`);
-      }
-
-      await upsert(delegate, { id: project.id }, data, ["id", "workspaceId"]);
+      await upsert(delegate, { id: project.id, workspaceId }, data, ["id", "workspaceId"]);
     },
 
     async getById(projectId) {
@@ -558,11 +553,14 @@ function createToolObservationRepository(delegate: PrismaDelegate): ToolObservat
 function createAgentHandoffRepository(delegate: PrismaDelegate): AgentHandoffRepository {
   return {
     async save(handoff) {
-      await upsert(delegate, { id: handoff.id }, toPrismaAgentHandoffCreate(handoff), ["id"], [
-        "taskId",
-        "blockingReason",
-        "artifactRefs"
-      ]);
+      await upsert(
+        delegate,
+        { id: handoff.id },
+        toPrismaAgentHandoffCreate(handoff),
+        ["id"],
+        ["taskId", "blockingReason"],
+        ["artifactRefs"]
+      );
     },
 
     async getById(handoffId) {
@@ -620,9 +618,13 @@ async function upsert(
   where: PrismaWhere,
   data: object,
   updateOmitKeys: string[] = ["id"],
-  nullableKeys: string[] = []
+  nullableKeys: string[] = [],
+  emptyJsonObjectKeys: string[] = []
 ): Promise<void> {
-  const row = materializeNulls(asPrismaRow(data), nullableKeys);
+  const row = materializeEmptyJsonObjects(
+    materializeNulls(asPrismaRow(data), nullableKeys),
+    emptyJsonObjectKeys
+  );
   await delegate.upsert({
     where,
     create: row,
@@ -867,6 +869,16 @@ function materializeNulls(row: PrismaRow, nullableKeys: string[]): PrismaRow {
   for (const key of nullableKeys) {
     if (!(key in copy)) {
       copy[key] = null;
+    }
+  }
+  return copy;
+}
+
+function materializeEmptyJsonObjects(row: PrismaRow, keys: string[]): PrismaRow {
+  const copy = { ...row };
+  for (const key of keys) {
+    if (!(key in copy)) {
+      copy[key] = {};
     }
   }
   return copy;
