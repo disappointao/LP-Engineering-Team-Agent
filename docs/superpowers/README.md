@@ -283,12 +283,12 @@
    - 在 Stage 20 design 后阅读，用于按 TDD 实现 read-only MCP executor contract、API-owned execution use case、安全 tool observation、Web 最小执行入口和文档收尾。
 
 70. `specs/2026-05-19-model-repair-retry-fallback-design.md`
-   - Stage 21 Model Repair、Retry 和 Fallback v0 design。
-   - 在 Stage 20 plan 后阅读，用于添加 Planner/Builder one-shot structured output repair、provider 临时错误 bounded retry 和 fallback route 安全 metadata，同时不做 streaming、tool-call conversion、自动 fallback execution 或 provider marketplace。
+   - Stage 21 Model Repair、Retry 和 Fallback v0 design（已实现）。
+   - 在 Stage 20 plan 后阅读，用于理解 Planner/Builder one-shot structured output repair、provider 临时错误 bounded retry 和 fallback route 安全 metadata，同时确认本阶段不做 streaming、tool-call conversion、自动 fallback execution 或 provider marketplace。
 
 71. `plans/2026-05-19-model-repair-retry-fallback.md`
-   - Stage 21 Model Repair、Retry 和 Fallback v0 implementation plan。
-   - 在 Stage 21 design 后阅读，用于按 TDD 实现 runtime provider retry、fallback metadata resolution、Planner/Builder one-shot repair、lifecycle diagnostics 和文档收尾。
+   - Stage 21 Model Repair、Retry 和 Fallback v0 implementation plan（已实现）。
+   - 在 Stage 21 design 后阅读，用于审计 runtime provider retry、fallback metadata resolution、Planner/Builder one-shot repair、lifecycle diagnostics 和文档收尾的实现顺序。
 
 ## 维护规则
 

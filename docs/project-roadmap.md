@@ -13,7 +13,8 @@
 - Web workbench：类 Manus 布局、conversation-first entry、普通任务和 LP 生成任务。
 - Static LP artifact：生成产物保持 `index.html`、`styles.css`、`script.js`，并支持 single HTML preview/export。
 - Model gateway：provider-neutral 配置、`anthropic-messages` adapter、`openai-completions` adapter、真实 runtime 显式 opt-in。
-- Structured model output：Planner `LPBriefSchema` parse、Builder static artifacts parse 和 artifact policy validation。
+- Structured model output：Planner `LPBriefSchema` parse、Builder static artifacts parse、artifact policy validation、one-shot repair prompt 和脱敏 repair timeline。
+- Model reliability v0：provider 临时错误 bounded retry、retry exhausted event、fallback route 安全 metadata resolution 和 fallback availability event；fallback v0 不自动调用备用 provider。
 - Context Pack v0：注入 task/project input、skills、visible MCP tools、model route、approval、artifact workspace、context memory、handoff summary。
 - Skills：manifest、version、validation、publish、project binding、runtime context injection、受控 deployment skill command 边界。
 - MCP registry / execution v0：connector、tool approval、role/permission visible tools、read-only MCP tool execution、deterministic local executor、run events 和安全 `ToolObservationRecord`。
@@ -28,6 +29,7 @@
 当前仍明确后置：
 
 - Web UI 无刷新体验、streaming UI、browser E2E。
+- 真实 fallback provider execution、模型 usage/cost reporting、streaming model output 和 tool-call protocol conversion。
 - 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
@@ -65,37 +67,35 @@ Stage 20 v0 已实现 read-only MCP tool execution：API 侧校验 project、con
 
 **实施计划：** `docs/superpowers/plans/2026-05-19-mcp-execution-v0.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 21：Model Repair、Retry 和 Fallback v0
 
-**状态：** design 和 implementation plan 已确认，待实现。
+**状态：** 已实现。
 
-**为什么在 Stage 18 之后：** Planner/Builder parse 当前 fail closed，这是正确的。下一步模型能力应增加受控 repair/retry，同时不能让 failed runs 不可见，也不能静默 fallback 到 deterministic output。
+Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder structured output parse 或 policy failure 后会做一次安全 repair，provider 临时错误会 bounded retry，项目 route 可解析 fallback metadata 并在失败时记录安全 fallback availability event。
 
-**建议范围：**
+已实现范围：
 
-- 为无效 Planner/Builder structured JSON 增加 one-shot repair loop。
-- 增加 provider error classification 和 bounded retry policy。
-- 增加 fallback route metadata，但不静默隐藏原始失败。
-- 记录 sanitized parse/retry/fallback events。
+- Planner / Builder one-shot repair loop，repair prompt 不包含首次 raw model output 或 raw artifact 内容。
+- Provider error classification、最多两次尝试、`model.retry.scheduled` / `model.retry.exhausted` events。
+- Fallback route metadata resolution 和 `model.fallback.available` / `model.fallback.not_configured` events。
+- Lifecycle regression coverage：completed repaired run 保留 parse failure history，但不显示失败诊断。
 
-**非目标：**
+未实现范围：
 
-- 不做 streaming model output。
-- 不做 tool-call conversion。
-- 不做自动 provider marketplace。
 - 不自动调用 fallback provider；v0 只暴露 fallback metadata 和安全事件。
+- 不做 streaming model output、tool-call conversion、自动 provider marketplace、usage/cost accounting。
 
-**当前设计：** `docs/superpowers/specs/2026-05-19-model-repair-retry-fallback-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-19-model-repair-retry-fallback-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-19-model-repair-retry-fallback.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-19-model-repair-retry-fallback.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 22：Postgres Repository v0
 
-**状态：** 推荐在严肃多人/公司内部使用前做。
+**状态：** 推荐下一阶段优先做。
 
-**为什么稍后做：** JSON-file repositories 足以支撑本地 MVP 和 desktop-friendly development。只有当项目共享、auth、durable background workers、audit 或公司内部使用更重要时，Postgres 才成为优先基础设施。
+**为什么现在做：** Stage 18-21 已经把 run lifecycle、worker queue、MCP execution 和真实模型可靠性做到本地 MVP 可审计状态。下一步如果要支持严肃多人/公司内部使用，Postgres repository 是项目共享、auth、durable background workers 和 audit 的基础。
 
 **建议范围：**
 
@@ -128,8 +128,7 @@ Stage 20 v0 已实现 read-only MCP tool execution：API 侧校验 project、con
 
 ### Model Gateway
 
-- invalid structured output 的 repair retry。
-- Provider fallback 和 cost/timeout policy。
+- 真实 fallback provider execution 和 cost/timeout policy。
 - Usage/cost reporting。
 - Streaming support。
 - Tool-call protocol conversion。

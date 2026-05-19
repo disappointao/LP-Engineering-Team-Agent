@@ -375,6 +375,113 @@ describe("deriveRunLifecycleView core states", () => {
     });
     expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
   });
+
+  it("treats repaired model output as completed while keeping parse failure history", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "completed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, { type: "run.started", sequence: 1 });
+    await saveEvent(repositories, {
+      type: "model.output.parse_failed",
+      sequence: 2,
+      payload: {
+        role: "planner",
+        schema: "LPBriefSchema",
+        reason: "invalid_json"
+      }
+    });
+    await saveEvent(repositories, {
+      type: "model.output.repair_started",
+      sequence: 3,
+      payload: {
+        role: "planner",
+        schema: "LPBriefSchema",
+        reason: "invalid_json"
+      }
+    });
+    await saveEvent(repositories, {
+      type: "model.output.repaired",
+      sequence: 4,
+      payload: {
+        role: "planner",
+        schema: "LPBriefSchema",
+        title: "Repaired",
+        sectionCount: 3,
+        productCount: 0,
+        hasAssets: false
+      }
+    });
+    await saveEvent(repositories, {
+      type: "run.completed",
+      sequence: 5,
+      payload: { state: "completed" }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "completed",
+        recoveryActions: []
+      }
+    });
+    if (result.ok) {
+      expect(result.view.diagnosticSummary).toBeUndefined();
+    }
+  });
+
+  it("uses fallback availability as a recovery hint without marking the run successful", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveEvent(repositories, { type: "run.started", sequence: 1 });
+    await saveEvent(repositories, {
+      type: "model.retry.exhausted",
+      sequence: 2,
+      payload: {
+        errorCode: "model_provider_http_error",
+        status: 503,
+        attempts: 2
+      }
+    });
+    await saveEvent(repositories, {
+      type: "model.fallback.available",
+      sequence: 3,
+      payload: {
+        provider: "provider_backup",
+        model: "gpt-5.4-mini",
+        baseUrlConfigured: true,
+        apiKeyEnvConfigured: true
+      }
+    });
+    await saveEvent(repositories, {
+      type: "run.failed",
+      sequence: 4,
+      payload: { state: "failed", errorName: "ModelProviderRequestError" }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        recoveryActions: ["retry_run"]
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("OPENAI_API_KEY");
+  });
 });
 
 function workerJob(
