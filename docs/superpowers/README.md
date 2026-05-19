@@ -290,6 +290,10 @@
    - Stage 21 Model Repair、Retry 和 Fallback v0 implementation plan（已实现）。
    - 在 Stage 21 design 后阅读，用于审计 runtime provider retry、fallback metadata resolution、Planner/Builder one-shot repair、lifecycle diagnostics 和文档收尾的实现顺序。
 
+72. `specs/2026-05-19-postgres-repository-foundation-design.md`
+   - Stage 22 Postgres Repository Foundation v0 design。
+   - 在 Stage 21 plan 后阅读，用于把 Prisma schema 和当前核心 `WorkbenchRepositories` contract 对齐，并规划显式 opt-in 的 Prisma/Postgres repository adapter，同时不做完整 hosted auth、object storage、production rollout 或默认 Web backend 切换。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

@@ -34,7 +34,7 @@
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
-- Postgres repository 实现和真实多用户 auth/RBAC。
+- Postgres production rollout、完整 repository migration、真实多用户 auth/RBAC。
 - Desktop packaging 和 desktop filesystem workspace。
 
 ## 已完成阶段记录
@@ -93,21 +93,26 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 ### Stage 22：Postgres Repository v0
 
-**状态：** 推荐下一阶段优先做。
+**状态：** design 已确认，待 implementation plan。
 
 **为什么现在做：** Stage 18-21 已经把 run lifecycle、worker queue、MCP execution 和真实模型可靠性做到本地 MVP 可审计状态。下一步如果要支持严肃多人/公司内部使用，Postgres repository 是项目共享、auth、durable background workers 和 audit 的基础。
 
 **建议范围：**
 
-- 先实现最高风险状态的 Prisma-backed repositories：projects、tasks、messages、runs、run events、tool observations、worker links、artifact workspace metadata。
-- 保留 in-memory 和 JSON-file repositories，用于 deterministic tests。
-- 增加 migration 和 validation docs。
+- 先把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract：tasks、messages、task snapshots、runs、run events、tool observations、agent handoffs、artifact workspace metadata。
+- 新增 Prisma/Postgres-backed repository adapter 的清晰边界，但默认本地开发仍保留 in-memory 和 JSON-file repositories。
+- 第一批 implementation 只覆盖 Agent runtime 可观察性闭环：project/task/message、run timeline、tool observation、handoff、artifact workspace metadata。
+- 增加 schema validation、mapper tests、shared repository contract tests 和 opt-in Postgres integration test 策略。
 
 **非目标：**
 
 - 不在同一阶段做完整 hosted auth。
 - 不做 object storage migration。
 - 不做 production deployment architecture。
+- 不切换默认 Web/runtime backend。
+- 不一次性实现 Skills、MCP connector、model provider、deployment 等所有 repository 的 Prisma backend。
+
+**当前设计：** `docs/superpowers/specs/2026-05-19-postgres-repository-foundation-design.md`。
 
 ## Backlog 分组
 
