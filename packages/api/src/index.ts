@@ -2250,6 +2250,26 @@ export class DemoWorkbenchService {
       }
       const api = resolveProviderApi(provider);
       const modelCapabilities = toRouteModelCapabilities(provider, route.model);
+      const fallbackConfig = normalizeModelFallbackConfig(route.fallback);
+      const fallbackProvider = fallbackConfig
+        ? await this.repositories.modelProviders.getById(fallbackConfig.providerId)
+        : undefined;
+      const fallbackMetadata =
+        fallbackConfig &&
+        fallbackProvider &&
+        fallbackProvider.enabled &&
+        isProjectModelProviderForProject(fallbackProvider, projectId)
+          ? {
+              provider: fallbackProvider.id,
+              providerName: fallbackProvider.name,
+              api: resolveProviderApi(fallbackProvider),
+              model: fallbackConfig.model,
+              baseUrlConfigured: Boolean(fallbackProvider.config.baseUrl),
+              apiKeyEnvConfigured: Boolean(
+                fallbackProvider.config.apiKeyEnv ?? fallbackProvider.config.secretEnvName
+              )
+            }
+          : undefined;
       resolved[role] = {
         provider: provider.id,
         providerName: provider.name,
@@ -2257,7 +2277,8 @@ export class DemoWorkbenchService {
         model: route.model,
         baseUrlConfigured: Boolean(provider.config.baseUrl),
         apiKeyEnvConfigured: Boolean(provider.config.apiKeyEnv ?? provider.config.secretEnvName),
-        ...(modelCapabilities ? { modelCapabilities } : {})
+        ...(modelCapabilities ? { modelCapabilities } : {}),
+        ...(fallbackMetadata ? { fallback: fallbackMetadata } : {})
       };
     }
 
@@ -3065,6 +3086,20 @@ function toRouteModelCapabilities(
     ...(model.supportsImages !== undefined ? { supportsImages: model.supportsImages } : {})
   };
   return Object.keys(capabilities).length > 0 ? capabilities : undefined;
+}
+
+function normalizeModelFallbackConfig(
+  value: Record<string, unknown> | undefined
+): { providerId: string; model: string } | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const providerId = typeof value.providerId === "string" ? value.providerId.trim() : "";
+  const model = typeof value.model === "string" ? value.model.trim() : "";
+  if (!providerId || !model) {
+    return undefined;
+  }
+  return { providerId, model };
 }
 
 function normalizeAgentRole(role: unknown): AgentRole {

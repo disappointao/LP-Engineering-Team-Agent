@@ -3415,6 +3415,88 @@ describe("demo workbench service", () => {
     );
   });
 
+  it("resolves safe model fallback metadata without exposing provider secrets", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const primary = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_primary",
+      name: "Primary",
+      provider: "openai",
+      secretEnvName: "PRIMARY_API_KEY",
+      modelId: "gpt-5.4"
+    });
+    const fallback = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_backup",
+      name: "Backup",
+      provider: "openai",
+      secretEnvName: "BACKUP_API_KEY",
+      modelId: "gpt-5.4-mini"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: primary.id,
+      model: "gpt-5.4"
+    });
+    const [route] = await repositories.modelRoutingPolicies.listForProject(project.id);
+    await repositories.modelRoutingPolicies.save({
+      ...route!,
+      fallback: {
+        providerId: fallback.id,
+        model: "gpt-5.4-mini"
+      }
+    });
+
+    const policy = await service.resolveModelRoutingPolicyForProject(project.id);
+
+    expect(policy.planner.fallback).toEqual({
+      provider: "provider_backup",
+      providerName: "Backup",
+      api: "openai-completions",
+      model: "gpt-5.4-mini",
+      baseUrlConfigured: false,
+      apiKeyEnvConfigured: true
+    });
+    expect(JSON.stringify(policy)).not.toContain("BACKUP_API_KEY");
+    expect(JSON.stringify(policy)).not.toContain("PRIMARY_API_KEY");
+  });
+
+  it("omits invalid model fallback metadata without breaking the primary route", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const primary = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "provider_primary",
+      name: "Primary",
+      provider: "openai",
+      secretEnvName: "PRIMARY_API_KEY",
+      modelId: "gpt-5.4"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: primary.id,
+      model: "gpt-5.4"
+    });
+    const [route] = await repositories.modelRoutingPolicies.listForProject(project.id);
+    await repositories.modelRoutingPolicies.save({
+      ...route!,
+      fallback: {
+        providerId: "missing_provider",
+        model: "gpt-5.4-mini"
+      }
+    });
+
+    const policy = await service.resolveModelRoutingPolicyForProject(project.id);
+
+    expect(policy.planner.provider).toBe("provider_primary");
+    expect(policy.planner.fallback).toBeUndefined();
+  });
+
   it("rejects disabled model providers during route resolution", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
