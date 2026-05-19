@@ -35,48 +35,19 @@
 - Postgres repository 实现和真实多用户 auth/RBAC。
 - Desktop packaging 和 desktop filesystem workspace。
 
-## 推荐下一阶段队列
+## 已完成阶段记录
 
 ### Stage 18：Agent Run Lifecycle & Recovery v0
 
 **状态：** 已实现。
 
-**为什么现在做：** run records、run events、handoffs、worker jobs、tool observations 都已有 v0，但缺一个更正式的 lifecycle/recovery 层。这个阶段会把真正 Agent 系统需要的失败诊断、恢复、retry/resume、blocked state 和幂等 finalizer 打牢。
+Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、worker jobs、tool observations 和 handoffs 派生 `RunLifecycleView`、安全 `diagnosticSummary` 和 recovery action contract，并强化 worker finalization 幂等性。
 
-**建议范围：**
-
-- 定义标准 run lifecycle states，例如 `queued`、`running`、`waiting_for_approval`、`blocked`、`cancelling`、`cancelled`、`failed`、`completed`。
-- 增加 helper，从持久化 run events 和关联 worker/tool state 派生当前 task/run status。
-- 为 failed 或 blocked run 增加最小 retry/resume contract，但不实现完整 DAG scheduler。
-- 增加 failure diagnostic summary records 或 event metadata，供 UI 和未来 model context 复用。
-- 强化 worker finalization 幂等性和 repeated-finalize 行为。
-- 文档化 task、run、handoff、worker job、tool observation 的关系。
-
-**非目标：**
-
-- 不做 Web UI overhaul。
-- 不做 streaming UI。
-- 不做 MCP execution。
-- 不做真实 shell execution。
-- 不做 worker daemon。
-- 不做 general agent swarm 或任意 DAG scheduler。
-
-**可能涉及文件：**
-
-- `packages/api/src/run-orchestrator.ts`
-- `packages/api/src/run-lifecycle.ts`
-- `packages/api/src/task-interrupts.ts`
-- `packages/api/src/skill-command-worker-queue.ts`
-- `packages/db/src/workbench-repositories.ts`
-- `packages/db/src/json-file-workbench-repositories.ts`
-- `packages/runtime-adapters/src/index.ts`
-- `docs/agent-development-learning.md`
-- `docs/superpowers/specs/2026-05-19-agent-run-lifecycle-recovery-design.md`
-- `docs/superpowers/` 下新增 plan
+## 推荐下一阶段队列
 
 ### Stage 19：Worker Daemon、Heartbeat 和 Streaming Logs v0
 
-**状态：** 推荐在 Stage 18 之后做。
+**状态：** 推荐下一阶段。
 
 **为什么在 Stage 18 之后：** daemon execution 需要更强的 run lifecycle 和 finalizer 语义，否则 stale claims、重复 finalization、cancellation 和可见 run state 会很难推理。
 
