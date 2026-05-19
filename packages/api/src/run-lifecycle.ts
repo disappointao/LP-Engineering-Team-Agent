@@ -1,11 +1,13 @@
 import type {
+  AgentHandoffRecord,
   RunEventRecord,
   RunRecord,
   RunRecordState,
   WorkbenchRepositories
 } from "@lp-agent/db";
 import type { AgentRole } from "@lp-agent/model-gateway";
-import type { WorkerRuntime } from "@lp-agent/worker-runtime";
+import type { WorkerJobRecord, WorkerRuntime } from "@lp-agent/worker-runtime";
+import { sanitizeHandoffText } from "./agent-handoffs";
 
 export type RunLifecycleState =
   | "queued"
@@ -105,7 +107,12 @@ export async function deriveRunLifecycleView(
 
   return {
     ok: true,
-    view: buildRunLifecycleView(run, events)
+    view: await buildRunLifecycleView({
+      repositories: input.repositories,
+      workerRuntime: input.workerRuntime,
+      run,
+      events
+    })
   };
 }
 
@@ -116,17 +123,25 @@ export async function listRunLifecycleViewsForTask(
   const views = await Promise.all(
     runs.map(async (run) => {
       const events = await input.repositories.runEvents.listForRun(run.id);
-      return buildRunLifecycleView(run, events);
+      return buildRunLifecycleView({
+        repositories: input.repositories,
+        workerRuntime: input.workerRuntime,
+        run,
+        events
+      });
     })
   );
 
   return views;
 }
 
-function buildRunLifecycleView(
-  run: RunRecord,
-  events: RunEventRecord[]
-): RunLifecycleView {
+async function buildRunLifecycleView(input: {
+  repositories: WorkbenchRepositories;
+  workerRuntime?: RunLifecycleWorkerRuntime;
+  run: RunRecord;
+  events: RunEventRecord[];
+}): Promise<RunLifecycleView> {
+  const { events, run } = input;
   const terminalEvent = findLatestTerminalRunEvent(events);
   const modelParseDiagnostic = deriveModelParseDiagnostic(events);
 
@@ -142,6 +157,33 @@ function buildRunLifecycleView(
     };
   }
 
+  const blockedHandoff = await findBlockedInboundHandoff(input.repositories, run);
+
+  if (blockedHandoff) {
+    return {
+      ...baseRunLifecycleView(run),
+      state: "blocked",
+      blockedReason: summarizeBlockedReason(blockedHandoff.blockingReason),
+      diagnosticSummary: {
+        code: "handoff_blocked",
+        message: "Run is blocked by an inbound handoff.",
+        source: "handoff"
+      },
+      recoveryActions: ["resolve_blocker"]
+    };
+  }
+
+  const workerLink = findLatestWorkerJobLink(events);
+
+  if (workerLink) {
+    return deriveLinkedWorkerJobView({
+      workerRuntime: input.workerRuntime,
+      run,
+      workerJobId: workerLink.workerJobId,
+      observationId: workerLink.observationId
+    });
+  }
+
   const mapped = mapRunRecordState(run.state);
 
   return {
@@ -149,6 +191,154 @@ function buildRunLifecycleView(
     state: mapped.state,
     diagnosticSummary: modelParseDiagnostic ?? mapped.diagnosticSummary,
     recoveryActions: mapped.recoveryActions
+  };
+}
+
+async function findBlockedInboundHandoff(
+  repositories: WorkbenchRepositories,
+  run: RunRecord
+): Promise<AgentHandoffRecord | undefined> {
+  const inbound = await repositories.agentHandoffs.listInbound({
+    projectId: run.projectId,
+    ...(run.taskId ? { taskId: run.taskId } : {}),
+    toRole: run.role
+  });
+
+  return inbound.filter((handoff) => handoff.state === "blocked").at(-1);
+}
+
+function summarizeBlockedReason(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const reason = sanitizeHandoffText(value).replace(/\s+/gu, " ").trim().slice(0, 240);
+  return reason || undefined;
+}
+
+function findLatestWorkerJobLink(events: RunEventRecord[]): {
+  workerJobId: string;
+  observationId?: string;
+} | undefined {
+  return events
+    .map((event) => {
+      if (event.type !== "worker.job.linked") {
+        return undefined;
+      }
+
+      const workerJobId = nonEmptyString(event.payload.workerJobId);
+      if (!workerJobId) {
+        return undefined;
+      }
+
+      const observationId = nonEmptyString(event.payload.observationId);
+      return {
+        workerJobId,
+        ...(observationId ? { observationId } : {})
+      };
+    })
+    .filter((link): link is { workerJobId: string; observationId?: string } => Boolean(link))
+    .at(-1);
+}
+
+async function deriveLinkedWorkerJobView(input: {
+  workerRuntime?: RunLifecycleWorkerRuntime;
+  run: RunRecord;
+  workerJobId: string;
+  observationId?: string;
+}): Promise<RunLifecycleView> {
+  const linkedFields = {
+    linkedWorkerJobId: input.workerJobId,
+    ...(input.observationId ? { linkedObservationId: input.observationId } : {})
+  };
+  const workerJob = input.workerRuntime
+    ? await input.workerRuntime.getJob(input.workerJobId)
+    : undefined;
+
+  if (!workerJob) {
+    return {
+      ...baseRunLifecycleView(input.run),
+      ...linkedFields,
+      state: "failed",
+      diagnosticSummary: {
+        code: "worker_job_missing",
+        message: "Linked worker job could not be found.",
+        source: "lifecycle",
+        eventType: "worker.job.linked"
+      },
+      recoveryActions: ["inspect_manually"]
+    };
+  }
+
+  const base = {
+    ...baseRunLifecycleView(input.run),
+    ...linkedFields
+  };
+
+  if (workerJob.state === "queued") {
+    return {
+      ...base,
+      state: "queued",
+      recoveryActions: []
+    };
+  }
+
+  if (workerJob.state === "running") {
+    return {
+      ...base,
+      state: workerJob.cancelRequestedAt ? "cancelling" : "running",
+      recoveryActions: []
+    };
+  }
+
+  if (workerJob.state === "completed") {
+    return {
+      ...base,
+      state: "completed",
+      diagnosticSummary: {
+        code: "worker_finalization_incomplete",
+        message: "Worker job completed but run finalization is incomplete.",
+        source: "lifecycle",
+        eventType: "worker.job.linked"
+      },
+      recoveryActions: ["resume_worker_finalization"]
+    };
+  }
+
+  if (workerJob.state === "cancelled") {
+    return {
+      ...base,
+      state: "cancelled",
+      diagnosticSummary: workerJobDiagnostic(
+        workerJob,
+        sanitizeOptionalDiagnosticCode(workerJob.errorName) ?? "worker_job_cancelled"
+      ),
+      recoveryActions: ["resume_worker_finalization"]
+    };
+  }
+
+  return {
+    ...base,
+    state: "failed",
+    diagnosticSummary: workerJobDiagnostic(
+      workerJob,
+      sanitizeOptionalDiagnosticCode(workerJob.errorName) ??
+        sanitizeOptionalDiagnosticCode(workerJob.resultSummary?.errorName) ??
+        "worker_job_failed"
+    ),
+    recoveryActions: ["resume_worker_finalization"]
+  };
+}
+
+function workerJobDiagnostic(
+  workerJob: WorkerJobRecord,
+  code: string
+): RunDiagnosticSummary {
+  return {
+    code,
+    message: `Worker job ${workerJob.state}.`,
+    source: "worker_job",
+    ...(workerJob.errorName ? { errorName: sanitizeDiagnosticCode(workerJob.errorName) } : {})
   };
 }
 
@@ -241,4 +431,21 @@ function sanitizeDiagnosticCode(value: unknown): string {
   }
 
   return value;
+}
+
+function sanitizeOptionalDiagnosticCode(value: unknown): string | undefined {
+  if (typeof value !== "string" || !safeDiagnosticCodePattern.test(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }

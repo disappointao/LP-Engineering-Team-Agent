@@ -10,6 +10,8 @@ import {
   deriveRunLifecycleView,
   listRunLifecycleViewsForTask
 } from "./run-lifecycle";
+import { createAgentHandoffRecord } from "./agent-handoffs";
+import type { WorkerJobRecord } from "@lp-agent/worker-runtime";
 
 function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
   return {
@@ -274,5 +276,210 @@ describe("deriveRunLifecycleView core states", () => {
       }
     });
     expect(JSON.stringify(result)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+});
+
+function workerJob(
+  overrides: Partial<WorkerJobRecord> = {}
+): WorkerJobRecord {
+  return {
+    id: "worker_job_1",
+    projectId: "project_1",
+    kind: "tool_command",
+    state: "queued",
+    payloadSource: "safe_persisted",
+    policy: {
+      mode: "simulate",
+      allowedCommands: ["static-deploy"],
+      timeoutMs: 30000,
+      allowedEnvNames: ["LP_PROJECT_ID"],
+      maxStdoutBytes: 1000,
+      maxStderrBytes: 1000,
+      network: "disabled"
+    },
+    inputSummary: {
+      projectId: "project_1",
+      kind: "tool_command",
+      commandId: "publish_static",
+      command: "static-deploy",
+      argCount: 2,
+      envNames: ["LP_PROJECT_ID"],
+      timeoutMs: 30000
+    },
+    createdAt: "2026-05-19T00:00:01.000Z",
+    ...overrides
+  };
+}
+
+async function saveWorkerLink(repositories: WorkbenchRepositories): Promise<void> {
+  await saveEvent(repositories, {
+    sequence: 1,
+    type: "worker.job.linked",
+    payload: {
+      taskId: "task_1",
+      runId: "run_planner_1",
+      workerJobId: "worker_job_1",
+      observationId: "tool_observation_1"
+    }
+  });
+}
+
+describe("deriveRunLifecycleView worker and handoff states", () => {
+  it.each([
+    ["queued", "queued"],
+    ["running", "running"]
+  ] as const)(
+    "derives linked worker job state %s",
+    async (workerState, expectedState) => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      await saveRun(repositories, { role: "deployer" });
+      await saveWorkerLink(repositories);
+
+      const result = await deriveRunLifecycleView({
+        repositories,
+        workerRuntime: {
+          getJob: async () => workerJob({ state: workerState })
+        },
+        runId: "run_planner_1"
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        view: {
+          state: expectedState,
+          linkedWorkerJobId: "worker_job_1",
+          linkedObservationId: "tool_observation_1"
+        }
+      });
+    }
+  );
+
+  it("derives cancelling when a linked running worker job has a cancellation request", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () =>
+          workerJob({
+            state: "running",
+            cancelRequestedAt: "2026-05-19T00:00:03.000Z"
+          })
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "cancelling",
+        recoveryActions: []
+      }
+    });
+  });
+
+  it("returns resume finalization for a terminal worker job without terminal run events", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () =>
+          workerJob({
+            state: "completed",
+            completedAt: "2026-05-19T00:00:04.000Z",
+            resultSummary: {
+              state: "completed",
+              exitCode: 0,
+              stdout: "published",
+              stderr: "",
+              stdoutBytes: 9,
+              stderrBytes: 0
+            }
+          })
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "completed",
+        recoveryActions: ["resume_worker_finalization"],
+        diagnosticSummary: {
+          code: "worker_finalization_incomplete",
+          source: "lifecycle"
+        }
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("published");
+  });
+
+  it("reports a missing linked worker job without manufacturing success", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await saveWorkerLink(repositories);
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      workerRuntime: {
+        getJob: async () => undefined
+      },
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "failed",
+        diagnosticSummary: {
+          code: "worker_job_missing",
+          source: "lifecycle"
+        },
+        recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
+  it("derives blocked from an inbound blocked handoff and redacts the blocking reason", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, { role: "deployer" });
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "blocked",
+        summary: "Reviewer blocked deployment",
+        blockingReason: "Deployment blocked with OPENAI_API_KEY=sk-test-secret",
+        now: () => new Date("2026-05-19T00:00:02.000Z")
+      })
+    );
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        state: "blocked",
+        blockedReason: "Deployment blocked with OPENAI_API_KEY=[REDACTED]",
+        diagnosticSummary: {
+          code: "handoff_blocked",
+          source: "handoff"
+        },
+        recoveryActions: ["resolve_blocker"]
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
   });
 });
