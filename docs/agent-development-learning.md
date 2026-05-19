@@ -2,7 +2,7 @@
 
 这份文档给缺少 Agent 开发经验的开发者使用。它不是一次性的项目介绍，也不是项目流水账。它只记录本项目推进过程中和 Agent 开发直接相关的概念、难点、实现取舍和本项目实践。
 
-不要把普通文档维护、README 写法、本地启动说明、纯 Web UI 视觉/交互调整、验收清单编写方式等内容放进这里，除非它们直接改变 Agent runtime、context、tool execution、artifact safety boundary、multi-agent coordination 或模型/检索/记忆机制。
+判断是否写入本文件时，先看它是否能帮助理解 Agent 知识点：例如 Agent runtime、上下文组装、工具执行、artifact 安全边界、多 Agent 协作、模型、检索、记忆、恢复、审批或可观察性。普通项目维护内容如果不涉及这些 Agent 知识点，就不要写入本文件；文档、启动、UI、验收等只是常见例子，不是固定排除清单。
 
 阅读目标：
 
@@ -803,4 +803,4 @@ pnpm --filter @lp-agent/model-gateway test
 - 如果实现了一个能力，在“本项目当前怎么处理”中把它从“还没做”移动到“已完成或基本成型”。
 - 如果发现一个新的工程难点，在“Agent 开发核心难点”中新增小节。
 - 如果某个旧判断过时，直接改成当前事实，不保留误导性历史描述。
-- 如果某个阶段只是普通文档、启动说明、纯 Web UI 或验收清单变更，不要写入本文件；这类内容应放在 README、roadmap、acceptance doc 或对应 spec/plan 中。
+- 如果某个阶段没有引入或改变 Agent 知识点、Agent 运行边界、上下文/工具/模型/记忆/协作机制，就不要写入本文件；这类内容应放在 README、roadmap、acceptance doc 或对应 spec/plan 中。
