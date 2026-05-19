@@ -1935,7 +1935,7 @@ export class DemoWorkbenchService {
     const normalizedArguments = normalizeMCPToolExecutionArguments(input.arguments);
     const argumentSummary = summarizeMCPToolArguments(normalizedArguments);
     const sensitiveValues = [
-      ...Object.values(normalizedArguments),
+      ...collectMCPArgumentStringValues(normalizedArguments),
       ...collectMCPSecretEnvValues(this.env)
     ].filter((value): value is string => typeof value === "string" && value.length > 0);
     const runId = await reserveRepositoryId(this.repositories, "run_mcp_tool", async () => {
@@ -3206,14 +3206,53 @@ function containsUnsafeMCPOutputSummary(value: string): boolean {
     /(^|[\s"'(])(?:\/Users\/|\/private\/|\/tmp\/|\/var\/folders\/)/.test(value) ||
     /[A-Za-z]:\\/.test(value) ||
     /<!doctype\s+html/i.test(value) ||
-    /<\/?(?:html|head|body|script|style|main|section|div|span|p|a|img|link|meta)\b/i.test(
+    /<\/?(?:html|head|body|script|style|main|section|article|div|span|p|a|img|link|meta|h[1-6]|ul|ol|li|button|form|input|label|header|footer|nav)\b/i.test(
       value
     ) ||
+    /\bconsole\.(?:log|error|warn|info|debug)\s*\(/.test(value) ||
+    /\b(?:function|const|let|var|class|import|export)\s+[A-Za-z_$]/.test(value) ||
+    /(?:^|[\s;{}])\.[A-Za-z_-][A-Za-z0-9_-]*\s*\{[^}]*:[^}]*\}/.test(value) ||
+    /(?:^|[\s;{}])#[A-Za-z_-][A-Za-z0-9_-]*\s*\{[^}]*:[^}]*\}/.test(value) ||
+    /\b[A-Za-z-]+\s*:\s*[^;{}]+;/.test(value) ||
     normalized.includes("document.queryselector") ||
     normalized.includes("window.") ||
     normalized.includes("body {") ||
     normalized.includes(":root {")
   );
+}
+
+function collectMCPArgumentStringValues(value: unknown): string[] {
+  const strings: string[] = [];
+  const seen = new Set<object>();
+  const visit = (candidate: unknown, depth: number): void => {
+    if (strings.length >= 100 || depth > 5) {
+      return;
+    }
+    if (typeof candidate === "string") {
+      if (candidate.length > 0) {
+        strings.push(candidate);
+      }
+      return;
+    }
+    if (typeof candidate !== "object" || candidate === null) {
+      return;
+    }
+    if (seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    const values = Array.isArray(candidate)
+      ? candidate
+      : Object.values(candidate as Record<string, unknown>);
+    for (const nested of values) {
+      visit(nested, depth + 1);
+      if (strings.length >= 100) {
+        return;
+      }
+    }
+  };
+  visit(value, 0);
+  return strings;
 }
 
 function collectMCPSecretEnvValues(env: RuntimeEnvironment): string[] {

@@ -5065,6 +5065,57 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("MCP_ENV_SECRET");
   });
 
+  it("redacts nested argument strings from failed MCP executor summaries", async () => {
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: "Failed while reading NESTED_ARGUMENT_SECRET",
+      arguments: {
+        filters: {
+          secret: "NESTED_ARGUMENT_SECRET"
+        }
+      }
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Failed while reading [redacted]"
+    });
+    expect(JSON.stringify(result)).not.toContain("NESTED_ARGUMENT_SECRET");
+    expect(JSON.stringify(events)).not.toContain("NESTED_ARGUMENT_SECRET");
+  });
+
+  it("does not persist HTML tag snippets from failed MCP executor summaries", async () => {
+    const artifactContent = "<h1>SECRET_ARTIFACT</h1>";
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${artifactContent}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain(artifactContent);
+    expect(JSON.stringify(result)).not.toContain("SECRET_ARTIFACT");
+    expect(JSON.stringify(events)).not.toContain(artifactContent);
+    expect(JSON.stringify(events)).not.toContain("SECRET_ARTIFACT");
+  });
+
+  it("does not persist JS or CSS snippets from failed MCP executor summaries", async () => {
+    const jsSnippet = 'console.log("SECRET_ARTIFACT")';
+    const cssSnippet = ".hero { color: red; }";
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${jsSnippet} and ${cssSnippet}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain("SECRET_ARTIFACT");
+    expect(JSON.stringify(result)).not.toContain(cssSnippet);
+    expect(JSON.stringify(events)).not.toContain("SECRET_ARTIFACT");
+    expect(JSON.stringify(events)).not.toContain(cssSnippet);
+  });
+
   it("uses the configured current user for mcp approval actor defaults", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
@@ -6080,6 +6131,7 @@ async function createMCPExecutionFixture(
 async function executeMCPFailureWithSummary(input: {
   outputSummary: string;
   env?: Record<string, string | undefined>;
+  arguments?: Record<string, unknown>;
 }): Promise<{
   result: Awaited<ReturnType<DemoWorkbenchService["executeProjectMCPTool"]>>;
   events: RunEventRecord[];
@@ -6118,7 +6170,7 @@ async function executeMCPFailureWithSummary(input: {
     connectorId: connector.id,
     toolName: "searchAssets",
     role: "builder",
-    arguments: {}
+    arguments: input.arguments ?? {}
   });
   const events = await repositories.runEvents.listForRun(result.run.id);
   return { result, events };
