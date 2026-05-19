@@ -186,6 +186,29 @@ describe("MCP gateway policy", () => {
     ).toBe(false);
   });
 
+  it("treats explicit write markers as authoritative", () => {
+    expect(
+      isReadOnlyMCPTool({
+        name: "listAssets",
+        permission: "assets:list",
+        roles: ["builder"],
+        requiresApproval: false,
+        readOnly: true,
+        sideEffect: "write"
+      })
+    ).toBe(false);
+    expect(
+      isReadOnlyMCPTool({
+        name: "inspectAssets",
+        permission: "assets:inspect",
+        roles: ["reviewer"],
+        requiresApproval: false,
+        readOnly: false,
+        sideEffect: "read"
+      })
+    ).toBe(false);
+  });
+
   it("summarizes MCP tool arguments without values", () => {
     const summary = summarizeMCPToolArguments({
       query: "SECRET_PRODUCT",
@@ -224,9 +247,43 @@ describe("MCP gateway policy", () => {
         argumentKeys: ["query"],
         argumentCount: 1
       },
-      durationMs: expect.any(Number)
+      durationMs: 0
     });
     expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
+  });
+
+  it("rejects malformed read-only metadata", () => {
+    expect(() =>
+      normalizeMCPConnectorDefinition({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false,
+            readOnly: "yes"
+          }
+        ]
+      })
+    ).toThrow("mcp_connector_validation_failed");
+
+    expect(() =>
+      normalizeMCPConnectorDefinition({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false,
+            sideEffect: "none"
+          }
+        ]
+      })
+    ).toThrow("mcp_connector_validation_failed");
   });
 
   it("rejects invalid connector definitions", () => {

@@ -138,18 +138,17 @@ export function isReadOnlyMCPTool(tool: MCPToolDefinition): boolean {
   ) {
     return false;
   }
-  if (tool.readOnly === true || tool.sideEffect === "read") {
-    return true;
-  }
   if (tool.readOnly === false || tool.sideEffect === "write") {
     return false;
+  }
+  if (tool.readOnly === true || tool.sideEffect === "read") {
+    return true;
   }
   return permission.endsWith(":read");
 }
 
 export class DeterministicMCPToolExecutor implements MCPToolExecutor {
   async execute(input: MCPToolExecutionInput): Promise<MCPToolExecutionResult> {
-    const startedAt = Date.now();
     const argumentSummary = summarizeMCPToolArguments(input.arguments);
     const keyNoun = argumentSummary.argumentCount === 1 ? "key" : "keys";
     return {
@@ -161,7 +160,7 @@ export class DeterministicMCPToolExecutor implements MCPToolExecutor {
         argumentKeys: argumentSummary.argumentKeys,
         argumentCount: argumentSummary.argumentCount
       },
-      durationMs: Math.max(0, Date.now() - startedAt)
+      durationMs: 0
     };
   }
 }
@@ -222,6 +221,16 @@ function normalizeToolDefinition(input: unknown): MCPToolDefinition {
     typeof input.description === "string" && input.description.trim().length > 0
       ? input.description.trim()
       : undefined;
+  if ("readOnly" in input && typeof input.readOnly !== "boolean") {
+    throw new Error("mcp_connector_validation_failed");
+  }
+  if (
+    "sideEffect" in input &&
+    input.sideEffect !== "read" &&
+    input.sideEffect !== "write"
+  ) {
+    throw new Error("mcp_connector_validation_failed");
+  }
   const readOnly = typeof input.readOnly === "boolean" ? input.readOnly : undefined;
   const sideEffect =
     input.sideEffect === "read" || input.sideEffect === "write"
