@@ -101,6 +101,7 @@ import {
 import {
   PlannerLPBriefParseError,
   createStructuredLPBriefPlannerPrompt,
+  createStructuredLPBriefRepairPrompt,
   parsePlannerLPBriefOutput,
   toLPBriefParseFailurePayload,
   toLPBriefParseSuccessPayload
@@ -570,7 +571,7 @@ export class DemoWorkbenchService {
         },
         now: this.now,
         finalizeResult: this.structuredPlannerOutputEnabled
-          ? ({ result }) => {
+          ? async ({ result, contextPack }) => {
               if (result.state !== "completed") {
                 return result;
               }
@@ -588,7 +589,18 @@ export class DemoWorkbenchService {
                 };
               } catch (error) {
                 if (error instanceof PlannerLPBriefParseError) {
-                  return failPlannerResultForParseError({ result, error });
+                  const repaired = await repairPlannerResult({
+                    runtime: this.plannerRuntime,
+                    result,
+                    projectId: input.projectId,
+                    userPrompt: input.prompt,
+                    context: contextPack.runtimeContext,
+                    error
+                  });
+                  if (repaired.brief) {
+                    parsedPlannerBrief = repaired.brief;
+                  }
+                  return repaired.result;
                 }
                 throw error;
               }
@@ -2679,16 +2691,174 @@ function failPlannerResultForParseError(input: {
   result: RuntimeRunResult;
   error: PlannerLPBriefParseError;
 }): RuntimeRunResult {
+  return {
+    ...input.result,
+    state: "failed",
+    events: [
+      ...input.result.events.filter((event) => event.type !== "run.completed"),
+      toPlannerParseFailureEvent(input),
+      {
+        type: "run.failed",
+        message: "Planner run failed.",
+        runId: input.result.runId,
+        role: "planner",
+        state: "failed",
+        errorName: input.error.name
+      }
+    ]
+  };
+}
+
+async function repairPlannerResult(input: {
+  runtime: AgentRuntimeAdapter;
+  result: RuntimeRunResult;
+  projectId: string;
+  userPrompt: string;
+  context: RuntimeRunContext;
+  error: PlannerLPBriefParseError;
+}): Promise<{ result: RuntimeRunResult; brief?: LPBrief }> {
+  const parseFailedEvent = toPlannerParseFailureEvent({
+    result: input.result,
+    error: input.error
+  });
+  const repairStarted = toPlannerRepairStartedEvent({
+    result: input.result,
+    error: input.error
+  });
+  const repairResult = await input.runtime.run({
+    runId: input.result.runId,
+    projectId: input.projectId,
+    role: "planner",
+    input: {
+      prompt: createStructuredLPBriefRepairPrompt({
+        userPrompt: input.userPrompt,
+        failure: {
+          reason: input.error.reason,
+          ...input.error.issueSummary
+        }
+      })
+    },
+    context: input.context
+  });
+  const repairEvents = selectModelAttemptEvents(repairResult.events);
+  try {
+    const brief = parsePlannerLPBriefOutput(repairResult.modelOutputText ?? "");
+    return {
+      brief,
+      result: {
+        ...input.result,
+        events: [
+          ...input.result.events.filter((event) => event.type !== "run.completed"),
+          parseFailedEvent,
+          repairStarted,
+          ...repairEvents,
+          toPlannerRepairSuccessEvent({
+            result: input.result,
+            brief
+          }),
+          {
+            type: "run.completed",
+            message: "planner run completed",
+            runId: input.result.runId,
+            state: "completed"
+          }
+        ]
+      }
+    };
+  } catch (error) {
+    if (error instanceof PlannerLPBriefParseError) {
+      return {
+        result: failPlannerResultForRepairError({
+          result: input.result,
+          parseFailedEvent,
+          repairStarted,
+          repairEvents,
+          error
+        })
+      };
+    }
+    throw error;
+  }
+}
+
+function toPlannerParseFailureEvent(input: {
+  result: RuntimeRunResult;
+  error: PlannerLPBriefParseError;
+}): RuntimeEvent {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...toLPBriefParseFailurePayload(input.error),
+    type: "model.output.parse_failed",
+    message: "Planner output could not be parsed as LP brief",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    reason: input.error.reason,
+    ...(issueSummary.issueCount !== undefined
+      ? { issueCount: issueSummary.issueCount }
+      : {}),
+    ...(issueSummary.firstIssuePath !== undefined
+      ? { firstIssuePath: issueSummary.firstIssuePath }
+      : {}),
+    ...(issueSummary.firstIssueCode !== undefined
+      ? { firstIssueCode: issueSummary.firstIssueCode }
+      : {})
+  };
+}
+
+function toPlannerRepairStartedEvent(input: {
+  result: RuntimeRunResult;
+  error: PlannerLPBriefParseError;
+}): RuntimeEvent {
+  return {
+    type: "model.output.repair_started",
+    message: "Planner output repair started",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    reason: input.error.reason,
+    ...input.error.issueSummary
+  };
+}
+
+function toPlannerRepairSuccessEvent(input: {
+  result: RuntimeRunResult;
+  brief: LPBrief;
+}): RuntimeEvent {
+  return {
+    ...toLPBriefParseSuccessPayload(input.brief),
+    type: "model.output.repaired",
+    message: "Planner output repaired as LP brief",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    title: input.brief.title,
+    sectionCount: input.brief.sections.length,
+    productCount: input.brief.productData.length,
+    hasAssets: input.brief.assets.length > 0
+  };
+}
+
+function failPlannerResultForRepairError(input: {
+  result: RuntimeRunResult;
+  parseFailedEvent: RuntimeEvent;
+  repairStarted: RuntimeEvent;
+  repairEvents: RuntimeEvent[];
+  error: PlannerLPBriefParseError;
+}): RuntimeRunResult {
   const issueSummary = input.error.issueSummary;
   return {
     ...input.result,
     state: "failed",
     events: [
       ...input.result.events.filter((event) => event.type !== "run.completed"),
+      input.parseFailedEvent,
+      input.repairStarted,
+      ...input.repairEvents,
       {
         ...toLPBriefParseFailurePayload(input.error),
-        type: "model.output.parse_failed",
-        message: "Planner output could not be parsed as LP brief",
+        type: "model.output.repair_failed",
+        message: "Planner output repair failed",
         runId: input.result.runId,
         role: "planner",
         schema: "LPBriefSchema",
@@ -2778,6 +2948,18 @@ function failBuilderResultForParseError(input: {
       }
     ]
   };
+}
+
+function selectModelAttemptEvents(events: RuntimeEvent[]): RuntimeEvent[] {
+  return events.filter((event) =>
+    [
+      "model.retry.scheduled",
+      "model.retry.exhausted",
+      "model.completed",
+      "model.fallback.available",
+      "model.fallback.not_configured"
+    ].includes(event.type)
+  );
 }
 
 function createLocalRuntimeAdapter(

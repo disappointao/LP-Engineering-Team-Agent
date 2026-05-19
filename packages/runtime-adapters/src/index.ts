@@ -187,6 +187,54 @@ export type RuntimeEvent =
       firstIssueCode?: string;
     }
   | {
+      type: "model.output.repair_started";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema" | "StaticArtifactsSchema";
+      reason: "empty_output" | "invalid_json" | "schema_invalid" | "policy_violation";
+      policyCode?: string;
+      issueCount?: number;
+      firstIssuePath?: string;
+      firstIssueCode?: string;
+    }
+  | {
+      type: "model.output.repaired";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema";
+      title: string;
+      sectionCount: number;
+      productCount: number;
+      hasAssets: boolean;
+    }
+  | {
+      type: "model.output.repaired";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "StaticArtifactsSchema";
+      artifactKind: "three-file-static";
+      htmlBytes: number;
+      cssBytes: number;
+      jsBytes: number;
+      hasExternalCss: boolean;
+      hasExternalImages: boolean;
+    }
+  | {
+      type: "model.output.repair_failed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema" | "StaticArtifactsSchema";
+      reason: "empty_output" | "invalid_json" | "schema_invalid" | "policy_violation";
+      policyCode?: string;
+      issueCount?: number;
+      firstIssuePath?: string;
+      firstIssueCode?: string;
+    }
+  | {
       type: "runtime.context.loaded";
       message: string;
       runId?: string;

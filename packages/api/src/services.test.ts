@@ -2724,7 +2724,109 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
   });
 
-  it("fails planner run without saving raw model output when structured LP brief parsing fails", async () => {
+  it("repairs invalid Planner structured output once before saving the brief", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const repairedBrief = {
+      ...sampleBrief,
+      title: "Repaired Planner Brief"
+    };
+    const responses = [
+      {
+        id: "chatcmpl_bad_planner",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "{\"title\":\"RAW_MODEL_OUTPUT_SECRET\"}" },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+      },
+      {
+        id: "chatcmpl_repaired_planner",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(repairedBrief) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 }
+      }
+    ];
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      const response = responses.shift();
+      if (!response) {
+        throw new Error("unexpected_fetch_call");
+      }
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+
+    expect(brief.brief.title).toBe("Repaired Planner Brief");
+    expect(fetchCalls).toHaveLength(2);
+    const repairRequestBody = JSON.parse(String(fetchCalls[1]?.init?.body));
+    expect(repairRequestBody.messages[0].content).toContain(
+      "Repair the previous Planner response"
+    );
+    expect(repairRequestBody.messages[0].content).toContain("LPBriefSchema");
+    expect(repairRequestBody.messages[0].content).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+    const events = await repositories.runEvents.listForRun("run_planner_brief_1");
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "model.output.parse_failed",
+      "model.output.repair_started",
+      "model.completed",
+      "model.output.repaired",
+      "run.completed",
+      "handoff.created"
+    ]);
+    expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("fails planner run without saving raw model output when structured LP brief repair fails", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const fakeFetch: ModelFetch = async () =>
       new Response(
@@ -2795,6 +2897,9 @@ describe("demo workbench service", () => {
       "runtime.context.loaded",
       "model.completed",
       "model.output.parse_failed",
+      "model.output.repair_started",
+      "model.completed",
+      "model.output.repair_failed",
       "run.failed"
     ]);
     expect(events.find((event) => event.type === "model.output.parse_failed")).toMatchObject({
@@ -3175,11 +3280,12 @@ describe("demo workbench service", () => {
       runId: "run_planner_brief_1",
       projectId: project.id,
       type: "run.failed",
-      message: "Mock model route mock-openai cannot be used when real model runtime is enabled",
+      message: "planner model provider failed",
       payload: expect.objectContaining({
         role: "planner",
         state: "failed",
-        errorName: "ModelProviderConfigurationError"
+        errorName: "ModelProviderConfigurationError",
+        errorCode: "model_provider_mock_route_disabled"
       })
     });
     expect(events.some((event) => event.type === "model.completed")).toBe(false);
@@ -3241,11 +3347,12 @@ describe("demo workbench service", () => {
       runId: "run_planner_brief_1",
       projectId: project.id,
       type: "run.failed",
-      message: "Mock model route project_mock cannot be used when real model runtime is enabled",
+      message: "planner model provider failed",
       payload: expect.objectContaining({
         role: "planner",
         state: "failed",
-        errorName: "ModelProviderConfigurationError"
+        errorName: "ModelProviderConfigurationError",
+        errorCode: "model_provider_mock_route_disabled"
       })
     });
     expect(events.some((event) => event.type === "model.completed")).toBe(false);
@@ -3309,11 +3416,12 @@ describe("demo workbench service", () => {
       runId: "run_planner_brief_1",
       projectId: project.id,
       type: "run.failed",
-      message: "Environment variable for provider zhipu is not configured",
+      message: "planner model provider failed",
       payload: expect.objectContaining({
         role: "planner",
         state: "failed",
-        errorName: "ModelProviderConfigurationError"
+        errorName: "ModelProviderConfigurationError",
+        errorCode: "model_provider_api_key_missing"
       })
     });
     expect(JSON.stringify(events)).not.toContain("ANTHROPIC_API_KEY");
