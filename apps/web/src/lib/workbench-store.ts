@@ -9,6 +9,7 @@ import {
   type InterruptTaskResult,
   type MCPConnectorRecord,
   type MCPToolApprovalRecord,
+  type MCPToolExecutionFlowResult,
   type ModelProviderRecord,
   type ModelProviderType,
   type ModelRoutingPolicyRecord,
@@ -155,6 +156,13 @@ export type MCPFlowErrorCode =
   | "mcp_connector_not_found"
   | "mcp_tool_not_found"
   | "mcp_tool_approval_not_required"
+  | "mcp_tool_not_visible"
+  | "mcp_tool_execution_not_read_only"
+  | "mcp_tool_execution_approval_required"
+  | "mcp_tool_execution_rejected"
+  | "mcp_tool_execution_failed"
+  | "mcp_tool_arguments_invalid"
+  | "mcp_executor_not_configured"
   | "mcp_operation_failed";
 
 export interface WebProjectModelState extends ProjectModelState {
@@ -196,6 +204,10 @@ export type ModelActionResult<T> =
 
 export type MCPActionResult<T> =
   | { ok: true; value: T }
+  | { ok: false; error: MCPFlowErrorCode };
+
+export type MCPExecutionActionResult =
+  | { ok: true; value: MCPToolExecutionFlowResult }
   | { ok: false; error: MCPFlowErrorCode };
 
 export interface CreateSkillDraftFormInput {
@@ -245,6 +257,14 @@ export interface SetMCPToolApprovalFormInput {
   connectorId: string;
   toolName: string;
   approved: boolean;
+}
+
+export interface ExecuteMCPToolFormInput {
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  role: AgentRole | string;
+  argumentsJson?: string;
 }
 
 export type TaskType = WorkbenchTaskType;
@@ -388,6 +408,7 @@ export interface WebWorkbenchStore {
   setMCPToolApproval(
     input: SetMCPToolApprovalFormInput
   ): Promise<MCPActionResult<MCPToolApprovalRecord>>;
+  executeMCPTool(input: ExecuteMCPToolFormInput): Promise<MCPExecutionActionResult>;
 }
 
 export interface WebWorkbenchStoreOptions {
@@ -988,6 +1009,25 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       } catch (error) {
         return { ok: false, error: toMCPFlowError(error) };
       }
+    },
+
+    async executeMCPTool(input) {
+      const parsedArguments = parseMCPArgumentsJson(input.argumentsJson);
+      if (!parsedArguments.ok) {
+        return { ok: false, error: parsedArguments.error };
+      }
+      try {
+        const value = await service.executeProjectMCPTool({
+          projectId: input.projectId,
+          connectorId: input.connectorId,
+          toolName: input.toolName,
+          role: input.role as AgentRole,
+          arguments: parsedArguments.value
+        });
+        return { ok: true, value };
+      } catch (error) {
+        return { ok: false, error: toMCPFlowError(error) };
+      }
     }
   };
 }
@@ -1354,7 +1394,14 @@ function toMCPFlowError(error: unknown): MCPFlowErrorCode {
     message === "mcp_connector_already_exists" ||
     message === "mcp_connector_not_found" ||
     message === "mcp_tool_not_found" ||
-    message === "mcp_tool_approval_not_required"
+    message === "mcp_tool_approval_not_required" ||
+    message === "mcp_tool_not_visible" ||
+    message === "mcp_tool_execution_not_read_only" ||
+    message === "mcp_tool_execution_approval_required" ||
+    message === "mcp_tool_execution_rejected" ||
+    message === "mcp_tool_execution_failed" ||
+    message === "mcp_tool_arguments_invalid" ||
+    message === "mcp_executor_not_configured"
   ) {
     return message;
   }
@@ -1362,6 +1409,28 @@ function toMCPFlowError(error: unknown): MCPFlowErrorCode {
     return "project_not_found";
   }
   return "mcp_operation_failed";
+}
+
+function parseMCPArgumentsJson(
+  value: string | undefined
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: MCPFlowErrorCode } {
+  const source = value?.trim() ?? "";
+  if (source.length === 0) {
+    return { ok: true, value: {} };
+  }
+  try {
+    const parsed = JSON.parse(source) as unknown;
+    if (!isRecord(parsed)) {
+      return { ok: false, error: "mcp_tool_arguments_invalid" };
+    }
+    return { ok: true, value: parsed };
+  } catch {
+    return { ok: false, error: "mcp_tool_arguments_invalid" };
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isRecoverableModelResolutionError(

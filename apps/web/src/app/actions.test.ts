@@ -24,7 +24,8 @@ const mocks = vi.hoisted(() => ({
   upsertProjectModelRoute: vi.fn(),
   createMCPConnector: vi.fn(),
   setMCPConnectorEnabled: vi.fn(),
-  setMCPToolApproval: vi.fn()
+  setMCPToolApproval: vi.fn(),
+  executeMCPTool: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({
@@ -59,7 +60,8 @@ vi.mock("../lib/workbench-store", () => ({
     upsertProjectModelRoute: mocks.upsertProjectModelRoute,
     createMCPConnector: mocks.createMCPConnector,
     setMCPConnectorEnabled: mocks.setMCPConnectorEnabled,
-    setMCPToolApproval: mocks.setMCPToolApproval
+    setMCPToolApproval: mocks.setMCPToolApproval,
+    executeMCPTool: mocks.executeMCPTool
   }))
 }));
 
@@ -69,6 +71,7 @@ import {
   createModelProviderAction,
   createProjectAction,
   createSkillDraftAction,
+  executeMCPToolAction,
   executeSkillCommandAction,
   interruptCurrentTaskAction,
   publishSkillVersionAction,
@@ -219,6 +222,14 @@ describe("submitPromptAction", () => {
     mocks.setMCPToolApproval.mockResolvedValue({
       ok: true,
       value: { id: "mcp_approval_1" }
+    });
+    mocks.executeMCPTool.mockReset();
+    mocks.executeMCPTool.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_mcp_tool_1" },
+        observation: { id: "tool_observation_1" }
+      }
     });
   });
 
@@ -1237,5 +1248,61 @@ describe("submitPromptAction", () => {
       expect.objectContaining({ projectId: "project_2" })
     );
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
+  it("executes MCP tools from form data", async () => {
+    mocks.executeMCPTool.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_mcp_tool_1" },
+        observation: { id: "tool_observation_1" }
+      }
+    });
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("connectorId", "connector_assets");
+    formData.set("toolName", "searchAssets");
+    formData.set("role", "builder");
+    formData.set("argumentsJson", "{\"query\":\"SECRET_PRODUCT\"}");
+
+    await expectRedirect(executeMCPToolAction(formData), "/?view=mcp");
+
+    expect(mocks.executeMCPTool).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      role: "builder",
+      argumentsJson: "{\"query\":\"SECRET_PRODUCT\"}"
+    });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects MCP tool execution errors to the mcp view", async () => {
+    mocks.executeMCPTool.mockResolvedValue({
+      ok: false,
+      error: "mcp_tool_arguments_invalid"
+    });
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("connectorId", "connector_assets");
+    formData.set("toolName", "searchAssets");
+    formData.set("role", "builder");
+    formData.set("argumentsJson", "{\"query\":");
+
+    await expectRedirect(
+      executeMCPToolAction(formData),
+      "/?view=mcp&mcpError=mcp_tool_arguments_invalid"
+    );
+
+    expect(mocks.executeMCPTool).toHaveBeenCalledWith({
+      projectId: "project_1",
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      role: "builder",
+      argumentsJson: "{\"query\":"
+    });
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 });

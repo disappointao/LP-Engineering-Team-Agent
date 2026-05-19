@@ -149,6 +149,10 @@ export interface WorkbenchCopy {
     disable: string;
     approve: string;
     revoke: string;
+    executeReadOnly: string;
+    argumentsLabel: string;
+    argumentsPlaceholder: string;
+    writeToolUnavailable: string;
     approvalRequired: string;
     approvalNotRequired: string;
     permissionLabel: string;
@@ -548,6 +552,10 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       disable: "Disable",
       approve: "Approve",
       revoke: "Revoke",
+      executeReadOnly: "Run read-only check",
+      argumentsLabel: "Arguments JSON",
+      argumentsPlaceholder: "{\"query\":\"spring sale\"}",
+      writeToolUnavailable: "Write tools are blocked in this stage.",
       approvalRequired: "Approval required",
       approvalNotRequired: "No approval required",
       permissionLabel: "Permission",
@@ -571,6 +579,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         mcp_connector_not_found: "The connector was not found for this project.",
         mcp_tool_not_found: "The selected MCP tool was not found.",
         mcp_tool_approval_not_required: "This tool does not require approval.",
+        mcp_tool_not_visible: "The selected MCP tool is not visible for this role.",
+        mcp_tool_execution_not_read_only: "Only read-only MCP tools can run in this stage.",
+        mcp_tool_execution_approval_required: "Approve this MCP tool before running it.",
+        mcp_tool_execution_rejected: "The MCP executor rejected the tool run.",
+        mcp_tool_execution_failed: "The MCP tool run failed.",
+        mcp_tool_arguments_invalid: "Enter arguments as a JSON object.",
+        mcp_executor_not_configured: "The MCP executor is not configured.",
         mcp_operation_failed: "The MCP operation failed."
       }
     },
@@ -980,6 +995,10 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       disable: "停用",
       approve: "批准",
       revoke: "撤销",
+      executeReadOnly: "执行只读检查",
+      argumentsLabel: "参数 JSON",
+      argumentsPlaceholder: "{\"query\":\"春季活动\"}",
+      writeToolUnavailable: "当前阶段已阻止写工具。",
       approvalRequired: "需要批准",
       approvalNotRequired: "无需批准",
       permissionLabel: "权限",
@@ -1003,6 +1022,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         mcp_connector_not_found: "当前项目中未找到该连接器。",
         mcp_tool_not_found: "未找到所选 MCP 工具。",
         mcp_tool_approval_not_required: "该工具不需要批准。",
+        mcp_tool_not_visible: "当前角色不可见所选 MCP 工具。",
+        mcp_tool_execution_not_read_only: "当前阶段只能执行只读 MCP 工具。",
+        mcp_tool_execution_approval_required: "请先批准该 MCP 工具再执行。",
+        mcp_tool_execution_rejected: "MCP executor 拒绝了本次工具运行。",
+        mcp_tool_execution_failed: "MCP 工具运行失败。",
+        mcp_tool_arguments_invalid: "请以 JSON object 格式输入参数。",
+        mcp_executor_not_configured: "MCP executor 尚未配置。",
         mcp_operation_failed: "MCP 操作失败。"
       }
     },

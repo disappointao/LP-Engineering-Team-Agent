@@ -74,6 +74,16 @@ describe("web i18n", () => {
     expect(en.collaboration.localIdentity).toBe("Local identity");
     expect(en.collaboration.localUser).toBe("Local user");
     expect(en.collaboration.roleLabels.owner).toBe("Owner");
+    expect(en.mcpView.executeReadOnly).toBe("Run read-only check");
+    expect(en.mcpView.argumentsLabel).toBe("Arguments JSON");
+    expect(en.mcpView.errors.mcp_tool_execution_not_read_only).toBe(
+      "Only read-only MCP tools can run in this stage."
+    );
+    expect(zh.mcpView.executeReadOnly).toBe("执行只读检查");
+    expect(zh.mcpView.argumentsLabel).toBe("参数 JSON");
+    expect(zh.mcpView.errors.mcp_tool_execution_not_read_only).toBe(
+      "当前阶段只能执行只读 MCP 工具。"
+    );
   });
 
   it("includes artifact diff and snippet labels in both locales", () => {

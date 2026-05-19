@@ -453,3 +453,23 @@ export async function setMCPToolApprovalAction(formData: FormData): Promise<void
   revalidatePath("/");
   redirect("/?view=mcp");
 }
+
+export async function executeMCPToolAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  if (!projectId) {
+    redirectToMCPWithError("project_not_found");
+  }
+  const result = await getWebWorkbenchStore().executeMCPTool({
+    projectId,
+    connectorId: String(formData.get("connectorId") ?? ""),
+    toolName: String(formData.get("toolName") ?? ""),
+    role: String(formData.get("role") ?? ""),
+    argumentsJson: String(formData.get("argumentsJson") ?? "")
+  });
+  if (!result.ok) {
+    redirectToMCPWithError(result.error);
+  }
+  await setCurrentProjectId(projectId);
+  revalidatePath("/");
+  redirect("/?view=mcp");
+}

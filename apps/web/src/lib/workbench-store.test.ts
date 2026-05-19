@@ -1754,6 +1754,106 @@ describe("web workbench store", () => {
     expect(disabledState.mcp.visibleToolsByRole.deployer).toEqual([]);
   });
 
+  it("executes read-only mcp tools through the Web store without leaking raw arguments", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "MCP Project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: JSON.stringify({
+        id: "skill_mcp_assets",
+        name: "MCP Assets",
+        version: "1.0.0",
+        type: "workflow",
+        scope: "project",
+        description: "Grants asset read access.",
+        permissions: ["assets:read"],
+        requiredSecrets: [],
+        entrypoints: ["workflow.md"],
+        reviewState: "published"
+      }),
+      content: "# MCP Assets",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+    const connector = await store.createMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
+    if (!connector.ok) {
+      throw new Error(`Expected connector creation to succeed, got ${connector.error}.`);
+    }
+
+    const result = await store.executeMCPTool({
+      projectId: project.id,
+      connectorId: "connector_assets",
+      toolName: "searchAssets",
+      role: "builder",
+      argumentsJson: "{\"query\":\"SECRET_PRODUCT\"}"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        run: {
+          state: "completed"
+        },
+        observation: {
+          state: "completed"
+        }
+      }
+    });
+    if (!result.ok) {
+      throw new Error(`Expected MCP execution to succeed, got ${result.error}.`);
+    }
+    expect(result.value.run.id).toBeTruthy();
+    expect(result.value.observation.id).toBeTruthy();
+    expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
+  });
+
+  it("rejects invalid mcp tool arguments JSON", async () => {
+    const store = createWebWorkbenchStore({
+      repositories: createInMemoryWorkbenchRepositories()
+    });
+
+    await expect(
+      store.executeMCPTool({
+        projectId: "project_1",
+        connectorId: "connector_assets",
+        toolName: "searchAssets",
+        role: "builder",
+        argumentsJson: "{\"query\":"
+      })
+    ).resolves.toEqual({ ok: false, error: "mcp_tool_arguments_invalid" });
+  });
+
   it("validates project and prompt form values", () => {
     expect(validateProjectInput({ name: " " })).toEqual({
       ok: false,
