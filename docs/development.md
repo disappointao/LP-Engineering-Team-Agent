@@ -1,5 +1,11 @@
 # Development
 
+## Start Here
+
+For a fresh local setup, use the root [README](../README.md) first. It lists install commands, environment setup, the Web V1 smoke command, and the manual acceptance checklist.
+
+This file keeps deeper development notes that are useful after the basic app is running.
+
 ## Prerequisites
 
 - Node.js compatible with the workspace dependencies.
