@@ -771,6 +771,23 @@ pnpm --filter @lp-agent/model-gateway test
 - 通过 URL query 触发 snippet preview 时，project/workspace/pageVersion 仍应由服务端会话和 repository 状态决定，不能信任浏览器传入这些归属字段。
 - 初始版本没有 previous workspace 时，不应该伪造 diff；可以显示 `initial` 文件摘要，让用户知道当前产物状态。
 
+### 阶段 17：Web V1 Smoke and Acceptance
+
+当前设计：
+
+- [2026-05-19-web-v1-smoke-acceptance-design.md](./superpowers/specs/2026-05-19-web-v1-smoke-acceptance-design.md)
+- 这一阶段不新增复杂 Agent 能力，而是给当前 Web V1 增加 README、本地启动说明、手动验收清单和 deterministic smoke command。
+- smoke test 走 Web store / API service 边界，不启动浏览器，不依赖真实模型 key，不需要网络，也不替代完整测试套件。
+- 手动验收文档覆盖普通任务、LP 生成、artifact diff/snippet、Skills/Models/MCP 当前边界和明确不做项。
+- 这一阶段仍不做 Playwright、MCP execution、真实部署、真实 shell、桌面版或 UI 大改。
+
+学习重点：
+
+- smoke test 是“本地核心路径是否还能跑”的快速闸门，不等于完整 E2E，也不应该承担真实 provider 或浏览器兼容性验证。
+- 新开发者入口要先解决“怎么启动、怎么配置、怎么验收”，否则功能越多，恢复上下文成本越高。
+- 默认 deterministic、真实模型 opt-in、真实 provider integration test opt-in 三者必须在文档里分开讲清楚。
+- 验收文档应该同时写能力和边界，避免用户把 registry、模拟 runner、artifact preview 误解成真实 MCP/部署/文件系统能力。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
