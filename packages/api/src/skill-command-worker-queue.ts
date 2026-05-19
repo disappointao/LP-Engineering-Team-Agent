@@ -203,11 +203,22 @@ export async function finalizeWorkerBackedSkillCommand(input: {
         isMatchingWorkerTerminalEvent(event, input.workerJob.id, observationId)
     )
     .at(-1);
+  if (
+    terminalToolEvent &&
+    terminalRunEvent &&
+    terminalToolEventToRecordState(terminalToolEvent) !==
+      terminalRunEventToRecordState(terminalRunEvent)
+  ) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
   const terminalRecordState = terminalRunEvent
     ? terminalRunEventToRecordState(terminalRunEvent)
     : terminalToolEvent
       ? terminalToolEventToRecordState(terminalToolEvent)
       : toRecordTerminalState(workerFinalState);
+  if (terminalRecordState !== toRecordTerminalState(workerFinalState)) {
+    return { ok: false, error: "worker_job_finalization_failed" };
+  }
   const resultState = workerFinalState;
   let newTerminalEventCreatedAt: string | undefined;
   const getNewTerminalEventCreatedAt = (): string => {
