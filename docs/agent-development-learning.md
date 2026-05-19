@@ -1,13 +1,15 @@
 # Agent 开发学习笔记
 
-这份文档给缺少 Agent 开发经验的开发者使用。它不是一次性的项目介绍，而是本项目推进过程中持续维护的学习笔记：每做一个阶段，就把这个阶段涉及的 Agent 概念、难点、取舍和本项目实践补充进来。
+这份文档给缺少 Agent 开发经验的开发者使用。它不是一次性的项目介绍，也不是项目流水账。它只记录本项目推进过程中和 Agent 开发直接相关的概念、难点、实现取舍和本项目实践。
+
+不要把普通文档维护、README 写法、本地启动说明、纯 Web UI 视觉/交互调整、验收清单编写方式等内容放进这里，除非它们直接改变 Agent runtime、context、tool execution、artifact safety boundary、multi-agent coordination 或模型/检索/记忆机制。
 
 阅读目标：
 
 - 快速理解 Agent 系统和普通聊天应用的区别。
 - 知道每个阶段为什么这样拆，不急着一次做完所有复杂能力。
 - 看到本项目已经解决了什么、预留了什么、还没做什么。
-- 后续换电脑或换开发者继续做时，可以先读这份文档建立上下文。
+- 后续换电脑或换开发者继续做时，可以先读这份文档理解 Agent 相关上下文。
 
 ## 1. 如何理解 Agent
 
@@ -215,7 +217,6 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
 - 通用 OpenAI Chat Completions compatible adapter：`packages/model-gateway` 已实现 `openai-completions`，可配置智谱 `paas/v4` 等兼容入口。
 - Web/API/runtime 已有真实模型执行接线，必须通过 `REAL_MODEL_RUNTIME=1` 显式开启；默认开发和测试仍走 deterministic runtime。
-- 中英文 UI 文案和语言自动判断。
 
 ### 已经预留但还不完整
 
@@ -231,7 +232,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
-- Web artifact diff cards 和安全 snippet preview 已进入 Stage 16 设计；行级 textual diff、文件编辑 UI、桌面文件系统 workspace 和 diff 注入仍未做。
+- Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、worker daemon、真实部署 runner、MCP worker execution 仍未做。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
@@ -741,16 +742,15 @@ pnpm --filter @lp-agent/model-gateway test
 - 需要把 preview/export 这种用户下载场景和 context/model/snippet 这种 Agent 上下文场景分开：前者可以恢复完整产物，后者必须受路径、归属和大小限制。
 - 实现时要把 snippet 放在 Context Pack 的显式 opt-in 区域，不默认进入 runtime/model context；这样既能为 Reviewer/MCP 预留小片段读取能力，又能保持模型请求边界默认 metadata-only。
 
-### 阶段 16：Web Artifact Diff Cards v0
+### 阶段 16：Artifact Metadata Exposure Boundary v0
 
 当前设计：
 
 - [2026-05-19-web-artifact-diff-cards-design.md](./superpowers/specs/2026-05-19-web-artifact-diff-cards-design.md)
-- 这一阶段把 Stage 15 的 artifact reader / static diff 能力放到 Web 对话流里：LP 生成完成后，在 assistant 交付区域显示 `index.html`、`styles.css`、`script.js` 的文件变化卡片。
-- 默认只显示 metadata：路径、状态、大小、短 hash 和 summary，不展示完整源码。
-- 用户显式选择单个 canonical path 时，Web 通过 artifact reader 读取最多 8KB snippet 并展示只读预览；非法 path、超限、workspace 缺失或文件损坏都只显示安全错误，不回显原始输入。
-- 第一版使用 server-rendered 查询参数方案，不新增独立 Artifacts 页面、不做客户端弹窗、不做文件编辑、不做 line-level diff。
-- 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射或完整源码默认展示。
+- 这一阶段把 Stage 15 的 artifact reader / static diff 能力暴露到用户可见的 Agent 交付边界里，但学习重点不是 Web UI，而是“默认 metadata-only，显式读取 bounded snippet”这条安全边界。
+- 默认只传播路径、状态、大小、短 hash 和 summary，不传播完整源码。
+- 用户显式选择单个 canonical path 时，系统通过 artifact reader 读取最多 8KB snippet；非法 path、超限、workspace 缺失或文件损坏都只返回安全错误，不回显原始输入。
+- 这一阶段仍不做 MCP execution、真实部署、真实 shell、桌面本地文件夹映射、文件编辑或 line-level diff。
 
 当前计划：
 
@@ -758,48 +758,16 @@ pnpm --filter @lp-agent/model-gateway test
 
 当前实现状态：
 
-- Web workbench 已在完成的 LP 对话交付区显示 artifact diff cards，默认只展示路径、状态、大小、短 hash 和 summary。
-- `artifactPath` 查询参数已通过服务端归一化后进入 Web store；重复参数取第一个值，非法 path 只显示通用不可用信息，不回显原始 query。
-- 用户显式选择 `index.html`、`styles.css` 或 `script.js` 时，Web 只通过 artifact reader 读取一个最多 8KB 的只读 snippet；超限内容显示 size-limit 状态，不展示内容。
-- snippet 预览链接保留已有查询参数并只替换 `artifactPath`，避免选择文件时丢失当前错误或中断提示状态。
-- CSS 已加入紧凑 diff card 和 dark snippet panel 样式；长路径和长 snippet 使用 wrapping/scroll 约束，移动端 diff grid 回到单列。
+- Agent 交付边界已能给出 artifact metadata diff，默认只展示路径、状态、大小、短 hash 和 summary。
+- `artifactPath` 这类来自浏览器的输入会在服务端归一化后进入 Web store；重复参数取第一个值，非法 path 只返回通用不可用信息，不回显原始 query。
+- 显式选择 `index.html`、`styles.css` 或 `script.js` 时，只通过 artifact reader 读取一个最多 8KB 的只读 snippet；超限内容只显示 size-limit 状态，不展示内容。
 
 学习重点：
 
-- Web preview/export 和 Agent snippet preview 是两个不同场景：前者服务用户下载完整产物，后者必须经过 reader 边界并受路径、归属和大小限制。
-- UI 默认 metadata-only 可以让用户理解文件变化，同时避免把 artifact content 扩散到页面、日志、上下文或模型请求。
+- preview/export 和 Agent snippet preview 是两个不同场景：前者服务用户下载完整产物，后者必须经过 reader 边界并受路径、归属和大小限制。
+- metadata-only 默认策略可以让用户理解文件变化，同时避免把 artifact content 扩散到页面、日志、上下文或模型请求。
 - 通过 URL query 触发 snippet preview 时，project/workspace/pageVersion 仍应由服务端会话和 repository 状态决定，不能信任浏览器传入这些归属字段。
 - 初始版本没有 previous workspace 时，不应该伪造 diff；可以显示 `initial` 文件摘要，让用户知道当前产物状态。
-
-### 阶段 17：Web V1 Smoke and Acceptance
-
-当前设计：
-
-- [2026-05-19-web-v1-smoke-acceptance-design.md](./superpowers/specs/2026-05-19-web-v1-smoke-acceptance-design.md)
-
-当前计划：
-
-- [2026-05-19-web-v1-smoke-acceptance.md](./superpowers/plans/2026-05-19-web-v1-smoke-acceptance.md)
-
-当前范围：
-
-- 这一阶段不新增复杂 Agent 能力，而是给当前 Web V1 增加 README、本地启动说明、手动验收清单和 deterministic smoke command。
-- smoke test 走 Web store / API service 边界，不启动浏览器，不依赖真实模型 key，不需要网络，也不替代完整测试套件。
-- 手动验收文档覆盖普通任务、LP 生成、artifact diff/snippet、Skills/Models/MCP 当前边界和明确不做项。
-- 这一阶段仍不做 Playwright、MCP execution、真实部署、真实 shell、桌面版或 UI 大改。
-
-当前实现状态：
-
-- `pnpm smoke` 已作为 Web V1 快速本地健康检查入口：它只走 deterministic store / API 级流程，用来验证当前最小 Web workbench 链路，不依赖真实模型、MCP、浏览器或部署环境。
-- 手动验收清单补齐了自动 smoke 无法判断的人工项，包括可见 UX、语言行为、Skills / Models / MCP 边界、artifact diff/snippet 体验，以及部署仍为后置能力的说明。
-- 分层验收适合 Agent 项目早期：先让最小链路稳定，再逐步接入真实模型、工具执行、上下文压缩、检索和多 Agent 协作，避免在基础流程不稳时同时调试过多变量。
-
-学习重点：
-
-- smoke test 是“本地核心路径是否还能跑”的快速闸门，不等于完整 E2E，也不应该承担真实 provider 或浏览器兼容性验证。
-- 新开发者入口要先解决“怎么启动、怎么配置、怎么验收”，否则功能越多，恢复上下文成本越高。
-- 默认 deterministic、真实模型 opt-in、真实 provider integration test opt-in 三者必须在文档里分开讲清楚。
-- 验收文档应该同时写能力和边界，避免用户把 registry、模拟 runner、artifact preview 误解成真实 MCP/部署/文件系统能力。
 
 ## 5. 写代码时的维护原则
 
@@ -828,7 +796,6 @@ pnpm --filter @lp-agent/model-gateway test
 - 文件系统 workspace、artifact workspace、diff 注入。
 - 多 agent handoff、协作、审批。
 - 与 Agent 学习路径相关的 specs/plans。
-- 后续阶段优先级、推荐队列或 backlog 发生变化时，同步更新 `docs/project-roadmap.md`。
 
 更新方式：
 
@@ -836,4 +803,4 @@ pnpm --filter @lp-agent/model-gateway test
 - 如果实现了一个能力，在“本项目当前怎么处理”中把它从“还没做”移动到“已完成或基本成型”。
 - 如果发现一个新的工程难点，在“Agent 开发核心难点”中新增小节。
 - 如果某个旧判断过时，直接改成当前事实，不保留误导性历史描述。
-- 如果用户调整下一阶段方向，先更新 roadmap，再进入对应 spec/plan。
+- 如果某个阶段只是普通文档、启动说明、纯 Web UI 或验收清单变更，不要写入本文件；这类内容应放在 README、roadmap、acceptance doc 或对应 spec/plan 中。
