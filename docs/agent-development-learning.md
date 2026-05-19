@@ -788,6 +788,12 @@ pnpm --filter @lp-agent/model-gateway test
 - 手动验收文档覆盖普通任务、LP 生成、artifact diff/snippet、Skills/Models/MCP 当前边界和明确不做项。
 - 这一阶段仍不做 Playwright、MCP execution、真实部署、真实 shell、桌面版或 UI 大改。
 
+当前实现状态：
+
+- `pnpm smoke` 已作为 Web V1 快速本地健康检查入口：它只走 deterministic store / API 级流程，用来验证当前最小 Web workbench 链路，不依赖真实模型、MCP、浏览器或部署环境。
+- 手动验收清单补齐了自动 smoke 无法判断的人工项，包括可见 UX、语言行为、Skills / Models / MCP 边界、artifact diff/snippet 体验，以及部署仍为后置能力的说明。
+- 分层验收适合 Agent 项目早期：先让最小链路稳定，再逐步接入真实模型、工具执行、上下文压缩、检索和多 Agent 协作，避免在基础流程不稳时同时调试过多变量。
+
 学习重点：
 
 - smoke test 是“本地核心路径是否还能跑”的快速闸门，不等于完整 E2E，也不应该承担真实 provider 或浏览器兼容性验证。
