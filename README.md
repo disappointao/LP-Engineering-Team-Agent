@@ -42,22 +42,30 @@ Create a local environment file from the template:
 cp .env.example .env.local
 ```
 
-The default deterministic mode does not require model keys:
+Default local development and smoke checks use deterministic providers and do not
+require model keys:
 
 ```env
 REAL_MODEL_RUNTIME=0
 REAL_MODEL_PROVIDER_TEST=0
 ```
 
-For real provider testing, fill only the provider section you want to test. The OpenAI-compatible adapter uses:
+Real provider integration tests are separate and opt in with
+`REAL_MODEL_PROVIDER_TEST=1` plus the provider variables for the adapter under
+test. Web/API real runtime experiments are also separate and opt in with
+`REAL_MODEL_RUNTIME=1` plus provider variables.
+
+For either opt-in path, fill only the provider section you want to use locally.
+The OpenAI-compatible adapter follows the `.env.example` style:
 
 ```env
 OPENAI_COMPATIBLE_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-OPENAI_COMPATIBLE_API_KEY=your_key_here
+OPENAI_COMPATIBLE_API_KEY=
 OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 ```
 
-Real provider tests are opt-in and should not be needed for normal local smoke checks.
+Leave secret values empty in committed templates and fill them only in your local
+`.env.local`.
 
 ## Run Locally
 

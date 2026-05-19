@@ -14,12 +14,12 @@ This file keeps deeper development notes that are useful after the basic app is 
 
 ## Commands
 
-- `pnpm install` installs dependencies.
-- `pnpm dev` starts the web workbench.
-- `pnpm worker:dev` runs the deterministic worker demo.
-- `pnpm test` runs package and app tests.
-- `pnpm typecheck` runs TypeScript checks.
-- `pnpm build` builds workspace targets that define a build script.
+Use the root [README](../README.md) as the source of truth for common install,
+run, smoke, test, typecheck, and build commands. Keep root package scripts there
+so this page can focus on deeper development notes.
+
+Specialized development commands:
+
 - `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` validates the Prisma schema.
 
 ## Current MVP Behavior
