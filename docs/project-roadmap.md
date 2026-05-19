@@ -16,7 +16,7 @@
 - Structured model output：Planner `LPBriefSchema` parse、Builder static artifacts parse 和 artifact policy validation。
 - Context Pack v0：注入 task/project input、skills、visible MCP tools、model route、approval、artifact workspace、context memory、handoff summary。
 - Skills：manifest、version、validation、publish、project binding、runtime context injection、受控 deployment skill command 边界。
-- MCP registry：connector、tool approval、role/permission visible tools；MCP execution 尚未实现。
+- MCP registry / execution v0：connector、tool approval、role/permission visible tools、read-only MCP tool execution、deterministic local executor、run events 和安全 `ToolObservationRecord`。
 - Run orchestration：deterministic Planner/Builder/Reviewer/Deployer run records、ordered run events、tool observations。
 - Agent run lifecycle / recovery v0：从 run events、worker jobs、tool observations 和 handoffs 派生 lifecycle view、diagnostic summary 和 recovery action contract，并强化 worker finalization 幂等性。
 - Agent handoff v0：固定 LP 链路 `Planner -> Builder -> Reviewer -> Deployer` 的结构化 handoff state。
@@ -28,7 +28,7 @@
 当前仍明确后置：
 
 - Web UI 无刷新体验、streaming UI、browser E2E。
-- MCP execution。
+- 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
@@ -55,37 +55,21 @@ daemon 配置 workbench repository 时会复用 Stage 18 的幂等 finalizer，�
 
 **实施计划：** `docs/superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 20：MCP Execution v0
 
-**状态：** design 和 implementation plan 已确认，待实现。
+**状态：** 已实现。
 
-**为什么在 Stage 19 之后：** MCP execution 应复用 worker job、approval、observation、artifact reader、cancellation 和 finalizer 边界，不应该在 API 进程里直接调用工具。
+Stage 20 v0 已实现 read-only MCP tool execution：API 侧校验 project、connector、tool、role、permission、approval 和 read-only 边界后，通过 deterministic local executor 写入 run events 与安全 `ToolObservationRecord`。Web MCP 页提供最小只读执行入口；raw arguments、raw output、secret、完整 artifact 内容和本机路径不会进入 observation、timeline、chat message 或 model context。
 
-**当前设计：** `docs/superpowers/specs/2026-05-19-mcp-execution-v0-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-19-mcp-execution-v0-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-19-mcp-execution-v0.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-19-mcp-execution-v0.md`。
 
-**建议范围：**
-
-- 先实现 read-only MCP tool execution v0。
-- 通过 API-owned executor seam、run events 和 tool observation 边界执行 allowlisted MCP tools。
-- 要求 project-scoped connector、tool approval、role/permission visibility。
-- 保存 bounded/redacted metadata 形式的 tool observations。
-- raw MCP output 不直接进入 chat messages 或 model context，除非经过显式 summarization。
-
-**非目标：**
-
-- 不做 write tools。
-- 不接真实 MCP SDK 或远端 MCP server。
-- 不允许浏览器任意安装 MCP server。
-- 不开放不安全的 filesystem access。
-- 不把 raw output 注入 model context。
+## 推荐下一阶段队列
 
 ### Stage 21：Model Repair、Retry 和 Fallback v0
 
-**状态：** 推荐在 run lifecycle 能清晰表达 retry/failure 后做。
+**状态：** 推荐下一阶段。
 
 **为什么在 Stage 18 之后：** Planner/Builder parse 当前 fail closed，这是正确的。下一步模型能力应增加受控 repair/retry，同时不能让 failed runs 不可见，也不能静默 fallback 到 deterministic output。
 
@@ -155,8 +139,9 @@ daemon 配置 workbench repository 时会复用 Stage 18 的幂等 finalizer，�
 
 ### MCP
 
-- 通过 worker/tool observation boundary 实现 MCP execution v0。
-- 写工具前先实现 read-only tool execution。
+- Real MCP SDK / remote MCP server adapter。
+- MCP execution through worker runtime。
+- MCP Write Tools with Approval v0。
 - Connector health checks。
 - Tool result summarization 和 redaction。
 - MCP cancellation 和 timeout mapping。

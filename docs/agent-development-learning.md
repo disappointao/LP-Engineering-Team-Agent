@@ -206,6 +206,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 项目级 Skills 管理和 runtime 注入。
 - 项目级模型 provider/route 配置和 runtime route resolution。
 - 项目级 MCP connector registry、tool approval 和可见工具计算。
+- Stage 20 Read-only MCP Execution v0：API 侧校验 project、connector、tool、role、permission、approval 和 read-only 边界后，通过 deterministic local executor 写入 run events 与安全 `ToolObservationRecord`；Web MCP 页已有最小只读执行入口。
 - Run Orchestration v0：planner、builder、reviewer、deployer 的 deterministic run records 和 ordered run events。
 - Context Pack v0：运行前通过 context assembler 组合 task/project input、skills、MCP tools、model routing、approval 和 artifact workspace。
 - Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
@@ -223,7 +224,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
-- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP execution、强 sandbox 和 raw stdout/stderr streaming。
+- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -231,7 +232,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 - 真实模型结构化输出的 repair loop、重试和自我修正还没做；Planner `LPBriefSchema` parse 和 Builder 静态产物 parse 已实现。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
-- MCP execution 尚未实现；Stage 20 已确认 read-only MCP execution v0 design，优先打通 executor seam、run events 和 safe `ToolObservationRecord`，不接真实 MCP SDK 或 write tools。
+- 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
@@ -841,6 +842,7 @@ pnpm --filter @lp-agent/model-gateway test
 - MCP registry 只回答“哪些工具可见”，MCP execution 还必须回答“这次调用是否被授权、是否只读、如何审计、失败如何表达”。
 - read-only 是第一版 MCP execution 的安全阀；写工具需要更强 approval、side-effect audit、rollback/retry 语义，不能和第一版混做。
 - `ToolObservationRecord` 是工具执行事实边界，不是 raw output 仓库。保存摘要而不是原文，后续模型上下文再通过显式 summarization 读取。
+- Stage 20 v0 证明了 MCP execution 不等同于“直接调用外部工具”：即使第一版 executor 是 deterministic local executor，也必须先经过 project/role/permission/approval/read-only 校验，再通过 run event 和 `ToolObservationRecord` 保存可审计、安全摘要。
 
 ## 5. 写代码时的维护原则
 
