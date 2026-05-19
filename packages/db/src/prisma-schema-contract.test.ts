@@ -20,7 +20,7 @@ function modelBlock(schema: string, modelName: string): string {
   let depth = 0;
 
   for (let index = startIndex; index < lines.length; index += 1) {
-    const line = lines[index];
+    const line = lines[index]!;
     blockLines.push(line);
     depth += (line.match(/\{/g) ?? []).length;
     depth -= (line.match(/\}/g) ?? []).length;
