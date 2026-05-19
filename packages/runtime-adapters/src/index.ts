@@ -41,6 +41,8 @@ export interface RuntimeMCPToolContext {
   name: string;
   permission: string;
   requiresApproval: boolean;
+  readOnly?: boolean;
+  sideEffect?: "read" | "write";
 }
 
 export interface RuntimeApprovalContext {

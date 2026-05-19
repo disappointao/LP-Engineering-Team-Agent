@@ -14,6 +14,7 @@ import {
 } from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
+import type { MCPToolExecutor } from "@lp-agent/mcp-gateway";
 import type { ModelFetch } from "@lp-agent/model-gateway";
 import type {
   AgentRuntimeAdapter,
@@ -4742,6 +4743,284 @@ describe("demo workbench service", () => {
     ]);
   });
 
+  it("executes visible read-only MCP tools and stores safe observations", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    });
+
+    const result = await service.executeProjectMCPTool({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "searchAssets",
+      role: "builder",
+      arguments: {
+        query: "SECRET_PRODUCT",
+        limit: 3
+      }
+    });
+
+    expect(result.run).toMatchObject({
+      id: "run_mcp_tool_1",
+      projectId: project.id,
+      role: "builder",
+      state: "completed",
+      contextSummary: {
+        injected: ["mcpTool:connector_assets:searchAssets"],
+        omitted: []
+      }
+    });
+    expect(result.observation).toMatchObject({
+      id: "tool_observation_1",
+      runId: "run_mcp_tool_1",
+      projectId: project.id,
+      toolName: "mcp:connector_assets:searchAssets",
+      input: {
+        connectorId: "connector_assets",
+        toolName: "searchAssets",
+        role: "builder",
+        permission: "assets:read",
+        requiresApproval: false,
+        argumentKeys: ["limit", "query"],
+        argumentCount: 2
+      },
+      outputSummary:
+        "Read-only MCP tool connector_assets.searchAssets completed with 2 argument keys.",
+      state: "completed"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.completed",
+      "run.completed"
+    ]);
+    expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
+    expect(JSON.stringify(events)).not.toContain("SECRET_PRODUCT");
+  });
+
+  it("rejects disabled, unauthorized, and unapproved MCP tool execution", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        },
+        {
+          name: "auditAssets",
+          permission: "assets:audit",
+          roles: ["reviewer"],
+          requiresApproval: true
+        }
+      ]
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "searchAssets",
+        role: "reviewer",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_not_visible");
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "auditAssets",
+        role: "reviewer",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_not_visible");
+
+    await service.setProjectMCPConnectorEnabled({
+      projectId: project.id,
+      connectorId: connector.id,
+      enabled: false
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "searchAssets",
+        role: "builder",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_not_visible");
+  });
+
+  it("requires saved MCP approval before executing approval-required read tools", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "auditAssets",
+          permission: "assets:read",
+          roles: ["reviewer"],
+          requiresApproval: true
+        }
+      ]
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "auditAssets",
+        role: "reviewer",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_execution_approval_required");
+
+    await service.setProjectMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "auditAssets",
+      approved: true,
+      approvedByUserId: "reviewer_1"
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "auditAssets",
+        role: "reviewer",
+        arguments: {}
+      })
+    ).resolves.toMatchObject({
+      observation: {
+        input: {
+          approvedByUserId: "reviewer_1"
+        }
+      }
+    });
+  });
+
+  it("rejects write-like MCP tools before calling the executor", async () => {
+    let called = false;
+    const executor: MCPToolExecutor = {
+      async execute() {
+        called = true;
+        return {
+          state: "completed",
+          outputSummary: "unsafe",
+          durationMs: 1
+        };
+      }
+    };
+    const service = new DemoWorkbenchService({
+      mcpToolExecutor: executor,
+      now: fixedClock()
+    });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["git:write"],
+      tools: [
+        {
+          name: "createPullRequest",
+          permission: "git:write",
+          roles: ["deployer"],
+          requiresApproval: true,
+          readOnly: true
+        }
+      ]
+    });
+    await service.setProjectMCPToolApproval({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "createPullRequest",
+      approved: true,
+      approvedByUserId: "deployer_1"
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "createPullRequest",
+        role: "deployer",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_execution_not_read_only");
+    expect(called).toBe(false);
+  });
+
+  it("stores failed MCP executor results without raw arguments", async () => {
+    const executor: MCPToolExecutor = {
+      async execute() {
+        return {
+          state: "failed",
+          outputSummary: "Failed while reading SECRET_PRODUCT",
+          metadata: {
+            rawOutput: "SECRET_PRODUCT"
+          },
+          errorName: "Remote Failure With Spaces",
+          durationMs: 7
+        };
+      }
+    };
+    const repositories = createInMemoryWorkbenchRepositories();
+    const service = new DemoWorkbenchService({
+      repositories,
+      mcpToolExecutor: executor,
+      now: fixedClock()
+    });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "searchAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false
+        }
+      ]
+    });
+
+    const result = await service.executeProjectMCPTool({
+      projectId: project.id,
+      connectorId: connector.id,
+      toolName: "searchAssets",
+      role: "builder",
+      arguments: {
+        query: "SECRET_PRODUCT"
+      }
+    });
+
+    expect(result.run.state).toBe("failed");
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Failed while reading [redacted]",
+      errorName: "mcp_executor_error"
+    });
+    const events = await repositories.runEvents.listForRun(result.run.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "tool.started",
+      "tool.failed",
+      "run.failed"
+    ]);
+    expect(JSON.stringify(result)).not.toContain("SECRET_PRODUCT");
+    expect(JSON.stringify(events)).not.toContain("SECRET_PRODUCT");
+  });
+
   it("uses the configured current user for mcp approval actor defaults", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
@@ -5704,6 +5983,54 @@ body { margin: 0; font-family: Inter, system-ui, sans-serif; }
   });
 });`
   };
+}
+
+async function createMCPExecutionFixture(
+  service: DemoWorkbenchService,
+  input: {
+    permissions: string[];
+    tools: Array<{
+      name: string;
+      permission: string;
+      roles: Array<"planner" | "builder" | "reviewer" | "deployer">;
+      requiresApproval: boolean;
+      readOnly?: boolean;
+      sideEffect?: "read" | "write";
+    }>;
+  }
+): Promise<{ project: ProjectRecord; connector: MCPConnectorRecord }> {
+  const project = await service.createProject({ name: "MCP Execution" });
+  const draft = await service.createSkillDraft({
+    manifestJson: JSON.stringify({
+      id: "skill_mcp_permissions",
+      name: "MCP Permissions",
+      version: "0.1.0",
+      type: "workflow",
+      scope: "project",
+      description: "Grants MCP tool permissions.",
+      permissions: input.permissions,
+      requiredSecrets: [],
+      entrypoints: ["workflow.md"],
+      reviewState: "draft"
+    }),
+    content: "Use approved MCP tools.",
+    contentType: "text/markdown"
+  });
+  await service.validateSkillVersion({ skillVersionId: draft.version.id });
+  const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+  await service.bindSkillVersionToProject({
+    projectId: project.id,
+    skillVersionId: published.id
+  });
+  const connector = await service.createProjectMCPConnector({
+    projectId: project.id,
+    definitionJson: JSON.stringify({
+      id: "connector_assets",
+      name: "Assets",
+      tools: input.tools
+    })
+  });
+  return { project, connector };
 }
 
 function fixedClock(): () => Date {

@@ -37,11 +37,16 @@ import {
 } from "@lp-agent/git-deployment";
 import { sampleBrief, type LPBrief, type ReviewFinding } from "@lp-agent/lp-schema";
 import {
+  DeterministicMCPToolExecutor,
   computeVisibleTools,
+  isReadOnlyMCPTool,
   normalizeMCPConnectorDefinition,
+  summarizeMCPToolArguments,
   type ApprovalState,
   type MCPToolDefinition,
-  type MCPToolApprovalState
+  type MCPToolApprovalState,
+  type MCPToolExecutionResult,
+  type MCPToolExecutor
 } from "@lp-agent/mcp-gateway";
 import {
   InMemoryModelGateway,
@@ -354,6 +359,21 @@ export interface ProjectMCPState {
   visibleToolsByRole: Record<AgentRole, RuntimeRunContext["mcpTools"]>;
 }
 
+export interface ExecuteProjectMCPToolInput {
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  role: AgentRole;
+  arguments?: Record<string, unknown>;
+  taskId?: string;
+  timeoutMs?: number;
+}
+
+export interface MCPToolExecutionFlowResult {
+  run: RunRecord;
+  observation: ToolObservationRecord;
+}
+
 export interface CreateModelProviderInput {
   projectId: string;
   providerId: string;
@@ -396,6 +416,7 @@ export interface DemoWorkbenchServiceOptions {
   deploymentAdapter?: GitDeploymentAdapter;
   toolCommandRunner?: ToolCommandRunner;
   workerQueueRuntime?: SkillCommandQueueRuntime;
+  mcpToolExecutor?: MCPToolExecutor;
   env?: RuntimeEnvironment;
   modelFetch?: ModelFetch;
   currentUser?: WorkbenchUserIdentity;
@@ -411,6 +432,7 @@ export class DemoWorkbenchService {
   private readonly deploymentAdapter: GitDeploymentAdapter;
   private readonly toolCommandRunner: ToolCommandRunner;
   private readonly workerQueueRuntime?: SkillCommandQueueRuntime;
+  private readonly mcpToolExecutor: MCPToolExecutor;
   private readonly env: RuntimeEnvironment;
   private readonly currentUser: WorkbenchUserIdentity;
   private readonly now: () => Date;
@@ -435,6 +457,7 @@ export class DemoWorkbenchService {
     this.deploymentAdapter = options.deploymentAdapter ?? new InMemoryGitDeploymentAdapter();
     this.toolCommandRunner = options.toolCommandRunner ?? new RejectingToolCommandRunner();
     this.workerQueueRuntime = options.workerQueueRuntime;
+    this.mcpToolExecutor = options.mcpToolExecutor ?? new DeterministicMCPToolExecutor();
     this.currentUser = normalizeWorkbenchUserIdentity(options.currentUser);
     this.now = options.now ?? (() => new Date());
   }
@@ -1864,6 +1887,205 @@ export class DemoWorkbenchService {
     });
   }
 
+  async executeProjectMCPTool(
+    input: ExecuteProjectMCPToolInput
+  ): Promise<MCPToolExecutionFlowResult> {
+    await this.getProjectOrThrow(input.projectId);
+    const role = normalizeAgentRole(input.role);
+    const connectorRecord = await this.repositories.mcpConnectors.getById(input.connectorId);
+    if (
+      !connectorRecord ||
+      !isProjectMCPConnectorForProject(connectorRecord, input.projectId)
+    ) {
+      throw new Error("mcp_connector_not_found");
+    }
+    if (connectorRecord.enabled !== true) {
+      throw new Error("mcp_tool_not_visible");
+    }
+
+    const connector = normalizeRuntimeMCPConnector(connectorRecord);
+    if (!connector) {
+      throw new Error("mcp_tool_not_visible");
+    }
+    const tool = connector.tools.find((candidate) => candidate.name === input.toolName);
+    if (!tool || !tool.roles.includes(role)) {
+      throw new Error("mcp_tool_not_visible");
+    }
+
+    const skillVersions = await this.listRuntimeSkillsForProject(input.projectId);
+    const grantedPermissions = new Set(
+      skillVersions.flatMap((version) => version.manifest.permissions)
+    );
+    if (!grantedPermissions.has(tool.permission)) {
+      throw new Error("mcp_tool_not_visible");
+    }
+
+    const approval = await this.repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+      input.projectId,
+      connector.id,
+      tool.name
+    );
+    if (tool.requiresApproval && approval?.state !== "approved") {
+      throw new Error("mcp_tool_execution_approval_required");
+    }
+    if (!isReadOnlyMCPTool(tool)) {
+      throw new Error("mcp_tool_execution_not_read_only");
+    }
+
+    const normalizedArguments = normalizeMCPToolExecutionArguments(input.arguments);
+    const argumentSummary = summarizeMCPToolArguments(normalizedArguments);
+    const sensitiveValues = Object.values(normalizedArguments).filter(
+      (value): value is string => typeof value === "string" && value.length > 0
+    );
+    const runId = await reserveRepositoryId(this.repositories, "run_mcp_tool", async () => {
+      const existingRuns = await this.repositories.runs.listAll();
+      return existingRuns.map((record) => record.id);
+    });
+    let observationId: string | undefined;
+
+    try {
+      observationId = await reserveRepositoryId(
+        this.repositories,
+        "tool_observation",
+        async () => {
+          const observations = await this.repositories.toolObservations.listAll();
+          return observations.map((record) => record.id);
+        }
+      );
+      const startedAt = this.timestamp();
+      const run: RunRecord = {
+        id: runId,
+        projectId: input.projectId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        role,
+        state: "running",
+        startedAt,
+        contextSummary: {
+          injected: [`mcpTool:${connector.id}:${tool.name}`],
+          omitted: []
+        }
+      };
+      await this.repositories.runs.save(run);
+
+      let sequence = 1;
+      const saveEvent = async (
+        type: string,
+        message: string,
+        payload: Record<string, unknown>
+      ): Promise<void> => {
+        await this.repositories.runEvents.save({
+          id: `${runId}_event_${sequence}`,
+          runId,
+          projectId: input.projectId,
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          sequence,
+          type,
+          message,
+          payload,
+          createdAt: this.timestamp()
+        });
+        sequence += 1;
+      };
+      const basePayload = {
+        connectorId: connector.id,
+        toolName: tool.name,
+        role,
+        permission: tool.permission,
+        requiresApproval: tool.requiresApproval,
+        approvedByUserId: approval?.approvedByUserId,
+        argumentKeys: argumentSummary.argumentKeys,
+        argumentCount: argumentSummary.argumentCount
+      };
+      await saveEvent("run.started", "MCP tool run started.", basePayload);
+      await saveEvent("tool.started", "MCP tool started.", {
+        ...basePayload,
+        observationId
+      });
+
+      const executorResult = await this.runMCPToolSafely({
+        projectId: input.projectId,
+        connectorId: connector.id,
+        toolName: tool.name,
+        role,
+        permission: tool.permission,
+        arguments: normalizedArguments,
+        timeoutMs: input.timeoutMs ?? 30000
+      });
+      const completedAt = this.timestamp();
+      const observationState = toMCPToolObservationState(executorResult.state);
+      const runState = toMCPRunState(executorResult.state);
+      const outputSummary = sanitizeMCPOutputSummary(
+        executorResult.outputSummary,
+        sensitiveValues,
+        observationState
+      );
+      const errorName = sanitizeMCPExecutorErrorName(
+        executorResult.errorName,
+        sensitiveValues,
+        observationState
+      );
+      const durationMs = normalizeMCPDurationMs(executorResult.durationMs);
+      const finalPayload = {
+        ...basePayload,
+        observationId,
+        outputSummary,
+        ...(errorName !== undefined ? { errorName } : {}),
+        ...(durationMs !== undefined ? { durationMs } : {})
+      };
+      await saveEvent(
+        observationState === "completed" ? "tool.completed" : "tool.failed",
+        observationState === "completed" ? "MCP tool completed." : "MCP tool failed.",
+        finalPayload
+      );
+      await saveEvent(
+        runState === "completed" ? "run.completed" : "run.failed",
+        runState === "completed" ? "MCP tool run completed." : "MCP tool run failed.",
+        finalPayload
+      );
+
+      const observation: ToolObservationRecord = {
+        id: observationId,
+        runId,
+        projectId: input.projectId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        toolName: `mcp:${connector.id}:${tool.name}`,
+        input: {
+          connectorId: connector.id,
+          toolName: tool.name,
+          role,
+          permission: tool.permission,
+          requiresApproval: tool.requiresApproval,
+          approvedByUserId: approval?.approvedByUserId,
+          argumentKeys: argumentSummary.argumentKeys,
+          argumentCount: argumentSummary.argumentCount
+        },
+        outputSummary,
+        state: observationState,
+        ...(errorName !== undefined ? { errorName } : {}),
+        createdAt: startedAt,
+        completedAt
+      };
+      await this.repositories.toolObservations.save(observation);
+
+      const finalRun: RunRecord = {
+        ...run,
+        state: runState,
+        completedAt
+      };
+      await this.repositories.runs.save(finalRun);
+
+      return {
+        run: copyRunRecord(finalRun),
+        observation: copyToolObservationRecord(observation)
+      };
+    } finally {
+      releaseRepositoryId(this.repositories, runId);
+      if (observationId) {
+        releaseRepositoryId(this.repositories, observationId);
+      }
+    }
+  }
+
   async createRuntimeContextForRole(
     input: CreateRuntimeContextForRoleInput
   ): Promise<RuntimeRunContext> {
@@ -2068,7 +2290,9 @@ export class DemoWorkbenchService {
         connectorId: connector.id,
         name: tool.name,
         permission: tool.permission,
-        requiresApproval: tool.requiresApproval
+        requiresApproval: tool.requiresApproval,
+        ...(tool.readOnly !== undefined ? { readOnly: tool.readOnly } : {}),
+        ...(tool.sideEffect ? { sideEffect: tool.sideEffect } : {})
       }))
     );
   }
@@ -2333,6 +2557,20 @@ export class DemoWorkbenchService {
           error instanceof Error && error.name
             ? error.name
             : "skill_command_runner_error"
+      };
+    }
+  }
+
+  private async runMCPToolSafely(
+    input: Parameters<MCPToolExecutor["execute"]>[0]
+  ): Promise<MCPToolExecutionResult> {
+    try {
+      return await this.mcpToolExecutor.execute(input);
+    } catch {
+      return {
+        state: "failed",
+        outputSummary: "MCP executor failed.",
+        errorName: "mcp_executor_error"
       };
     }
   }
@@ -2906,6 +3144,93 @@ function copyMCPToolApprovalRecord(approval: MCPToolApprovalRecord): MCPToolAppr
   return { ...approval };
 }
 
+function normalizeMCPToolExecutionArguments(
+  value: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (value === undefined) {
+    return {};
+  }
+  if (!isRecord(value)) {
+    throw new Error("mcp_tool_arguments_invalid");
+  }
+  return structuredClone(value);
+}
+
+function toMCPToolObservationState(
+  state: MCPToolExecutionResult["state"]
+): ToolObservationRecord["state"] {
+  if (state === "completed" || state === "cancelled") {
+    return state;
+  }
+  return "failed";
+}
+
+function toMCPRunState(state: MCPToolExecutionResult["state"]): RunRecord["state"] {
+  if (state === "completed" || state === "cancelled") {
+    return state;
+  }
+  return "failed";
+}
+
+function sanitizeMCPOutputSummary(
+  value: string,
+  sensitiveValues: string[],
+  state: ToolObservationRecord["state"]
+): string {
+  const fallback =
+    state === "completed"
+      ? "MCP tool completed."
+      : state === "cancelled"
+        ? "MCP tool cancelled."
+        : "MCP tool failed.";
+  const normalized =
+    typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : fallback;
+  const redacted = redactCommandOutput(normalized, sensitiveValues);
+  if (redacted.length <= 500) {
+    return redacted;
+  }
+  return `${redacted.slice(0, 497)}...`;
+}
+
+function sanitizeMCPExecutorErrorName(
+  errorName: string | undefined,
+  sensitiveValues: string[],
+  state: ToolObservationRecord["state"]
+): string | undefined {
+  if (state !== "failed") {
+    return undefined;
+  }
+  if (errorName === undefined) {
+    return "mcp_executor_error";
+  }
+  const trimmed = errorName.trim();
+  if (
+    trimmed.length === 0 ||
+    trimmed !== errorName ||
+    trimmed.length > 80 ||
+    /\s/.test(trimmed) ||
+      !/^[A-Za-z0-9_.:-]+$/.test(trimmed)
+  ) {
+    return "mcp_executor_error";
+  }
+  if (redactCommandOutput(trimmed, sensitiveValues) !== trimmed) {
+    return "mcp_executor_error";
+  }
+  return trimmed;
+}
+
+function normalizeMCPDurationMs(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.round(value);
+}
+
 function sanitizeRunnerErrorName(
   errorName: string | undefined,
   sensitiveValues: string[],
@@ -3169,12 +3494,19 @@ function copyMCPToolDefinition(tool: unknown): MCPToolDefinition | undefined {
     ? tool.roles.filter(isMCPAgentRole)
     : [];
   const description = normalizeOptionalString(tool.description);
+  const readOnly = typeof tool.readOnly === "boolean" ? tool.readOnly : undefined;
+  const sideEffect =
+    tool.sideEffect === "read" || tool.sideEffect === "write"
+      ? tool.sideEffect
+      : undefined;
   return {
     name,
     ...(description ? { description } : {}),
     permission,
     roles,
-    requiresApproval: tool.requiresApproval
+    requiresApproval: tool.requiresApproval,
+    ...(readOnly !== undefined ? { readOnly } : {}),
+    ...(sideEffect ? { sideEffect } : {})
   };
 }
 

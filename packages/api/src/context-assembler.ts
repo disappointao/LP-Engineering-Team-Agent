@@ -8,6 +8,7 @@ import type { WorkbenchRepositories } from "@lp-agent/db";
 import { LPBriefSchema } from "@lp-agent/lp-schema";
 import { agentRoles, type AgentRole } from "@lp-agent/model-gateway";
 import type {
+  RuntimeMCPToolContext,
   RuntimeRunContext,
   RuntimeRunInput
 } from "@lp-agent/runtime-adapters";
@@ -33,11 +34,13 @@ export const RuntimeSkillContextSchema = z.object({
   contentType: z.enum(["text/markdown", "text/plain"])
 });
 
-export const RuntimeMCPToolContextSchema = z.object({
+export const RuntimeMCPToolContextSchema: z.ZodType<RuntimeMCPToolContext> = z.object({
   connectorId: z.string().min(1),
   name: z.string().min(1),
   permission: z.string().min(1),
-  requiresApproval: z.boolean()
+  requiresApproval: z.boolean(),
+  readOnly: z.boolean().optional(),
+  sideEffect: z.enum(["read", "write"]).optional()
 });
 
 const RuntimeApprovalContextSchema = z.object({
