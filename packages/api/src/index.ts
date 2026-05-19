@@ -183,6 +183,7 @@ export {
   type TaskInterruptView,
   type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
+export * from "./run-lifecycle";
 export {
   createLocalWorkerQueueRuntime,
   finalizeWorkerBackedSkillCommand,
