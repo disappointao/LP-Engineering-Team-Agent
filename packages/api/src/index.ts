@@ -1934,9 +1934,9 @@ export class DemoWorkbenchService {
 
     const normalizedArguments = normalizeMCPToolExecutionArguments(input.arguments);
     const argumentSummary = summarizeMCPToolArguments(normalizedArguments);
-    const argumentStrings = collectMCPArgumentStringValues(normalizedArguments);
+    const argumentValues = collectMCPArgumentScalarValues(normalizedArguments);
     const sensitiveValues = [
-      ...argumentStrings.values,
+      ...argumentValues.values,
       ...collectMCPSecretEnvValues(this.env)
     ].filter((value): value is string => typeof value === "string" && value.length > 0);
     const runId = await reserveRepositoryId(this.repositories, "run_mcp_tool", async () => {
@@ -2019,13 +2019,13 @@ export class DemoWorkbenchService {
       const outputSummary = sanitizeMCPOutputSummary(
         executorResult.outputSummary,
         sensitiveValues,
-        argumentStrings.complete,
+        argumentValues.complete,
         observationState
       );
       const errorName = sanitizeMCPExecutorErrorName(
         executorResult.errorName,
         sensitiveValues,
-        argumentStrings.complete,
+        argumentValues.complete,
         observationState
       );
       const durationMs = normalizeMCPDurationMs(executorResult.durationMs);
@@ -3210,9 +3210,9 @@ function sanitizeMCPOutputSummary(
 function containsUnsafeMCPOutputSummary(value: string): boolean {
   const normalized = value.toLowerCase();
   return (
-    /(^|[\s"'(])\/(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+/.test(value) ||
+    /(^|[\s"'(])\/[^\s"'<>]+/.test(value) ||
     /(^|[\s"'(])(?:\.{1,2}\/)(?:[^\s/]+\/)*[^\s/]+/.test(value) ||
-    /[A-Za-z]:\\/.test(value) ||
+    /[A-Za-z]:[\\/][^\s"'<>]+/.test(value) ||
     /<!doctype\s+html/i.test(value) ||
     /<\s*\/?\s*[a-zA-Z][^>]*>/.test(value) ||
     /<\/?(?:html|head|body|script|style|main|section|article|div|span|p|a|img|link|meta|h[1-6]|ul|ol|li|button|form|input|label|header|footer|nav)\b/i.test(
@@ -3230,22 +3230,30 @@ function containsUnsafeMCPOutputSummary(value: string): boolean {
   );
 }
 
-function collectMCPArgumentStringValues(value: unknown): {
+function collectMCPArgumentScalarValues(value: unknown): {
   values: string[];
   complete: boolean;
 } {
   const maxDepth = 5;
   const maxValues = 100;
-  const strings: string[] = [];
+  const values: string[] = [];
   const seen = new Set<object>();
   const visit = (candidate: unknown, depth: number): boolean => {
-    if (depth > maxDepth || strings.length >= maxValues) {
+    if (depth > maxDepth || values.length >= maxValues) {
       return false;
     }
     if (typeof candidate === "string") {
       if (candidate.length > 0) {
-        strings.push(candidate);
+        values.push(candidate);
       }
+      return true;
+    }
+    if (
+      typeof candidate === "number" ||
+      typeof candidate === "boolean" ||
+      candidate === null
+    ) {
+      values.push(String(candidate));
       return true;
     }
     if (typeof candidate !== "object" || candidate === null) {
@@ -3255,21 +3263,21 @@ function collectMCPArgumentStringValues(value: unknown): {
       return false;
     }
     seen.add(candidate);
-    const values = Array.isArray(candidate)
+    const childValues = Array.isArray(candidate)
       ? candidate
       : Object.values(candidate as Record<string, unknown>);
-    for (let index = 0; index < values.length; index += 1) {
-      if (!visit(values[index], depth + 1)) {
+    for (let index = 0; index < childValues.length; index += 1) {
+      if (!visit(childValues[index], depth + 1)) {
         return false;
       }
-      if (strings.length >= maxValues && index < values.length - 1) {
+      if (values.length >= maxValues && index < childValues.length - 1) {
         return false;
       }
     }
     return true;
   };
   return {
-    values: strings,
+    values,
     complete: visit(value, 0)
   };
 }

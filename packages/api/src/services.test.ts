@@ -4962,6 +4962,63 @@ describe("demo workbench service", () => {
     expect(called).toBe(false);
   });
 
+  it("rejects read-permission MCP tools with write metadata before calling the executor", async () => {
+    let called = false;
+    const executor: MCPToolExecutor = {
+      async execute() {
+        called = true;
+        return {
+          state: "completed",
+          outputSummary: "unsafe",
+          durationMs: 1
+        };
+      }
+    };
+    const service = new DemoWorkbenchService({
+      mcpToolExecutor: executor,
+      now: fixedClock()
+    });
+    const { project, connector } = await createMCPExecutionFixture(service, {
+      permissions: ["assets:read"],
+      tools: [
+        {
+          name: "mutateAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false,
+          sideEffect: "write"
+        },
+        {
+          name: "syncAssets",
+          permission: "assets:read",
+          roles: ["builder"],
+          requiresApproval: false,
+          readOnly: false
+        }
+      ]
+    });
+
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "mutateAssets",
+        role: "builder",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_execution_not_read_only");
+    await expect(
+      service.executeProjectMCPTool({
+        projectId: project.id,
+        connectorId: connector.id,
+        toolName: "syncAssets",
+        role: "builder",
+        arguments: {}
+      })
+    ).rejects.toThrow("mcp_tool_execution_not_read_only");
+    expect(called).toBe(false);
+  });
+
   it("stores failed MCP executor results without raw arguments", async () => {
     const executor: MCPToolExecutor = {
       async execute() {
@@ -5083,6 +5140,25 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("NESTED_ARGUMENT_SECRET");
   });
 
+  it("redacts scalar argument leaves from failed MCP executor summaries", async () => {
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: "Found ticket 424242 active true",
+      arguments: {
+        ticketId: 424242,
+        active: true
+      }
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Found ticket [redacted] active [redacted]"
+    });
+    expect(JSON.stringify(result)).not.toContain("424242");
+    expect(JSON.stringify(result)).not.toContain("active true");
+    expect(JSON.stringify(events)).not.toContain("424242");
+    expect(JSON.stringify(events)).not.toContain("active true");
+  });
+
   it("falls back when MCP argument traversal exceeds depth limits", async () => {
     const { result, events } = await executeMCPFailureWithSummary({
       outputSummary: "Failed while reading DEEP_ARGUMENT_SECRET",
@@ -5168,8 +5244,28 @@ describe("demo workbench service", () => {
     const localPaths = [
       "/home/user/site/index.html",
       "/etc/passwd",
-      "../site/index.html"
+      "../site/index.html",
+      "/index.html",
+      "/.env",
+      "/tmp",
+      "C:/Users/a/file.txt"
     ];
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${localPaths.join(" ")}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    for (const localPath of localPaths) {
+      expect(JSON.stringify(result)).not.toContain(localPath);
+      expect(JSON.stringify(events)).not.toContain(localPath);
+    }
+  });
+
+  it("does not persist root-level or Windows forward-slash paths", async () => {
+    const localPaths = ["/index.html", "/.env", "/tmp", "C:/Users/a/file.txt"];
     const { result, events } = await executeMCPFailureWithSummary({
       outputSummary: `Failed with ${localPaths.join(" ")}`
     });
