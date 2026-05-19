@@ -664,7 +664,7 @@ button {
 
 .workerHeartbeat span {
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--surface);
   padding: 2px 8px;
   font-size: 0.74rem;
