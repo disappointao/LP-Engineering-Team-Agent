@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @lp-agent/web dev",
+    "smoke": "vitest run apps/web/src/lib/web-v1-smoke.test.ts",
     "worker:dev": "pnpm --filter @lp-agent/agent-worker dev",
     "test": "vitest run",
     "test:watch": "vitest",
