@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  InMemoryWorkerLogRepository,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createJsonFileWorkerJobPayloadRepository,
@@ -9,8 +10,8 @@ import {
   createSimulatedSandboxPolicy,
   type SafeWorkerJobInput
 } from "@lp-agent/worker-runtime";
-import { describe, expect, it } from "vitest";
-import { runDemoWorkerJob, runWorkerOnce } from "./worker";
+import { describe, expect, it, vi } from "vitest";
+import { runDemoWorkerJob, runWorkerDaemon, runWorkerOnce } from "./worker";
 
 describe("agent worker", () => {
   it("runs the demo workbench flow and returns reviewed deployment records", async () => {
@@ -125,6 +126,166 @@ describe("worker queue handoff", () => {
   });
 });
 
+describe("worker daemon", () => {
+  it("runs bounded idle iterations and writes idle logs", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    try {
+      const logs = new InMemoryWorkerLogRepository();
+      const result = await runWorkerDaemon({
+        workerId: "worker_a",
+        jobRepository: createJsonFileWorkerJobRepository({
+          filePath: join(directory, "worker-jobs.json")
+        }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: join(directory, "worker-payloads.json")
+        }),
+        workerLogRepository: logs,
+        maxIterations: 2,
+        pollIntervalMs: 10,
+        heartbeatTimeoutMs: 1000,
+        staleClaimTimeoutMs: 1000,
+        maxStaleRecoveryCount: 1,
+        sleep: async () => undefined,
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z"
+        ])
+      });
+
+      expect(result).toEqual({
+        iterations: 2,
+        processedJobs: 0,
+        idleIterations: 2,
+        stoppedReason: "max_iterations"
+      });
+      await expect(logs.list({ limit: 10 })).resolves.toEqual([
+        expect.objectContaining({ type: "worker.daemon.idle" }),
+        expect.objectContaining({ type: "worker.daemon.idle" })
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("claims, heartbeats, completes, finalizes, and logs one daemon job", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    const jobsFilePath = join(directory, "worker-jobs.json");
+    const payloadsFilePath = join(directory, "worker-payloads.json");
+    try {
+      const logs = new InMemoryWorkerLogRepository();
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        now: () => new Date("2026-05-19T00:00:00.000Z")
+      });
+      const queued = await apiRuntime.enqueueSafe(
+        safeInput(),
+        createSimulatedSandboxPolicy({
+          allowedCommands: ["build"],
+          allowedEnvNames: ["PUBLIC_FLAG"],
+          timeoutMs: 1000
+        })
+      );
+      const finalizeWorkerJob = vi.fn(async () => undefined);
+
+      const result = await runWorkerDaemon({
+        workerId: "worker_a",
+        jobRepository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        workerLogRepository: logs,
+        adapter: new SimulatedExecutionAdapter(),
+        claimTokenFactory: () => "claim_token_1",
+        finalizeWorkerJob,
+        maxIterations: 1,
+        pollIntervalMs: 10,
+        heartbeatTimeoutMs: 1000,
+        staleClaimTimeoutMs: 1000,
+        maxStaleRecoveryCount: 1,
+        sleep: async () => undefined,
+        now: createClock([
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z",
+          "2026-05-19T00:00:04.000Z"
+        ])
+      });
+
+      expect(result.processedJobs).toBe(1);
+      expect(finalizeWorkerJob).toHaveBeenCalledWith(
+        expect.objectContaining({ id: queued.id, state: "completed" })
+      );
+      await expect(logs.list({ projectId: "project_a", limit: 10 })).resolves.toEqual([
+        expect.objectContaining({ type: "worker.job.completed" }),
+        expect.objectContaining({ type: "worker.job.heartbeat" }),
+        expect.objectContaining({ type: "worker.job.claimed" })
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("logs finalization failures without rerunning completed jobs", async () => {
+    const logs = new InMemoryWorkerLogRepository();
+    const directory = await mkdtemp(join(tmpdir(), "agent-worker-daemon-"));
+    const jobsFilePath = join(directory, "worker-jobs.json");
+    const payloadsFilePath = join(directory, "worker-payloads.json");
+    try {
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        now: () => new Date("2026-05-19T00:00:00.000Z")
+      });
+      await apiRuntime.enqueueSafe(safeInput(), simulatedPolicy());
+
+      await runWorkerDaemon({
+        workerId: "worker_a",
+        jobRepository: createJsonFileWorkerJobRepository({ filePath: jobsFilePath }),
+        payloadRepository: createJsonFileWorkerJobPayloadRepository({
+          filePath: payloadsFilePath
+        }),
+        workerLogRepository: logs,
+        adapter: new SimulatedExecutionAdapter(),
+        claimTokenFactory: () => "claim_token_1",
+        finalizeWorkerJob: async () => {
+          throw new Error("finalizer failed");
+        },
+        maxIterations: 1,
+        pollIntervalMs: 10,
+        heartbeatTimeoutMs: 1000,
+        staleClaimTimeoutMs: 1000,
+        maxStaleRecoveryCount: 1,
+        sleep: async () => undefined,
+        now: createClock([
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z",
+          "2026-05-19T00:00:04.000Z"
+        ])
+      });
+
+      await expect(logs.list({ limit: 10 })).resolves.toEqual([
+        expect.objectContaining({
+          type: "worker.job.finalization_failed",
+          payload: expect.objectContaining({ errorName: "Error" })
+        }),
+        expect.objectContaining({ type: "worker.job.completed" }),
+        expect.objectContaining({ type: "worker.job.heartbeat" }),
+        expect.objectContaining({ type: "worker.job.claimed" })
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 function safeInput(
   overrides: Partial<SafeWorkerJobInput> = {}
 ): SafeWorkerJobInput {
@@ -137,6 +298,14 @@ function safeInput(
     timeoutMs: 1000,
     ...overrides
   };
+}
+
+function simulatedPolicy() {
+  return createSimulatedSandboxPolicy({
+    allowedCommands: ["build"],
+    allowedEnvNames: ["PUBLIC_FLAG"],
+    timeoutMs: 1000
+  });
 }
 
 function createClock(values: string[]): () => Date {

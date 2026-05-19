@@ -23,6 +23,9 @@ importers:
       '@lp-agent/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@lp-agent/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@lp-agent/worker-runtime':
         specifier: workspace:*
         version: link:../../packages/worker-runtime
