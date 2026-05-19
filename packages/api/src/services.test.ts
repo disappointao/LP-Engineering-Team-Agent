@@ -5021,6 +5021,50 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("SECRET_PRODUCT");
   });
 
+  it("does not persist local paths from failed MCP executor summaries", async () => {
+    const unsafePath = "/Users/ao/private/site/index.html";
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed while reading ${unsafePath}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain(unsafePath);
+    expect(JSON.stringify(events)).not.toContain(unsafePath);
+  });
+
+  it("does not persist artifact-like content from failed MCP executor summaries", async () => {
+    const artifactContent = "<!doctype html><html><body>SECRET_ARTIFACT</body></html>";
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: `Failed with ${artifactContent}`
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Read-only MCP tool failed."
+    });
+    expect(JSON.stringify(result)).not.toContain(artifactContent);
+    expect(JSON.stringify(result)).not.toContain("SECRET_ARTIFACT");
+    expect(JSON.stringify(events)).not.toContain(artifactContent);
+    expect(JSON.stringify(events)).not.toContain("SECRET_ARTIFACT");
+  });
+
+  it("redacts env secret values from failed MCP executor summaries", async () => {
+    const { result, events } = await executeMCPFailureWithSummary({
+      outputSummary: "Failed while reading MCP_ENV_SECRET",
+      env: { MCP_SECRET: "MCP_ENV_SECRET" }
+    });
+
+    expect(result.observation).toMatchObject({
+      state: "failed",
+      outputSummary: "Failed while reading [redacted]"
+    });
+    expect(JSON.stringify(result)).not.toContain("MCP_ENV_SECRET");
+    expect(JSON.stringify(events)).not.toContain("MCP_ENV_SECRET");
+  });
+
   it("uses the configured current user for mcp approval actor defaults", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
@@ -6031,6 +6075,53 @@ async function createMCPExecutionFixture(
     })
   });
   return { project, connector };
+}
+
+async function executeMCPFailureWithSummary(input: {
+  outputSummary: string;
+  env?: Record<string, string | undefined>;
+}): Promise<{
+  result: Awaited<ReturnType<DemoWorkbenchService["executeProjectMCPTool"]>>;
+  events: RunEventRecord[];
+}> {
+  const executor: MCPToolExecutor = {
+    async execute() {
+      return {
+        state: "failed",
+        outputSummary: input.outputSummary,
+        errorName: "remote_failure",
+        durationMs: 1
+      };
+    }
+  };
+  const repositories = createInMemoryWorkbenchRepositories();
+  const service = new DemoWorkbenchService({
+    repositories,
+    mcpToolExecutor: executor,
+    env: input.env,
+    now: fixedClock()
+  });
+  const { project, connector } = await createMCPExecutionFixture(service, {
+    permissions: ["assets:read"],
+    tools: [
+      {
+        name: "searchAssets",
+        permission: "assets:read",
+        roles: ["builder"],
+        requiresApproval: false
+      }
+    ]
+  });
+
+  const result = await service.executeProjectMCPTool({
+    projectId: project.id,
+    connectorId: connector.id,
+    toolName: "searchAssets",
+    role: "builder",
+    arguments: {}
+  });
+  const events = await repositories.runEvents.listForRun(result.run.id);
+  return { result, events };
 }
 
 function fixedClock(): () => Date {

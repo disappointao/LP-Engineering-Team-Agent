@@ -1934,9 +1934,10 @@ export class DemoWorkbenchService {
 
     const normalizedArguments = normalizeMCPToolExecutionArguments(input.arguments);
     const argumentSummary = summarizeMCPToolArguments(normalizedArguments);
-    const sensitiveValues = Object.values(normalizedArguments).filter(
-      (value): value is string => typeof value === "string" && value.length > 0
-    );
+    const sensitiveValues = [
+      ...Object.values(normalizedArguments),
+      ...collectMCPSecretEnvValues(this.env)
+    ].filter((value): value is string => typeof value === "string" && value.length > 0);
     const runId = await reserveRepositoryId(this.repositories, "run_mcp_tool", async () => {
       const existingRuns = await this.repositories.runs.listAll();
       return existingRuns.map((record) => record.id);
@@ -3182,16 +3183,44 @@ function sanitizeMCPOutputSummary(
       ? "MCP tool completed."
       : state === "cancelled"
         ? "MCP tool cancelled."
-        : "MCP tool failed.";
+        : "Read-only MCP tool failed.";
   const normalized =
     typeof value === "string" && value.trim().length > 0
       ? value.trim()
       : fallback;
-  const redacted = redactCommandOutput(normalized, sensitiveValues);
-  if (redacted.length <= 500) {
-    return redacted;
+  if (containsUnsafeMCPOutputSummary(normalized)) {
+    return fallback;
   }
-  return `${redacted.slice(0, 497)}...`;
+  const redacted = redactCommandOutput(normalized, sensitiveValues);
+  const bounded =
+    redacted.length <= 500 ? redacted : `${redacted.slice(0, 497)}...`;
+  if (containsUnsafeMCPOutputSummary(bounded)) {
+    return fallback;
+  }
+  return bounded;
+}
+
+function containsUnsafeMCPOutputSummary(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    /(^|[\s"'(])(?:\/Users\/|\/private\/|\/tmp\/|\/var\/folders\/)/.test(value) ||
+    /[A-Za-z]:\\/.test(value) ||
+    /<!doctype\s+html/i.test(value) ||
+    /<\/?(?:html|head|body|script|style|main|section|div|span|p|a|img|link|meta)\b/i.test(
+      value
+    ) ||
+    normalized.includes("document.queryselector") ||
+    normalized.includes("window.") ||
+    normalized.includes("body {") ||
+    normalized.includes(":root {")
+  );
+}
+
+function collectMCPSecretEnvValues(env: RuntimeEnvironment): string[] {
+  return Object.entries(env)
+    .filter(([name]) => /(?:SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE_KEY)/i.test(name))
+    .map(([, value]) => value)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
 }
 
 function sanitizeMCPExecutorErrorName(
