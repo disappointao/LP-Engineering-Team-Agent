@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -60,6 +60,44 @@ describe("worker log repositories", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("returns empty JSON-file logs for malformed stored elements", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "worker-logs-"));
+    try {
+      const filePath = join(directory, "worker-logs.json");
+      await writeFile(filePath, `${JSON.stringify({ workerLogs: [{}] })}\n`, "utf8");
+
+      const repository = createJsonFileWorkerLogRepository({ filePath });
+
+      await expect(repository.list({ limit: 10 })).resolves.toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("copies payload values so callers cannot mutate stored records", async () => {
+    const payload = {
+      workerId: "worker_a",
+      outputSummary: { text: "safe" }
+    };
+    const repository = new InMemoryWorkerLogRepository();
+
+    const appended = await repository.append(logRecord({ payload }));
+    (appended.payload.outputSummary as { text: string }).text = "mutated";
+    payload.outputSummary.text = "mutated again";
+
+    const [stored] = await repository.list({ limit: 1 });
+    expect(stored?.payload.outputSummary).toEqual({ text: "safe" });
+
+    (stored?.payload.outputSummary as { text: string }).text = "mutated from list";
+    await expect(repository.list({ limit: 1 })).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          outputSummary: { text: "safe" }
+        })
+      })
+    ]);
   });
 });
 

@@ -55,6 +55,21 @@ interface WorkerLogFileState {
 
 const DEFAULT_MAX_RECORDS = 200;
 const jsonFileSaveQueues = new Map<string, Promise<void>>();
+const workerLogTypes = new Set<WorkerLogType>([
+  "worker.daemon.started",
+  "worker.daemon.idle",
+  "worker.daemon.stopped",
+  "worker.job.claimed",
+  "worker.job.heartbeat",
+  "worker.job.completed",
+  "worker.job.failed",
+  "worker.job.cancelled",
+  "worker.job.finalization_failed",
+  "worker.job.stale_recovered",
+  "worker.job.stale_cancelled",
+  "worker.job.stale_failed",
+  "worker.job.claim_conflict"
+]);
 
 export class InMemoryWorkerLogRepository implements WorkerLogRepository {
   private readonly maxRecords: number;
@@ -134,9 +149,13 @@ export class JsonFileWorkerLogRepository implements WorkerLogRepository {
     try {
       const contents = await readFile(this.filePath, "utf8");
       const parsed = JSON.parse(contents) as Partial<WorkerLogFileState> | null;
-      return Array.isArray(parsed?.workerLogs)
-        ? parsed.workerLogs.map(sanitizeLogRecord)
-        : [];
+      if (!Array.isArray(parsed?.workerLogs)) {
+        return [];
+      }
+      if (!parsed.workerLogs.every(isWorkerLogRecordShape)) {
+        return [];
+      }
+      return parsed.workerLogs.map(sanitizeLogRecord);
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
         return [];
@@ -194,7 +213,8 @@ function sanitizePayload(payload: Record<string, unknown>): Record<string, unkno
   return Object.fromEntries(
     allowedKeys
       .filter((key) => payload[key] !== undefined)
-      .map((key) => [key, payload[key]])
+      .map((key) => [key, copyPayloadValue(payload[key])])
+      .filter(([, value]) => value !== undefined)
   );
 }
 
@@ -236,8 +256,58 @@ function toOptionalString(value: unknown): string | undefined {
 function copyLogRecord(record: WorkerLogRecord): WorkerLogRecord {
   return {
     ...record,
-    payload: { ...record.payload }
+    payload: sanitizePayload(record.payload)
   };
+}
+
+function isWorkerLogRecordShape(value: unknown): value is WorkerLogRecord {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === "string" &&
+    workerLogTypes.has(value.type as WorkerLogType) &&
+    typeof value.message === "string" &&
+    isOptionalString(value.workerId) &&
+    isOptionalString(value.workerJobId) &&
+    isOptionalString(value.projectId) &&
+    isRecord(value.payload) &&
+    typeof value.createdAt === "string"
+  );
+}
+
+function copyPayloadValue(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value) || isRecord(value)) {
+    return copyJsonCompatibleValue(value);
+  }
+
+  return undefined;
+}
+
+function copyJsonCompatibleValue(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
