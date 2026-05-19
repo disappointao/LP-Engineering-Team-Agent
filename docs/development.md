@@ -1,33 +1,31 @@
-# Development
+# 开发说明
 
-## Start Here
+## 先从这里开始
 
-For a fresh local setup, use the root [README](../README.md) first. It lists install commands, environment setup, the Web V1 smoke command, and the manual acceptance checklist.
+全新本地环境请先阅读根目录 [README](../README.md)。那里记录了安装命令、环境变量、Web V1 smoke 命令和手动验收清单。
 
-This file keeps deeper development notes that are useful after the basic app is running.
+本文只保留基础应用跑起来之后更深入的开发说明。
 
-## Prerequisites
+## 前置条件
 
-- Node.js compatible with the workspace dependencies.
-- pnpm.
-- Optional Postgres instance for future DB-backed development.
+- 与 workspace 依赖兼容的 Node.js。
+- pnpm。
+- 可选 Postgres 实例，用于未来 DB-backed 开发。
 
-## Commands
+## 命令
 
-Use the root [README](../README.md) as the source of truth for common install,
-run, smoke, test, typecheck, and build commands. Keep root package scripts there
-so this page can focus on deeper development notes.
+常见安装、启动、smoke、测试、typecheck 和 build 命令以根目录 [README](../README.md) 为准。根目录 `package.json` scripts 是这些通用命令的 source of truth，本文只补充更偏开发内部的命令。
 
-Specialized development commands:
+专项开发命令：
 
-- `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` validates the Prisma schema.
+- `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` 验证 Prisma schema。
 
-## Current MVP Behavior
+## 当前 MVP 行为
 
-The first implementation uses deterministic local services for model calls, runtime execution, MCP visibility, and Git deployment handoff. The boundaries match the v1 design so real providers can replace these implementations without changing the product flow.
+第一版实现使用 deterministic 本地服务处理模型调用、runtime execution、MCP 可见性和 Git deployment handoff。边界与 v1 设计保持一致，因此后续真实 provider 可以替换这些实现，而不需要改变产品流程。
 
-Stage 2 starts by moving workbench records behind repository contracts in `@lp-agent/db`. The default local implementation is still in-memory for deterministic tests, but `@lp-agent/api` now depends on repository interfaces instead of private maps so Prisma/Postgres repositories can replace the in-memory implementation without changing Web or worker callers.
+Stage 2 从 repository contract 开始，把 workbench records 放到 `@lp-agent/db` 后面。默认本地实现仍然是 in-memory，方便 deterministic 测试；但 `@lp-agent/api` 已经依赖 repository interface，而不是私有 map，因此未来 Prisma/Postgres repository 可以替换 in-memory 实现，不影响 Web 或 worker caller。
 
-Stage 2 Milestone 6 persists deterministic planner, builder, reviewer, and deployer run records with ordered run events. Runtime calls now pass through a context assembly boundary before they reach the local runtime adapter. The first context pack includes project/task input, published project skills, visible MCP tools, model routing policy, approval state, and artifact workspace metadata; compression, retrieval, streaming, real tool execution, and real model providers remain future slices.
+Stage 2 Milestone 6 已经持久化 deterministic planner、builder、reviewer、deployer run records 和 ordered run events。Runtime call 现在先经过 context assembly 边界，再进入 local runtime adapter。第一版 context pack 包含 project/task input、已发布项目 skills、visible MCP tools、model routing policy、approval state 和 artifact workspace metadata；compression、retrieval、streaming、real tool execution 和 real model providers 仍是后续阶段。
 
-Generated LP output remains static HTML/CSS/JS. The Next.js app is only the workbench shell used to create, preview, review, and hand off those artifacts.
+生成的 LP 输出保持静态 HTML/CSS/JS。Next.js app 只是用于创建、预览、review 和 handoff 这些 artifact 的 workbench shell。

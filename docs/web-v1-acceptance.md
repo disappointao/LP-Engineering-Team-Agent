@@ -1,69 +1,69 @@
-# Web V1 Acceptance Checklist
+# Web V1 验收清单
 
-Use this checklist before treating the current web workbench as a usable local MVP. The deterministic smoke command covers store-level behavior. This checklist covers visible web behavior and product boundaries.
+在把当前 Web workbench 视为可用本地 MVP 前，使用本清单做一次人工验收。Deterministic smoke 命令覆盖 store/API 级行为；本清单覆盖可见 Web 行为和产品边界。
 
-## Preparation
+## 准备
 
-- [ ] Dependencies are installed with `pnpm install`.
-- [ ] `.env.local` exists. Deterministic local mode uses `REAL_MODEL_RUNTIME=0`.
-- [ ] `pnpm smoke` passes.
-- [ ] `pnpm dev` starts the web app and prints a local URL.
+- [ ] 已通过 `pnpm install` 安装依赖。
+- [ ] 已创建 `.env.local`。Deterministic 本地模式使用 `REAL_MODEL_RUNTIME=0`。
+- [ ] `pnpm smoke` 通过。
+- [ ] `pnpm dev` 能启动 Web app，并输出本地 URL。
 
-## First Screen
+## 首屏
 
-- [ ] The app opens to a Manus-like workbench layout with a fixed left navigation area and a large central conversation entry.
-- [ ] The left navigation does not scroll with the main conversation content.
-- [ ] A user can start with a normal chat prompt without first creating a project.
-- [ ] A user can still create a project from the project entry flow.
-- [ ] Chinese and English UI text follows the browser or environment language behavior documented for the current MVP.
+- [ ] 应用打开后是类 Manus 的 workbench 布局：左侧固定导航，中间是较大的对话入口。
+- [ ] 左侧导航不会跟随主对话内容一起滚动。
+- [ ] 用户可以不先创建项目，直接提交普通聊天 prompt。
+- [ ] 用户仍然可以通过项目入口创建项目。
+- [ ] 中英文 UI 文案符合当前 MVP 记录的浏览器或环境语言判断行为。
 
-## Ordinary Task Flow
+## 普通任务流程
 
-- [ ] Submit a non-LP prompt, such as `帮我整理一个首页上线检查清单`.
-- [ ] The task appears in the task list.
-- [ ] The conversation detail opens in a chat-style layout.
-- [ ] Tool or process rows, when present, render as progress/process information rather than final user content.
-- [ ] The composer remains available after the ordinary task result and can submit a follow-up message in the same conversation.
-- [ ] When there is no running worker job, the interrupt control is unavailable or fails gracefully without blocking the conversation.
-- [ ] No LP artifact preview is shown for a normal chat task.
+- [ ] 提交非 LP prompt，例如 `帮我整理一个首页上线检查清单`。
+- [ ] 任务会出现在任务列表中。
+- [ ] 对话详情以 chat-style layout 打开。
+- [ ] 如果存在工具或过程行，它们应显示为进度/过程信息，而不是最终用户正文。
+- [ ] 普通任务结果出来后，composer 仍可继续提交 follow-up message。
+- [ ] 没有 running worker job 时，interrupt control 应不可用，或 graceful failure，且不阻塞对话。
+- [ ] 普通聊天任务不显示 LP artifact preview。
 
-## LP Generation Flow
+## LP 生成流程
 
-- [ ] Submit an LP prompt, such as `生成一个春季电商活动的静态 HTML 落地页`.
-- [ ] The task appears as an LP generation task.
-- [ ] The result contains a static artifact workspace with `index.html`, `styles.css`, and `script.js`.
-- [ ] The generated artifact can be previewed locally.
-- [ ] The generated LP artifact does not require React, Vue, Angular, Next.js, Vite, or another frontend framework build step.
-- [ ] The visible conversation explains artifact generation as process output and final result output separately.
+- [ ] 提交 LP prompt，例如 `生成一个春季电商活动的静态 HTML 落地页`。
+- [ ] 任务被识别为 LP generation task。
+- [ ] 结果包含静态 artifact workspace，文件为 `index.html`、`styles.css`、`script.js`。
+- [ ] 生成的 artifact 可以本地 preview。
+- [ ] 生成的 LP artifact 不依赖 React、Vue、Angular、Next.js、Vite 或其它前端框架构建步骤。
+- [ ] 可见对话中能区分 artifact 生成过程输出和最终结果输出。
 
-## Artifact Diff And Source Snippets
+## Artifact Diff 和源码片段
 
-- [ ] The artifact diff list shows file-level metadata for `index.html`, `styles.css`, and `script.js`.
-- [ ] Default artifact diff cards only show metadata; full source is shown only after clicking `Preview snippet`.
-- [ ] Click `Preview snippet` for `index.html` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=index.html`.
-- [ ] Click `Preview snippet` for `styles.css` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=styles.css`.
-- [ ] Click `Preview snippet` for `script.js` and confirm the UI shows a bounded read-only source snippet. Implementation detail: this selects `artifactPath=script.js`.
-- [ ] Unknown artifact paths fail gracefully without breaking the task page.
+- [ ] Artifact diff list 显示 `index.html`、`styles.css`、`script.js` 的 file-level metadata。
+- [ ] 默认 artifact diff cards 只展示 metadata；完整源码只在点击 `Preview snippet` 后显示。
+- [ ] 点击 `index.html` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=index.html`。
+- [ ] 点击 `styles.css` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=styles.css`。
+- [ ] 点击 `script.js` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=script.js`。
+- [ ] 未知 artifact path 应 graceful failure，不破坏任务页面。
 
-## Skills, Models, And MCP Boundaries
+## Skills、Models 和 MCP 边界
 
-- [ ] Click `Skills` in the sidebar and confirm the view opens with managed workflow capabilities rather than ad hoc prompt text.
-- [ ] Click `Models` in the sidebar and confirm the view opens with deterministic/mock resolved routes and real provider configuration form fields.
-- [ ] Real model provider tests are opt-in and do not run during `pnpm smoke`.
-- [ ] Click `MCP` in the sidebar and confirm the view opens with registry, approval, and visible tools surfaces, without executing a real MCP tool.
-- [ ] Deployment is not required for the current flow. Deployment can later be provided by skills or a dedicated deployment module.
+- [ ] 点击 sidebar 中的 `Skills`，确认 view 能打开，并展示 managed workflow capabilities，而不是 ad hoc prompt text。
+- [ ] 点击 sidebar 中的 `Models`，确认 view 能打开，并展示 deterministic/mock resolved routes 和真实 provider 配置表单字段。
+- [ ] 真实模型 provider 测试是 opt-in，`pnpm smoke` 不会运行这些测试。
+- [ ] 点击 sidebar 中的 `MCP`，确认 view 能打开，并展示 registry、approval、visible tools surfaces，但不会执行真实 MCP tool。
+- [ ] 当前流程不要求 deployment。后续 deployment 可以由 skills 或独立 deployment module 提供。
 
-## Regression Commands
+## 回归命令
 
-- [ ] `pnpm smoke` passes.
-- [ ] `pnpm test` passes.
-- [ ] `pnpm typecheck` passes.
-- [ ] `pnpm build` passes.
+- [ ] `pnpm smoke` 通过。
+- [ ] `pnpm test` 通过。
+- [ ] `pnpm typecheck` 通过。
+- [ ] `pnpm build` 通过。
 
-## Known Later Work
+## 已知后续工作
 
-- [ ] Browser automation acceptance tests are still future work.
-- [ ] Real MCP execution from the web UI is still future work.
-- [ ] Durable multi-agent context compression and retrieval are still future work.
-- [ ] Built-in deployment orchestration is still future work.
-- [ ] Desktop packaging is still future work.
+- [ ] Browser automation acceptance tests 仍是后续工作。
+- [ ] Web UI 中的真实 MCP execution 仍是后续工作。
+- [ ] Durable multi-agent context compression and retrieval 仍是后续工作。
+- [ ] Built-in deployment orchestration 仍是后续工作。
+- [ ] Desktop packaging 仍是后续工作。

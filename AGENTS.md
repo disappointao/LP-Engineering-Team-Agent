@@ -1,52 +1,54 @@
-# Repository Guidelines
+# 仓库协作指南
 
-## Project Structure & Module Organization
+## 项目结构与模块组织
 
-This repository is a pnpm TypeScript monorepo for the LP Engineering Team Agent MVP.
+本仓库是 LP Engineering Team Agent MVP 的 pnpm TypeScript monorepo。
 
-- `apps/web/` contains the Next.js workbench.
-- `apps/agent-worker/` contains the deterministic worker demo.
-- `packages/api/` orchestrates the in-memory workbench flow.
-- `packages/lp-schema/`, `packages/artifacts/`, `packages/runtime-adapters/`, `packages/git-deployment/`, `packages/skills/`, `packages/mcp-gateway/`, and `packages/model-gateway/` contain focused domain packages.
-- `packages/db/prisma/schema.prisma` defines the Postgres data model.
-- `docs/` contains design notes, implementation plans, and contributor documentation.
+- `apps/web/` 包含 Next.js workbench。
+- `apps/agent-worker/` 包含 deterministic worker demo。
+- `packages/api/` 编排 in-memory workbench flow。
+- `packages/lp-schema/`、`packages/artifacts/`、`packages/runtime-adapters/`、`packages/git-deployment/`、`packages/skills/`、`packages/mcp-gateway/`、`packages/model-gateway/` 是边界清晰的领域包。
+- `packages/db/prisma/schema.prisma` 定义 Postgres 数据模型。
+- `docs/` 包含设计说明、实施计划和贡献者文档。
 
-Avoid committing machine-local editor state or generated build output. `.DS_Store`, `.idea`, `node_modules/`, `.next/`, `.superpowers/`, and local worktrees are ignored at the repository root.
+不要提交机器本地编辑器状态或生成构建输出。仓库根目录已忽略 `.DS_Store`、`.idea`、`node_modules/`、`.next/`、`.superpowers/` 和本地 worktrees。
 
-## Build, Test, and Development Commands
+## 构建、测试和开发命令
 
-- `pnpm install` - install workspace dependencies.
-- `pnpm dev` - start the Next.js web workbench.
-- `pnpm worker:dev` - run the demo agent-worker job.
-- `pnpm test` - run all Vitest tests.
-- `pnpm typecheck` - type-check all workspace packages and apps.
-- `pnpm build` - build all packages and apps that expose a build script.
-- `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` - validate the Prisma schema without connecting to a live database.
+- `pnpm install` - 安装 workspace 依赖。
+- `pnpm dev` - 启动 Next.js Web workbench。
+- `pnpm worker:dev` - 运行 demo agent-worker job。
+- `pnpm test` - 运行全部 Vitest 测试。
+- `pnpm typecheck` - 对所有 workspace packages/apps 做 TypeScript 检查。
+- `pnpm build` - 构建所有提供 build script 的 packages/apps。
+- `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` - 在不连接真实数据库的情况下验证 Prisma schema。
 
-## Coding Style & Naming Conventions
+## 代码风格和命名
 
-Follow TypeScript conventions already used in the workspace. Use 2-space indentation for JSON/YAML/Markdown and TypeScript/TSX files.
+遵循 workspace 现有 TypeScript 风格。JSON/YAML/Markdown 和 TypeScript/TSX 文件使用 2 空格缩进。
 
-Use descriptive names. Prefer `kebab-case` for Markdown and config files (`contributor-guide.md`), `snake_case` for Python modules, and `camelCase` or `PascalCase` according to JavaScript/TypeScript conventions.
+使用描述性命名。Markdown 和 config 文件优先用 `kebab-case`，Python 模块用 `snake_case`，JavaScript/TypeScript 按场景使用 `camelCase` 或 `PascalCase`。
 
-## Testing Guidelines
+## 测试规则
 
-Vitest is configured at the workspace root. Package and app tests live beside source files as `*.test.ts`.
+Vitest 配置在 workspace 根目录。Package 和 app 测试文件与源码放在一起，命名为 `*.test.ts`。
 
-Use names that describe behavior, such as `services.test.ts` or `worker.test.ts`. Keep tests deterministic and avoid relying on local IDE settings or machine-specific paths.
+测试名称应描述行为，例如 `services.test.ts` 或 `worker.test.ts`。测试应保持 deterministic，不依赖本地 IDE 设置或机器特定路径。
 
-## Commit & Pull Request Guidelines
+## Commit 和 Pull Request 规则
 
-The current Git history uses a short imperative commit style, for example: `add .gitignore to exclude .DS_Store and .idea files`. Continue using concise, lowercase, imperative summaries.
+当前 Git history 使用简短祈使句 commit 风格，例如 `add .gitignore to exclude .DS_Store and .idea files`。继续使用简短、小写、祈使句摘要。
 
-Pull requests should include a brief description, the reason for the change, commands run for verification, and screenshots or logs for user-facing behavior when relevant. Link related issues when available and call out any follow-up work clearly.
+Pull request 应包含简要说明、变更原因、运行过的验证命令，以及用户可见行为相关的截图或日志。有关联 issue 时要链接，并清楚列出 follow-up work。
 
-## Agent-Specific Instructions
+## Agent 专用规则
 
-Before editing, inspect the current tree and preserve unrelated user changes. Keep generated files focused and update this guide whenever new tooling, directories, or workflows become part of the repository. The generated LP artifact itself should remain framework-free static HTML/CSS/JS even though the workbench is a Next.js app.
+编辑前先检查当前工作树，保留无关用户改动。生成文件保持聚焦；当新 tooling、目录或 workflow 成为仓库一部分时，同步更新本指南。即使 workbench 是 Next.js app，生成的 LP artifact 本身仍必须保持框架无关静态 HTML/CSS/JS。
 
-When creating, renaming, replacing, or materially updating Superpowers specs or plans under `docs/superpowers/specs/` or `docs/superpowers/plans/`, update `docs/superpowers/README.md` in the same change so the reading order and document purpose remain accurate for future agents and developers.
+创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 Superpowers spec/plan 时，必须在同一变更中更新 `docs/superpowers/README.md`，确保未来 agent 和开发者能看到准确阅读顺序和文档用途。
 
-When adding or materially changing agent runtime, run orchestration, context assembly, skills, model routing, MCP/tool execution, artifact workspace, multi-agent coordination, or related learning-relevant specs/plans, update `docs/agent-development-learning.md` in the same change so the Chinese Agent development notes stay current. Keep that file limited to Agent development concepts, difficulties, implementation tradeoffs, and project-specific Agent practices. Before updating it, judge whether the change teaches or changes an Agent concept or boundary; ordinary project maintenance should not be added unless it directly affects Agent runtime, context, tools, models, memory, retrieval, recovery, approval, observability, or multi-agent coordination.
+新增或实质更新 Superpowers spec/plan 默认使用中文。保留代码、命令、文件名、环境变量、API protocol、错误码和 schema/type 名称的英文原文。历史英文 spec/plan 不要求一次性全量翻译；当它们被实质更新、重写或继续作为当前阶段依据时，再同步中文化。
 
-When a stage is completed, a new stage is planned, or the recommended next-stage priority changes, update `docs/project-roadmap.md` in the same change. Future agents should read that roadmap before choosing the next stage instead of inferring priority only from the latest commit history.
+新增或实质修改 agent runtime、run orchestration、context assembly、skills、model routing、MCP/tool execution、artifact workspace、multi-agent coordination，或与 Agent 学习相关的 specs/plans 时，必须在同一变更中更新 `docs/agent-development-learning.md`，让中文 Agent 开发笔记保持当前事实。该文件只记录 Agent 开发概念、难点、实现取舍和本项目 Agent 实践。更新前先判断变更是否讲清或改变了某个 Agent 概念或边界；普通项目维护不应写入，除非它直接影响 Agent runtime、context、tools、models、memory、retrieval、recovery、approval、observability 或 multi-agent coordination。
+
+当一个阶段完成、新阶段被规划，或推荐下一阶段优先级变化时，必须在同一变更中更新 `docs/project-roadmap.md`。未来 agent 选择下一阶段前应先读 roadmap，而不是只根据最新 commit history 推断优先级。
