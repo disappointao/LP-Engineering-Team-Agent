@@ -211,7 +211,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
 - Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
 - Stage 7 Collaboration Primitives v0：已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化、审批 actor 归属和 Web 项目成员只读展示。
-- Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file job persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once 和 Web 本地 worker queue 闭环。
+- Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file job persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat metadata、stale safe claim recovery、bounded lifecycle logs 和 Web 只读 worker queue health。
 - Durable Artifact Workspace v0：已实现本地 artifact workspace/file repository、manifest/hash/summary、workspace-backed preview/export recovery 和 metadata-first context 注入。
 - Artifact Reader / Static Diff v0：已实现受控 artifact file 读取、8KB bounded snippet、metadata-only workspace/page-version diff 和 runtime/model no-content guard。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
@@ -223,8 +223,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
-- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel 和 Web run-once 闭环；后续还要补真实 runner、daemon、MCP execution、强 sandbox 和流式日志。
-- Stage 19 已确认 worker daemon / heartbeat / stale recovery / bounded worker logs 设计：daemon 应作为 worker runtime/CLI 能力推进；配置 workbench repository 时复用幂等 finalizer 回写 terminal run/tool events；Web 只读展示 queue health，不负责启动或停止长期进程。
+- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP execution、强 sandbox 和 raw stdout/stderr streaming。
 - Prisma schema 有 workspace/project member、run、run event、deployment 等方向，但 Web V1 未完整接入。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
@@ -234,7 +233,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - MCP execution。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
-- 真实本地命令 runner、强 sandbox adapter、worker daemon 实现、真实部署 runner、MCP worker execution 仍未做；worker daemon / heartbeat / stale recovery 已有 Stage 19 设计但尚未实现。
+- 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；恢复、retry/resume、团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
 - 实时流式输出和真正的 interrupt/cancel。
@@ -804,13 +803,19 @@ pnpm --filter @lp-agent/model-gateway test
 当前设计：
 
 - [2026-05-19-worker-daemon-heartbeat-logs-design.md](./superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md)
-- 当前实现计划：[2026-05-19-worker-daemon-heartbeat-logs.md](./superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md)
+- 实现计划：[2026-05-19-worker-daemon-heartbeat-logs.md](./superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md)
 - 这一阶段在 Stage 18 的 lifecycle / recovery 和 finalizer 幂等性基础上，给 worker queue 增加 daemon / polling loop、heartbeat metadata、stale claim recovery 和 bounded worker lifecycle logs。
 - 路线采用 `runtime-first + Web 只读展示`：核心状态在 `packages/worker-runtime`，daemon 入口在 `apps/agent-worker`，Web 只展示 queue counts、heartbeat、stale summary 和 recent worker logs，不负责启停长期 daemon。
 - daemon 配置 workbench repository 时应复用 Stage 18 的幂等 finalizer，把 terminal worker job 回写到 run/tool events；没配置时只更新 worker job 和 worker logs，不猜测 workbench state。
 - Stage 19 的 “Streaming Logs” 是 bounded worker lifecycle log/event summary，不是 raw stdout/stderr 流。真实 stdout/stderr streaming 要等真实 runner 和更强 sandbox 边界之后再做。
 - stale recovery 只自动处理 `payloadSource: "safe_persisted"` 的 running job。旧 worker 完成时必须继续受 claim token 保护，不能覆盖已经恢复或重排后的状态。
 - 本阶段仍不做真实 shell、MCP execution、真实 deployment runner、生产 process manager 或 Web daemon controls。
+
+当前实现状态：
+
+- Stage 19 v0 已实现 worker daemon / polling loop、heartbeat metadata、stale safe claim recovery、bounded worker lifecycle logs 和 Web 只读 worker queue visibility。
+- daemon 配置 workbench repository 时会复用幂等 finalizer 回写 terminal run/tool events；未配置时只更新 worker job 和 worker logs。
+- Stage 19 的 logs 仍是 lifecycle summary，不是 raw stdout/stderr streaming。
 
 学习重点：
 

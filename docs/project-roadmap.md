@@ -20,7 +20,7 @@
 - Run orchestration：deterministic Planner/Builder/Reviewer/Deployer run records、ordered run events、tool observations。
 - Agent run lifecycle / recovery v0：从 run events、worker jobs、tool observations 和 handoffs 派生 lifecycle view、diagnostic summary 和 recovery action contract，并强化 worker finalization 幂等性。
 - Agent handoff v0：固定 LP 链路 `Planner -> Builder -> Reviewer -> Deployer` 的结构化 handoff state。
-- Worker runtime / queue：job contract、sandbox policy、JSON-file persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once、安全 simulated payload。
+- Worker runtime / queue：job contract、sandbox policy、JSON-file persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat、stale safe claim recovery、bounded lifecycle logs、Web 只读 queue health、安全 simulated payload。
 - Artifact workspace：durable artifact workspace、manifest/hash/summary、controlled artifact reader、metadata-only static diff、bounded snippet。
 - Collaboration primitives：local identity seam、workspace/project member repositories、project owner membership、approval actor audit context。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
@@ -29,7 +29,7 @@
 
 - Web UI 无刷新体验、streaming UI、browser E2E。
 - MCP execution。
-- Worker daemon、heartbeat、stale claim recovery、streaming logs。
+- Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
 - Postgres repository 实现和真实多用户 auth/RBAC。
@@ -43,37 +43,23 @@
 
 Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、worker jobs、tool observations 和 handoffs 派生 `RunLifecycleView`、安全 `diagnosticSummary` 和 recovery action contract，并强化 worker finalization 幂等性。
 
-## 推荐下一阶段队列
-
 ### Stage 19：Worker Daemon、Heartbeat 和 Streaming Logs v0
 
-**状态：** 设计和 implementation plan 已确认，待实现。
+**状态：** 已实现。
 
-**为什么在 Stage 18 之后：** daemon execution 需要更强的 run lifecycle 和 finalizer 语义，否则 stale claims、重复 finalization、cancellation 和可见 run state 会很难推理。
+Stage 19 v0 已实现 worker daemon / polling loop、heartbeat metadata、stale safe claim recovery、bounded worker lifecycle logs 和 Web 只读 worker queue visibility。
 
-**当前设计：** `docs/superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md`。
+daemon 配置 workbench repository 时会复用 Stage 18 的幂等 finalizer，把 terminal worker job 回写到 run/tool events；未配置时只更新 worker job 和 worker logs。Stage 19 的 logs 仍是 lifecycle summary，不是 raw stdout/stderr streaming。
 
-**当前计划：** `docs/superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md`。
+**设计：** `docs/superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md`。
 
-**建议范围：**
+**实施计划：** `docs/superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md`。
 
-- 增加 worker heartbeat metadata 和 stale-claim detection。
-- 为 `apps/agent-worker` 增加 daemon 或 polling loop mode。
-- 增加 bounded worker lifecycle log/event summary，并通过 Web Skills local worker queue 面板只读展示 queue counts、heartbeat、stale summary 和 recent logs。
-- daemon 配置 workbench repository 时复用幂等 worker finalizer，把 terminal worker job 回写到 run/tool events。
-- 默认 execution adapter 仍保持 simulated/reject。
-
-**非目标：**
-
-- 不做真实 shell execution。
-- 不做 MCP execution。
-- 不做 deployment runner。
-- 不做生产级 process manager。
-- 不做 Web 启停长期 daemon。
+## 推荐下一阶段队列
 
 ### Stage 20：MCP Execution v0
 
-**状态：** 推荐在 worker lifecycle 更强之后做。
+**状态：** 推荐下一阶段。
 
 **为什么在 Stage 19 之后：** MCP execution 应复用 worker job、approval、observation、artifact reader、cancellation 和 finalizer 边界，不应该在 API 进程里直接调用工具。
 
@@ -155,7 +141,6 @@ Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、w
 
 ### Worker / Sandbox / Execution
 
-- Stage 19 已规划 worker daemon、heartbeat、stale claim recovery 和 bounded worker lifecycle logs，待实现。
 - Streaming stdout/stderr summaries。
 - Strong sandbox adapter。
 - 受 explicit policy 和 approval 保护的真实 shell runner。
