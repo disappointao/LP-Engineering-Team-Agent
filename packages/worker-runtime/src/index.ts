@@ -3,6 +3,18 @@ import { resolve, sep } from "node:path";
 
 import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
 
+export {
+  InMemoryWorkerLogRepository,
+  JsonFileWorkerLogRepository,
+  createJsonFileWorkerLogRepository,
+  type InMemoryWorkerLogRepositoryOptions,
+  type JsonFileWorkerLogRepositoryOptions,
+  type WorkerLogListInput,
+  type WorkerLogRecord,
+  type WorkerLogRepository,
+  type WorkerLogType
+} from "./worker-log-repositories";
+
 const CANCEL_REASON_MAX_LENGTH = 200;
 const WORKER_ID_MAX_LENGTH = 120;
 const WORKER_JOB_CANCELLED_ERROR = "worker_job_cancelled";
