@@ -266,6 +266,10 @@
    - Stage 18 Agent Run Lifecycle and Recovery v0 implementation plan。
    - 在 Stage 18 design 后阅读，用于按 TDD 实现 `RunLifecycleView` helper、worker/handoff 状态派生、diagnostic safety、task-level lifecycle listing、worker finalizer 幂等性和文档收尾。
 
+66. `specs/2026-05-19-worker-daemon-heartbeat-logs-design.md`
+   - Stage 19 Worker Daemon、Heartbeat 和 Streaming Logs v0 design。
+   - 在 Stage 18 plan 后阅读，用于添加 worker daemon / polling loop、heartbeat metadata、stale claim recovery、bounded worker lifecycle logs 和 Web 只读 queue visibility，同时不引入真实 shell execution、MCP execution、deployment runner 或 Web daemon process management。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

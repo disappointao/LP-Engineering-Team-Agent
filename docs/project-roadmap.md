@@ -47,15 +47,18 @@ Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、w
 
 ### Stage 19：Worker Daemon、Heartbeat 和 Streaming Logs v0
 
-**状态：** 推荐下一阶段。
+**状态：** 设计已确认，待 implementation plan 和实现。
 
 **为什么在 Stage 18 之后：** daemon execution 需要更强的 run lifecycle 和 finalizer 语义，否则 stale claims、重复 finalization、cancellation 和可见 run state 会很难推理。
+
+**当前设计：** `docs/superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md`。
 
 **建议范围：**
 
 - 增加 worker heartbeat metadata 和 stale-claim detection。
 - 为 `apps/agent-worker` 增加 daemon 或 polling loop mode。
-- 把 worker execution 的 bounded streaming log/event records 写入 run events 或 worker observations。
+- 增加 bounded worker lifecycle log/event summary，并通过 Web Skills local worker queue 面板只读展示 queue counts、heartbeat、stale summary 和 recent logs。
+- daemon 配置 workbench repository 时复用幂等 worker finalizer，把 terminal worker job 回写到 run/tool events。
 - 默认 execution adapter 仍保持 simulated/reject。
 
 **非目标：**
@@ -64,6 +67,7 @@ Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、w
 - 不做 MCP execution。
 - 不做 deployment runner。
 - 不做生产级 process manager。
+- 不做 Web 启停长期 daemon。
 
 ### Stage 20：MCP Execution v0
 
@@ -149,8 +153,7 @@ Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、w
 
 ### Worker / Sandbox / Execution
 
-- Worker daemon 和 heartbeat。
-- Stale lease recovery。
+- Stage 19 已规划 worker daemon、heartbeat、stale claim recovery 和 bounded worker lifecycle logs，待实现。
 - Streaming stdout/stderr summaries。
 - Strong sandbox adapter。
 - 受 explicit policy 和 approval 保护的真实 shell runner。
