@@ -47,11 +47,13 @@ Stage 18 已完成 Agent run lifecycle / recovery v0：API 侧从 run events、w
 
 ### Stage 19：Worker Daemon、Heartbeat 和 Streaming Logs v0
 
-**状态：** 设计已确认，待 implementation plan 和实现。
+**状态：** 设计和 implementation plan 已确认，待实现。
 
 **为什么在 Stage 18 之后：** daemon execution 需要更强的 run lifecycle 和 finalizer 语义，否则 stale claims、重复 finalization、cancellation 和可见 run state 会很难推理。
 
 **当前设计：** `docs/superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md`。
+
+**当前计划：** `docs/superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md`。
 
 **建议范围：**
 

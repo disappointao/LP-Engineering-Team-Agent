@@ -804,6 +804,7 @@ pnpm --filter @lp-agent/model-gateway test
 当前设计：
 
 - [2026-05-19-worker-daemon-heartbeat-logs-design.md](./superpowers/specs/2026-05-19-worker-daemon-heartbeat-logs-design.md)
+- 当前实现计划：[2026-05-19-worker-daemon-heartbeat-logs.md](./superpowers/plans/2026-05-19-worker-daemon-heartbeat-logs.md)
 - 这一阶段在 Stage 18 的 lifecycle / recovery 和 finalizer 幂等性基础上，给 worker queue 增加 daemon / polling loop、heartbeat metadata、stale claim recovery 和 bounded worker lifecycle logs。
 - 路线采用 `runtime-first + Web 只读展示`：核心状态在 `packages/worker-runtime`，daemon 入口在 `apps/agent-worker`，Web 只展示 queue counts、heartbeat、stale summary 和 recent worker logs，不负责启停长期 daemon。
 - daemon 配置 workbench repository 时应复用 Stage 18 的幂等 finalizer，把 terminal worker job 回写到 run/tool events；没配置时只更新 worker job 和 worker logs，不猜测 workbench state。
