@@ -96,20 +96,27 @@ model WorkspaceMember {
 }
 
 model Project {
-  id          String          @id @default(cuid())
-  workspaceId String
-  name        String
-  repository  String?
-  workspace   Workspace       @relation(fields: [workspaceId], references: [id])
-  members     ProjectMember[]
-  briefs      LPBrief[]
-  versions    PageVersion[]
-  runs        Run[]
-  toolObservations ToolObservation[]
-  deployments Deployment[]
-  skillBindings SkillBinding[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                     String                    @id @default(cuid())
+  workspaceId            String
+  name                   String
+  repository             String?
+  workspace              Workspace                 @relation(fields: [workspaceId], references: [id])
+  members                ProjectMember[]
+  briefs                 LPBrief[]
+  versions               PageVersion[]
+  tasks                  WorkbenchTask[]
+  messages               WorkbenchMessage[]
+  taskSnapshots          WorkbenchTaskSnapshot[]
+  runs                   Run[]
+  runEvents              RunEvent[]
+  toolObservations       ToolObservation[]
+  deployments            Deployment[]
+  artifactWorkspaces     ArtifactWorkspace[]
+  artifactWorkspaceFiles ArtifactWorkspaceFile[]
+  agentHandoffs          AgentHandoff[]
+  skillBindings          SkillBinding[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
 
   @@index([workspaceId])
 }
@@ -127,33 +134,126 @@ model ProjectMember {
 }
 
 model LPBrief {
-  id        String        @id @default(cuid())
-  projectId String
-  title     String
-  data      Json
-  project   Project       @relation(fields: [projectId], references: [id])
-  versions  PageVersion[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id            String                  @id @default(cuid())
+  projectId     String
+  title         String
+  prompt        String
+  data          Json
+  project       Project                 @relation(fields: [projectId], references: [id])
+  versions      PageVersion[]
+  taskSnapshots WorkbenchTaskSnapshot[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
 
   @@index([projectId])
 }
 
 model PageVersion {
-  id           String       @id @default(cuid())
-  projectId    String
-  briefId      String
-  artifactData Json
-  reviewStatus ReviewStatus
-  project      Project      @relation(fields: [projectId], references: [id])
-  brief        LPBrief      @relation(fields: [briefId], references: [id])
-  artifacts    Artifact[]
-  deployments  Deployment[]
-  createdAt    DateTime     @default(now())
+  id                     String                    @id @default(cuid())
+  projectId              String
+  briefId                String
+  artifactData           Json
+  artifactWorkspaceId    String?
+  findings               Json
+  reviewStatus           ReviewStatus
+  project                Project                   @relation(fields: [projectId], references: [id])
+  brief                  LPBrief                   @relation(fields: [briefId], references: [id])
+  artifacts              Artifact[]
+  deployments            Deployment[]
+  taskSnapshots          WorkbenchTaskSnapshot[]
+  artifactWorkspaces     ArtifactWorkspace[]
+  artifactWorkspaceFiles ArtifactWorkspaceFile[]
+  createdAt              DateTime                  @default(now())
 
   @@index([projectId])
   @@index([briefId])
   @@index([reviewStatus])
+}
+
+model WorkbenchTask {
+  id        String                   @id
+  title     String
+  type      String
+  status    String
+  projectId String?
+  project   Project?                 @relation(fields: [projectId], references: [id])
+  messages  WorkbenchMessage[]
+  snapshot  WorkbenchTaskSnapshot?
+  createdAt DateTime
+
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model WorkbenchMessage {
+  id        String        @id
+  taskId    String
+  projectId String?
+  role      String
+  content   String
+  task      WorkbenchTask @relation(fields: [taskId], references: [id])
+  project   Project?      @relation(fields: [projectId], references: [id])
+  createdAt DateTime
+
+  @@index([taskId, createdAt])
+  @@index([projectId])
+}
+
+model WorkbenchTaskSnapshot {
+  taskId        String         @id
+  projectId     String
+  briefId       String?
+  pageVersionId String?
+  task          WorkbenchTask  @relation(fields: [taskId], references: [id])
+  project       Project        @relation(fields: [projectId], references: [id])
+  brief         LPBrief?       @relation(fields: [briefId], references: [id])
+  pageVersion   PageVersion?   @relation(fields: [pageVersionId], references: [id])
+  createdAt     DateTime
+
+  @@index([projectId])
+  @@index([briefId])
+  @@index([pageVersionId])
+}
+
+model ArtifactWorkspace {
+  id            String                  @id
+  projectId     String
+  pageVersionId String?
+  runId         String?
+  kind          String
+  state         String
+  project       Project                 @relation(fields: [projectId], references: [id])
+  pageVersion   PageVersion?            @relation(fields: [pageVersionId], references: [id])
+  files         ArtifactWorkspaceFile[]
+  createdAt     DateTime
+  updatedAt     DateTime
+
+  @@index([projectId, createdAt])
+  @@index([pageVersionId])
+  @@index([runId])
+}
+
+model ArtifactWorkspaceFile {
+  id            String            @id
+  workspaceId   String
+  projectId     String
+  pageVersionId String?
+  path          String
+  kind          String
+  mimeType      String
+  sizeBytes     Int
+  sha256        String
+  summary       String
+  content       String
+  workspace     ArtifactWorkspace @relation(fields: [workspaceId], references: [id])
+  project       Project           @relation(fields: [projectId], references: [id])
+  pageVersion   PageVersion?      @relation(fields: [pageVersionId], references: [id])
+  createdAt     DateTime
+  updatedAt     DateTime
+
+  @@unique([workspaceId, path])
+  @@index([projectId])
+  @@index([pageVersionId])
 }
 
 model Artifact {
@@ -287,31 +387,44 @@ model SkillBinding {
 }
 
 model Run {
-  id        String     @id
-  projectId String
-  role      String
-  state     RunState
-  project   Project    @relation(fields: [projectId], references: [id])
-  events    RunEvent[]
+  id               String            @id
+  projectId        String
+  taskId           String?
+  role             String
+  state            RunState
+  startedAt        DateTime
+  completedAt      DateTime?
+  contextSummary   Json
+  project          Project           @relation(fields: [projectId], references: [id])
+  events           RunEvent[]
   toolObservations ToolObservation[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  outboundHandoffs AgentHandoff[]    @relation("AgentHandoffFromRun")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([projectId])
+  @@index([taskId])
   @@index([state])
+  @@index([startedAt])
 }
 
 model RunEvent {
-  id        String   @id @default(cuid())
+  id        String   @id
   runId     String
+  projectId String
+  taskId    String?
   sequence  Int
   type      String
+  message   String
   payload   Json
   run       Run      @relation(fields: [runId], references: [id])
-  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id])
+  createdAt DateTime
 
   @@unique([runId, sequence])
   @@index([runId, type])
+  @@index([projectId])
+  @@index([taskId])
   @@index([createdAt])
 }
 
@@ -328,7 +441,7 @@ model ToolObservation {
   errorName     String?
   project       Project  @relation(fields: [projectId], references: [id])
   run           Run      @relation(fields: [runId], references: [id])
-  createdAt     DateTime @default(now())
+  createdAt     DateTime
   completedAt   DateTime?
 
   @@index([runId])
@@ -336,6 +449,30 @@ model ToolObservation {
   @@index([taskId])
   @@index([state])
   @@index([createdAt])
+}
+
+model AgentHandoff {
+  id             String   @id
+  projectId      String
+  taskId         String?
+  fromRunId      String
+  fromRole       String
+  toRole         String
+  state          String
+  summary        String
+  blockingReason String?
+  artifactRefs   Json?
+  project        Project  @relation(fields: [projectId], references: [id])
+  fromRun        Run      @relation("AgentHandoffFromRun", fields: [fromRunId], references: [id])
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@index([projectId, updatedAt])
+  @@index([taskId])
+  @@index([fromRunId])
+  @@index([toRole])
+  @@index([fromRole])
+  @@index([state])
 }
 
 model Deployment {
