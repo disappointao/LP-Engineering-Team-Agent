@@ -11,6 +11,7 @@ import {
   type RunRecord,
   type ToolObservationRecord
 } from "./index";
+import { runCoreWorkbenchRepositoryContractTests } from "./workbench-repository-contract";
 
 const createdAt = "2026-05-13T00:00:00.000Z";
 const indexSha256 = sha256("<h1>Spring</h1>");
@@ -37,6 +38,14 @@ afterEach(async () => {
       })
     )
   );
+});
+
+runCoreWorkbenchRepositoryContractTests({
+  name: "json-file",
+  createRepositories: async () =>
+    createJsonFileWorkbenchRepositories({
+      filePath: await tempStateFile()
+    })
 });
 
 describe("json-file workbench repositories", () => {

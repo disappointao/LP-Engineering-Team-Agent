@@ -16,8 +16,14 @@ import {
   type ToolObservationRecord,
   type WorkspaceMemberRecord
 } from "./index";
+import { runCoreWorkbenchRepositoryContractTests } from "./workbench-repository-contract";
 
 const createdAt = "2026-05-12T00:00:00.000Z";
+
+runCoreWorkbenchRepositoryContractTests({
+  name: "in-memory",
+  createRepositories: () => createInMemoryWorkbenchRepositories()
+});
 
 describe("in-memory workbench repositories", () => {
   it("persists projects and returns defensive copies", async () => {
