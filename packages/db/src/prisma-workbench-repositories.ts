@@ -173,12 +173,21 @@ function createProjectRepository(delegate: PrismaDelegate, workspaceId: string):
   return {
     async save(project) {
       const data = toPrismaProjectCreate(project, workspaceId);
-      await upsert(delegate, { id: project.id }, data);
+      const existing = await delegate.findUnique({ where: { id: project.id } });
+      if (existing && existing.workspaceId !== workspaceId) {
+        throw new Error(`Prisma project ${project.id} belongs to a different workspace`);
+      }
+
+      await upsert(delegate, { id: project.id }, data, ["id", "workspaceId"]);
     },
 
     async getById(projectId) {
+      const rows = await delegate.findMany({
+        where: { id: projectId, workspaceId },
+        take: 1
+      });
       return mapOptional(
-        await delegate.findUnique({ where: { id: projectId } }),
+        rows[0],
         (row) => toRepositoryProject(row as unknown as PrismaProjectRow)
       );
     },
@@ -198,7 +207,7 @@ function createProjectRepository(delegate: PrismaDelegate, workspaceId: string):
 function createWorkbenchTaskRepository(delegate: PrismaDelegate): WorkbenchTaskRepository {
   return {
     async save(task) {
-      await upsert(delegate, { id: task.id }, toPrismaWorkbenchTask(task));
+      await upsert(delegate, { id: task.id }, toPrismaWorkbenchTask(task), ["id"], ["projectId"]);
     },
 
     async getById(taskId) {
@@ -247,9 +256,13 @@ function createWorkbenchTaskSnapshotRepository(
 ): WorkbenchTaskSnapshotRepository {
   return {
     async save(snapshot) {
-      await upsert(delegate, { taskId: snapshot.taskId }, toPrismaWorkbenchTaskSnapshot(snapshot), [
-        "taskId"
-      ]);
+      await upsert(
+        delegate,
+        { taskId: snapshot.taskId },
+        toPrismaWorkbenchTaskSnapshot(snapshot),
+        ["taskId"],
+        ["briefId", "pageVersionId"]
+      );
     },
 
     async getByTaskId(taskId) {
@@ -289,7 +302,13 @@ function createBriefRepository(delegate: PrismaDelegate): BriefRepository {
 function createPageVersionRepository(delegate: PrismaDelegate): PageVersionRepository {
   return {
     async save(pageVersion) {
-      await upsert(delegate, { id: pageVersion.id }, toPrismaPageVersion(pageVersion));
+      await upsert(
+        delegate,
+        { id: pageVersion.id },
+        toPrismaPageVersion(pageVersion),
+        ["id"],
+        ["artifactWorkspaceId"]
+      );
     },
 
     async getById(pageVersionId) {
@@ -322,7 +341,13 @@ function createArtifactWorkspaceRepository(
 ): ArtifactWorkspaceRepository {
   return {
     async save(workspace) {
-      await upsert(delegate, { id: workspace.id }, toPrismaArtifactWorkspace(workspace));
+      await upsert(
+        delegate,
+        { id: workspace.id },
+        toPrismaArtifactWorkspace(workspace),
+        ["id"],
+        ["pageVersionId", "runId"]
+      );
     },
 
     async getById(workspaceId) {
@@ -368,7 +393,9 @@ function createArtifactWorkspaceFileRepository(
       await upsert(
         delegate,
         { workspaceId_path: { workspaceId: file.workspaceId, path: file.path } },
-        toPrismaArtifactWorkspaceFile(file)
+        toPrismaArtifactWorkspaceFile(file),
+        ["id"],
+        ["pageVersionId"]
       );
     },
 
@@ -403,7 +430,10 @@ function createArtifactWorkspaceFileRepository(
 function createRunRepository(delegate: PrismaDelegate): RunRepository {
   return {
     async save(run) {
-      await upsert(delegate, { id: run.id }, toPrismaRunCreate(run));
+      await upsert(delegate, { id: run.id }, toPrismaRunCreate(run), ["id"], [
+        "taskId",
+        "completedAt"
+      ]);
     },
 
     async getById(runId) {
@@ -488,7 +518,12 @@ function createRunEventRepository(delegate: PrismaDelegate): RunEventRepository 
 function createToolObservationRepository(delegate: PrismaDelegate): ToolObservationRepository {
   return {
     async save(observation) {
-      await upsert(delegate, { id: observation.id }, toPrismaToolObservation(observation));
+      await upsert(delegate, { id: observation.id }, toPrismaToolObservation(observation), ["id"], [
+        "taskId",
+        "exitCode",
+        "errorName",
+        "completedAt"
+      ]);
     },
 
     async listForRun(runId) {
@@ -523,7 +558,11 @@ function createToolObservationRepository(delegate: PrismaDelegate): ToolObservat
 function createAgentHandoffRepository(delegate: PrismaDelegate): AgentHandoffRepository {
   return {
     async save(handoff) {
-      await upsert(delegate, { id: handoff.id }, toPrismaAgentHandoffCreate(handoff));
+      await upsert(delegate, { id: handoff.id }, toPrismaAgentHandoffCreate(handoff), ["id"], [
+        "taskId",
+        "blockingReason",
+        "artifactRefs"
+      ]);
     },
 
     async getById(handoffId) {
@@ -580,12 +619,14 @@ async function upsert(
   delegate: PrismaDelegate,
   where: PrismaWhere,
   data: object,
-  updateOmitKeys: string[] = ["id"]
+  updateOmitKeys: string[] = ["id"],
+  nullableKeys: string[] = []
 ): Promise<void> {
+  const row = materializeNulls(asPrismaRow(data), nullableKeys);
   await delegate.upsert({
     where,
-    create: asPrismaRow(data),
-    update: omitKeys(asPrismaRow(data), updateOmitKeys)
+    create: row,
+    update: omitKeys(row, updateOmitKeys)
   });
 }
 
@@ -817,6 +858,16 @@ function omitKeys(row: PrismaRow, keys: string[]): PrismaRow {
   const copy = { ...row };
   for (const key of keys) {
     delete copy[key];
+  }
+  return copy;
+}
+
+function materializeNulls(row: PrismaRow, nullableKeys: string[]): PrismaRow {
+  const copy = { ...row };
+  for (const key of nullableKeys) {
+    if (!(key in copy)) {
+      copy[key] = null;
+    }
   }
   return copy;
 }
