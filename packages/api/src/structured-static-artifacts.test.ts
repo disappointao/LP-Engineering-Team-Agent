@@ -3,6 +3,7 @@ import { sampleBrief } from "@lp-agent/lp-schema";
 import {
   BuilderStaticArtifactParseError,
   createStructuredStaticArtifactsBuilderPrompt,
+  createStructuredStaticArtifactsRepairPrompt,
   parseBuilderStaticArtifactsOutput,
   toStaticArtifactParseFailurePayload,
   toStaticArtifactParseSuccessPayload
@@ -19,6 +20,28 @@ describe("structured static artifact model output", () => {
     expect(prompt).toContain("Framework-free static HTML/CSS/JS");
     expect(prompt).toContain("Do not include React, Vue, Angular, Svelte");
     expect(prompt).toContain(sampleBrief.title);
+  });
+
+  it("creates a safe static artifacts repair prompt without raw artifact output", () => {
+    const prompt = createStructuredStaticArtifactsRepairPrompt({
+      brief: sampleBrief,
+      failure: {
+        reason: "policy_violation",
+        policyCode: "external_script_blocked",
+        issueCount: 1,
+        firstIssuePath: "indexHtml",
+        firstIssueCode: "custom"
+      }
+    });
+
+    expect(prompt).toContain("Repair the previous Builder response");
+    expect(prompt).toContain("indexHtml");
+    expect(prompt).toContain("stylesCss");
+    expect(prompt).toContain("scriptJs");
+    expect(prompt).toContain("external_script_blocked");
+    expect(prompt).toContain(sampleBrief.title);
+    expect(prompt).not.toContain("RAW_STATIC_ARTIFACT_SECRET");
+    expect(prompt).not.toContain("<script src=\"https://");
   });
 
   it("parses a complete framework-free static artifact JSON object", () => {

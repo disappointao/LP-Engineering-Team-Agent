@@ -3,6 +3,7 @@ import { sampleBrief } from "@lp-agent/lp-schema";
 import {
   PlannerLPBriefParseError,
   createStructuredLPBriefPlannerPrompt,
+  createStructuredLPBriefRepairPrompt,
   parsePlannerLPBriefOutput,
   toLPBriefParseFailurePayload,
   toLPBriefParseSuccessPayload
@@ -18,6 +19,26 @@ describe("structured LP brief model output", () => {
     expect(prompt).toContain("LPBriefSchema");
     expect(prompt).toContain("Framework-free static HTML/CSS/JS");
     expect(prompt).toContain(userPrompt);
+  });
+
+  it("creates a safe LP brief repair prompt without raw model output", () => {
+    const prompt = createStructuredLPBriefRepairPrompt({
+      userPrompt: "Build a landing page for a spring sale.",
+      failure: {
+        reason: "schema_invalid",
+        issueCount: 2,
+        firstIssuePath: "sections.0.headline",
+        firstIssueCode: "invalid_type"
+      }
+    });
+
+    expect(prompt).toContain("Repair the previous Planner response");
+    expect(prompt).toContain("LPBriefSchema");
+    expect(prompt).toContain("schema_invalid");
+    expect(prompt).toContain("sections.0.headline");
+    expect(prompt).toContain("Build a landing page for a spring sale.");
+    expect(prompt).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+    expect(prompt).not.toContain("```");
   });
 
   it("parses a complete LPBriefSchema JSON object", () => {

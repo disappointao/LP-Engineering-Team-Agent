@@ -56,6 +56,58 @@ export function createStructuredLPBriefPlannerPrompt(userPrompt: string): string
   ].join("\n");
 }
 
+export interface StructuredLPBriefRepairPromptInput {
+  userPrompt: string;
+  failure: {
+    reason: LPBriefParseFailureReason;
+    issueCount?: number;
+    firstIssuePath?: string;
+    firstIssueCode?: string;
+  };
+}
+
+export function createStructuredLPBriefRepairPrompt(
+  input: StructuredLPBriefRepairPromptInput
+): string {
+  return [
+    "Repair the previous Planner response for an LP Engineering Team Agent.",
+    "Return exactly one JSON object that matches LPBriefSchema.",
+    "Do not wrap the JSON in Markdown fences.",
+    "Do not include prose before or after the JSON.",
+    "Do not copy invalid formatting from the previous response.",
+    "",
+    "Failure summary:",
+    `- reason: ${input.failure.reason}`,
+    ...(input.failure.issueCount !== undefined
+      ? [`- issueCount: ${input.failure.issueCount}`]
+      : []),
+    ...(input.failure.firstIssuePath
+      ? [`- firstIssuePath: ${input.failure.firstIssuePath}`]
+      : []),
+    ...(input.failure.firstIssueCode
+      ? [`- firstIssueCode: ${input.failure.firstIssueCode}`]
+      : []),
+    "",
+    "LPBriefSchema compact guide:",
+    "- title: non-empty string",
+    "- objective: non-empty string",
+    "- audience: non-empty string",
+    "- offer: non-empty string",
+    "- brandProfile: { name, tone, colors: string[], typography }",
+    "- tone: non-empty string",
+    "- constraints: string[]",
+    "- sections: non-empty array of { id, type, purpose, headline, body, media, cta, layoutHints, validationRules }",
+    "- assets: array of { id, type, label, url, alt? }",
+    "- productData: array of { id, name, description, price?, imageUrl? }",
+    "- seo: { title, description, socialImage? }",
+    "- tracking: { analyticsId?, events: string[] }",
+    "- complianceNotes: string[]",
+    "",
+    "Original user request:",
+    input.userPrompt
+  ].join("\n");
+}
+
 export function parsePlannerLPBriefOutput(output: string): LPBrief {
   const trimmed = output.trim();
   if (trimmed.length === 0) {

@@ -100,6 +100,47 @@ export function createStructuredStaticArtifactsBuilderPrompt(brief: LPBrief): st
   ].join("\n");
 }
 
+export interface StructuredStaticArtifactsRepairPromptInput {
+  brief: LPBrief;
+  failure: {
+    reason: StaticArtifactParseFailureReason;
+    policyCode?: string;
+    issueCount?: number;
+    firstIssuePath?: string;
+    firstIssueCode?: string;
+  };
+}
+
+export function createStructuredStaticArtifactsRepairPrompt(
+  input: StructuredStaticArtifactsRepairPromptInput
+): string {
+  return [
+    "Repair the previous Builder response for an LP Engineering Team Agent.",
+    "Return exactly one JSON object with exactly these three non-empty string keys: indexHtml, stylesCss, scriptJs.",
+    "Do not include any other keys.",
+    "Do not wrap the JSON in Markdown fences.",
+    "Do not include prose before or after the JSON.",
+    "Build Framework-free static HTML/CSS/JS only.",
+    "External JavaScript, javascript: URLs, inline event handler attributes, and CSS frameworks are forbidden.",
+    "",
+    "Failure summary:",
+    `- reason: ${input.failure.reason}`,
+    ...(input.failure.policyCode ? [`- policyCode: ${input.failure.policyCode}`] : []),
+    ...(input.failure.issueCount !== undefined
+      ? [`- issueCount: ${input.failure.issueCount}`]
+      : []),
+    ...(input.failure.firstIssuePath
+      ? [`- firstIssuePath: ${input.failure.firstIssuePath}`]
+      : []),
+    ...(input.failure.firstIssueCode
+      ? [`- firstIssueCode: ${input.failure.firstIssueCode}`]
+      : []),
+    "",
+    "LPBrief JSON:",
+    JSON.stringify(input.brief)
+  ].join("\n");
+}
+
 export function parseBuilderStaticArtifactsOutput(output: string): StaticArtifacts {
   const trimmed = output.trim();
   if (trimmed.length === 0) {
