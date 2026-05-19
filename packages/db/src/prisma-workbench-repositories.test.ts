@@ -459,6 +459,50 @@ describe("createPrismaWorkbenchRepositories", () => {
       updatedAt: "2026-05-14T00:04:00.000Z"
     });
   });
+
+  it("clears run event task scope when taskId is omitted on update", async () => {
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient(),
+      workspaceId: "workspace_default"
+    });
+    const eventWithTask = {
+      id: "run_event_task_scope",
+      runId: "run_task_scope",
+      projectId: "project_task_scope",
+      taskId: "task_task_scope",
+      sequence: 1,
+      type: "status",
+      message: "Scoped to a task",
+      payload: { state: "running" },
+      createdAt
+    };
+
+    await repositories.runEvents.save(eventWithTask);
+    await repositories.runEvents.save({
+      id: "run_event_task_scope",
+      runId: "run_task_scope",
+      projectId: "project_task_scope",
+      sequence: 1,
+      type: "status",
+      message: "No longer scoped to a task",
+      payload: { state: "running" },
+      createdAt
+    });
+
+    await expect(repositories.runEvents.listForRun("run_task_scope")).resolves.toEqual([
+      {
+        id: "run_event_task_scope",
+        runId: "run_task_scope",
+        projectId: "project_task_scope",
+        sequence: 1,
+        type: "status",
+        message: "No longer scoped to a task",
+        payload: { state: "running" },
+        createdAt
+      }
+    ]);
+    await expect(repositories.runEvents.listForTask("task_task_scope")).resolves.toEqual([]);
+  });
 });
 
 describe("createUnsupportedPrismaRepository", () => {

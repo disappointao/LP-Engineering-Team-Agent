@@ -469,7 +469,7 @@ function createRunRepository(delegate: PrismaDelegate): RunRepository {
 function createRunEventRepository(delegate: PrismaDelegate): RunEventRepository {
   return {
     async save(event) {
-      await upsert(delegate, { id: event.id }, toPrismaRunEventCreate(event));
+      await upsert(delegate, { id: event.id }, toPrismaRunEventCreate(event), ["id"], ["taskId"]);
     },
 
     async listForRun(runId) {
