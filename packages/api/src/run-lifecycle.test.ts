@@ -6,7 +6,10 @@ import {
   type RunRecordState,
   type WorkbenchRepositories
 } from "@lp-agent/db";
-import { deriveRunLifecycleView } from "./run-lifecycle";
+import {
+  deriveRunLifecycleView,
+  listRunLifecycleViewsForTask
+} from "./run-lifecycle";
 
 function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
   return {
@@ -107,7 +110,10 @@ describe("deriveRunLifecycleView core states", () => {
   it.each([
     ["running", "running", [], undefined],
     ["needs_approval", "waiting_for_approval", ["request_approval"], undefined],
-    ["needs_input", "blocked", ["resolve_blocker"], "input_required"]
+    ["needs_input", "blocked", ["resolve_blocker"], "input_required"],
+    ["failed", "failed", ["retry_run"], undefined],
+    ["completed", "completed", [], undefined],
+    ["cancelled", "cancelled", [], undefined]
   ] as const)(
     "maps run record state %s to lifecycle state %s",
     async (recordState, expectedState, recoveryActions, expectedDiagnosticCode) => {
@@ -136,6 +142,54 @@ describe("deriveRunLifecycleView core states", () => {
       });
     }
   );
+
+  it("lists lifecycle views for a task in saved run order", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      id: "run_planner_1",
+      role: "planner",
+      state: "completed",
+      startedAt: "2026-05-19T00:00:00.000Z",
+      completedAt: "2026-05-19T00:00:05.000Z"
+    });
+    await saveRun(repositories, {
+      id: "run_builder_1",
+      role: "builder",
+      state: "failed",
+      startedAt: "2026-05-19T00:00:10.000Z",
+      completedAt: "2026-05-19T00:00:15.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_1",
+      sequence: 1,
+      type: "run.completed"
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_1",
+      sequence: 1,
+      type: "run.failed"
+    });
+
+    const views = await listRunLifecycleViewsForTask({
+      repositories,
+      taskId: "task_1"
+    });
+
+    expect(views).toMatchObject([
+      {
+        runId: "run_planner_1",
+        state: "completed",
+        terminalEventType: "run.completed",
+        recoveryActions: []
+      },
+      {
+        runId: "run_builder_1",
+        state: "failed",
+        terminalEventType: "run.failed",
+        recoveryActions: ["retry_run"]
+      }
+    ]);
+  });
 
   it("uses model parse failure metadata as the failed diagnostic without exposing raw output", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
