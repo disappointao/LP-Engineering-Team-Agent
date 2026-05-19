@@ -22,9 +22,12 @@ import {
   type WorkerJobCompleteClaimedInput,
   type WorkerJobClaimOldestQueuedInput,
   type WorkerJobCancelQueuedInput,
+  type WorkerJobHeartbeatClaimedInput,
   type WorkerJobPayloadRecord,
   type WorkerJobPayloadRepository,
+  type WorkerJobRecoverStaleInput,
   type WorkerJobRepository,
+  type WorkerJobStaleRecoveryResult,
   type WorkerJobRequestRunningCancellationInput,
   type WorkerJobRecord,
   type WorkerJobInput
@@ -102,6 +105,11 @@ function createClock(values: string[]): () => Date {
   return () => new Date(values[index++] ?? lastValue);
 }
 
+function createTokenFactory(values: string[]): () => string {
+  let index = 0;
+  return () => values[index++] ?? values[values.length - 1] ?? "claim_token";
+}
+
 const noCancellationContext: ExecutionContext = {
   isCancellationRequested: async () => false
 };
@@ -152,6 +160,18 @@ class BlockingRunningSaveRepository implements WorkerJobRepository {
     });
   }
 
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
+  }
+
   completeClaimed(
     input: WorkerJobCompleteClaimedInput
   ): Promise<WorkerJobRecord | undefined> {
@@ -196,6 +216,18 @@ class FailAllSavesWorkerJobRepository implements WorkerJobRepository {
     _input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined> {
     return undefined;
+  }
+
+  async heartbeatClaimed(
+    _input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    throw new Error("injected job save failure");
+  }
+
+  async recoverStale(
+    _input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    throw new Error("injected job save failure");
   }
 
   async completeClaimed(
@@ -270,6 +302,18 @@ class FailOnceCancelledSaveRepository implements WorkerJobRepository {
     return this.repository.claimOldestQueued(input);
   }
 
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
+  }
+
   completeClaimed(
     input: WorkerJobCompleteClaimedInput
   ): Promise<WorkerJobRecord | undefined> {
@@ -332,6 +376,18 @@ class ExternalCancellationBeforeClaimedCompletionRepository
     input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.claimOldestQueued(input);
+  }
+
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
   }
 
   async completeClaimed(
@@ -444,6 +500,18 @@ class CompleteBeforeStaleRunningCancellationRepository
     return this.repository.claimOldestQueued(input);
   }
 
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
+  }
+
   completeClaimed(
     input: WorkerJobCompleteClaimedInput
   ): Promise<WorkerJobRecord | undefined> {
@@ -502,6 +570,18 @@ class CompleteBeforeStaleQueuedCancellationRepository
     input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.claimOldestQueued(input);
+  }
+
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
   }
 
   completeClaimed(
@@ -589,6 +669,18 @@ class ClaimBeforeQueuedCancellationRepository implements WorkerJobRepository {
     input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined> {
     return this.repository.claimOldestQueued(input);
+  }
+
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.repository.heartbeatClaimed(input);
+  }
+
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.repository.recoverStale(input);
   }
 
   completeClaimed(
@@ -1400,6 +1492,189 @@ describe("InMemoryWorkerRuntime", () => {
     const successfulClaims = claims.filter((claim) => claim !== undefined);
 
     expect(successfulClaims).toHaveLength(1);
+  });
+
+  describe("worker heartbeat and stale recovery", () => {
+    it("updates heartbeat only for the matching running claim", async () => {
+      const repository = new InMemoryWorkerJobRepository();
+      const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+      const runtime = new InMemoryWorkerRuntime({
+        repository,
+        payloadRepository,
+        claimTokenFactory: () => "claim_token_1",
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z"
+        ])
+      });
+
+      await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+      const claim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+      if (!claim) {
+        throw new Error("Expected claim.");
+      }
+
+      await expect(
+        runtime.heartbeatClaimedJob({
+          jobId: claim.record.id,
+          claimToken: "wrong_token",
+          workerId: "worker_a",
+          heartbeatTimeoutMs: 30000
+        })
+      ).resolves.toBeUndefined();
+
+      await expect(
+        runtime.heartbeatClaimedJob({
+          jobId: claim.record.id,
+          claimToken: claim.claimToken,
+          workerId: "worker_a",
+          heartbeatTimeoutMs: 30000
+        })
+      ).resolves.toMatchObject({
+        id: claim.record.id,
+        state: "running",
+        lastHeartbeatAt: "2026-05-19T00:00:02.000Z",
+        heartbeatExpiresAt: "2026-05-19T00:00:32.000Z"
+      });
+    });
+
+    it("requeues one stale safe persisted job and rejects stale completions", async () => {
+      const repository = new InMemoryWorkerJobRepository();
+      const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+      const runtime = new InMemoryWorkerRuntime({
+        repository,
+        payloadRepository,
+        adapter: new SimulatedExecutionAdapter(),
+        claimTokenFactory: createTokenFactory(["claim_token_1", "claim_token_2"]),
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:04.000Z",
+          "2026-05-19T00:00:06.000Z",
+          "2026-05-19T00:00:07.000Z",
+          "2026-05-19T00:00:08.000Z"
+        ])
+      });
+
+      await runtime.enqueueSafe(baseSafeInput(), simulatedPolicy());
+      const staleClaim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+      if (!staleClaim) {
+        throw new Error("Expected stale claim.");
+      }
+      await runtime.heartbeatClaimedJob({
+        jobId: staleClaim.record.id,
+        claimToken: staleClaim.claimToken,
+        workerId: "worker_a",
+        heartbeatTimeoutMs: 1000
+      });
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:06.000Z",
+          maxStaleRecoveryCount: 1
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          type: "requeued",
+          jobId: staleClaim.record.id,
+          record: expect.objectContaining({
+            state: "queued",
+            staleRecoveredAt: "2026-05-19T00:00:06.000Z",
+            staleRecoveryCount: 1,
+            claimToken: undefined
+          })
+        })
+      ]);
+
+      await expect(runtime.runClaimedJob(staleClaim)).rejects.toThrow(
+        "worker_job_claim_conflict"
+      );
+
+      const freshClaim = await runtime.claimOldestQueued({ workerId: "worker_b" });
+      if (!freshClaim) {
+        throw new Error("Expected fresh claim.");
+      }
+      await expect(runtime.runClaimedJob(freshClaim)).resolves.toMatchObject({
+        id: staleClaim.record.id,
+        state: "completed",
+        claimedByWorkerId: "worker_b"
+      });
+    });
+
+    it("cancels requested stale jobs and fails jobs over the stale recovery limit", async () => {
+      const repository = new InMemoryWorkerJobRepository();
+      const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+      const runtime = new InMemoryWorkerRuntime({
+        repository,
+        payloadRepository,
+        claimTokenFactory: createTokenFactory(["claim_token_1", "claim_token_2"]),
+        now: createClock([
+          "2026-05-19T00:00:00.000Z",
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z",
+          "2026-05-19T00:00:04.000Z",
+          "2026-05-19T00:00:05.000Z"
+        ])
+      });
+
+      await runtime.enqueueSafe(
+        baseSafeInput({ commandId: "cancel_me" }),
+        simulatedPolicy()
+      );
+      const cancelClaim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+      if (!cancelClaim) {
+        throw new Error("Expected cancel claim.");
+      }
+      await runtime.cancelJob(cancelClaim.record.id, "User stopped job.");
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:04.000Z",
+          staleClaimTimeoutMs: 1,
+          maxStaleRecoveryCount: 1
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          type: "cancelled",
+          record: expect.objectContaining({
+            state: "cancelled",
+            errorName: "worker_job_cancelled"
+          })
+        })
+      ]);
+
+      await runtime.enqueueSafe(
+        baseSafeInput({ commandId: "fail_me" }),
+        simulatedPolicy()
+      );
+      const failClaim = await runtime.claimOldestQueued({ workerId: "worker_a" });
+      if (!failClaim) {
+        throw new Error("Expected fail claim.");
+      }
+      await repository.save({
+        ...failClaim.record,
+        staleRecoveryCount: 1,
+        startedAt: "2026-05-19T00:00:00.000Z"
+      });
+
+      await expect(
+        runtime.recoverStaleJobs({
+          staleBefore: "2026-05-19T00:00:05.000Z",
+          staleClaimTimeoutMs: 1,
+          maxStaleRecoveryCount: 1
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          type: "failed",
+          record: expect.objectContaining({
+            state: "failed",
+            errorName: "worker_job_stale_recovery_limit_exceeded"
+          })
+        })
+      ]);
+    });
   });
 
   it("preserves the original job save error when safe enqueue payload cleanup fails", async () => {

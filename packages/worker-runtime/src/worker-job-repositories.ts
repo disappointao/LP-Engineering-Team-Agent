@@ -6,10 +6,14 @@ import type {
   SandboxPolicy,
   WorkerJobCancelQueuedInput,
   WorkerJobCompleteClaimedInput,
+  WorkerJobHeartbeatClaimedInput,
   WorkerJobClaimOldestQueuedInput,
   WorkerJobRecord,
+  WorkerJobRecoverStaleInput,
   WorkerJobRequestRunningCancellationInput,
-  WorkerJobRepository
+  WorkerJobRepository,
+  WorkerJobResultSummary,
+  WorkerJobStaleRecoveryResult
 } from "./index";
 
 export interface JsonFileWorkerJobRepositoryOptions {
@@ -21,6 +25,9 @@ interface WorkerJobFileState {
 }
 
 const jsonFileSaveQueues = new Map<string, Promise<void>>();
+const WORKER_JOB_CANCELLED_ERROR = "worker_job_cancelled";
+const WORKER_JOB_STALE_LIMIT_ERROR =
+  "worker_job_stale_recovery_limit_exceeded";
 
 export class InMemoryWorkerJobRepository implements WorkerJobRepository {
   private readonly recordsById = new Map<string, WorkerJobRecord>();
@@ -90,6 +97,43 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     this.recordsById.set(record.id, copyRecord(completedRecord));
 
     return copyRecord(completedRecord);
+  }
+
+  async heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    const record = this.recordsById.get(input.jobId);
+    if (
+      !record ||
+      record.state !== "running" ||
+      record.claimToken !== input.claimToken ||
+      (record.claimedByWorkerId && record.claimedByWorkerId !== input.workerId)
+    ) {
+      return undefined;
+    }
+
+    const updatedRecord: WorkerJobRecord = {
+      ...copyRecord(record),
+      lastHeartbeatAt: input.heartbeatAt,
+      heartbeatExpiresAt: input.heartbeatExpiresAt
+    };
+    this.recordsById.set(record.id, copyRecord(updatedRecord));
+    return copyRecord(updatedRecord);
+  }
+
+  async recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    const results: WorkerJobStaleRecoveryResult[] = [];
+    for (const record of this.sortedRecords()) {
+      const result = recoverStaleRecord(record, input);
+      if (!result) {
+        continue;
+      }
+      this.recordsById.set(record.id, copyRecord(result.record));
+      results.push(copyStaleRecoveryResult(result));
+    }
+    return results;
   }
 
   async requestRunningCancellation(
@@ -236,6 +280,66 @@ export class JsonFileWorkerJobRepository implements WorkerJobRepository {
 
       await this.writeRecords(records);
       return copyRecord(completedRecord);
+    });
+  }
+
+  async heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const recordIndex = records.findIndex(
+        (stored) => stored.id === input.jobId
+      );
+      if (recordIndex === -1) {
+        return undefined;
+      }
+
+      const record = records[recordIndex];
+      if (
+        !record ||
+        record.state !== "running" ||
+        record.claimToken !== input.claimToken ||
+        (record.claimedByWorkerId &&
+          record.claimedByWorkerId !== input.workerId)
+      ) {
+        return undefined;
+      }
+
+      const updatedRecord: WorkerJobRecord = {
+        ...copyRecord(record),
+        lastHeartbeatAt: input.heartbeatAt,
+        heartbeatExpiresAt: input.heartbeatExpiresAt
+      };
+      records[recordIndex] = copyRecord(updatedRecord);
+
+      await this.writeRecords(records);
+      return copyRecord(updatedRecord);
+    });
+  }
+
+  async recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]> {
+    return this.withMutationLock(async () => {
+      const records = await this.readRecords();
+      const results: WorkerJobStaleRecoveryResult[] = [];
+      for (const record of [...records].sort(compareRecords)) {
+        const recordIndex = records.findIndex((stored) => stored.id === record.id);
+        if (recordIndex === -1) {
+          continue;
+        }
+        const result = recoverStaleRecord(record, input);
+        if (!result) {
+          continue;
+        }
+        records[recordIndex] = copyRecord(result.record);
+        results.push(copyStaleRecoveryResult(result));
+      }
+      if (results.length > 0) {
+        await this.writeRecords(records);
+      }
+      return results;
     });
   }
 
@@ -417,6 +521,135 @@ function createQueuedCancellationRecord(
   };
 }
 
+function recoverStaleRecord(
+  record: WorkerJobRecord,
+  input: WorkerJobRecoverStaleInput
+): WorkerJobStaleRecoveryResult | undefined {
+  if (
+    record.state !== "running" ||
+    getPayloadSource(record) !== "safe_persisted" ||
+    (input.projectId && record.projectId !== input.projectId) ||
+    !isRecordStale(record, input)
+  ) {
+    return undefined;
+  }
+
+  if (record.cancelRequestedAt) {
+    const cancelledRecord = createStaleCancelledRecord(record, input.recoveredAt);
+    return {
+      type: "cancelled",
+      jobId: record.id,
+      projectId: record.projectId,
+      record: cancelledRecord,
+      errorName: WORKER_JOB_CANCELLED_ERROR
+    };
+  }
+
+  const staleRecoveryCount = record.staleRecoveryCount ?? 0;
+  if (staleRecoveryCount >= input.maxStaleRecoveryCount) {
+    const failedRecord = createStaleFailedRecord(record, input.recoveredAt);
+    return {
+      type: "failed",
+      jobId: record.id,
+      projectId: record.projectId,
+      record: failedRecord,
+      errorName: WORKER_JOB_STALE_LIMIT_ERROR
+    };
+  }
+
+  const requeuedRecord: WorkerJobRecord = {
+    ...copyRecord(record),
+    state: "queued",
+    startedAt: undefined,
+    claimedByWorkerId: undefined,
+    claimToken: undefined,
+    lastHeartbeatAt: undefined,
+    heartbeatExpiresAt: undefined,
+    staleRecoveredAt: input.recoveredAt,
+    staleRecoveryCount: staleRecoveryCount + 1
+  };
+  return {
+    type: "requeued",
+    jobId: record.id,
+    projectId: record.projectId,
+    record: requeuedRecord
+  };
+}
+
+function isRecordStale(
+  record: WorkerJobRecord,
+  input: WorkerJobRecoverStaleInput
+): boolean {
+  if (record.heartbeatExpiresAt) {
+    return record.heartbeatExpiresAt < input.staleBefore;
+  }
+  if (!record.startedAt || input.staleClaimTimeoutMs === undefined) {
+    return false;
+  }
+  return (
+    new Date(record.startedAt).getTime() + input.staleClaimTimeoutMs <
+    new Date(input.staleBefore).getTime()
+  );
+}
+
+function createStaleCancelledRecord(
+  record: WorkerJobRecord,
+  recoveredAt: string
+): WorkerJobRecord {
+  return {
+    ...copyRecord(record),
+    state: "cancelled",
+    errorName: WORKER_JOB_CANCELLED_ERROR,
+    resultSummary: createStaleResultSummary({
+      state: "cancelled",
+      errorName: WORKER_JOB_CANCELLED_ERROR
+    }),
+    cancelledAt: recoveredAt,
+    completedAt: recoveredAt,
+    staleRecoveredAt: recoveredAt
+  };
+}
+
+function createStaleFailedRecord(
+  record: WorkerJobRecord,
+  recoveredAt: string
+): WorkerJobRecord {
+  return {
+    ...copyRecord(record),
+    state: "failed",
+    errorName: WORKER_JOB_STALE_LIMIT_ERROR,
+    resultSummary: createStaleResultSummary({
+      state: "failed",
+      errorName: WORKER_JOB_STALE_LIMIT_ERROR
+    }),
+    completedAt: recoveredAt,
+    staleRecoveredAt: recoveredAt
+  };
+}
+
+function createStaleResultSummary(input: {
+  state: "cancelled" | "failed";
+  errorName: string;
+}): WorkerJobResultSummary {
+  return {
+    state: input.state,
+    stdout: "",
+    stderr: "",
+    stdoutBytes: 0,
+    stderrBytes: 0,
+    errorName: input.errorName
+  };
+}
+
+function copyStaleRecoveryResult(
+  result: WorkerJobStaleRecoveryResult
+): WorkerJobStaleRecoveryResult {
+  return {
+    ...result,
+    record: copyRecord(result.record)
+  };
+}
+
 function copyPolicy(policy: SandboxPolicy): SandboxPolicy {
   return {
     ...policy,
@@ -453,7 +686,12 @@ function copyRecord(record: WorkerJobRecord): WorkerJobRecord {
     cancelledAt: record.cancelledAt,
     cancelReason: record.cancelReason,
     claimedByWorkerId: record.claimedByWorkerId,
-    claimToken: record.claimToken
+    claimToken: record.claimToken,
+    lastHeartbeatAt: record.lastHeartbeatAt,
+    heartbeatExpiresAt: record.heartbeatExpiresAt,
+    staleRecoveredAt: record.staleRecoveredAt,
+    staleRecoveryCount: record.staleRecoveryCount,
+    lastWorkerLogAt: record.lastWorkerLogAt
   };
 }
 

@@ -92,6 +92,11 @@ export interface WorkerJobRecord {
   payloadSource?: WorkerJobPayloadSource;
   claimedByWorkerId?: string;
   claimToken?: string;
+  lastHeartbeatAt?: string;
+  heartbeatExpiresAt?: string;
+  staleRecoveredAt?: string;
+  staleRecoveryCount?: number;
+  lastWorkerLogAt?: string;
 }
 
 export interface WorkerJobClaim {
@@ -178,6 +183,12 @@ export interface WorkerJobRepository {
   claimOldestQueued(
     input: WorkerJobClaimOldestQueuedInput
   ): Promise<WorkerJobRecord | undefined>;
+  heartbeatClaimed(
+    input: WorkerJobHeartbeatClaimedInput
+  ): Promise<WorkerJobRecord | undefined>;
+  recoverStale(
+    input: WorkerJobRecoverStaleInput
+  ): Promise<WorkerJobStaleRecoveryResult[]>;
   completeClaimed(
     input: WorkerJobCompleteClaimedInput
   ): Promise<WorkerJobRecord | undefined>;
@@ -195,6 +206,32 @@ export interface WorkerJobClaimOldestQueuedInput {
   claimedByWorkerId?: string;
   claimToken?: string;
   projectId?: string;
+}
+
+export interface WorkerJobHeartbeatClaimedInput {
+  jobId: string;
+  claimToken: string;
+  workerId: string;
+  heartbeatAt: string;
+  heartbeatExpiresAt: string;
+}
+
+export interface WorkerJobRecoverStaleInput {
+  staleBefore: string;
+  recoveredAt: string;
+  staleClaimTimeoutMs?: number;
+  maxStaleRecoveryCount: number;
+  projectId?: string;
+}
+
+export type WorkerJobStaleRecoveryType = "requeued" | "cancelled" | "failed";
+
+export interface WorkerJobStaleRecoveryResult {
+  type: WorkerJobStaleRecoveryType;
+  jobId: string;
+  projectId: string;
+  record: WorkerJobRecord;
+  errorName?: string;
 }
 
 export interface WorkerJobCompleteClaimedInput {
@@ -480,6 +517,57 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     return this.withRunLock(async () => this.claimOldestQueuedForWorker(workerId, projectId));
   }
 
+  async heartbeatClaimedJob(input: {
+    jobId: string;
+    claimToken: string;
+    workerId: string;
+    heartbeatTimeoutMs: number;
+  }): Promise<WorkerJobRecord | undefined> {
+    const workerId = normalizeWorkerId(input.workerId);
+    if (!workerId) {
+      throw new Error("worker_id_required");
+    }
+    if (
+      !Number.isInteger(input.heartbeatTimeoutMs) ||
+      input.heartbeatTimeoutMs <= 0
+    ) {
+      throw new Error("worker_heartbeat_timeout_invalid");
+    }
+
+    const heartbeatAt = this.now();
+    return this.repository.heartbeatClaimed({
+      jobId: input.jobId,
+      claimToken: input.claimToken,
+      workerId,
+      heartbeatAt: heartbeatAt.toISOString(),
+      heartbeatExpiresAt: new Date(
+        heartbeatAt.getTime() + input.heartbeatTimeoutMs
+      ).toISOString()
+    });
+  }
+
+  async recoverStaleJobs(input: {
+    staleBefore: string;
+    staleClaimTimeoutMs?: number;
+    maxStaleRecoveryCount: number;
+    projectId?: string;
+  }): Promise<WorkerJobStaleRecoveryResult[]> {
+    if (
+      !Number.isInteger(input.maxStaleRecoveryCount) ||
+      input.maxStaleRecoveryCount < 0
+    ) {
+      throw new Error("worker_stale_recovery_limit_invalid");
+    }
+
+    return this.repository.recoverStale({
+      staleBefore: input.staleBefore,
+      staleClaimTimeoutMs: input.staleClaimTimeoutMs,
+      maxStaleRecoveryCount: input.maxStaleRecoveryCount,
+      projectId: input.projectId,
+      recoveredAt: this.nowIso()
+    });
+  }
+
   async runClaimedJob(claim: WorkerJobClaim): Promise<WorkerJobRecord> {
     if (!this.payloadRepository) {
       throw new Error("worker_job_payload_repository_required");
@@ -583,9 +671,10 @@ export class InMemoryWorkerRuntime implements WorkerRuntime {
     projectId?: string
   ): Promise<WorkerJobClaim | undefined> {
     const claimToken = this.claimTokenFactory();
+    const startedAt = this.now();
     const claimed = await this.repository.claimOldestQueued({
       payloadSource: "safe_persisted",
-      startedAt: this.nowIso(),
+      startedAt: startedAt.toISOString(),
       claimedByWorkerId: workerId,
       claimToken,
       projectId
