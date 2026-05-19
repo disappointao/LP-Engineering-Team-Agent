@@ -109,6 +109,7 @@ import {
 import {
   BuilderStaticArtifactParseError,
   createStructuredStaticArtifactsBuilderPrompt,
+  createStructuredStaticArtifactsRepairPrompt,
   parseBuilderStaticArtifactsOutput,
   toStaticArtifactParseFailurePayload,
   toStaticArtifactParseSuccessPayload
@@ -686,7 +687,7 @@ export class DemoWorkbenchService {
           }),
         now: this.now,
         finalizeResult: this.structuredBuilderOutputEnabled
-          ? ({ result }) => {
+          ? async ({ result, contextPack }) => {
               if (result.state !== "completed") {
                 return result;
               }
@@ -707,7 +708,18 @@ export class DemoWorkbenchService {
                 };
               } catch (error) {
                 if (error instanceof BuilderStaticArtifactParseError) {
-                  return failBuilderResultForParseError({ result, error });
+                  const repaired = await repairBuilderResult({
+                    runtime: this.builderRuntime,
+                    result,
+                    projectId: input.projectId,
+                    brief: brief.brief,
+                    context: contextPack.runtimeContext,
+                    error
+                  });
+                  if (repaired.artifacts) {
+                    parsedBuilderArtifacts = repaired.artifacts;
+                  }
+                  return repaired.result;
                 }
                 throw error;
               }
@@ -2910,7 +2922,6 @@ function failBuilderResultForParseError(input: {
   result: RuntimeRunResult;
   error: BuilderStaticArtifactParseError;
 }): RuntimeRunResult {
-  const issueSummary = input.error.issueSummary;
   return {
     ...input.result,
     state: "failed",
@@ -2919,10 +2930,180 @@ function failBuilderResultForParseError(input: {
       ...input.result.events.filter(
         (event) => event.type !== "run.completed" && event.type !== "artifact.created"
       ),
+      toBuilderParseFailureEvent(input),
+      {
+        type: "run.failed",
+        message: "Builder run failed.",
+        runId: input.result.runId,
+        role: "builder",
+        state: "failed",
+        errorName: input.error.name
+      }
+    ]
+  };
+}
+
+async function repairBuilderResult(input: {
+  runtime: AgentRuntimeAdapter;
+  result: RuntimeRunResult;
+  projectId: string;
+  brief: LPBrief;
+  context: RuntimeRunContext;
+  error: BuilderStaticArtifactParseError;
+}): Promise<{ result: RuntimeRunResult; artifacts?: StaticArtifacts }> {
+  const parseFailedEvent = toBuilderParseFailureEvent({
+    result: input.result,
+    error: input.error
+  });
+  const repairStarted = toBuilderRepairStartedEvent({
+    result: input.result,
+    error: input.error
+  });
+  const repairResult = await input.runtime.run({
+    runId: input.result.runId,
+    projectId: input.projectId,
+    role: "builder",
+    input: {
+      brief: copyBrief(input.brief),
+      prompt: createStructuredStaticArtifactsRepairPrompt({
+        brief: input.brief,
+        failure: {
+          reason: input.error.reason,
+          ...(input.error.policyCode ? { policyCode: input.error.policyCode } : {}),
+          ...input.error.issueSummary
+        }
+      })
+    },
+    context: input.context
+  });
+  const repairEvents = selectModelAttemptEvents(repairResult.events);
+  try {
+    const artifacts = parseBuilderStaticArtifactsOutput(repairResult.modelOutputText ?? "");
+    return {
+      artifacts,
+      result: {
+        ...input.result,
+        artifacts,
+        modelOutputText: repairResult.modelOutputText,
+        events: [
+          ...input.result.events.filter((event) => event.type !== "run.completed"),
+          parseFailedEvent,
+          repairStarted,
+          ...repairEvents,
+          toBuilderRepairSuccessEvent({
+            result: input.result,
+            artifacts
+          }),
+          {
+            type: "run.completed",
+            message: "builder run completed",
+            runId: input.result.runId,
+            state: "completed"
+          }
+        ]
+      }
+    };
+  } catch (error) {
+    if (error instanceof BuilderStaticArtifactParseError) {
+      return {
+        result: failBuilderResultForRepairError({
+          result: input.result,
+          parseFailedEvent,
+          repairStarted,
+          repairEvents,
+          error
+        })
+      };
+    }
+    throw error;
+  }
+}
+
+function toBuilderParseFailureEvent(input: {
+  result: RuntimeRunResult;
+  error: BuilderStaticArtifactParseError;
+}): RuntimeEvent {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...toStaticArtifactParseFailurePayload(input.error),
+    type: "model.output.parse_failed",
+    message: "Builder output could not be parsed as static artifacts",
+    runId: input.result.runId,
+    role: "builder",
+    schema: "StaticArtifactsSchema",
+    reason: input.error.reason,
+    ...(input.error.policyCode ? { policyCode: input.error.policyCode } : {}),
+    ...(issueSummary.issueCount !== undefined
+      ? { issueCount: issueSummary.issueCount }
+      : {}),
+    ...(issueSummary.firstIssuePath !== undefined
+      ? { firstIssuePath: issueSummary.firstIssuePath }
+      : {}),
+    ...(issueSummary.firstIssueCode !== undefined
+      ? { firstIssueCode: issueSummary.firstIssueCode }
+      : {})
+  };
+}
+
+function toBuilderRepairStartedEvent(input: {
+  result: RuntimeRunResult;
+  error: BuilderStaticArtifactParseError;
+}): RuntimeEvent {
+  return {
+    ...toStaticArtifactParseFailurePayload(input.error),
+    type: "model.output.repair_started",
+    message: "Builder output repair started",
+    runId: input.result.runId,
+    role: "builder",
+    schema: "StaticArtifactsSchema",
+    reason: input.error.reason,
+    ...(input.error.policyCode ? { policyCode: input.error.policyCode } : {}),
+    ...input.error.issueSummary
+  };
+}
+
+function toBuilderRepairSuccessEvent(input: {
+  result: RuntimeRunResult;
+  artifacts: StaticArtifacts;
+}): RuntimeEvent {
+  const payload = toStaticArtifactParseSuccessPayload(input.artifacts);
+  return {
+    ...payload,
+    type: "model.output.repaired",
+    message: "Builder output repaired as static artifacts",
+    runId: input.result.runId,
+    role: "builder",
+    schema: "StaticArtifactsSchema",
+    artifactKind: "three-file-static",
+    htmlBytes: Number(payload.htmlBytes),
+    cssBytes: Number(payload.cssBytes),
+    jsBytes: Number(payload.jsBytes),
+    hasExternalCss: Boolean(payload.hasExternalCss),
+    hasExternalImages: Boolean(payload.hasExternalImages)
+  };
+}
+
+function failBuilderResultForRepairError(input: {
+  result: RuntimeRunResult;
+  parseFailedEvent: RuntimeEvent;
+  repairStarted: RuntimeEvent;
+  repairEvents: RuntimeEvent[];
+  error: BuilderStaticArtifactParseError;
+}): RuntimeRunResult {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...input.result,
+    state: "failed",
+    artifacts: undefined,
+    events: [
+      ...input.result.events.filter((event) => event.type !== "run.completed"),
+      input.parseFailedEvent,
+      input.repairStarted,
+      ...input.repairEvents,
       {
         ...toStaticArtifactParseFailurePayload(input.error),
-        type: "model.output.parse_failed",
-        message: "Builder output could not be parsed as static artifacts",
+        type: "model.output.repair_failed",
+        message: "Builder output repair failed",
         runId: input.result.runId,
         role: "builder",
         schema: "StaticArtifactsSchema",

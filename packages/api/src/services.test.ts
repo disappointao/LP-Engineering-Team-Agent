@@ -3059,11 +3059,159 @@ describe("demo workbench service", () => {
     expect(serializedBuilderEvents).not.toContain("https://open.bigmodel.cn");
   });
 
-  it("fails closed when real Builder output violates static artifact policy", async () => {
+  it("repairs invalid Builder static artifacts once before saving the page version", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const modelBrief = {
       ...sampleBrief,
       title: "Model Planned Landing Page"
+    };
+    const repairedArtifacts = completeModelArtifacts();
+    const responseQueue = [
+      JSON.stringify({
+        id: "chatcmpl_planner",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(modelBrief) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+      }),
+      JSON.stringify({
+        id: "chatcmpl_builder_bad",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                ...repairedArtifacts,
+                indexHtml: repairedArtifacts.indexHtml.replace(
+                  '  <script src="script.js"></script>',
+                  '  <script src="https://cdn.example.com/RAW_STATIC_ARTIFACT_SECRET.js"></script>\n  <script src="script.js"></script>'
+                )
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 80, total_tokens: 100 }
+      }),
+      JSON.stringify({
+        id: "chatcmpl_builder_repaired",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: JSON.stringify(repairedArtifacts) },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 22, completion_tokens: 90, total_tokens: 112 }
+      })
+    ];
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      const body = responseQueue.shift();
+      if (!body) {
+        throw new Error("unexpected_fetch_call");
+      }
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "builder",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+    const pageVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: brief.id
+    });
+
+    expect(pageVersion.artifacts).toEqual(repairedArtifacts);
+    expect(fetchCalls).toHaveLength(3);
+    const repairRequestBody = JSON.parse(String(fetchCalls[2]?.init?.body));
+    expect(repairRequestBody.messages[0].content).toContain(
+      "Repair the previous Builder response"
+    );
+    expect(repairRequestBody.messages[0].content).toContain("external_script_blocked");
+    expect(repairRequestBody.messages[0].content).not.toContain("RAW_STATIC_ARTIFACT_SECRET");
+    const builderEvents = await repositories.runEvents.listForRun("run_builder_version_1");
+    expect(builderEvents.map((event) => event.type)).toEqual([
+      "handoff.consumed",
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "artifact.created",
+      "model.output.parse_failed",
+      "model.output.repair_started",
+      "model.completed",
+      "model.output.repaired",
+      "run.completed",
+      "artifact.workspace.created",
+      "handoff.created"
+    ]);
+    const serializedBuilderEvents = JSON.stringify(builderEvents);
+    expect(serializedBuilderEvents).not.toContain("RAW_STATIC_ARTIFACT_SECRET");
+    expect(serializedBuilderEvents).not.toContain(repairedArtifacts.indexHtml);
+    expect(serializedBuilderEvents).not.toContain(repairedArtifacts.stylesCss);
+    expect(serializedBuilderEvents).not.toContain(repairedArtifacts.scriptJs);
+    expect(serializedBuilderEvents).not.toContain("sk-test-secret");
+    expect(serializedBuilderEvents).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(serializedBuilderEvents).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("fails Builder run when one-shot repair still violates artifact policy", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const modelBrief = {
+      ...sampleBrief,
+      title: "Model Planned Landing Page"
+    };
+    const unsafeArtifacts = {
+      ...completeModelArtifacts(),
+      indexHtml: completeModelArtifacts().indexHtml.replace(
+        '  <script src="script.js"></script>',
+        '  <script src="https://cdn.example.com/RAW_STATIC_ARTIFACT_SECRET.js"></script>\n  <script src="script.js"></script>'
+      )
     };
     const responseQueue = [
       JSON.stringify({
@@ -3086,13 +3234,22 @@ describe("demo workbench service", () => {
             index: 0,
             message: {
               role: "assistant",
-              content: JSON.stringify({
-                ...completeModelArtifacts(),
-                indexHtml: completeModelArtifacts().indexHtml.replace(
-                  '  <script src="script.js"></script>',
-                  '  <script src="https://cdn.example.com/RAW_STATIC_ARTIFACT_SECRET.js"></script>\n  <script src="script.js"></script>'
-                )
-              })
+              content: JSON.stringify(unsafeArtifacts)
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 80, total_tokens: 100 }
+      }),
+      JSON.stringify({
+        id: "chatcmpl_builder_repair_bad",
+        model: "glm-5.1",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: JSON.stringify(unsafeArtifacts)
             },
             finish_reason: "stop"
           }
@@ -3173,7 +3330,11 @@ describe("demo workbench service", () => {
       "run.started",
       "runtime.context.loaded",
       "model.completed",
+      "artifact.created",
       "model.output.parse_failed",
+      "model.output.repair_started",
+      "model.completed",
+      "model.output.repair_failed",
       "run.failed"
     ]);
     expect(builderEvents.find((event) => event.type === "model.output.parse_failed")).toMatchObject({
