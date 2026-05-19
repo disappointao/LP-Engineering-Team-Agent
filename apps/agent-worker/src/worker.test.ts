@@ -2,13 +2,20 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  InMemoryWorkerJobPayloadRepository,
+  InMemoryWorkerJobRepository,
   InMemoryWorkerLogRepository,
   InMemoryWorkerRuntime,
   SimulatedExecutionAdapter,
   createJsonFileWorkerJobPayloadRepository,
   createJsonFileWorkerJobRepository,
   createSimulatedSandboxPolicy,
-  type SafeWorkerJobInput
+  type ExecutionAdapter,
+  type ExecutionContext,
+  type ExecutionInput,
+  type ExecutionResult,
+  type SafeWorkerJobInput,
+  type SandboxPolicy
 } from "@lp-agent/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { runDemoWorkerJob, runWorkerDaemon, runWorkerOnce } from "./worker";
@@ -157,6 +164,68 @@ describe("worker queue handoff", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("refreshes heartbeat while a claimed worker job is still executing", async () => {
+    vi.useFakeTimers();
+    try {
+      const repository = new InMemoryWorkerJobRepository();
+      const payloadRepository = new InMemoryWorkerJobPayloadRepository();
+      const logs = new InMemoryWorkerLogRepository();
+      const apiRuntime = new InMemoryWorkerRuntime({
+        repository,
+        payloadRepository,
+        now: () => new Date("2026-05-19T00:00:00.000Z")
+      });
+      const adapter = new DeferredExecutionAdapter();
+      const queued = await apiRuntime.enqueueSafe(safeInput(), simulatedPolicy());
+
+      const run = runWorkerOnce({
+        workerId: "worker_a",
+        jobRepository: repository,
+        payloadRepository,
+        workerLogRepository: logs,
+        adapter,
+        claimTokenFactory: () => "claim_token_1",
+        heartbeatTimeoutMs: 1000,
+        heartbeatIntervalMs: 10,
+        now: createClock([
+          "2026-05-19T00:00:01.000Z",
+          "2026-05-19T00:00:02.000Z",
+          "2026-05-19T00:00:03.000Z",
+          "2026-05-19T00:00:04.000Z",
+          "2026-05-19T00:00:05.000Z",
+          "2026-05-19T00:00:06.000Z"
+        ])
+      });
+
+      await adapter.started;
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(apiRuntime.getJob(queued.id)).resolves.toMatchObject({
+        state: "running",
+        lastHeartbeatAt: "2026-05-19T00:00:05.000Z",
+        heartbeatExpiresAt: "2026-05-19T00:00:06.000Z"
+      });
+
+      adapter.complete({
+        state: "completed",
+        exitCode: 0,
+        stdout: "done",
+        stderr: ""
+      });
+      await expect(run).resolves.toMatchObject({
+        id: queued.id,
+        state: "completed"
+      });
+      await expect(logs.list({ projectId: "project_a", limit: 10 })).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "worker.job.heartbeat" }),
+          expect.objectContaining({ type: "worker.job.completed" })
+        ])
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("worker daemon", () => {
@@ -286,6 +355,10 @@ describe("worker daemon", () => {
         expect.objectContaining({ type: "worker.job.heartbeat" }),
         expect.objectContaining({ type: "worker.job.claimed" })
       ]);
+      const storedLogs = await logs.list({ projectId: "project_a", limit: 10 });
+      const terminalLog = storedLogs.find((log) => log.type === "worker.job.completed");
+      expect(terminalLog?.payload.outputSummary).toBe("stdout: 38 bytes\nstderr: 0 bytes");
+      expect(JSON.stringify(terminalLog)).not.toContain("Simulated build for project project_a.");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -487,4 +560,35 @@ function createClock(values: string[]): () => Date {
     index += 1;
     return new Date(value);
   };
+}
+
+class DeferredExecutionAdapter implements ExecutionAdapter {
+  readonly started: Promise<void>;
+  private readonly resolveStarted: () => void;
+  private readonly result: Promise<ExecutionResult>;
+  private resolveResult: (result: ExecutionResult) => void = () => undefined;
+
+  constructor() {
+    let resolveStarted: () => void = () => undefined;
+    this.started = new Promise((resolve) => {
+      resolveStarted = resolve;
+    });
+    this.resolveStarted = resolveStarted;
+    this.result = new Promise((resolve) => {
+      this.resolveResult = resolve;
+    });
+  }
+
+  async execute(
+    _input: ExecutionInput,
+    _policy: SandboxPolicy,
+    _context: ExecutionContext
+  ): Promise<ExecutionResult> {
+    this.resolveStarted();
+    return this.result;
+  }
+
+  complete(result: ExecutionResult): void {
+    this.resolveResult(result);
+  }
 }

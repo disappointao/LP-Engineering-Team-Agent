@@ -62,6 +62,7 @@ export interface RunWorkerOnceInput {
   now?: () => Date;
   claimTokenFactory?: () => string;
   heartbeatTimeoutMs?: number;
+  heartbeatIntervalMs?: number;
 }
 
 export interface RunWorkerDaemonInput extends RunWorkerOnceInput {
@@ -102,21 +103,23 @@ export async function runWorkerOnce(
     workerJob: claim.record,
     now: input.now
   });
-  await runtime.heartbeatClaimedJob({
-    jobId: claim.record.id,
-    claimToken: claim.claimToken,
-    workerId: input.workerId,
-    heartbeatTimeoutMs: input.heartbeatTimeoutMs ?? 30000
+  await heartbeatClaimedWorkerJob({
+    runtime,
+    claim,
+    input,
+    logHeartbeat: true
   });
-  await appendWorkerLog({
-    repository: input.workerLogRepository,
-    type: "worker.job.heartbeat",
-    message: "Worker job heartbeat recorded.",
-    workerId: input.workerId,
-    workerJob: claim.record,
-    now: input.now
+  const stopHeartbeat = startClaimHeartbeatLoop({
+    runtime,
+    claim,
+    input
   });
-  const completed = await runtime.runClaimedJob(claim);
+  let completed: WorkerJobRecord;
+  try {
+    completed = await runtime.runClaimedJob(claim);
+  } finally {
+    stopHeartbeat();
+  }
   await appendWorkerLog({
     repository: input.workerLogRepository,
     type: toTerminalWorkerLogType(completed),
@@ -204,9 +207,13 @@ function validateRunWorkerOnceInput(input: RunWorkerOnceInput): void {
   if (input.heartbeatTimeoutMs !== undefined) {
     assertPositiveInteger(input.heartbeatTimeoutMs, "worker_heartbeat_timeout_invalid");
   }
+  if (input.heartbeatIntervalMs !== undefined) {
+    assertPositiveInteger(input.heartbeatIntervalMs, "worker_heartbeat_interval_invalid");
+  }
 }
 
 function validateRunWorkerDaemonInput(input: RunWorkerDaemonInput): void {
+  validateRunWorkerOnceInput(input);
   assertPositiveInteger(input.maxIterations, "worker_daemon_max_iterations_invalid");
   assertPositiveInteger(input.pollIntervalMs, "worker_poll_interval_invalid");
   assertPositiveInteger(input.heartbeatTimeoutMs, "worker_heartbeat_timeout_invalid");
@@ -239,6 +246,69 @@ function createWorkerRuntime(input: RunWorkerOnceInput): InMemoryWorkerRuntime {
   });
 }
 
+function startClaimHeartbeatLoop(input: {
+  runtime: InMemoryWorkerRuntime;
+  claim: { record: WorkerJobRecord; claimToken: string };
+  input: RunWorkerOnceInput;
+}): () => void {
+  const intervalMs =
+    input.input.heartbeatIntervalMs ??
+    Math.max(1, Math.floor((input.input.heartbeatTimeoutMs ?? 30000) / 2));
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const schedule = () => {
+    if (stopped) {
+      return;
+    }
+    timer = setTimeout(() => {
+      void heartbeatClaimedWorkerJob({
+        runtime: input.runtime,
+        claim: input.claim,
+        input: input.input,
+        logHeartbeat: true
+      })
+        .catch(() => undefined)
+        .finally(schedule);
+    }, intervalMs);
+  };
+
+  schedule();
+
+  return () => {
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
+  };
+}
+
+async function heartbeatClaimedWorkerJob(input: {
+  runtime: InMemoryWorkerRuntime;
+  claim: { record: WorkerJobRecord; claimToken: string };
+  input: RunWorkerOnceInput;
+  logHeartbeat: boolean;
+}): Promise<WorkerJobRecord | undefined> {
+  const record = await input.runtime.heartbeatClaimedJob({
+    jobId: input.claim.record.id,
+    claimToken: input.claim.claimToken,
+    workerId: input.input.workerId,
+    heartbeatTimeoutMs: input.input.heartbeatTimeoutMs ?? 30000
+  });
+  if (!record || !input.logHeartbeat) {
+    return record;
+  }
+  await appendWorkerLog({
+    repository: input.input.workerLogRepository,
+    type: "worker.job.heartbeat",
+    message: "Worker job heartbeat recorded.",
+    workerId: input.input.workerId,
+    workerJob: record,
+    now: input.input.now
+  });
+  return record;
+}
+
 async function appendWorkerLog(input: {
   repository?: WorkerLogRepository;
   type: WorkerLogType;
@@ -265,12 +335,20 @@ async function appendWorkerLog(input: {
       projectId: input.workerJob?.projectId,
       state: input.workerJob?.state,
       errorName: input.workerJob?.errorName,
-      outputSummary: input.workerJob?.resultSummary?.stdout,
+      outputSummary: summarizeWorkerLogOutput(input.workerJob),
       createdAt,
       ...(input.payload ?? {})
     },
     createdAt
   });
+}
+
+function summarizeWorkerLogOutput(record: WorkerJobRecord | undefined): string | undefined {
+  const summary = record?.resultSummary;
+  if (!summary) {
+    return undefined;
+  }
+  return `stdout: ${summary.stdoutBytes} bytes\nstderr: ${summary.stderrBytes} bytes`;
 }
 
 function nextWorkerLogTimestamp(now: (() => Date) | undefined): string {
