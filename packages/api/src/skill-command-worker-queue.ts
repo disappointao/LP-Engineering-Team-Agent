@@ -362,9 +362,33 @@ function toWorkerQueueSnapshotLog(
     workerId: record.workerId,
     workerJobId: record.workerJobId,
     projectId: record.projectId,
-    payload: structuredClone(record.payload),
+    payload: sanitizeSnapshotLogPayload(record.payload),
     createdAt: record.createdAt
   };
+}
+
+function sanitizeSnapshotLogPayload(
+  payload: Record<string, unknown>
+): Record<string, unknown> {
+  const allowedKeys = [
+    "workerId",
+    "workerJobId",
+    "projectId",
+    "state",
+    "previousState",
+    "nextState",
+    "staleRecoveryCount",
+    "errorName",
+    "exitCode",
+    "outputSummary",
+    "createdAt"
+  ];
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => payload[key] !== undefined)
+      .map((key) => [key, copyJsonCompatibleValue(payload[key])])
+      .filter(([, value]) => value !== undefined)
+  );
 }
 
 async function appendWorkerLog(input: {
@@ -379,25 +403,29 @@ async function appendWorkerLog(input: {
     return;
   }
   const createdAt = nextWorkerLogTimestamp(input.now);
-  await input.repository.append({
-    id: `${input.workerJob.id}_${input.type}_${createdAt}`,
-    type: input.type,
-    message: input.message,
-    workerId: input.workerId,
-    workerJobId: input.workerJob.id,
-    projectId: input.workerJob.projectId,
-    payload: {
+  try {
+    await input.repository.append({
+      id: `${input.workerJob.id}_${input.type}_${createdAt}`,
+      type: input.type,
+      message: input.message,
       workerId: input.workerId,
       workerJobId: input.workerJob.id,
       projectId: input.workerJob.projectId,
-      state: input.workerJob.state,
-      errorName: input.workerJob.errorName,
-      exitCode: input.workerJob.resultSummary?.exitCode,
-      outputSummary: summarizeWorkerResult(input.workerJob),
+      payload: {
+        workerId: input.workerId,
+        workerJobId: input.workerJob.id,
+        projectId: input.workerJob.projectId,
+        state: input.workerJob.state,
+        errorName: input.workerJob.errorName,
+        exitCode: input.workerJob.resultSummary?.exitCode,
+        outputSummary: summarizeWorkerResult(input.workerJob),
+        createdAt
+      },
       createdAt
-    },
-    createdAt
-  });
+    });
+  } catch {
+    // Worker logs are observability only; execution/finalization results own control flow.
+  }
 }
 
 function nextWorkerLogTimestamp(now: (() => Date) | undefined): string {
@@ -422,6 +450,14 @@ function toTerminalWorkerLogType(record: WorkerJobRecord): WorkerLogType {
     return "worker.job.completed";
   }
   return "worker.job.failed";
+}
+
+function copyJsonCompatibleValue(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 async function claimOldestQueuedForProject(input: {

@@ -20,6 +20,8 @@ import {
   createSimulatedSandboxPolicy,
   type SandboxPolicy,
   type WorkerJobState,
+  type WorkerLogRecord,
+  type WorkerLogRepository,
   type WorkerJobRecord
 } from "@lp-agent/worker-runtime";
 import { DemoWorkbenchService } from "./index";
@@ -498,6 +500,58 @@ describe("worker queue snapshots", () => {
       lastLogAt: "2026-05-19T00:00:01.000Z"
     });
     expect(snapshot.logs.map((log) => log.id)).toEqual(["worker_log_idle"]);
+  });
+
+  it("sanitizes snapshot log payloads from arbitrary worker log repositories", async () => {
+    const jobRepository = new InMemoryWorkerJobRepository();
+    const unsafeLog: WorkerLogRecord = {
+      id: "worker_log_unsafe",
+      type: "worker.job.failed",
+      message: "Worker job failed.",
+      workerId: "worker_a",
+      workerJobId: "worker_job_1",
+      projectId: "project_1",
+      payload: {
+        workerId: "worker_a",
+        workerJobId: "worker_job_1",
+        projectId: "project_1",
+        state: "failed",
+        errorName: "simulated_command_failed",
+        exitCode: 1,
+        outputSummary: "stdout: 12 bytes\nstderr: 6 bytes",
+        createdAt: "2026-05-19T00:00:01.000Z",
+        stdout: "raw command output",
+        stderr: "raw error output",
+        args: ["--token", "secret-token"],
+        env: { API_KEY: "secret-value" },
+        secret: "secret-value"
+      },
+      createdAt: "2026-05-19T00:00:01.000Z"
+    };
+    const workerLogRepository: WorkerLogRepository = {
+      append: async (record) => record,
+      list: async () => [unsafeLog]
+    };
+
+    const snapshot = await createWorkerQueueSnapshot({
+      jobRepository,
+      workerLogRepository,
+      projectId: "project_1"
+    });
+
+    expect(snapshot.logs[0]?.payload).toEqual({
+      workerId: "worker_a",
+      workerJobId: "worker_job_1",
+      projectId: "project_1",
+      state: "failed",
+      errorName: "simulated_command_failed",
+      exitCode: 1,
+      outputSummary: "stdout: 12 bytes\nstderr: 6 bytes",
+      createdAt: "2026-05-19T00:00:01.000Z"
+    });
+    expect(JSON.stringify(snapshot.logs[0]?.payload)).not.toContain("raw command output");
+    expect(JSON.stringify(snapshot.logs[0]?.payload)).not.toContain("secret-token");
+    expect(JSON.stringify(snapshot.logs[0]?.payload)).not.toContain("secret-value");
   });
 });
 
@@ -1408,6 +1462,73 @@ describe("worker-backed skill command finalization", () => {
       ])
     );
     expect(JSON.stringify(logs)).not.toContain("Simulated command output");
+  });
+
+  it("continues worker execution and finalization when optional worker logging fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.runs.save(runningRun());
+    await repositories.toolObservations.save(runningObservation());
+    const workerLogRepository: WorkerLogRepository = {
+      append: async () => {
+        throw new Error("log append failed");
+      },
+      list: async () => []
+    };
+    const workerRuntime = new InMemoryWorkerRuntime({
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      adapter: new SimulatedExecutionAdapter(),
+      now: () => new Date("2026-05-18T00:00:02.000Z")
+    });
+    const workerJob = await workerRuntime.enqueueSafe(
+      {
+        projectId: "project_1",
+        kind: "tool_command",
+        commandId: "publish_static",
+        command: "static-deploy",
+        args: ["--project", "project_1"],
+        envNames: ["LP_PROJECT_ID"],
+        timeoutMs: 30000
+      },
+      createSimulatedSandboxPolicy({
+        allowedCommands: ["static-deploy"],
+        allowedEnvNames: ["LP_PROJECT_ID"]
+      })
+    );
+    await repositories.runEvents.save({
+      id: "run_skill_command_1_event_1",
+      runId: "run_skill_command_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 1,
+      type: "worker.job.linked",
+      message: "Worker job linked to task.",
+      payload: {
+        taskId: "task_1",
+        runId: "run_skill_command_1",
+        workerJobId: workerJob.id,
+        observationId: "tool_observation_1"
+      },
+      createdAt: "2026-05-18T00:00:02.000Z"
+    });
+
+    const result = await runLocalWorkerOnceAndFinalize({
+      repositories,
+      workerRuntime,
+      workerLogRepository,
+      heartbeatTimeoutMs: 30000,
+      workerId: "local-web-worker",
+      now: () => new Date("2026-05-18T00:00:04.000Z")
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      state: "completed",
+      workerJobId: workerJob.id,
+      runId: "run_skill_command_1"
+    });
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "completed"
+    });
   });
 
   it("returns worker runtime not configured when no runtime is available", async () => {
