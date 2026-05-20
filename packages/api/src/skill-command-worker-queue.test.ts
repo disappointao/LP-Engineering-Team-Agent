@@ -2017,6 +2017,14 @@ async function savePublishedBoundDeploymentSkill(
     name: "Demo project",
     createdAt: "2026-05-18T00:00:00.000Z"
   });
+  await repositories.tasks.save({
+    id: "task_1",
+    title: "Deploy static LP artifacts",
+    type: "lp_generation",
+    status: "complete",
+    projectId: "project_1",
+    createdAt: "2026-05-18T00:00:00.000Z"
+  });
   await repositories.skills.save({
     id: manifest.id,
     name: manifest.name,
