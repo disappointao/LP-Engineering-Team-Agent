@@ -94,7 +94,14 @@ export interface ExecuteRunRecoveryActionInput {
 export async function listRunRecoveryViewsForTask(
   input: ListRunRecoveryViewsForTaskInput
 ): Promise<RunLifecycleView[]> {
-  const directViews = await listRunLifecycleViewsForTask(input);
+  const task = await input.repositories.tasks.getById(input.taskId);
+  if (!task?.projectId) {
+    return [];
+  }
+
+  const directViews = (await listRunLifecycleViewsForTask(input)).filter(
+    (view) => view.projectId === task.projectId
+  );
   const viewsByRunId = new Map(directViews.map((view) => [view.runId, view]));
   const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
 
@@ -112,7 +119,7 @@ export async function listRunRecoveryViewsForTask(
       workerRuntime: input.workerRuntime,
       runId
     });
-    if (result.ok && result.view.projectId === snapshot.projectId) {
+    if (result.ok && result.view.projectId === task.projectId) {
       viewsByRunId.set(runId, result.view);
     }
   }
@@ -213,16 +220,16 @@ async function runBelongsToTaskScope(
   input: ExecuteRunRecoveryActionInput
 ): Promise<boolean> {
   const run = await input.repositories.runs.getById(input.runId);
-  if (!run) {
+  const task = await input.repositories.tasks.getById(input.taskId);
+  if (!run || !task?.projectId || task.projectId !== run.projectId) {
     return false;
   }
   if (run.taskId === input.taskId) {
     return true;
   }
 
-  const task = await input.repositories.tasks.getById(input.taskId);
   const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
-  if (!task || !snapshot || task.projectId !== run.projectId) {
+  if (!snapshot || snapshot.projectId !== task.projectId) {
     return false;
   }
 

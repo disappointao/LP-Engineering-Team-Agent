@@ -221,6 +221,29 @@ describe("run recovery views", () => {
 
     expect(views.map((view) => view.runId)).not.toContain("run_planner_foreign_brief");
   });
+
+  it("does not trust stale snapshot project ids when listing snapshot-linked runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_2",
+      briefId: "stale_brief",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_planner_stale_brief",
+      projectId: "project_2",
+      taskId: undefined,
+      role: "planner",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views.map((view) => view.runId)).not.toContain("run_planner_stale_brief");
+  });
 });
 
 describe("execute run recovery action", () => {
@@ -406,5 +429,67 @@ describe("execute run recovery action", () => {
       ok: false,
       error: "worker_runtime_not_configured"
     });
+  });
+
+  it("does not execute recovery for direct task runs from another project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_foreign_skill_command_1",
+      projectId: "project_2",
+      role: "deployer"
+    });
+    await saveObservation(repositories, {
+      id: "tool_observation_foreign",
+      runId: "run_foreign_skill_command_1",
+      projectId: "project_2"
+    });
+    await saveEvent(repositories, {
+      runId: "run_foreign_skill_command_1",
+      type: "worker.job.linked",
+      sequence: 1,
+      payload: {
+        runId: "run_foreign_skill_command_1",
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_foreign"
+      }
+    });
+
+    const result = await executeRunRecoveryAction({
+      repositories,
+      workerRuntime: { getJob: async () => terminalWorkerJob({ projectId: "project_2" }) },
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_foreign_skill_command_1",
+      action: "resume_worker_finalization"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "run_not_found"
+    });
+    await expect(repositories.runs.getById("run_foreign_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    await expect(repositories.runEvents.listForRun("run_foreign_skill_command_1")).resolves.not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "tool.completed" }),
+        expect.objectContaining({ type: "run.completed" })
+      ])
+    );
   });
 });
