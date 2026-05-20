@@ -70,6 +70,21 @@ describe("createWebWorkbenchRepositories", () => {
     });
   });
 
+  it("uses LP_AGENT_WORKBENCH_STATE_FILE for JSON-file repositories when provided", async () => {
+    const repositories = fakeRepositories();
+    const createJsonFileRepositories = vi.fn().mockReturnValue(repositories);
+
+    await expect(
+      createWebWorkbenchRepositories({
+        env: { LP_AGENT_WORKBENCH_STATE_FILE: "/tmp/custom-workbench-state.json" },
+        createJsonFileRepositories
+      })
+    ).resolves.toBe(repositories);
+    expect(createJsonFileRepositories).toHaveBeenCalledWith({
+      filePath: "/tmp/custom-workbench-state.json"
+    });
+  });
+
   it("uses memory repositories when WORKBENCH_REPOSITORY_BACKEND is memory", async () => {
     const repositories = fakeRepositories();
     const createMemoryRepositories = vi.fn().mockReturnValue(repositories);
