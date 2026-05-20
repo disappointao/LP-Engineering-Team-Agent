@@ -112,7 +112,17 @@ export interface PrismaModelRoutingPolicyCreate {
   updatedAt: Date;
 }
 
-export interface PrismaMCPConnectorRow extends PrismaMCPConnectorCreate {}
+export interface PrismaMCPConnectorRow {
+  id: string;
+  scope: MCPConnectorRecord["scope"];
+  targetKey: string;
+  name: string;
+  description?: string | null;
+  toolsJson?: unknown | null;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface PrismaMCPConnectorCreate {
   id: string;
@@ -258,7 +268,7 @@ export function toPrismaProjectMemberCreate(
     projectId: member.projectId,
     userId: member.userId,
     role: member.role,
-    ...(member.displayName ? { displayName: member.displayName } : {}),
+    ...(isDefined(member.displayName) ? { displayName: member.displayName } : {}),
     createdAt: new Date(member.createdAt),
     updatedAt: new Date(member.updatedAt)
   };
@@ -270,7 +280,7 @@ export function toRepositoryProjectMember(row: PrismaProjectMemberRow): ProjectM
     projectId: row.projectId,
     userId: row.userId,
     role: row.role,
-    ...(row.displayName ? { displayName: row.displayName } : {}),
+    ...(isPresentRowValue(row.displayName) ? { displayName: row.displayName } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
@@ -332,9 +342,9 @@ export function toPrismaSkillBindingCreate(
     skillVersionId: binding.skillVersionId,
     scope: binding.scope,
     targetKey: binding.targetKey,
-    ...(binding.organizationId ? { organizationId: binding.organizationId } : {}),
-    ...(binding.workspaceId ? { workspaceId: binding.workspaceId } : {}),
-    ...(binding.projectId ? { projectId: binding.projectId } : {}),
+    ...(isDefined(binding.organizationId) ? { organizationId: binding.organizationId } : {}),
+    ...(isDefined(binding.workspaceId) ? { workspaceId: binding.workspaceId } : {}),
+    ...(isDefined(binding.projectId) ? { projectId: binding.projectId } : {}),
     enabled: binding.enabled,
     ...(binding.settings ? { settings: cloneRecord(binding.settings) } : {}),
     createdAt: new Date(binding.createdAt),
@@ -348,9 +358,9 @@ export function toRepositorySkillBinding(row: PrismaSkillBindingRow): SkillBindi
     skillVersionId: row.skillVersionId,
     scope: row.scope,
     targetKey: row.targetKey,
-    ...(row.organizationId ? { organizationId: row.organizationId } : {}),
-    ...(row.workspaceId ? { workspaceId: row.workspaceId } : {}),
-    ...(row.projectId ? { projectId: row.projectId } : {}),
+    ...(isPresentRowValue(row.organizationId) ? { organizationId: row.organizationId } : {}),
+    ...(isPresentRowValue(row.workspaceId) ? { workspaceId: row.workspaceId } : {}),
+    ...(isPresentRowValue(row.projectId) ? { projectId: row.projectId } : {}),
     enabled: row.enabled,
     ...(row.settings ? { settings: cloneRecord(row.settings) } : {}),
     createdAt: row.createdAt.toISOString(),
@@ -430,7 +440,7 @@ export function toPrismaMCPConnectorCreate(
     scope: connector.scope,
     targetKey: connector.targetKey,
     name: connector.name,
-    ...(connector.description ? { description: connector.description } : {}),
+    ...(isDefined(connector.description) ? { description: connector.description } : {}),
     toolsJson: cloneJson(connector.tools),
     enabled: connector.enabled,
     createdAt: new Date(connector.createdAt),
@@ -444,8 +454,8 @@ export function toRepositoryMCPConnector(row: PrismaMCPConnectorRow): MCPConnect
     scope: row.scope,
     targetKey: row.targetKey,
     name: row.name,
-    ...(row.description ? { description: row.description } : {}),
-    tools: cloneJson(row.toolsJson),
+    ...(isPresentRowValue(row.description) ? { description: row.description } : {}),
+    tools: cloneMCPToolsOrEmpty(row.toolsJson),
     enabled: row.enabled,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
@@ -461,7 +471,9 @@ export function toPrismaMCPToolApprovalCreate(
     connectorId: approval.connectorId,
     toolName: approval.toolName,
     state: approval.state,
-    ...(approval.approvedByUserId ? { approvedByUserId: approval.approvedByUserId } : {}),
+    ...(isDefined(approval.approvedByUserId)
+      ? { approvedByUserId: approval.approvedByUserId }
+      : {}),
     createdAt: new Date(approval.createdAt),
     updatedAt: new Date(approval.updatedAt)
   };
@@ -476,7 +488,9 @@ export function toRepositoryMCPToolApproval(
     connectorId: row.connectorId,
     toolName: row.toolName,
     state: row.state,
-    ...(row.approvedByUserId ? { approvedByUserId: row.approvedByUserId } : {}),
+    ...(isPresentRowValue(row.approvedByUserId)
+      ? { approvedByUserId: row.approvedByUserId }
+      : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
@@ -641,6 +655,14 @@ function cloneJson<T>(value: T): T {
   return structuredClone(value);
 }
 
+function cloneMCPToolsOrEmpty(value: unknown): MCPConnectorRecord["tools"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return cloneJson(value) as MCPConnectorRecord["tools"];
+}
+
 function cloneRecordOrDefault(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) {
     return {};
@@ -675,4 +697,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
+function isPresentRowValue<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
 }

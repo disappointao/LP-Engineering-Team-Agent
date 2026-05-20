@@ -16,6 +16,7 @@ import type {
 import {
   toPrismaMCPConnectorCreate,
   toPrismaMCPToolApprovalCreate,
+  toPrismaDeploymentCreate,
   toPrismaModelProviderCreate,
   toPrismaModelRoutingPolicyCreate,
   toPrismaProjectMemberCreate,
@@ -311,8 +312,16 @@ describe("prisma workbench mappers", () => {
     expect(toPrismaProjectMemberCreate({ ...member, displayName: undefined })).not.toHaveProperty(
       "displayName"
     );
+    expect(toPrismaProjectMemberCreate({ ...member, displayName: "" })).toHaveProperty(
+      "displayName",
+      ""
+    );
     expect(toRepositoryProjectMember({ ...create, displayName: null })).not.toHaveProperty(
       "displayName"
+    );
+    expect(toRepositoryProjectMember({ ...create, displayName: "" })).toHaveProperty(
+      "displayName",
+      ""
     );
   });
 
@@ -393,7 +402,10 @@ describe("prisma workbench mappers", () => {
       reviewState: "validated",
       createdAt: new Date("2026-05-20T00:01:00.000Z")
     });
-    expect(toRepositorySkillVersion(versionCreate)).toEqual({
+    const mappedVersion = toRepositorySkillVersion(versionCreate);
+    versionCreate.manifest.description = "mutated-after-read";
+
+    expect(mappedVersion).toEqual({
       ...version,
       manifest: {
         id: "skill_1",
@@ -421,7 +433,10 @@ describe("prisma workbench mappers", () => {
       createdAt: new Date("2026-05-20T00:02:00.000Z"),
       updatedAt: new Date("2026-05-20T00:03:00.000Z")
     });
-    expect(toRepositorySkillBinding(bindingCreate)).toEqual({
+    const mappedBinding = toRepositorySkillBinding(bindingCreate);
+    bindingCreate.settings!.severity = "mutated-after-read";
+
+    expect(mappedBinding).toEqual({
       ...binding,
       settings: {
         severity: "blocking"
@@ -430,9 +445,33 @@ describe("prisma workbench mappers", () => {
     expect(toPrismaSkillBindingCreate({ ...binding, settings: undefined })).not.toHaveProperty(
       "settings"
     );
+    expect(
+      toPrismaSkillBindingCreate({
+        ...binding,
+        organizationId: "",
+        workspaceId: "",
+        projectId: ""
+      })
+    ).toMatchObject({
+      organizationId: "",
+      workspaceId: "",
+      projectId: ""
+    });
     expect(toRepositorySkillBinding({ ...bindingCreate, settings: null })).not.toHaveProperty(
       "settings"
     );
+    expect(
+      toRepositorySkillBinding({
+        ...bindingCreate,
+        organizationId: "",
+        workspaceId: "",
+        projectId: ""
+      })
+    ).toMatchObject({
+      organizationId: "",
+      workspaceId: "",
+      projectId: ""
+    });
   });
 
   it("maps model routes with fallback and settings JSON", () => {
@@ -498,7 +537,10 @@ describe("prisma workbench mappers", () => {
       createdAt: new Date("2026-05-20T00:00:00.000Z"),
       updatedAt: new Date("2026-05-20T00:01:00.000Z")
     });
-    expect(toRepositoryModelProvider(providerCreate)).toEqual({
+    const mappedProvider = toRepositoryModelProvider(providerCreate);
+    providerCreate.config.models![0]!.id = "mutated-after-read";
+
+    expect(mappedProvider).toEqual({
       ...provider,
       config: {
         api: "openai-completions",
@@ -527,7 +569,11 @@ describe("prisma workbench mappers", () => {
       createdAt: new Date("2026-05-20T00:02:00.000Z"),
       updatedAt: new Date("2026-05-20T00:03:00.000Z")
     });
-    expect(toRepositoryModelRoutingPolicy(policyCreate)).toEqual({
+    const mappedPolicy = toRepositoryModelRoutingPolicy(policyCreate);
+    policyCreate.fallback!.model = "mutated-after-read";
+    policyCreate.settings!.maxTokens = 1;
+
+    expect(mappedPolicy).toEqual({
       ...policy,
       fallback: {
         providerId: "provider_fallback",
@@ -624,9 +670,44 @@ describe("prisma workbench mappers", () => {
     expect(toPrismaMCPConnectorCreate({ ...connector, description: undefined })).not.toHaveProperty(
       "description"
     );
+    expect(toPrismaMCPConnectorCreate({ ...connector, description: "" })).toHaveProperty(
+      "description",
+      ""
+    );
+    expect(toRepositoryMCPConnector({ ...connectorCreate, description: "" })).toHaveProperty(
+      "description",
+      ""
+    );
+    expect(toRepositoryMCPConnector({ ...connectorCreate, toolsJson: null }).tools).toEqual([]);
+    expect(toRepositoryMCPConnector({ ...connectorCreate, toolsJson: "invalid" }).tools).toEqual(
+      []
+    );
     expect(
       toRepositoryMCPToolApproval({ ...toPrismaMCPToolApprovalCreate(approval), approvedByUserId: null })
     ).not.toHaveProperty("approvedByUserId");
+    expect(toPrismaMCPToolApprovalCreate({ ...approval, approvedByUserId: "" })).toHaveProperty(
+      "approvedByUserId",
+      ""
+    );
+    expect(
+      toRepositoryMCPToolApproval({
+        ...toPrismaMCPToolApprovalCreate(approval),
+        approvedByUserId: ""
+      })
+    ).toHaveProperty("approvedByUserId", "");
+
+    const mappedConnector = toRepositoryMCPConnector(connectorCreate);
+    connectorCreate.toolsJson[0]!.name = "mutated-after-read";
+
+    expect(mappedConnector.tools).toEqual([
+      {
+        name: "searchAssets",
+        permission: "assets:read",
+        roles: ["planner", "builder"],
+        requiresApproval: false,
+        readOnly: true
+      }
+    ]);
   });
 
   it("maps deployment handoffs with fixed static file tuple", () => {
@@ -652,5 +733,22 @@ describe("prisma workbench mappers", () => {
       files: ["index.html", "styles.css", "script.js"],
       status: "pr_opened"
     });
+    expect(toRepositoryDeployment({ ...row, files: ["wrong.html"] })).toEqual({
+      id: "deployment_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      branch: "lp-agent/project_1/version_1",
+      commitSha: "mock_commit_1",
+      pullRequestUrl: "https://git.example.local/pr/deployment_1",
+      files: ["index.html", "styles.css", "script.js"],
+      status: "pr_opened"
+    });
+
+    const deployment = toRepositoryDeployment(row);
+    const create = toPrismaDeploymentCreate(deployment);
+    (deployment.files as unknown as string[])[0] = "mutated.html";
+
+    expect(create.files).toEqual(["index.html", "styles.css", "script.js"]);
+    expect(create.files).not.toBe(deployment.files);
   });
 });
