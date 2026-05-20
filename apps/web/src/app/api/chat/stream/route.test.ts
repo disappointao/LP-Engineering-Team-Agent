@@ -76,6 +76,23 @@ async function readRemainingText(reader: ReadableStreamDefaultReader<Uint8Array>
   ).text();
 }
 
+async function captureUnhandledRejections(action: () => Promise<void>): Promise<unknown[]> {
+  const unhandledRejections: unknown[] = [];
+  const recordUnhandledRejection = (reason: unknown) => {
+    unhandledRejections.push(reason);
+  };
+
+  process.on("unhandledRejection", recordUnhandledRejection);
+  try {
+    await action();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  } finally {
+    process.off("unhandledRejection", recordUnhandledRejection);
+  }
+
+  return unhandledRejections;
+}
+
 describe("POST /api/chat/stream", () => {
   beforeEach(() => {
     mocks.startStreamingChatPrompt.mockReset();
@@ -329,4 +346,61 @@ describe("POST /api/chat/stream", () => {
       remainder: ""
     });
   });
+
+  it.each([
+    {
+      outcome: "resolves",
+      settle: (completion: ReturnType<typeof deferred<{ ok: true }>>) => {
+        completion.resolve({ ok: true });
+      }
+    },
+    {
+      outcome: "rejects",
+      settle: (completion: ReturnType<typeof deferred<{ ok: true }>>) => {
+        completion.reject(new Error("database unavailable"));
+      }
+    }
+  ])(
+    "does not leak unhandled rejections when a canceled stream completion $outcome",
+    async ({ settle }) => {
+      const completion = deferred<{ ok: true }>();
+      mocks.startStreamingChatPrompt.mockResolvedValue({
+        ok: true,
+        taskId: "task_1",
+        taskType: "general_chat",
+        userMessageId: "message_1",
+        assistantMessageId: "message_2",
+        assistantContent: "Hello there",
+        chunks: ["Hello"]
+      });
+      mocks.completeStreamingChatPrompt.mockReturnValue(completion.promise);
+      const { POST } = await import("./route");
+
+      const response = await POST(
+        new Request("http://localhost/api/chat/stream", {
+          method: "POST",
+          body: JSON.stringify({ prompt: "Hello" })
+        })
+      );
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+      if (!reader) {
+        return;
+      }
+
+      const initialText = await readEventTextUntil(reader, 3);
+      expect(decodeChatStreamLines(initialText).events.map((event) => event.type)).toEqual([
+        "task.created",
+        "run.status",
+        "assistant.delta"
+      ]);
+
+      await reader.cancel();
+      const unhandledRejections = await captureUnhandledRejections(async () => {
+        settle(completion);
+      });
+
+      expect(unhandledRejections).toEqual([]);
+    }
+  );
 });

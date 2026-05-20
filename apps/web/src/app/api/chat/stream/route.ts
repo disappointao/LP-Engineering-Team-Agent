@@ -42,10 +42,30 @@ function createEventStream(
   produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  let closed = false;
   return new ReadableStream({
     start(controller) {
       const enqueue: ChatStreamEnqueue = (event) => {
-        controller.enqueue(encoder.encode(encodeChatStreamEvent(event)));
+        if (closed) {
+          return;
+        }
+        const chunk = encoder.encode(encodeChatStreamEvent(event));
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true;
+        }
+      };
+      const close = () => {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // The client can cancel between the closed check and close attempt.
+        }
       };
       void Promise.resolve()
         .then(() => produceEvents(enqueue))
@@ -57,8 +77,11 @@ function createEventStream(
           });
         })
         .finally(() => {
-          controller.close();
+          close();
         });
+    },
+    cancel() {
+      closed = true;
     }
   });
 }
