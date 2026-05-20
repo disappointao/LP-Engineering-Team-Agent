@@ -151,7 +151,7 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 ### Stage 24：Worker Job Postgres Backend v0
 
-**状态：** 下一阶段优先推荐。
+**状态：** design 已确认，下一步写 implementation plan。
 
 **为什么现在做：** Web workbench state 可选择 Postgres 后，worker queue 仍是 JSON-file。durable background workers、stale recovery、daemon heartbeat 和审计要进入多人/长期运行场景，需要把 worker job/log repository 单独迁出本地文件。
 
@@ -159,7 +159,7 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 - 为 worker job、worker lifecycle log、heartbeat/stale recovery 需要的持久字段补 Prisma schema 和 mapper。
 - 提取 worker job repository shared contract tests，覆盖 claim token、conditional update、cancel/interrupt、heartbeat、stale safe recovery 和 bounded lifecycle logs。
-- 新增 Prisma-backed worker job repository，并让 `apps/agent-worker` 通过显式配置 opt-in。
+- 新增 Prisma-backed worker job、safe persisted payload 和 worker lifecycle log repositories，并让 Web enqueue 与 `apps/agent-worker` 通过同一显式配置 opt-in。
 - 保留 JSON-file worker queue 作为默认本地和 deterministic test backend。
 
 **非目标：**
@@ -168,6 +168,8 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 - 不开放真实 shell runner 或 OS-level sandbox。
 - 不把 MCP execution 迁到 worker。
 - 不做 raw stdout/stderr streaming。
+
+**当前设计：** `docs/superpowers/specs/2026-05-20-worker-job-postgres-backend-design.md`。
 
 ### Stage 25：Run Recovery UI v0
 

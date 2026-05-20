@@ -306,6 +306,10 @@
    - Stage 23 Web Opt-in Postgres Backend Wiring v0 implementation plan（已实现）。
    - 在 Stage 23 design 后阅读，用于按 TDD 补齐 Web-facing Prisma repository closure、实现 Web backend factory、异步接线 `getWebWorkbenchStore()`、补最小 Web Postgres flow 覆盖和文档收尾。
 
+76. `specs/2026-05-20-worker-job-postgres-backend-design.md`
+   - Stage 24 Worker Job Postgres Backend v0 design。
+   - 在 Stage 23 plan 后阅读，用于把 worker job、safe persisted payload 和 bounded worker lifecycle log repository 扩展到显式 opt-in 的 Postgres backend，同时继续保留 JSON-file 默认路径、安全 payload 边界和不做真实 shell / production worker fleet 的限制。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

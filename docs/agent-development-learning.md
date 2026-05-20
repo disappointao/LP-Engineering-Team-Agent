@@ -400,6 +400,16 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 全局 async store 初始化失败时需要清理 rejected Promise cache；否则一次失败会污染后续修正配置后的请求。
 - `WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert local organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth，也不迁移既有 JSON-file state。
 
+已确认的 Stage 24 Worker Job Postgres Backend v0 设计：
+
+- [2026-05-20-worker-job-postgres-backend-design.md](./superpowers/specs/2026-05-20-worker-job-postgres-backend-design.md)
+- 这一阶段把 worker queue 的 durable backend 从 JSON-file 扩展到显式 opt-in 的 Postgres：`WorkerJobRepository`、`WorkerJobPayloadRepository` 和 `WorkerLogRepository` 都纳入范围。
+- 默认 worker queue 仍是 JSON-file；`WORKER_REPOSITORY_BACKEND=postgres` 缺少 `DATABASE_URL`、Prisma client 初始化失败或 backend 值非法时必须 fail closed，不回退 JSON-file。
+- worker job Postgres backend 的关键语义是 claim token 条件更新：claim、heartbeat、complete claimed、running cancellation 和 stale recovery 都必须防止两个 worker 执行同一个 job。
+- safe persisted payload 可以进入 Postgres，但只能保存现有 `WorkerJobPayloadRecord` 的安全字段：`command`、bounded `args`、`envNames`、`workingDirectory`、`timeoutMs`；仍不能保存 env values、secret、raw stdout/stderr、artifact content 或足以恢复任意 shell execution 的 payload。
+- `WorkerJobPayload` 本阶段不强制 FK 到 `WorkerJob`，因为当前 `enqueueSafe()` 为了 cleanup safety 先保存 payload、再保存 job；强 FK 会破坏现有 contract，除非同时重写 runtime transaction boundary。
+- worker lifecycle log 进入 Postgres 后仍必须 bounded 和 sanitized，只保留 allowlisted payload keys，不能把 raw execution data 扩散到 audit log。
+
 已实现的 Stage 4 Skill Command MVP：
 
 - [2026-05-14-skill-command-execution-design.md](./superpowers/specs/2026-05-14-skill-command-execution-design.md)
