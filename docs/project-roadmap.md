@@ -176,16 +176,19 @@ Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workb
 
 ### Stage 25：Run Recovery UI v0
 
-**状态：** Stage 24 后推荐（当前推荐下一阶段）。
+**状态：** 设计已确认，待 implementation plan。
 
 **为什么现在做：** Stage 18 已有 lifecycle view、diagnostic summary 和 recovery action contract，但 Web 侧还没有把这些动作变成用户可见、可执行的恢复流程。Workbench state 和 worker queue 都有显式 opt-in Postgres backend 后，retry/resume 的价值会更明显。
 
-**建议范围：**
+**当前设计：** `docs/superpowers/specs/2026-05-20-run-recovery-ui-design.md`。
 
-- 在 Web task timeline / run panel 展示 `RunLifecycleView` 状态、安全诊断和推荐 recovery action。
-- 实现第一批安全 server action：`resume_worker_finalization`、可控 retry failed run、approval/blocker 指引。
+**已确认范围：**
+
+- 在 Web task timeline / run panel 以 inline recovery block 展示 `RunLifecycleView` 状态、安全诊断和推荐 recovery action。
+- 实现第一批安全 server action：`resume_worker_finalization`、可控 `retry_run`、approval/blocker/manual inspect 指引。
 - 对 completed repaired run、failed parse/retry exhausted run、missing worker finalization、cancelled run 和 blocked handoff 增加 UI/API regression coverage。
 - 保持 diagnostic summary 脱敏，不展示 raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
+- `retry_run` 只做 safely reconstructable single-run retry，创建新的 retry attempt / run id，不覆盖原 failed run，也不自动重跑完整 agent chain；输入或目标输出不能安全确认时 fail closed。
 
 **非目标：**
 
@@ -196,7 +199,7 @@ Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workb
 
 ### Stage 26：MCP Worker Execution v0
 
-**状态：** Stage 25 后推荐。
+**状态：** Stage 25 plan/implementation 后推荐。
 
 **为什么现在做：** Stage 20 的 read-only MCP execution 已有 API 校验和安全 observation，但执行仍在 API 进程内通过 deterministic local executor 完成。worker queue durable backend 和 recovery UI 稳定后，可以把 MCP 执行迁到 worker 边界，保留审批和审计语义。
 
@@ -362,7 +365,8 @@ Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workb
 - Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
-- Stage 25 下一阶段优先做 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程。
+- Stage 25 已确认优先做 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。
+- Stage 25 的 `retry_run` 只做 safely reconstructable single-run retry，创建新 retry attempt，不覆盖原 failed run，也不自动重跑完整 agent chain。
 - MCP worker execution 应等待 recovery UI 更稳定后再做。
 - 真实 MCP SDK / remote MCP server adapter 应等待 MCP worker execution 稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。

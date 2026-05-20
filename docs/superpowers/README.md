@@ -314,6 +314,10 @@
    - Stage 24 Worker Job Postgres Backend v0 implementation plan（已实现）。
    - 在 Stage 24 design 后阅读，用于按 TDD 实现 Prisma worker job/payload/log schema、shared repository contracts、Prisma adapters、shared worker queue backend factory、Web/agent-worker opt-in wiring、integration coverage 和文档收尾。
 
+78. `specs/2026-05-20-run-recovery-ui-design.md`
+   - Stage 25 Run Recovery UI v0 design。
+   - 在 Stage 24 plan 后阅读，用于把已有 `RunLifecycleView`、安全 diagnostic summary 和 recovery action contract 接入 Web task inline recovery block，并规划 `resume_worker_finalization`、可控 `retry_run`、approval/blocker/manual inspect guidance，同时继续排除通用 DAG scheduler、自动完整 chain rerun、streaming UI 和团队审批队列。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
