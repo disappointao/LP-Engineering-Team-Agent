@@ -183,7 +183,7 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 
 - Web task state 现在包含 API 派生的 recovery views，并在 task timeline / run panel 展示 `RunLifecycleView` 状态、安全诊断和推荐 recovery action。
 - Server action 会在执行前重新读取 repository state 并重新派生 lifecycle，不信任浏览器提交的 action availability。
-- 已实现第一批安全 server action：`resume_worker_finalization`、可控 `retry_run`、approval/blocker/manual inspect 指引。
+- 已实现第一批安全 executable server actions：`resume_worker_finalization` 和可控 `retry_run`；`request_approval`、`resolve_blocker`、`inspect_manually` 仍是 non-executable guidance。
 - `retry_run` 只做 safely reconstructable single-run retry，创建新的 retry attempt / run id，不覆盖原 failed run，也不自动重跑完整 agent chain；输入或目标输出不能安全确认时 fail closed。
 - 已覆盖 completed repaired run、failed parse/retry exhausted run、missing worker finalization、cancelled run 和 blocked handoff 的 UI/API regression。
 - 保持 diagnostic summary 脱敏，不展示 raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
@@ -331,7 +331,7 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 - Streaming run timeline。
 - Browser E2E acceptance。
 - Dedicated artifact workspace page。
-- Handoff/retry/recovery UI。
+- Stage 25 inline block 之后的高级 handoff/recovery UX。
 - Core flow 稳定后再做 Skills/Models/MCP client-side management。
 
 ### Desktop
