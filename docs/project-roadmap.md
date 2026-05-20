@@ -30,6 +30,7 @@
 - Postgres Web backend：显式 opt-in 时需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`，缺失或初始化失败时 fail closed，不静默回退 JSON-file。
 - Web-facing Prisma repository closure：Stage 23 已补齐 Web 会读取的 project members、deployments、skills、models、MCP config/approval 等 repository 边界，避免 Postgres core state 和 JSON sidecar split-brain。
 - Worker queue opt-in Postgres backend：Stage 24 已实现 `WORKER_REPOSITORY_BACKEND=json|memory|postgres`，Web enqueue 和 `apps/agent-worker` 共用同一 backend selection helper；默认 worker queue 仍是 JSON-file。
+- Streaming chat transport / UI v0：普通聊天已有 Web/API NDJSON streaming route、client transient streaming state、terminal persistence / refresh recovery 和 server action fallback。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 ## 第一版可用闭环目标
@@ -47,10 +48,10 @@
 
 当前第一版可用闭环优先补齐：
 
-- Web/API streaming transport、streaming UI 和 no-refresh task state。
 - 普通聊天真实模型 runtime wiring、消息持久化和错误恢复。
 - LP agent chain 的 Web/API/worker end-to-end 执行路径。
 - Skill-only 上下文和 skill command 可观察工作流；MCP 暂不作为近期目标。
+- Live run timeline、artifact progress 和 no-refresh task state。
 - Browser E2E acceptance 和 alpha hardening。
 
 当前仍明确后置：
@@ -219,21 +220,19 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 
 **实施计划：** `docs/superpowers/plans/2026-05-20-run-recovery-ui.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 26：Streaming Chat Transport and UI v0
 
-**状态：** 当前推荐下一阶段。
+**状态：** 已实现。
 
-**为什么现在做：** 用户定义的第一版可用核心是“页面能正常问答，回答是流式的”。当前 Web 已有 task/message/run/timeline 基础，但交互仍偏 server action / 刷新式流程。先补 streaming transport 和 UI，后续普通聊天、LP 工作流进度、skill command progress 都能复用同一条实时反馈边界。
+Stage 26 v0 已把普通聊天的 Web/API 实时反馈边界接入 workbench：API route 持久化 user message 和 placeholder assistant message，返回 NDJSON event stream；客户端用 transient streaming state 追加 assistant delta，收到 terminal event 后回到 repository fact，刷新后仍以 server state 为准。
 
-**建议范围：**
+已实现范围：
 
-- 新增 Web/API streaming 边界，支持普通 assistant text delta、terminal message、safe error 和 run status update。
-- Web chat timeline 支持流式追加 assistant content，刷新后仍以 repository 里的 message/run event 为事实来源。
-- provider 不支持 streaming 或 deterministic test path 时，保留 non-streaming fallback，但 UI 状态语义保持一致。
+- 新增 `chat-stream` event contract 和 `/api/chat/stream` route，覆盖 ordinary assistant text delta、terminal message、safe error 和 run status update。
+- Web store / streaming workbench 已支持 per-task streaming placeholder、delta append、terminal replacement、interruption 标记和 refresh recovery。
+- LP / project setup 仍通过既有 `submitPromptAction` fallback，避免 streaming route 把初始化流程和普通聊天运行语义混在一起。
+- 显式 null task routing 用于普通聊天入口，避免 stale task cookie 把新输入误路由到旧 task。
 - streaming payload 只包含面向 UI 的安全文本和状态摘要，不暴露 raw model response、secret、raw tool output 或完整 artifact 内容。
-- 增加 store/action/API tests 覆盖 normal completion、stream interruption、provider failure 和 refresh recovery。
 
 **非目标：**
 
@@ -246,9 +245,11 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 
 **实施计划：** `docs/superpowers/plans/2026-05-20-streaming-chat-transport-ui.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 27：Real Chat Runtime and Skill Context v0
 
-**状态：** Stage 26 后推荐。
+**状态：** 当前推荐下一阶段。
 
 **为什么现在做：** Streaming UI 稳定后，普通问答要从 deterministic response 升级为真实模型 runtime。项目已经有 provider-neutral model gateway、真实 runtime opt-in、Context Pack 和 Skills 注入边界；下一步是把这些能力收敛成用户可用的普通聊天路径。
 
@@ -458,7 +459,7 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
 - Stage 25 已完成 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。
 - Stage 25 的 `retry_run` 只做 safely reconstructable single-run retry，创建新 retry attempt，不覆盖原 failed run，也不自动重跑完整 agent chain。
-- Stage 26 当前推荐做 Streaming Chat Transport and UI v0，优先补齐 Web/API 普通问答流式闭环。
+- Stage 26 已完成 Streaming Chat Transport and UI v0，优先补齐 Web/API 普通问答流式闭环；Stage 27 当前推荐接入真实普通聊天 runtime 和 skill context。
 - MCP Worker Execution、真实 MCP SDK / remote MCP server adapter 和 MCP write tools 已后置到 backlog，等待 Web/API/Skill/LP 第一版可用闭环稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。

@@ -323,12 +323,12 @@
    - 在 Stage 25 design 后阅读，用于按 TDD 实现 API recovery helper、controlled single-run retry、Web store/server action wiring、inline recovery block、回归覆盖和文档收尾。
 
 80. `specs/2026-05-20-streaming-chat-transport-ui-design.md`
-   - Stage 26 Streaming Chat Transport and UI v0 design。
-   - 在 Stage 25 plan 和当前 roadmap 后阅读，用于新增普通聊天 streaming route / UI event contract，同时保留 `submitPromptAction` fallback，并继续排除 LP agent chain、MCP/tool-call streaming、raw stdout/stderr streaming 和真实 provider token streaming。
+   - Stage 26 Streaming Chat Transport and UI v0 design（已实现，当前已完成）。
+   - 在 Stage 25 plan 和当前 roadmap 后阅读，用于理解已新增的普通聊天 streaming route / UI event contract、`submitPromptAction` fallback 边界，以及继续排除 LP agent chain、MCP/tool-call streaming、raw stdout/stderr streaming 和真实 provider token streaming 的历史范围。
 
 81. `plans/2026-05-20-streaming-chat-transport-ui.md`
-   - Stage 26 Streaming Chat Transport and UI v0 implementation plan。
-   - 在 Stage 26 design 后阅读，用于按 TDD 实现 chat stream event contract、Web store streaming helper、NDJSON route、client streaming composer、fallback handling、tests 和文档收尾。
+   - Stage 26 Streaming Chat Transport and UI v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 26 design 后阅读，用于理解已实现的 chat stream event contract、Web store streaming helper、NDJSON route、client streaming composer、fallback handling、tests 和文档收尾历史。
 
 ## 维护规则
 

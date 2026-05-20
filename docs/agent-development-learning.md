@@ -230,8 +230,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Postgres Repository Foundation v0 已把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract，并提供显式 opt-in 的 Prisma-backed repository adapter；默认本地开发和测试仍走 `in-memory` / `JSON-file` repositories。
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
+- Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
-- Stage 26 Streaming Chat Transport and UI v0 已进入设计和计划：下一步会新增普通聊天 streaming route / UI event contract，并保留现有 server action fallback。这个阶段只做 Web/API 实时反馈边界，不把 LP chain、MCP/tool-call streaming 或真实 provider token streaming 混入同一阶段。
 
 ### 还没做
 
@@ -243,7 +243,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已实现恢复 UI 和第一批 retry/resume server actions，但团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
-- 实时流式输出和真正的 interrupt/cancel。
+- 真实模型 token streaming、live run/artifact progress 和真正的 interrupt/cancel。
 
 ## 4. 循序渐进路线
 
@@ -432,6 +432,16 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Web skill command forms 会携带当前 task scope；API 会校验 task 属于同一 project，并把 `taskId` 写入 run、run events 和 tool observation，让 worker finalization gaps 能从 task recovery UI 被发现和恢复。
 - `skill_command` retry 默认不进入 Stage 25 可执行范围；带外部 side effect 的命令重试需要独立的 approval / idempotency / audit contract。
 - 学习重点：recovery action contract 变成产品按钮时，必须在 server action 里重新派生当前 lifecycle，不信任浏览器提交的 action availability。可执行恢复动作不是“把失败 run 再跑一次”，而是受 ownership、input reconstruction、output conflict、approval 和 side-effect 边界约束的业务动作。
+
+已实现的 Stage 26 Streaming Chat Transport and UI v0：
+
+- [2026-05-20-streaming-chat-transport-ui-design.md](./superpowers/specs/2026-05-20-streaming-chat-transport-ui-design.md)
+- 当前实施计划：[2026-05-20-streaming-chat-transport-ui.md](./superpowers/plans/2026-05-20-streaming-chat-transport-ui.md)
+- 这一阶段已把普通聊天的实时反馈边界落到 Web/API：streaming route 先持久化 user message 和 placeholder assistant message，再用 NDJSON 输出 assistant delta、terminal status 和 safe error。
+- 客户端 streaming state 是暂态 UI 层，不是新的事实来源；收到 terminal event 或刷新页面后，仍以 repository 中的 message / task state 为准。
+- LP / project setup 没被塞进 streaming route，仍回退到既有 `submitPromptAction` server action，避免 project bootstrap、artifact workflow 和普通聊天运行语义互相污染。
+- 普通聊天入口会显式传递 null task routing，让新输入脱离 stale task cookie，避免用户退出旧任务后仍被错误路由到旧 task。
+- 学习重点：streaming 是 UI 反馈边界，不等于新的 Agent runtime、真实 provider token streaming 或 tool-call protocol。先让 route、store 和 refresh recovery 拥有一致语义，再把 Stage 27 的真实普通聊天 runtime 和 skill context 接入这条边界。
 
 已实现的 Stage 4 Skill Command MVP：
 
