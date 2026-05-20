@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useReducer, useRef } from "react";
+import React, { useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   decodeChatStreamLines,
@@ -85,6 +85,32 @@ function getVisibleStreamingStatus(
   return undefined;
 }
 
+export interface PromptSubmissionControlState {
+  visiblePromptDisabled: boolean;
+  hiddenPromptValue?: string;
+}
+
+export function getPromptSubmissionControlState({
+  fallbackPrompt,
+  isStreaming
+}: {
+  fallbackPrompt?: string;
+  isStreaming: boolean;
+}): PromptSubmissionControlState {
+  const hiddenPromptValue =
+    fallbackPrompt === undefined || fallbackPrompt.length === 0 ? undefined : fallbackPrompt;
+  const visiblePromptDisabled = isStreaming || hiddenPromptValue !== undefined;
+
+  if (hiddenPromptValue === undefined) {
+    return { visiblePromptDisabled };
+  }
+
+  return {
+    hiddenPromptValue,
+    visiblePromptDisabled
+  };
+}
+
 export function StreamingWorkbench({
   children,
   action,
@@ -104,12 +130,18 @@ export function StreamingWorkbench({
   const formRef = useRef<HTMLFormElement>(null);
   const skipStreamingOnceRef = useRef(false);
   const fallbackSubmittedRef = useRef(false);
+  const submittedPromptRef = useRef("");
   const stateRef = useRef(createInitialStreamingWorkbenchState());
+  const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
   const [state, dispatch] = useReducer(
     streamingWorkbenchReducer,
     createInitialStreamingWorkbenchState()
   );
   const isStreaming = state.status === "streaming";
+  const promptSubmissionControls = getPromptSubmissionControlState({
+    fallbackPrompt,
+    isStreaming
+  });
   const visibleStatus = getVisibleStreamingStatus(
     state,
     streamingStatusLabel,
@@ -128,7 +160,8 @@ export function StreamingWorkbench({
     if (event.type === "fallback.required" && !fallbackSubmittedRef.current) {
       fallbackSubmittedRef.current = true;
       skipStreamingOnceRef.current = true;
-      formRef.current?.requestSubmit();
+      setFallbackPrompt(submittedPromptRef.current);
+      globalThis.setTimeout(() => formRef.current?.requestSubmit(), 0);
     }
   };
 
@@ -160,6 +193,8 @@ export function StreamingWorkbench({
       status: "streaming" as const
     };
     fallbackSubmittedRef.current = false;
+    submittedPromptRef.current = prompt;
+    setFallbackPrompt(undefined);
     applyState(initialState);
     dispatch({ type: "start" });
 
@@ -255,19 +290,30 @@ export function StreamingWorkbench({
         {projectId ? <input name="projectId" type="hidden" value={projectId} /> : null}
         {taskId ? <input name="taskId" type="hidden" value={taskId} /> : null}
         <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
+        {promptSubmissionControls.hiddenPromptValue === undefined ? null : (
+          <input
+            name="prompt"
+            type="hidden"
+            value={promptSubmissionControls.hiddenPromptValue}
+          />
+        )}
         <div className="composer">
           <button type="button" aria-label={addAttachmentLabel}>
             +
           </button>
           <input
             aria-label={promptLabel}
-            disabled={isStreaming}
+            disabled={promptSubmissionControls.visiblePromptDisabled}
             name="prompt"
             placeholder={placeholder}
           />
           <span>{runtimeChip}</span>
           {interruptControl}
-          <button type="submit" className="sendButton" disabled={isStreaming}>
+          <button
+            type="submit"
+            className="sendButton"
+            disabled={promptSubmissionControls.visiblePromptDisabled}
+          >
             {sendLabel}
           </button>
         </div>
