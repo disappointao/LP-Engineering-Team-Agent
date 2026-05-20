@@ -87,7 +87,11 @@ vi.mock("react-dom", () => ({
 }));
 
 import HomePage from "./page";
-import { executeSkillCommandAction, runLocalWorkerOnceAction } from "./actions";
+import {
+  executeRunRecoveryAction,
+  executeSkillCommandAction,
+  runLocalWorkerOnceAction
+} from "./actions";
 
 async function renderHomePage({
   searchParams,
@@ -599,6 +603,57 @@ describe("HomePage project flow errors", () => {
     });
 
     expect(html).toContain("当前没有可打断的任务。");
+  });
+
+  it("renders inline recovery actions without raw diagnostics", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      recovery: {
+        runs: [
+          {
+            runId: "run_planner_failed",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "planner",
+            state: "failed",
+            runRecordState: "failed",
+            startedAt: "2026-05-20T00:00:00.000Z",
+            completedAt: "2026-05-20T00:00:05.000Z",
+            terminalEventType: "run.failed",
+            diagnosticSummary: {
+              code: "planner_failed",
+              message: "Planner stopped before producing a brief.",
+              source: "run_event",
+              eventType: "run.failed",
+              errorName: "planner_failed",
+              rawPayload: "secret-token"
+            },
+            recoveryActions: ["retry_run", "resolve_blocker"]
+          }
+        ]
+      }
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const recoveryForms = collectElements(page, "form").filter(
+      (form) => form.props?.action === executeRunRecoveryAction
+    );
+
+    expect(text).toContain("Run recovery");
+    expect(text).toContain("Planner");
+    expect(text).toContain("Failed");
+    expect(text).toContain("Retry run");
+    expect(text).toContain("Resolve blocker");
+    expect(text).toContain("Planner stopped before producing a brief.");
+    expect(text).toContain("planner_failed");
+    expect(text).not.toContain("secret-token");
+    expect(recoveryForms).toHaveLength(1);
+    expect(collectFormPayload(recoveryForms[0]!)).toEqual({
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run"
+    });
   });
 
   it("does not expose deployment navigation in the local web flow", async () => {

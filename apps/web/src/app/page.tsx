@@ -6,6 +6,7 @@ import {
   createMCPConnectorAction,
   createProjectAction,
   executeMCPToolAction,
+  executeRunRecoveryAction,
   executeSkillCommandAction,
   runLocalWorkerOnceAction,
   createModelProviderAction,
@@ -34,6 +35,7 @@ import {
   type ModelFlowErrorCode,
   type ProjectMCPState,
   type ProjectFlowErrorCode,
+  type RunRecoveryFlowErrorCode,
   type SkillFlowErrorCode,
   type WebArtifactDiffState,
   type WebProjectModelState,
@@ -72,6 +74,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const mcpError = toMCPFlowError(getFirstSearchParam(params?.mcpError));
   const modelError = toModelFlowError(getFirstSearchParam(params?.modelError));
   const interruptError = toInterruptFlowError(getFirstSearchParam(params?.interruptError));
+  const recoveryError = toRunRecoveryFlowError(getFirstSearchParam(params?.recoveryError));
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
@@ -103,6 +106,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const interruptErrorMessage = interruptError
     ? copy.interruptFlow.errors[interruptError]
     : undefined;
+  const recoveryErrorMessage = recoveryError ? copy.chat.recoveryErrorLabel : undefined;
   const roleOrder = ["planner", "builder", "reviewer", "deployer"] as const;
   const builderModelRoute = modelState.resolvedPolicy.builder;
   const builderModelLabel = copy.chat.builderModelRoute(
@@ -927,6 +931,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 {interruptErrorMessage ? (
                   <div className="formError" role="alert">{interruptErrorMessage}</div>
                 ) : null}
+                {recoveryErrorMessage ? (
+                  <div className="formError" role="alert">{recoveryErrorMessage}</div>
+                ) : null}
                 <div className="userTurn" aria-label={copy.chat.userLabel}>
                   <div className="messageBubble userMessage">{chat.userMessage}</div>
                 </div>
@@ -962,6 +969,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         ))}
                       </div>
                     </section>
+
+                    {pageState.kind === "task_ready" &&
+                    (pageState.recovery?.runs.length ?? 0) > 0
+                      ? RecoveryBlock({ pageState, copy })
+                      : null}
 
                     <p>{chat.assistantCompletion}</p>
 
@@ -1078,6 +1090,24 @@ function toInterruptFlowError(value: string | undefined): InterruptFlowErrorCode
   return undefined;
 }
 
+function toRunRecoveryFlowError(value: string | undefined): RunRecoveryFlowErrorCode | undefined {
+  if (
+    value === "run_not_found" ||
+    value === "task_not_found" ||
+    value === "recovery_action_not_available" ||
+    value === "worker_runtime_not_configured" ||
+    value === "worker_job_not_found" ||
+    value === "worker_job_not_terminal" ||
+    value === "worker_finalization_failed" ||
+    value === "retry_input_not_reconstructable" ||
+    value === "retry_target_conflict" ||
+    value === "retry_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 function parseWorkerQueueError(value: unknown): WorkerQueueFlowErrorCode | undefined {
   return value === "worker_runtime_not_configured" ||
     value === "worker_job_execution_failed" ||
@@ -1159,6 +1189,74 @@ function ProjectMembersBlock({
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
+
+function RecoveryBlock({
+  pageState,
+  copy
+}: {
+  pageState: TaskReadyPageState;
+  copy: ReturnType<typeof getWorkbenchCopy>;
+}) {
+  const executableActions = new Set(["resume_worker_finalization", "retry_run"]);
+  const guidanceActions = new Set(["request_approval", "resolve_blocker", "inspect_manually"]);
+
+  return (
+    <section className="recoveryBlock" aria-label={copy.chat.recoveryTitle}>
+      <div className="recoveryHeader">
+        <div>
+          <strong>{copy.chat.recoveryTitle}</strong>
+          <p>{copy.chat.recoverySubtitle}</p>
+        </div>
+        <span>{pageState.recovery.runs.length}</span>
+      </div>
+      <div className="recoveryList">
+        {pageState.recovery.runs.map((run) => {
+          const diagnosticMessage =
+            run.diagnosticSummary?.message ?? run.terminalEventType ?? run.state;
+          const diagnosticCode = run.diagnosticSummary?.code ?? run.runId;
+          const executable = run.recoveryActions.filter((action) =>
+            executableActions.has(action)
+          ) as Array<keyof typeof copy.chat.recoveryActionLabels>;
+          const guidance = run.recoveryActions.filter((action) =>
+            guidanceActions.has(action)
+          ) as Array<keyof typeof copy.chat.recoveryGuidanceLabels>;
+
+          return (
+            <div className="recoveryItem" key={run.runId}>
+              <div className="toolEventTop">
+                <strong>{copy.modelsView.roleLabels[run.role]}</strong>
+                <span>{copy.chat.recoveryStateLabels[run.state]}</span>
+              </div>
+              <p>{diagnosticMessage}</p>
+              <small>{diagnosticCode}</small>
+              {executable.length > 0 ? (
+                <div className="recoveryActions">
+                  {executable.map((action) => (
+                    <form action={executeRunRecoveryAction} key={action}>
+                      <input name="taskId" type="hidden" value={pageState.task.id} />
+                      <input name="runId" type="hidden" value={run.runId} />
+                      <input name="action" type="hidden" value={action} />
+                      <button type="submit">{copy.chat.recoveryActionLabels[action]}</button>
+                    </form>
+                  ))}
+                </div>
+              ) : null}
+              {guidance.length > 0 ? (
+                <div className="recoveryGuidance">
+                  {guidance.map((action) => (
+                    <span key={action}>{copy.chat.recoveryGuidanceLabels[action]}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

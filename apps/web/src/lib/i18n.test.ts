@@ -146,4 +146,57 @@ describe("web i18n", () => {
     expect(en.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
     expect(zh.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
   });
+
+  it("exposes localized run recovery copy for both locales", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    expect(en.chat.recoveryTitle).toBe("Run recovery");
+    expect(en.chat.recoverySubtitle).toBe(
+      "Safe recovery options derived from the run lifecycle."
+    );
+    expect(en.chat.recoveryStateLabels).toEqual({
+      queued: "Queued",
+      running: "Running",
+      waiting_for_approval: "Waiting approval",
+      blocked: "Blocked",
+      cancelling: "Stopping",
+      cancelled: "Stopped",
+      failed: "Failed",
+      completed: "Completed"
+    });
+    expect(en.chat.recoveryActionLabels).toEqual({
+      resume_worker_finalization: "Resume finalization",
+      retry_run: "Retry run"
+    });
+    expect(en.chat.recoveryGuidanceLabels).toEqual({
+      request_approval: "Request approval",
+      resolve_blocker: "Resolve blocker",
+      inspect_manually: "Inspect manually"
+    });
+    expect(en.chat.recoveryErrorLabel).toBe("Recovery action could not be completed.");
+
+    expect(zh.chat.recoveryTitle).toBe("运行恢复");
+    expect(zh.chat.recoverySubtitle).toBe("根据运行生命周期派生的安全恢复选项。");
+    expect(zh.chat.recoveryStateLabels).toEqual({
+      queued: "排队中",
+      running: "运行中",
+      waiting_for_approval: "等待审批",
+      blocked: "已阻塞",
+      cancelling: "正在停止",
+      cancelled: "已停止",
+      failed: "失败",
+      completed: "完成"
+    });
+    expect(zh.chat.recoveryActionLabels).toEqual({
+      resume_worker_finalization: "继续写回",
+      retry_run: "重试运行"
+    });
+    expect(zh.chat.recoveryGuidanceLabels).toEqual({
+      request_approval: "请求审批",
+      resolve_blocker: "解除阻塞",
+      inspect_manually: "人工检查"
+    });
+    expect(zh.chat.recoveryErrorLabel).toBe("恢复动作未能完成。");
+  });
 });

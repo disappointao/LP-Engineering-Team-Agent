@@ -258,6 +258,25 @@ export interface WorkbenchCopy {
     interruptLabel: string;
     interruptStoppingLabel: string;
     interruptUnavailableLabel: string;
+    recoveryTitle: string;
+    recoverySubtitle: string;
+    recoveryStateLabels: Record<
+      | "queued"
+      | "running"
+      | "waiting_for_approval"
+      | "blocked"
+      | "cancelling"
+      | "cancelled"
+      | "failed"
+      | "completed",
+      string
+    >;
+    recoveryActionLabels: Record<"resume_worker_finalization" | "retry_run", string>;
+    recoveryGuidanceLabels: Record<
+      "request_approval" | "resolve_blocker" | "inspect_manually",
+      string
+    >;
+    recoveryErrorLabel: string;
     sendLabel: string;
     toolStatusRunning: string;
     toolStatusComplete: string;
@@ -719,6 +738,28 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptLabel: "Interrupt",
       interruptStoppingLabel: "Stopping...",
       interruptUnavailableLabel: "Nothing running",
+      recoveryTitle: "Run recovery",
+      recoverySubtitle: "Safe recovery options derived from the run lifecycle.",
+      recoveryStateLabels: {
+        queued: "Queued",
+        running: "Running",
+        waiting_for_approval: "Waiting approval",
+        blocked: "Blocked",
+        cancelling: "Stopping",
+        cancelled: "Stopped",
+        failed: "Failed",
+        completed: "Completed"
+      },
+      recoveryActionLabels: {
+        resume_worker_finalization: "Resume finalization",
+        retry_run: "Retry run"
+      },
+      recoveryGuidanceLabels: {
+        request_approval: "Request approval",
+        resolve_blocker: "Resolve blocker",
+        inspect_manually: "Inspect manually"
+      },
+      recoveryErrorLabel: "Recovery action could not be completed.",
       sendLabel: "Send",
       toolStatusRunning: "Running",
       toolStatusComplete: "Complete",
@@ -1162,6 +1203,28 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptLabel: "打断",
       interruptStoppingLabel: "正在停止...",
       interruptUnavailableLabel: "当前没有可打断任务",
+      recoveryTitle: "运行恢复",
+      recoverySubtitle: "根据运行生命周期派生的安全恢复选项。",
+      recoveryStateLabels: {
+        queued: "排队中",
+        running: "运行中",
+        waiting_for_approval: "等待审批",
+        blocked: "已阻塞",
+        cancelling: "正在停止",
+        cancelled: "已停止",
+        failed: "失败",
+        completed: "完成"
+      },
+      recoveryActionLabels: {
+        resume_worker_finalization: "继续写回",
+        retry_run: "重试运行"
+      },
+      recoveryGuidanceLabels: {
+        request_approval: "请求审批",
+        resolve_blocker: "解除阻塞",
+        inspect_manually: "人工检查"
+      },
+      recoveryErrorLabel: "恢复动作未能完成。",
       sendLabel: "发送",
       toolStatusRunning: "运行中",
       toolStatusComplete: "完成",

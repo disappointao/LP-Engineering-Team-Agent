@@ -1214,6 +1214,7 @@ button {
 }
 
 .processBlock,
+.recoveryBlock,
 .deliveryBlock,
 .inlinePreview {
   min-width: 0;
@@ -1223,6 +1224,7 @@ button {
 }
 
 .processHeader,
+.recoveryHeader,
 .deliveryHeader {
   display: flex;
   align-items: center;
@@ -1234,6 +1236,7 @@ button {
 }
 
 .processHeader strong,
+.recoveryHeader strong,
 .deliveryHeader strong,
 .previewTitle {
   font-size: 0.86rem;
@@ -1241,10 +1244,23 @@ button {
 }
 
 .processHeader span,
+.recoveryHeader span,
 .deliveryHeader span {
   color: var(--muted);
   font-size: 0.78rem;
   white-space: nowrap;
+}
+
+.recoveryHeader > div {
+  min-width: 0;
+}
+
+.recoveryHeader p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .toolTimeline {
@@ -1315,6 +1331,71 @@ button {
   font-size: 0.88rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.recoveryList {
+  display: grid;
+  padding: 6px 0;
+}
+
+.recoveryItem {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 10px 13px;
+}
+
+.recoveryItem:not(:last-child) {
+  border-bottom: 1px solid var(--line);
+}
+
+.recoveryItem p {
+  margin: 0;
+  color: #3c4147;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.recoveryItem small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.recoveryActions,
+.recoveryGuidance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.recoveryActions form {
+  margin: 0;
+}
+
+.recoveryActions button,
+.recoveryGuidance span {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.recoveryActions button {
+  background: var(--text);
+  color: var(--surface);
+}
+
+.recoveryGuidance span {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-raised);
+  color: var(--muted);
 }
 
 .deliveryBlock {
