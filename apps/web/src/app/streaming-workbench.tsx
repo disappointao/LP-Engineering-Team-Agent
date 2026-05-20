@@ -111,6 +111,41 @@ export function getPromptSubmissionControlState({
   };
 }
 
+export interface StreamingSubmitDecision {
+  allowNativeSubmit: boolean;
+  preventDefault: boolean;
+  streamPrompt?: string;
+}
+
+export function getStreamingSubmitDecision({
+  promptValue,
+  skipStreamingOnce
+}: {
+  promptValue: string;
+  skipStreamingOnce: boolean;
+}): StreamingSubmitDecision {
+  if (skipStreamingOnce) {
+    return {
+      allowNativeSubmit: true,
+      preventDefault: false
+    };
+  }
+
+  const streamPrompt = promptValue.trim();
+  if (streamPrompt.length === 0) {
+    return {
+      allowNativeSubmit: false,
+      preventDefault: true
+    };
+  }
+
+  return {
+    allowNativeSubmit: false,
+    preventDefault: true,
+    streamPrompt
+  };
+}
+
 export function StreamingWorkbench({
   children,
   action,
@@ -176,18 +211,26 @@ export function StreamingWorkbench({
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    if (skipStreamingOnceRef.current) {
+    const formData = new FormData(event.currentTarget);
+    const decision = getStreamingSubmitDecision({
+      promptValue: String(formData.get("prompt") ?? ""),
+      skipStreamingOnce: skipStreamingOnceRef.current
+    });
+
+    if (decision.allowNativeSubmit) {
       skipStreamingOnceRef.current = false;
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
-    const prompt = String(formData.get("prompt") ?? "").trim();
-    if (!prompt) {
+    if (decision.preventDefault) {
+      event.preventDefault();
+    }
+
+    if (decision.streamPrompt === undefined) {
       return;
     }
 
-    event.preventDefault();
+    const prompt = decision.streamPrompt;
     const initialState = {
       ...createInitialStreamingWorkbenchState(),
       status: "streaming" as const

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getPromptSubmissionControlState } from "./streaming-workbench";
+import {
+  getPromptSubmissionControlState,
+  getStreamingSubmitDecision
+} from "./streaming-workbench";
 
 function collectEnabledPromptPayload({
   visiblePromptDisabled,
@@ -50,5 +53,20 @@ describe("streaming workbench prompt submission controls", () => {
     expect(controls.visiblePromptDisabled).toBe(false);
     expect(controls.hiddenPromptValue).toBeUndefined();
     expect(collectEnabledPromptPayload(controls)).toEqual([""]);
+  });
+});
+
+describe("streaming workbench submit interception", () => {
+  it("intercepts blank ordinary chat submits without starting stream handling", () => {
+    const decision = getStreamingSubmitDecision({
+      promptValue: "   ",
+      skipStreamingOnce: false
+    });
+
+    expect(decision).toEqual({
+      allowNativeSubmit: false,
+      preventDefault: true,
+      streamPrompt: undefined
+    });
   });
 });
