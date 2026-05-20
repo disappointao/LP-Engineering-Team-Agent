@@ -96,9 +96,13 @@ export async function listRunRecoveryViewsForTask(
 ): Promise<RunLifecycleView[]> {
   const directViews = await listRunLifecycleViewsForTask(input);
   const viewsByRunId = new Map(directViews.map((view) => [view.runId, view]));
-  const snapshotRunIds = await listSnapshotLinkedRunIds(input);
+  const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
 
-  for (const runId of snapshotRunIds) {
+  if (!snapshot) {
+    return [...viewsByRunId.values()].sort(compareRunLifecycleViews);
+  }
+
+  for (const runId of snapshotRunIds(snapshot)) {
     if (viewsByRunId.has(runId)) {
       continue;
     }
@@ -108,7 +112,7 @@ export async function listRunRecoveryViewsForTask(
       workerRuntime: input.workerRuntime,
       runId
     });
-    if (result.ok) {
+    if (result.ok && result.view.projectId === snapshot.projectId) {
       viewsByRunId.set(runId, result.view);
     }
   }
@@ -136,6 +140,13 @@ export async function executeRunRecoveryAction(
   });
   if (!lifecycleResult.ok) {
     return { ok: false, error: lifecycleResult.error };
+  }
+  if (
+    input.action === "resume_worker_finalization" &&
+    !input.workerRuntime &&
+    lifecycleResult.view.linkedWorkerJobId
+  ) {
+    return { ok: false, error: "worker_runtime_not_configured" };
   }
   if (!lifecycleResult.view.recoveryActions.includes(input.action)) {
     return { ok: false, error: "recovery_action_not_available" };
@@ -166,6 +177,9 @@ export async function executeRunRecoveryAction(
   if (!isTerminalWorkerJob(workerJob)) {
     return { ok: false, error: "worker_job_not_terminal" };
   }
+  if (!(await hasUniqueRequestedWorkerLink({ ...input, view: lifecycleResult.view }))) {
+    return { ok: false, error: "worker_finalization_failed" };
+  }
 
   let finalized: Awaited<ReturnType<typeof finalizeWorkerBackedSkillCommand>>;
   try {
@@ -195,17 +209,6 @@ export async function executeRunRecoveryAction(
   };
 }
 
-async function listSnapshotLinkedRunIds(
-  input: ListRunRecoveryViewsForTaskInput
-): Promise<string[]> {
-  const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
-  if (!snapshot) {
-    return [];
-  }
-
-  return snapshotRunIds(snapshot);
-}
-
 async function runBelongsToTaskScope(
   input: ExecuteRunRecoveryActionInput
 ): Promise<boolean> {
@@ -224,6 +227,37 @@ async function runBelongsToTaskScope(
   }
 
   return snapshotRunIds(snapshot).includes(input.runId);
+}
+
+async function hasUniqueRequestedWorkerLink(input: {
+  repositories: WorkbenchRepositories;
+  runId: string;
+  view: RunLifecycleView;
+}): Promise<boolean> {
+  const workerJobId = input.view.linkedWorkerJobId;
+  if (!workerJobId) {
+    return false;
+  }
+
+  const links = (await input.repositories.runEvents.listAll()).filter(
+    (event) =>
+      event.type === "worker.job.linked" && event.payload.workerJobId === workerJobId
+  );
+  if (links.length !== 1) {
+    return false;
+  }
+
+  const [link] = links;
+  if (!link) {
+    return false;
+  }
+
+  return (
+    link.runId === input.runId &&
+    link.payload.runId === input.runId &&
+    (input.view.linkedObservationId === undefined ||
+      link.payload.observationId === input.view.linkedObservationId)
+  );
 }
 
 function snapshotRunIds(snapshot: {

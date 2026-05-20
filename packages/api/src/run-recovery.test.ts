@@ -198,6 +198,29 @@ describe("run recovery views", () => {
       }
     });
   });
+
+  it("does not include snapshot-linked runs from another project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "foreign_brief",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_planner_foreign_brief",
+      projectId: "project_2",
+      taskId: undefined,
+      role: "planner",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views.map((view) => view.runId)).not.toContain("run_planner_foreign_brief");
+  });
 });
 
 describe("execute run recovery action", () => {
@@ -258,5 +281,130 @@ describe("execute run recovery action", () => {
         expect.objectContaining({ type: "run.completed" })
       ])
     );
+  });
+
+  it("fails closed when the worker job is linked to more than one run", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_skill_command_1",
+      role: "deployer"
+    });
+    await saveRun(repositories, {
+      id: "run_other_skill_command_1",
+      role: "deployer"
+    });
+    await saveObservation(repositories);
+    await saveObservation(repositories, {
+      id: "tool_observation_other",
+      runId: "run_other_skill_command_1"
+    });
+    await saveEvent(repositories, {
+      runId: "run_skill_command_1",
+      type: "worker.job.linked",
+      sequence: 1,
+      payload: {
+        runId: "run_skill_command_1",
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_1"
+      }
+    });
+    await saveEvent(repositories, {
+      runId: "run_other_skill_command_1",
+      type: "worker.job.linked",
+      sequence: 2,
+      payload: {
+        runId: "run_other_skill_command_1",
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_other"
+      }
+    });
+
+    const result = await executeRunRecoveryAction({
+      repositories,
+      workerRuntime: { getJob: async () => terminalWorkerJob() },
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_skill_command_1",
+      action: "resume_worker_finalization"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "worker_finalization_failed"
+    });
+    await expect(repositories.runs.getById("run_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    await expect(repositories.runs.getById("run_other_skill_command_1")).resolves.toMatchObject({
+      state: "running"
+    });
+    await expect(repositories.runEvents.listForRun("run_other_skill_command_1")).resolves.not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "tool.completed" }),
+        expect.objectContaining({ type: "run.completed" })
+      ])
+    );
+  });
+
+  it("returns worker_runtime_not_configured when resuming without worker runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_skill_command_1",
+      role: "deployer"
+    });
+    await saveObservation(repositories);
+    await saveEvent(repositories, {
+      runId: "run_skill_command_1",
+      type: "worker.job.linked",
+      sequence: 1,
+      payload: {
+        runId: "run_skill_command_1",
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_1"
+      }
+    });
+
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_skill_command_1",
+      action: "resume_worker_finalization"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "worker_runtime_not_configured"
+    });
   });
 });
