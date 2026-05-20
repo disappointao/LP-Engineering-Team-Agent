@@ -298,6 +298,10 @@
    - Stage 22 Postgres Repository Foundation v0 implementation plan（已实现 foundation v0）。
    - 在 Stage 22 design 后阅读，用于按 TDD 对齐 Prisma schema、提取 shared repository contract tests、实现 Prisma mappers、显式 opt-in Prisma-backed repository adapter、opt-in Postgres integration test 和文档收尾。
 
+74. `specs/2026-05-20-web-opt-in-postgres-backend-wiring-design.md`
+   - Stage 23 Web Opt-in Postgres Backend Wiring v0 design。
+   - 在 Stage 22 plan 后阅读，用于把 Web/API runtime 从 JSON-file 默认路径扩展到显式 opt-in 的 Postgres backend，同时补齐 Web-facing Prisma repository closure，并继续排除 production migration、hosted auth/RBAC、object storage 和 worker queue Postgres backend。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

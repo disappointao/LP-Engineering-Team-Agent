@@ -123,7 +123,7 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 ### Stage 23：Web Opt-in Postgres Backend Wiring v0
 
-**状态：** 推荐下一阶段。
+**状态：** design 已确认，待 implementation plan。
 
 **为什么现在做：** Stage 22 已提供 Prisma-backed repository adapter，但 Web/API runtime 默认仍走 in-memory / JSON-file。下一步应先证明同一套 workbench flow 可以在显式开关下选择 Postgres backend，再考虑 production rollout、auth/RBAC 或 hosted 部署。
 
@@ -140,6 +140,8 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 - 不迁移 artifact file content 到 object storage。
 - 不把 worker job queue 切到 Postgres。
 - 不改变默认本地开发 backend。
+
+**当前设计：** `docs/superpowers/specs/2026-05-20-web-opt-in-postgres-backend-wiring-design.md`。
 
 ### Stage 24：Worker Job Postgres Backend v0
 
