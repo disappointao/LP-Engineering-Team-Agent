@@ -396,8 +396,43 @@ describe("web workbench store", () => {
 
     const store = await getWebWorkbenchStore();
     const project = await store.createProject({ name: "Memory backend project" });
+    const draft = await store.createSkillDraft({
+      manifestJson: deploymentSkillManifestJson(),
+      content: "# Deploy",
+      contentType: "text/markdown"
+    });
+    if (!draft.ok) {
+      throw new Error(`Expected draft creation to succeed, got ${draft.error}.`);
+    }
+    const validated = await store.validateSkillVersion(draft.value.version.id);
+    if (!validated.ok) {
+      throw new Error(`Expected validation to succeed, got ${validated.error}.`);
+    }
+    const published = await store.publishSkillVersion(draft.value.version.id);
+    if (!published.ok) {
+      throw new Error(`Expected publishing to succeed, got ${published.error}.`);
+    }
+    const binding = await store.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.value.id
+    });
+    if (!binding.ok) {
+      throw new Error(`Expected binding to succeed, got ${binding.error}.`);
+    }
+
+    const command = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: published.value.id,
+      commandId: "publish_static"
+    });
+    if (!command.ok) {
+      throw new Error(`Expected command queueing to succeed, got ${command.error}.`);
+    }
+    const state = await store.getPageState({ projectId: project.id });
 
     expect(project.name).toBe("Memory backend project");
+    expect(state.workerQueue.counts.queued).toBe(1);
+    expect(state.workerQueue.projectId).toBe(project.id);
   });
 
   it("retries global store initialization after repository backend setup fails", async () => {
