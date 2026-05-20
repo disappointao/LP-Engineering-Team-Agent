@@ -1,4 +1,9 @@
-import type { WorkbenchRepositories } from "@lp-agent/db";
+import type {
+  BriefRecord,
+  PageVersionRecord,
+  WorkbenchRepositories
+} from "@lp-agent/db";
+import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { WorkerJobRecord } from "@lp-agent/worker-runtime";
 import {
   deriveRunLifecycleView,
@@ -29,6 +34,7 @@ export type RunRecoveryExecutionResult =
       ok: true;
       action: RunRecoveryExecutionAction;
       runId: string;
+      newRunId?: string;
       state: RunLifecycleView["state"];
     }
   | {
@@ -46,26 +52,26 @@ export interface RunRecoveryService {
     prompt: string;
     taskId?: string;
     runId?: string;
-  }): Promise<unknown>;
+  }): Promise<BriefRecord>;
   generatePageVersion(input: {
     projectId: string;
     briefId: string;
     taskId?: string;
     runId?: string;
-  }): Promise<unknown>;
+  }): Promise<PageVersionRecord>;
   reviewPageVersion(input: {
     projectId: string;
     pageVersionId: string;
     taskId?: string;
     runId?: string;
-  }): Promise<unknown>;
+  }): Promise<PageVersionRecord>;
   approveAndCreateDeployment(input: {
     projectId: string;
     pageVersionId: string;
     reviewerUserId: string;
     taskId?: string;
     runId?: string;
-  }): Promise<unknown>;
+  }): Promise<DeploymentHandoff>;
 }
 
 export interface ListRunRecoveryViewsForTaskInput {
