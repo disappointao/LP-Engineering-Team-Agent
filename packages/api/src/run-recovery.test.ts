@@ -641,4 +641,151 @@ describe("execute run recovery retry", () => {
       })
     ).resolves.toEqual({ ok: false, error: "retry_target_conflict" });
   });
+
+  it("fails closed without retrying when the task snapshot belongs to another project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_2",
+      briefId: "brief_stale",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_builder_failed",
+      role: "builder",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let generatePageVersionCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          generatePageVersionCalls += 1;
+          throw new Error("stale snapshot must not retry");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_builder_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_input_not_reconstructable" });
+    expect(generatePageVersionCalls).toBe(0);
+  });
+
+  it("uses the next available retry run id when a prior retry exists", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_planner_failed",
+      role: "planner",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveRun(repositories, {
+      id: "run_planner_failed_retry_1",
+      role: "planner",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: () => new Date("2026-05-20T00:10:00.000Z")
+    });
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run",
+      now: () => new Date("2026-05-20T00:10:00.000Z")
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      action: "retry_run",
+      runId: "run_planner_failed",
+      newRunId: "run_planner_failed_retry_2",
+      state: "completed"
+    });
+    await expect(repositories.runs.getById("run_planner_failed_retry_2")).resolves.toMatchObject({
+      role: "planner",
+      state: "completed",
+      taskId: "task_1"
+    });
+  });
+
+  it("passes fail-fast deployment creation into deployer retry failures", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_deployer_failed",
+      role: "deployer",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_deployer_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let receivedFailIfDeploymentExists: boolean | undefined;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async (input) => {
+          receivedFailIfDeploymentExists = input.failIfDeploymentExists;
+          throw new Error("deployment_already_exists");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_deployer_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_failed" });
+    expect(receivedFailIfDeploymentExists).toBe(true);
+  });
 });

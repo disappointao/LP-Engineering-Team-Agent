@@ -283,6 +283,7 @@ export interface ApproveAndCreateDeploymentInput {
   reviewerUserId: string;
   taskId?: string;
   runId?: string;
+  failIfDeploymentExists?: boolean;
 }
 
 export interface ExecuteProjectSkillCommandInput {
@@ -939,6 +940,9 @@ export class DemoWorkbenchService {
 
     const existing = await this.repositories.deployments.getByPageVersionId(pageVersion.id);
     if (existing) {
+      if (input.failIfDeploymentExists) {
+        throw new Error("deployment_already_exists");
+      }
       return copyDeployment(existing);
     }
 
@@ -973,14 +977,24 @@ export class DemoWorkbenchService {
       throw new Error("Deployer run did not complete.");
     }
 
-    const deployment = await this.deploymentAdapter.createHandoff({
-      projectId: input.projectId,
-      pageVersionId: pageVersion.id,
-      approved: true,
-      artifacts: copyArtifacts(pageVersion.artifacts)
+    return withRepositoryIdLock(this.repositories, async () => {
+      const existingAfterRun = await this.repositories.deployments.getByPageVersionId(pageVersion.id);
+      if (existingAfterRun) {
+        if (input.failIfDeploymentExists) {
+          throw new Error("deployment_already_exists");
+        }
+        return copyDeployment(existingAfterRun);
+      }
+
+      const deployment = await this.deploymentAdapter.createHandoff({
+        projectId: input.projectId,
+        pageVersionId: pageVersion.id,
+        approved: true,
+        artifacts: copyArtifacts(pageVersion.artifacts)
+      });
+      await this.repositories.deployments.save(deployment);
+      return copyDeployment(deployment);
     });
-    await this.repositories.deployments.save(deployment);
-    return copyDeployment(deployment);
   }
 
   async executeProjectSkillCommand(
