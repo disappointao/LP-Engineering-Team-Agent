@@ -34,8 +34,9 @@ Agent 系统更像一个可观察、可恢复、可约束的任务执行系统�
 本项目当前的目标不是一步到位做完整通用 Agent，而是先做一个轻量、可维护、可迭代的 LP Engineering Team Agent：
 
 - 先保证 Web 端可以创建任务、生成框架无关的 LP 静态产物。
-- 再逐步加入 Skills、模型路由、MCP、运行事件、上下文组装和团队协作。
-- 完整自动部署和广义 MCP/tool execution 仍后置；当前只开放经过 API `ToolCommandRunner` 校验和审批的窄范围 deployment skill command 执行路径。
+- 再逐步加入 Skills、模型路由、运行事件、上下文组装和团队协作。
+- 当前第一版可用闭环优先级已收敛为 Web/API 普通问答、LP 固定链路工作流、Skill 上下文/命令和流式反馈；MCP、真实部署、auth/RBAC 和广义 tool execution 后置。
+- 完整自动部署和广义 tool execution 仍后置；当前只开放经过 API `ToolCommandRunner` 校验和审批的窄范围 deployment skill command 执行路径。
 
 ## 2. Agent 开发核心难点
 
@@ -236,7 +237,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
-- 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
+- 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已实现恢复 UI 和第一批 retry/resume server actions，但团队审批和通用 DAG 仍未做。
@@ -915,6 +916,7 @@ pnpm --filter @lp-agent/model-gateway test
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
+- 第一版可用优先级是 Web/API 普通问答、LP 固定链路工作流、Skill 上下文/命令和 streaming/no-refresh 体验；MCP、真实部署、auth/RBAC 和广义 write tools 不应抢在这个闭环前面。
 - 业务入口依赖接口，不直接依赖具体 provider、MCP SDK、Git SDK 或 shell。
 - 生成 LP 产物永远保持框架无关静态 HTML/CSS/JS。
 - Skills 在当前阶段仍是 manifest、内容和规则数据；只有预声明的 deployment skill command 会在 API 校验和一次性审批后通过 `ToolCommandRunner` 边界执行。

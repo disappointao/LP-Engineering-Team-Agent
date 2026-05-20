@@ -32,10 +32,30 @@
 - Worker queue opt-in Postgres backend：Stage 24 已实现 `WORKER_REPOSITORY_BACKEND=json|memory|postgres`，Web enqueue 和 `apps/agent-worker` 共用同一 backend selection helper；默认 worker queue 仍是 JSON-file。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
+## 第一版可用闭环目标
+
+当前“第一版可用”不再按 README 里的本地 deterministic Web MVP 口径判断，而是按用户能在网页里完成真实产品闭环判断：
+
+- 能在 Web workbench 里进行普通问答，回答支持流式展示。
+- Web/API 能接真实模型 runtime，同时保留 deterministic fallback 作为测试路径。
+- 能提交“写 LP / 改 LP / 继续优化 LP”这类复杂任务，并跑通 `Planner -> Builder -> Reviewer -> Deployer` 的可观察工作流。
+- Skill 是第一版主要扩展机制：已发布、已绑定的 project skills 能进入上下文；受控 skill command 继续走 approval、worker、run event 和 observation 边界。
+- Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
+- 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
+
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **10-15 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 browser E2E、真实 provider 冒烟、文档和交互 hardening，粗略估算 **15-25 个有效开发日**。
+
+当前第一版可用闭环优先补齐：
+
+- Web/API streaming transport、streaming UI 和 no-refresh task state。
+- 普通聊天真实模型 runtime wiring、消息持久化和错误恢复。
+- LP agent chain 的 Web/API/worker end-to-end 执行路径。
+- Skill-only 上下文和 skill command 可观察工作流；MCP 暂不作为近期目标。
+- Browser E2E acceptance 和 alpha hardening。
+
 当前仍明确后置：
 
-- Web UI 无刷新体验、streaming UI、browser E2E。
-- 真实 fallback provider execution、模型 usage/cost reporting、streaming model output 和 tool-call protocol conversion。
+- 真实 fallback provider execution、模型 usage/cost reporting 和 tool-call protocol conversion。
 - 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
@@ -201,65 +221,110 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 
 ## 推荐下一阶段队列
 
-### Stage 26：MCP Worker Execution v0
+### Stage 26：Streaming Chat Transport and UI v0
 
 **状态：** 当前推荐下一阶段。
 
-**为什么现在做：** Stage 20 的 read-only MCP execution 已有 API 校验和安全 observation，但执行仍在 API 进程内通过 deterministic local executor 完成。worker queue durable backend 和 recovery UI 稳定后，可以把 MCP 执行迁到 worker 边界，保留审批和审计语义。
+**为什么现在做：** 用户定义的第一版可用核心是“页面能正常问答，回答是流式的”。当前 Web 已有 task/message/run/timeline 基础，但交互仍偏 server action / 刷新式流程。先补 streaming transport 和 UI，后续普通聊天、LP 工作流进度、skill command progress 都能复用同一条实时反馈边界。
 
 **建议范围：**
 
-- 将 read-only MCP execution 支持入队为 safe persisted worker payload，由 worker claim 后执行 deterministic local executor。
-- worker finalizer 回写 `ToolObservationRecord` 和 run events，并复用 Stage 18/19 的幂等 finalization、heartbeat 和 stale recovery 语义。
-- 映射 MCP cancellation、timeout、execution failure 到 bounded / redacted observation summary。
-- Web MCP 执行入口保持同一授权语义，只在配置开启时走 worker-backed path。
+- 新增 Web/API streaming 边界，支持普通 assistant text delta、terminal message、safe error 和 run status update。
+- Web chat timeline 支持流式追加 assistant content，刷新后仍以 repository 里的 message/run event 为事实来源。
+- provider 不支持 streaming 或 deterministic test path 时，保留 non-streaming fallback，但 UI 状态语义保持一致。
+- streaming payload 只包含面向 UI 的安全文本和状态摘要，不暴露 raw model response、secret、raw tool output 或完整 artifact 内容。
+- 增加 store/action/API tests 覆盖 normal completion、stream interruption、provider failure 和 refresh recovery。
 
 **非目标：**
 
-- 不接真实 MCP SDK 或 remote MCP server adapter。
-- 不开放 write tools、filesystem、shell 或 deployment side effects。
-- 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
-- 不做 streaming MCP output。
+- 不在本阶段改完整 LP agent chain。
+- 不做 MCP/tool-call streaming。
+- 不做 raw stdout/stderr streaming。
+- 不引入 auth/RBAC、生产部署或 object storage。
 
-### Stage 27：Real MCP Adapter v0
+### Stage 27：Real Chat Runtime and Skill Context v0
 
 **状态：** Stage 26 后推荐。
 
-**为什么现在做：** MCP execution 先在 API 进程内用 deterministic local executor 打通授权、observation 和 timeline，再迁到 worker boundary。等 worker-backed path 稳定后，可以把真实 MCP SDK / remote server adapter 接到同一执行边界，而不是让 Web/API 直接拥有外部 tool side effects。
+**为什么现在做：** Streaming UI 稳定后，普通问答要从 deterministic response 升级为真实模型 runtime。项目已经有 provider-neutral model gateway、真实 runtime opt-in、Context Pack 和 Skills 注入边界；下一步是把这些能力收敛成用户可用的普通聊天路径。
 
 **建议范围：**
 
-- 定义真实 MCP server adapter 边界，保持 connector、tool、role/permission、approval 和 read-only policy 校验不变。
-- 在 worker 执行路径内接入第一批受限 read-only MCP transport / client adapter，并把结果映射为 bounded / redacted `ToolObservationRecord`。
-- 增加 connector health、timeout、cancellation 和 provider/server error mapping 的 deterministic coverage。
-- 保持 Web MCP 页调用语义不变，只替换执行 backend。
+- 普通聊天 task 通过 `REAL_MODEL_RUNTIME=1` 的 provider-backed runtime 生成 assistant answer，并通过 Stage 26 streaming 边界展示。
+- 已发布、已绑定 project skills 进入 normal chat Context Pack；UI 明确展示当前任务使用的 project / skill context 摘要。
+- 模型失败、parse 不适用、provider transient error 和 cancellation 都写入安全 run events，并能在 Web timeline/recovery block 中解释。
+- 保持 deterministic runtime 作为默认测试路径；真实 provider 冒烟仍显式 opt-in。
+- 补齐普通聊天路径的 browser-level acceptance checklist。
 
 **非目标：**
 
-- 不开放 MCP write tools。
-- 不允许 shell、filesystem 或 deployment side effects。
-- 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
-- 不做企业级 connector marketplace 或 OAuth flow。
+- 不做 MCP execution。
+- 不做 tool-call protocol conversion。
+- 不做长期记忆或向量检索升级。
+- 不开放真实 shell 或 deployment runner。
 
-### Stage 28：MCP Write Tools with Approval v0
+### Stage 28：LP Agent Chain End-to-End v0
 
 **状态：** Stage 27 后推荐。
 
-**为什么现在做：** read-only MCP execution 需要先经过 worker boundary 和真实 adapter 稳定，再把 write tools 纳入显式 approval、审计和 side-effect policy。这样可以复用 Stage 25 的 fail-closed recovery 边界，避免 Web/API 直接拥有外部写入副作用。
+**为什么现在做：** 用户的核心复杂任务是“写 LP / 做 LP 等工作流任务”。当前已经有固定 LP 链路、真实 Planner/Builder structured output、artifact workspace、handoff、worker queue 和 recovery UI，但 Web 需要把这些能力组织成一个可用的端到端任务体验。
 
 **建议范围：**
 
-- 为 MCP write tools 定义显式 approval request、approval decision 和 audit event contract。
-- 将 approved write execution 限定在 worker boundary 内，并映射 bounded / redacted observation summary。
-- 处理 timeout、cancellation、provider/server failure 和 approval revoked 的安全状态。
-- Web MCP 页只展示已授权的 write action 和审批状态，不展示 raw arguments、raw output 或 secret。
+- Web 提交 LP 复杂任务后，API 创建可观察的 `Planner -> Builder -> Reviewer -> Deployer` chain，并把每个 run / handoff / artifact update 展示在 task timeline。
+- `REAL_MODEL_RUNTIME=1` 下 Planner / Builder 使用真实模型 structured output；Reviewer / Deployer 可先保持 deterministic / policy-driven，以确保第一版稳定。
+- Builder 成功后写 durable artifact workspace，Web artifact preview/export 自动更新。
+- Reviewer blocked、模型 parse/retry exhausted、worker finalization gap 等失败继续通过 Stage 25 recovery UI 暴露。
+- LP task 支持继续对话式修改：下一轮输入能引用当前 project/task/artifact metadata 和 bound skills。
 
 **非目标：**
 
-- 不开放 shell、filesystem 或 deployment side effects。
-- 不自动批准 write tools。
-- 不做 OAuth connector marketplace。
-- 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
+- 不做通用 DAG scheduler；只覆盖固定 LP 链路。
+- 不自动真实部署。
+- 不做 MCP、write tools 或 shell execution。
+- 不做多人审批队列。
+
+### Stage 29：Live Run Timeline and Artifact Progress v0
+
+**状态：** Stage 28 后推荐。
+
+**为什么现在做：** LP 链路端到端可跑后，用户还需要不刷新页面就能理解任务正在做什么。Stage 26 解决 assistant text streaming，本阶段把 run events、worker state、recovery view 和 artifact progress 统一成 live task panel。
+
+**建议范围：**
+
+- Web task detail 通过 polling 或 SSE 读取 task state delta，展示 run lifecycle、worker queue health、recovery actions 和 artifact workspace changes。
+- 对 running / queued / cancelling / failed / blocked / completed 提供一致 UI 状态和空状态。
+- artifact preview/export 在新的 page version 或 workspace 可用时自动更新。
+- interrupt/cancel 后 timeline 能实时反映 optimistic state 与 repository fact 的差异。
+- 增加 browser E2E 覆盖普通聊天、LP chain、artifact 更新和失败恢复的核心路径。
+
+**非目标：**
+
+- 不做 raw stdout/stderr streaming。
+- 不做实时多人协作。
+- 不引入生产 observability stack。
+- 不做 object storage migration。
+
+### Stage 30：Skill-Only Alpha Hardening v0
+
+**状态：** Stage 29 后推荐。
+
+**为什么现在做：** 第一版可用闭环完成后，需要把“只用 Skill、不用 MCP”的 alpha 体验收敛到可交付状态：启动、配置、技能绑定、真实 provider opt-in、失败提示和验收都要清晰。
+
+**建议范围：**
+
+- 调整 README、manual acceptance 和 smoke/alpha scripts，明确第一版可用闭环、Skill-only 范围和 MCP 后置。
+- 补齐 skill authoring / binding / command execution 与 chat/LP task 的可见关联。
+- 做真实 provider 本地冒烟说明和 fail-closed 错误提示整理。
+- 做 UI copy、empty/error/loading state hardening。
+- 跑完整 `pnpm smoke`、`pnpm test`、`pnpm typecheck`，并执行 browser E2E / manual alpha checklist。
+
+**非目标：**
+
+- 不做 production auth/RBAC。
+- 不做 production Postgres migrations。
+- 不做 MCP。
+- 不做真实部署编排。
 
 ## Backlog 分组
 
@@ -389,8 +454,8 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
 - Stage 25 已完成 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。
 - Stage 25 的 `retry_run` 只做 safely reconstructable single-run retry，创建新 retry attempt，不覆盖原 failed run，也不自动重跑完整 agent chain。
-- Stage 26 当前推荐做 MCP Worker Execution v0。
-- 真实 MCP SDK / remote MCP server adapter 应等待 MCP worker execution 稳定后再接入。
+- Stage 26 当前推荐做 Streaming Chat Transport and UI v0，优先补齐 Web/API 普通问答流式闭环。
+- MCP Worker Execution、真实 MCP SDK / remote MCP server adapter 和 MCP write tools 已后置到 backlog，等待 Web/API/Skill/LP 第一版可用闭环稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
 - 即使 workbench 持续演进，生成的 LP artifacts 也必须保持框架无关静态 HTML/CSS/JS。
