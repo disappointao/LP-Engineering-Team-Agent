@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createWorkerQueueRuntime } from "@lp-agent/api";
 import {
   InMemoryWorkerJobPayloadRepository,
   InMemoryWorkerJobRepository,
@@ -130,6 +131,54 @@ describe("worker queue handoff", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("runs against explicit postgres backend repositories without worker JSON files", async () => {
+    const repositories = {
+      jobRepository: new InMemoryWorkerJobRepository(),
+      payloadRepository: new InMemoryWorkerJobPayloadRepository(),
+      workerLogRepository: new InMemoryWorkerLogRepository()
+    };
+    const loadPrismaClient = vi.fn(async () => ({ prisma: true }));
+    const createPrismaWorkerRepositories = vi.fn(() => repositories);
+    const queueRuntime = await createWorkerQueueRuntime({
+      env: {
+        WORKER_REPOSITORY_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://user:pass@localhost:5432/lp_agent"
+      },
+      loadPrismaClient,
+      createPrismaWorkerRepositories
+    });
+    const queued = await queueRuntime.runtime.enqueueSafe(safeInput(), simulatedPolicy());
+
+    const result = await runWorkerOnce({
+      workerId: "worker_postgres",
+      jobRepository: queueRuntime.jobRepository,
+      payloadRepository: queueRuntime.payloadRepository,
+      workerLogRepository: queueRuntime.workerLogRepository,
+      adapter: new SimulatedExecutionAdapter(),
+      claimTokenFactory: () => "claim_token_postgres",
+      now: createClock([
+        "2026-05-20T00:00:01.000Z",
+        "2026-05-20T00:00:02.000Z"
+      ])
+    });
+
+    expect(loadPrismaClient).toHaveBeenCalledTimes(1);
+    expect(createPrismaWorkerRepositories).toHaveBeenCalledWith({ prisma: true });
+    expect(result).toMatchObject({
+      id: queued.id,
+      state: "completed",
+      claimedByWorkerId: "worker_postgres"
+    });
+    await expect(queueRuntime.workerLogRepository.list({ limit: 10 })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workerJobId: queued.id,
+          type: "worker.job.completed"
+        })
+      ])
+    );
   });
 
   it("rejects invalid heartbeat timeout before claiming a queued worker job", async () => {

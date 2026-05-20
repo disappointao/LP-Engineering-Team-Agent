@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "test": "vitest run src/worker.test.ts",
+    "test": "vitest run src/worker.test.ts src/config.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

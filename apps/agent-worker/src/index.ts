@@ -1,36 +1,25 @@
-import { finalizeWorkerBackedSkillCommand } from "@lp-agent/api";
+import { createWorkerQueueRuntime, finalizeWorkerBackedSkillCommand } from "@lp-agent/api";
 import { createJsonFileWorkbenchRepositories } from "@lp-agent/db";
-import {
-  createJsonFileWorkerJobPayloadRepository,
-  createJsonFileWorkerJobRepository,
-  createJsonFileWorkerLogRepository,
-  type WorkerJobRecord
-} from "@lp-agent/worker-runtime";
+import { type WorkerJobRecord } from "@lp-agent/worker-runtime";
+import { resolveAgentWorkerMode } from "./config";
 import { runDemoWorkerJob, runWorkerDaemon, runWorkerOnce } from "./worker";
 
 type WorkerMode = "once" | "daemon";
 
-const jobsFilePath = process.env.WORKER_JOBS_FILE;
-const payloadsFilePath = process.env.WORKER_PAYLOADS_FILE;
-const logsFilePath = process.env.WORKER_LOGS_FILE;
 const workbenchStateFilePath = process.env.LP_AGENT_WORKBENCH_STATE_FILE;
 const workerMode = parseWorkerMode({
   workerMode: process.env.WORKER_MODE,
   workerDaemon: process.env.WORKER_DAEMON
 });
 const workerId = process.env.WORKER_ID ?? "local-agent-worker";
+const agentWorkerMode = resolveAgentWorkerMode(process.env);
 
-if (jobsFilePath && payloadsFilePath) {
+if (agentWorkerMode.mode === "queue") {
   const heartbeatTimeoutMs = parseIntegerEnv("WORKER_HEARTBEAT_TIMEOUT_MS", "30000", {
     min: 1
   });
-  const jobRepository = createJsonFileWorkerJobRepository({ filePath: jobsFilePath });
-  const payloadRepository = createJsonFileWorkerJobPayloadRepository({
-    filePath: payloadsFilePath
-  });
-  const workerLogRepository = logsFilePath
-    ? createJsonFileWorkerLogRepository({ filePath: logsFilePath })
-    : undefined;
+  const { jobRepository, payloadRepository, workerLogRepository } =
+    await createWorkerQueueRuntime({ env: process.env });
   const workbenchRepositories = workbenchStateFilePath
     ? createJsonFileWorkbenchRepositories({ filePath: workbenchStateFilePath })
     : undefined;
