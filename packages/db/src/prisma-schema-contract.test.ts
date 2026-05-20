@@ -33,6 +33,10 @@ function modelBlock(schema: string, modelName: string): string {
   throw new Error(`Unclosed Prisma model ${modelName}`);
 }
 
+function modelLines(block: string): string[] {
+  return block.split(/\r?\n/).map((line) => line.trim().replace(/\s+/g, " "));
+}
+
 describe("Prisma workbench schema contract", () => {
   it("contains Stage 22 workbench repository models", async () => {
     const schema = await readFile(schemaPath, "utf8");
@@ -131,5 +135,78 @@ describe("Prisma workbench schema contract", () => {
     }
 
     expect(schema).toContain("@@unique([projectId, connectorId, toolName])");
+  });
+
+  it("defines the worker job postgres backend models", async () => {
+    const schema = await readFile(schemaPath, "utf8");
+
+    const workerJob = modelBlock(schema, "WorkerJob");
+    expect(modelLines(workerJob)).toEqual(
+      expect.arrayContaining([
+        "id String @id",
+        "projectId String",
+        "kind String",
+        "state String",
+        "payloadSource String?",
+        "policy Json",
+        "inputSummary Json",
+        "resultSummary Json?",
+        "errorName String?",
+        "createdAt DateTime",
+        "startedAt DateTime?",
+        "completedAt DateTime?",
+        "cancelRequestedAt DateTime?",
+        "cancelledAt DateTime?",
+        "cancelReason String?",
+        "claimedByWorkerId String?",
+        "claimToken String?",
+        "lastHeartbeatAt DateTime?",
+        "heartbeatExpiresAt DateTime?",
+        "staleRecoveredAt DateTime?",
+        "staleRecoveryCount Int?",
+        "lastWorkerLogAt DateTime?"
+      ])
+    );
+    expect(workerJob).toContain("@@index([projectId, createdAt, id])");
+    expect(workerJob).toContain("@@index([state, payloadSource, createdAt, id])");
+    expect(workerJob).toContain("@@index([claimedByWorkerId])");
+    expect(workerJob).toContain("@@index([heartbeatExpiresAt])");
+
+    const payload = modelBlock(schema, "WorkerJobPayload");
+    expect(modelLines(payload)).toEqual(
+      expect.arrayContaining([
+        "jobId String @id",
+        "kind String",
+        "projectId String",
+        "commandId String?",
+        "command String",
+        "args Json",
+        "envNames Json",
+        "workingDirectory String?",
+        "timeoutMs Int",
+        "createdAt DateTime"
+      ])
+    );
+    expect(payload).toContain("@@index([projectId, createdAt])");
+    expect(payload).toContain("@@index([kind])");
+    expect(payload).not.toContain("@relation");
+
+    const log = modelBlock(schema, "WorkerLog");
+    expect(modelLines(log)).toEqual(
+      expect.arrayContaining([
+        "id String @id",
+        "type String",
+        "message String",
+        "workerId String?",
+        "workerJobId String?",
+        "projectId String?",
+        "payload Json",
+        "createdAt DateTime"
+      ])
+    );
+    expect(log).toContain("@@index([projectId, createdAt, id])");
+    expect(log).toContain("@@index([workerId, createdAt, id])");
+    expect(log).toContain("@@index([workerJobId, createdAt, id])");
+    expect(log).toContain("@@index([type, createdAt])");
   });
 });

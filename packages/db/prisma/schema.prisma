@@ -411,6 +411,68 @@ model SkillBinding {
   @@index([projectId])
 }
 
+model WorkerJob {
+  id                 String    @id
+  projectId          String
+  kind               String
+  state              String
+  payloadSource      String?
+  policy             Json
+  inputSummary       Json
+  resultSummary      Json?
+  errorName          String?
+  createdAt          DateTime
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelRequestedAt  DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  claimedByWorkerId  String?
+  claimToken         String?
+  lastHeartbeatAt    DateTime?
+  heartbeatExpiresAt DateTime?
+  staleRecoveredAt   DateTime?
+  staleRecoveryCount Int?
+  lastWorkerLogAt    DateTime?
+
+  @@index([projectId, createdAt, id])
+  @@index([state, payloadSource, createdAt, id])
+  @@index([claimedByWorkerId])
+  @@index([heartbeatExpiresAt])
+}
+
+model WorkerJobPayload {
+  jobId            String   @id
+  kind             String
+  projectId        String
+  commandId        String?
+  command          String
+  args             Json
+  envNames         Json
+  workingDirectory String?
+  timeoutMs        Int
+  createdAt        DateTime
+
+  @@index([projectId, createdAt])
+  @@index([kind])
+}
+
+model WorkerLog {
+  id          String   @id
+  type        String
+  message     String
+  workerId    String?
+  workerJobId String?
+  projectId   String?
+  payload     Json
+  createdAt   DateTime
+
+  @@index([projectId, createdAt, id])
+  @@index([workerId, createdAt, id])
+  @@index([workerJobId, createdAt, id])
+  @@index([type, createdAt])
+}
+
 model Run {
   id               String            @id
   projectId        String
