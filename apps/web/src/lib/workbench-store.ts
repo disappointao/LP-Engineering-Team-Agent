@@ -42,7 +42,6 @@ import {
 } from "@lp-agent/artifacts";
 import {
   createInMemoryWorkbenchRepositories,
-  createJsonFileWorkbenchRepositories,
   type WorkbenchMessageRecord,
   type WorkbenchMessageRole,
   type WorkbenchRepositories,
@@ -58,6 +57,7 @@ import type {
 } from "@lp-agent/worker-runtime";
 import { getLocalWorkbenchUser } from "./local-identity";
 import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
+import { createWebWorkbenchRepositories } from "./workbench-repository-factory";
 
 export type {
   MCPConnectorRecord,
@@ -1539,12 +1539,8 @@ function nextSequentialId(prefix: string, existingIds: string[]): string {
 }
 
 const globalStore = globalThis as typeof globalThis & {
-  __lpAgentWebWorkbenchStore?: WebWorkbenchStore;
+  __lpAgentWebWorkbenchStore?: Promise<WebWorkbenchStore>;
 };
-
-function defaultWorkbenchStateFilePath(): string {
-  return process.env.LP_AGENT_WORKBENCH_STATE_FILE ?? ".lp-agent/workbench-state.json";
-}
 
 function defaultWorkerJobsFilePath(): string {
   return process.env.WORKER_JOBS_FILE ?? ".lp-agent/worker-jobs.json";
@@ -1562,24 +1558,26 @@ function defaultWorkerId(): string {
   return process.env.WORKER_ID ?? "local-web-worker";
 }
 
-export function getWebWorkbenchStore(): WebWorkbenchStore {
+async function createDefaultWebWorkbenchStore(): Promise<WebWorkbenchStore> {
+  const workerLogsFilePath = defaultWorkerLogsFilePath();
+  const workerQueue = createLocalWorkerQueueRuntime({
+    jobsFilePath: defaultWorkerJobsFilePath(),
+    payloadsFilePath: defaultWorkerPayloadsFilePath(),
+    ...(workerLogsFilePath !== undefined ? { logsFilePath: workerLogsFilePath } : {})
+  });
+  return createWebWorkbenchStore({
+    repositories: await createWebWorkbenchRepositories(),
+    workerQueueRuntime: workerQueue.runtime,
+    workerRuntime: workerQueue.runtime,
+    workerJobRepository: workerQueue.jobRepository,
+    workerLogRepository: workerQueue.workerLogRepository,
+    workerId: defaultWorkerId()
+  });
+}
+
+export function getWebWorkbenchStore(): Promise<WebWorkbenchStore> {
   if (!globalStore.__lpAgentWebWorkbenchStore) {
-    const workerLogsFilePath = defaultWorkerLogsFilePath();
-    const workerQueue = createLocalWorkerQueueRuntime({
-      jobsFilePath: defaultWorkerJobsFilePath(),
-      payloadsFilePath: defaultWorkerPayloadsFilePath(),
-      ...(workerLogsFilePath !== undefined ? { logsFilePath: workerLogsFilePath } : {})
-    });
-    globalStore.__lpAgentWebWorkbenchStore = createWebWorkbenchStore({
-      repositories: createJsonFileWorkbenchRepositories({
-        filePath: defaultWorkbenchStateFilePath()
-      }),
-      workerQueueRuntime: workerQueue.runtime,
-      workerRuntime: workerQueue.runtime,
-      workerJobRepository: workerQueue.jobRepository,
-      workerLogRepository: workerQueue.workerLogRepository,
-      workerId: defaultWorkerId()
-    });
+    globalStore.__lpAgentWebWorkbenchStore = createDefaultWebWorkbenchStore();
   }
   return globalStore.__lpAgentWebWorkbenchStore;
 }

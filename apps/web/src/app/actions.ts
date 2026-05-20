@@ -168,7 +168,7 @@ async function readSkillContent(formData: FormData): Promise<{
 }
 
 export async function createProjectAction(formData: FormData): Promise<void> {
-  const store = getWebWorkbenchStore();
+  const store = await getWebWorkbenchStore();
   const name = String(formData.get("projectName") ?? "");
 
   try {
@@ -188,7 +188,7 @@ export async function createProjectAction(formData: FormData): Promise<void> {
 
 export async function submitPromptAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
-  const store = getWebWorkbenchStore();
+  const store = await getWebWorkbenchStore();
   const prompt = String(formData.get("prompt") ?? "");
   const implicitProjectName = String(
     formData.get("implicitProjectName") ?? "Untitled LP Project"
@@ -217,7 +217,8 @@ export async function interruptCurrentTaskAction(_formData?: FormData): Promise<
     redirectToInterruptError("task_not_found");
   }
 
-  const result = await getWebWorkbenchStore().interruptCurrentTask({
+  const store = await getWebWorkbenchStore();
+  const result = await store.interruptCurrentTask({
     taskId: currentTaskId,
     reason: "User interrupted the task."
   });
@@ -231,7 +232,8 @@ export async function interruptCurrentTaskAction(_formData?: FormData): Promise<
 
 export async function createSkillDraftAction(formData: FormData): Promise<void> {
   const skillContent = await readSkillContent(formData);
-  const result = await getWebWorkbenchStore().createSkillDraft({
+  const store = await getWebWorkbenchStore();
+  const result = await store.createSkillDraft({
     manifestJson: String(formData.get("manifestJson") ?? ""),
     content: skillContent.content,
     contentType: skillContent.contentType
@@ -244,7 +246,8 @@ export async function createSkillDraftAction(formData: FormData): Promise<void> 
 }
 
 export async function validateSkillVersionAction(formData: FormData): Promise<void> {
-  const result = await getWebWorkbenchStore().validateSkillVersion(
+  const store = await getWebWorkbenchStore();
+  const result = await store.validateSkillVersion(
     String(formData.get("skillVersionId") ?? "")
   );
   if (!result.ok) {
@@ -255,7 +258,8 @@ export async function validateSkillVersionAction(formData: FormData): Promise<vo
 }
 
 export async function publishSkillVersionAction(formData: FormData): Promise<void> {
-  const result = await getWebWorkbenchStore().publishSkillVersion(
+  const store = await getWebWorkbenchStore();
+  const result = await store.publishSkillVersion(
     String(formData.get("skillVersionId") ?? "")
   );
   if (!result.ok) {
@@ -267,7 +271,8 @@ export async function publishSkillVersionAction(formData: FormData): Promise<voi
 
 export async function bindSkillVersionAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get("projectId") ?? "");
-  const result = await getWebWorkbenchStore().bindSkillVersionToProject({
+  const store = await getWebWorkbenchStore();
+  const result = await store.bindSkillVersionToProject({
     projectId,
     skillVersionId: String(formData.get("skillVersionId") ?? "")
   });
@@ -282,7 +287,8 @@ export async function bindSkillVersionAction(formData: FormData): Promise<void> 
 export async function setSkillBindingEnabledAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
   const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
-  const result = await getWebWorkbenchStore().setProjectSkillBindingEnabled({
+  const store = await getWebWorkbenchStore();
+  const result = await store.setProjectSkillBindingEnabled({
     projectId,
     bindingId: String(formData.get("bindingId") ?? ""),
     enabled: String(formData.get("enabled") ?? "false") === "true"
@@ -304,7 +310,8 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
   }
 
   const pageVersionId = String(formData.get("pageVersionId") ?? "").trim();
-  const result = await getWebWorkbenchStore().executeSkillCommand({
+  const store = await getWebWorkbenchStore();
+  const result = await store.executeSkillCommand({
     projectId,
     skillVersionId: String(formData.get("skillVersionId") ?? "").trim(),
     commandId: String(formData.get("commandId") ?? "").trim(),
@@ -322,9 +329,8 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
 export async function runLocalWorkerOnceAction(formData: FormData): Promise<void> {
   const currentProjectId = (await getCurrentProjectId())?.trim();
   const projectId = currentProjectId || String(formData.get("projectId") ?? "").trim();
-  const result = await getWebWorkbenchStore().runLocalWorkerOnce(
-    projectId ? { projectId } : {}
-  );
+  const store = await getWebWorkbenchStore();
+  const result = await store.runLocalWorkerOnce(projectId ? { projectId } : {});
   if (!result.ok) {
     redirectToSkillsWithWorkerError(result.error);
   }
@@ -341,7 +347,8 @@ export async function createModelProviderAction(formData: FormData): Promise<voi
   if (!projectId) {
     redirectToModelsWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().createModelProvider({
+  const store = await getWebWorkbenchStore();
+  const result = await store.createModelProvider({
     projectId,
     providerId: String(formData.get("providerId") ?? ""),
     name: String(formData.get("name") ?? ""),
@@ -366,7 +373,8 @@ export async function setModelProviderEnabledAction(formData: FormData): Promise
   if (!projectId) {
     redirectToModelsWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().setModelProviderEnabled({
+  const store = await getWebWorkbenchStore();
+  const result = await store.setModelProviderEnabled({
     projectId,
     providerId: String(formData.get("providerId") ?? ""),
     enabled: String(formData.get("enabled") ?? "false") === "true"
@@ -386,7 +394,8 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
     redirectToModelsWithError("project_not_found");
   }
   const role = parseAgentRole(formData.get("role"));
-  const result = await getWebWorkbenchStore().upsertProjectModelRoute({
+  const store = await getWebWorkbenchStore();
+  const result = await store.upsertProjectModelRoute({
     projectId,
     role,
     providerId: String(formData.get("providerId") ?? ""),
@@ -405,7 +414,8 @@ export async function createMCPConnectorAction(formData: FormData): Promise<void
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().createMCPConnector({
+  const store = await getWebWorkbenchStore();
+  const result = await store.createMCPConnector({
     projectId,
     definitionJson: String(formData.get("definitionJson") ?? "")
   });
@@ -422,7 +432,8 @@ export async function setMCPConnectorEnabledAction(formData: FormData): Promise<
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().setMCPConnectorEnabled({
+  const store = await getWebWorkbenchStore();
+  const result = await store.setMCPConnectorEnabled({
     projectId,
     connectorId: String(formData.get("connectorId") ?? ""),
     enabled: String(formData.get("enabled") ?? "false") === "true"
@@ -440,7 +451,8 @@ export async function setMCPToolApprovalAction(formData: FormData): Promise<void
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().setMCPToolApproval({
+  const store = await getWebWorkbenchStore();
+  const result = await store.setMCPToolApproval({
     projectId,
     connectorId: String(formData.get("connectorId") ?? ""),
     toolName: String(formData.get("toolName") ?? ""),
@@ -459,7 +471,8 @@ export async function executeMCPToolAction(formData: FormData): Promise<void> {
   if (!projectId) {
     redirectToMCPWithError("project_not_found");
   }
-  const result = await getWebWorkbenchStore().executeMCPTool({
+  const store = await getWebWorkbenchStore();
+  const result = await store.executeMCPTool({
     projectId,
     connectorId: String(formData.get("connectorId") ?? ""),
     toolName: String(formData.get("toolName") ?? ""),

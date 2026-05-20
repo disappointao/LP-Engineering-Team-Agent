@@ -209,6 +209,7 @@ async function saveManualPageVersion(input: {
 
 describe("web workbench store", () => {
   afterEach(async () => {
+    vi.unstubAllEnvs();
     restoreWorkerEnv();
     delete webStoreGlobal.__lpAgentWebWorkbenchStore;
     await Promise.all(
@@ -340,7 +341,7 @@ describe("web workbench store", () => {
     process.env.WORKER_PAYLOADS_FILE = files.payloadsFilePath;
     delete process.env.WORKER_LOGS_FILE;
     delete webStoreGlobal.__lpAgentWebWorkbenchStore;
-    const store = getWebWorkbenchStore();
+    const store = await getWebWorkbenchStore();
     const project = await store.createProject({ name: "Project" });
     const draft = await store.createSkillDraft({
       manifestJson: deploymentSkillManifestJson(),
@@ -382,6 +383,19 @@ describe("web workbench store", () => {
     await expect(readFile(files.logsFilePath, "utf8")).resolves.toContain(
       "worker.job.completed"
     );
+  });
+
+  it("creates the global store through the configured repository backend", async () => {
+    const stateFileDirectory = await mkdtemp(join(tmpdir(), "web-store-memory-backend-"));
+    tempDirs.push(stateFileDirectory);
+    vi.stubEnv("LP_AGENT_WORKBENCH_STATE_FILE", stateFileDirectory);
+    vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "memory");
+    delete webStoreGlobal.__lpAgentWebWorkbenchStore;
+
+    const store = await getWebWorkbenchStore();
+    const project = await store.createProject({ name: "Memory backend project" });
+
+    expect(project.name).toBe("Memory backend project");
   });
 
   it("runs one local worker job and finalizes the queued command", async () => {

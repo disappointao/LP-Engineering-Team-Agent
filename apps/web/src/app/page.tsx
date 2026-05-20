@@ -75,7 +75,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
-  const pageState = await getWebWorkbenchStore().getPageState({
+  const store = await getWebWorkbenchStore();
+  const pageState = await store.getPageState({
     projectId: currentProjectId,
     taskId: currentTaskId,
     artifactPath
