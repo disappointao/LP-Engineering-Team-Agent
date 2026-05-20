@@ -19,6 +19,7 @@
     "@lp-agent/mcp-gateway": "workspace:*",
     "@lp-agent/model-gateway": "workspace:*",
     "@lp-agent/skills": "workspace:*",
+    "@lp-agent/worker-runtime": "workspace:*",
     "@prisma/client": "^6.0.0"
   },
   "devDependencies": {
