@@ -61,6 +61,7 @@ const emptyWorkerQueueSnapshot = {
 const tempDirs: string[] = [];
 const originalEnv = {
   LP_AGENT_WORKBENCH_STATE_FILE: process.env.LP_AGENT_WORKBENCH_STATE_FILE,
+  WORKER_REPOSITORY_BACKEND: process.env.WORKER_REPOSITORY_BACKEND,
   WORKER_JOBS_FILE: process.env.WORKER_JOBS_FILE,
   WORKER_PAYLOADS_FILE: process.env.WORKER_PAYLOADS_FILE,
   WORKER_LOGS_FILE: process.env.WORKER_LOGS_FILE
@@ -390,6 +391,7 @@ describe("web workbench store", () => {
     tempDirs.push(stateFileDirectory);
     vi.stubEnv("LP_AGENT_WORKBENCH_STATE_FILE", stateFileDirectory);
     vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "memory");
+    vi.stubEnv("WORKER_REPOSITORY_BACKEND", "memory");
     delete webStoreGlobal.__lpAgentWebWorkbenchStore;
 
     const store = await getWebWorkbenchStore();
@@ -402,6 +404,7 @@ describe("web workbench store", () => {
     vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "postgres");
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("WORKBENCH_POSTGRES_WORKSPACE_ID", "workspace_local");
+    vi.stubEnv("WORKER_REPOSITORY_BACKEND", "memory");
     delete webStoreGlobal.__lpAgentWebWorkbenchStore;
 
     await expect(getWebWorkbenchStore()).rejects.toThrow(
@@ -413,6 +416,25 @@ describe("web workbench store", () => {
     const project = await store.createProject({ name: "Recovered memory backend project" });
 
     expect(project.name).toBe("Recovered memory backend project");
+  });
+
+  it("fails global store initialization when worker postgres backend misses DATABASE_URL", async () => {
+    vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "memory");
+    vi.stubEnv("WORKER_REPOSITORY_BACKEND", "postgres");
+    vi.stubEnv("DATABASE_URL", "");
+    delete webStoreGlobal.__lpAgentWebWorkbenchStore;
+
+    await expect(getWebWorkbenchStore()).rejects.toThrow(
+      "WORKER_REPOSITORY_BACKEND=postgres requires DATABASE_URL"
+    );
+
+    vi.stubEnv("WORKER_REPOSITORY_BACKEND", "memory");
+    const store = await getWebWorkbenchStore();
+    const project = await store.createProject({
+      name: "Recovered worker memory backend project"
+    });
+
+    expect(project.name).toBe("Recovered worker memory backend project");
   });
 
   it("runs one local worker job and finalizes the queued command", async () => {

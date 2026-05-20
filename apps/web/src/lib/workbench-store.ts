@@ -1,6 +1,6 @@
 import {
   DemoWorkbenchService,
-  createLocalWorkerQueueRuntime,
+  createWorkerQueueRuntime,
   createWorkerQueueSnapshot,
   deriveTaskInterruptView,
   interruptTask,
@@ -1542,29 +1542,12 @@ const globalStore = globalThis as typeof globalThis & {
   __lpAgentWebWorkbenchStore?: Promise<WebWorkbenchStore>;
 };
 
-function defaultWorkerJobsFilePath(): string {
-  return process.env.WORKER_JOBS_FILE ?? ".lp-agent/worker-jobs.json";
-}
-
-function defaultWorkerPayloadsFilePath(): string {
-  return process.env.WORKER_PAYLOADS_FILE ?? ".lp-agent/worker-payloads.json";
-}
-
-function defaultWorkerLogsFilePath(): string | undefined {
-  return process.env.WORKER_LOGS_FILE;
-}
-
 function defaultWorkerId(): string {
   return process.env.WORKER_ID ?? "local-web-worker";
 }
 
 async function createDefaultWebWorkbenchStore(): Promise<WebWorkbenchStore> {
-  const workerLogsFilePath = defaultWorkerLogsFilePath();
-  const workerQueue = createLocalWorkerQueueRuntime({
-    jobsFilePath: defaultWorkerJobsFilePath(),
-    payloadsFilePath: defaultWorkerPayloadsFilePath(),
-    ...(workerLogsFilePath !== undefined ? { logsFilePath: workerLogsFilePath } : {})
-  });
+  const workerQueue = await createWorkerQueueRuntime();
   return createWebWorkbenchStore({
     repositories: await createWebWorkbenchRepositories(),
     workerQueueRuntime: workerQueue.runtime,
