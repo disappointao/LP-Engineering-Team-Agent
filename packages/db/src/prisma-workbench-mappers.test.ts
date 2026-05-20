@@ -139,6 +139,8 @@ describe("prisma workbench mappers", () => {
       injected: [],
       omitted: []
     });
+    expect(toPrismaRunCreate({ ...run, taskId: "" })).toHaveProperty("taskId", "");
+    expect(toRepositoryRun({ ...create, taskId: "" })).toHaveProperty("taskId", "");
   });
 
   it("maps run event payloads defensively", () => {
@@ -196,6 +198,8 @@ describe("prisma workbench mappers", () => {
       createdAt: "2026-05-12T00:00:00.000Z"
     });
     expect(toRepositoryRunEvent({ ...create, payload: "invalid" }).payload).toEqual({});
+    expect(toPrismaRunEventCreate({ ...event, taskId: "" })).toHaveProperty("taskId", "");
+    expect(toRepositoryRunEvent({ ...create, taskId: "" })).toHaveProperty("taskId", "");
   });
 
   it("maps handoff artifact refs as optional JSON", () => {
@@ -284,6 +288,14 @@ describe("prisma workbench mappers", () => {
     expect(toRepositoryAgentHandoff({ ...create, artifactRefs: "invalid" })).not.toHaveProperty(
       "artifactRefs"
     );
+    expect(toPrismaAgentHandoffCreate({ ...handoff, taskId: "", blockingReason: "" })).toMatchObject({
+      taskId: "",
+      blockingReason: ""
+    });
+    expect(toRepositoryAgentHandoff({ ...create, taskId: "", blockingReason: "" })).toMatchObject({
+      taskId: "",
+      blockingReason: ""
+    });
   });
 
   it("maps project members with display name and updated timestamp", () => {

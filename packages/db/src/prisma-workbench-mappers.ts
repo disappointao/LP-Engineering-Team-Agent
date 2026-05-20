@@ -528,7 +528,7 @@ export function toPrismaRunCreate(run: RunRecord): PrismaRunCreate {
   return {
     id: run.id,
     projectId: run.projectId,
-    ...(run.taskId ? { taskId: run.taskId } : {}),
+    ...(isDefined(run.taskId) ? { taskId: run.taskId } : {}),
     role: run.role,
     state: run.state,
     startedAt: new Date(run.startedAt),
@@ -541,11 +541,11 @@ export function toRepositoryRun(row: PrismaRunRow): RunRecord {
   return {
     id: row.id,
     projectId: row.projectId,
-    ...(row.taskId ? { taskId: row.taskId } : {}),
+    ...(isPresentRowValue(row.taskId) ? { taskId: row.taskId } : {}),
     role: row.role,
     state: row.state,
     startedAt: row.startedAt.toISOString(),
-    ...(row.completedAt ? { completedAt: row.completedAt.toISOString() } : {}),
+    ...(isPresentRowValue(row.completedAt) ? { completedAt: row.completedAt.toISOString() } : {}),
     contextSummary: cloneContextSummaryOrDefault(row.contextSummary)
   };
 }
@@ -555,7 +555,7 @@ export function toPrismaRunEventCreate(event: RunEventRecord): PrismaRunEventCre
     id: event.id,
     runId: event.runId,
     projectId: event.projectId,
-    ...(event.taskId ? { taskId: event.taskId } : {}),
+    ...(isDefined(event.taskId) ? { taskId: event.taskId } : {}),
     sequence: event.sequence,
     type: event.type,
     message: event.message,
@@ -569,7 +569,7 @@ export function toRepositoryRunEvent(row: PrismaRunEventRow): RunEventRecord {
     id: row.id,
     runId: row.runId,
     projectId: row.projectId,
-    ...(row.taskId ? { taskId: row.taskId } : {}),
+    ...(isPresentRowValue(row.taskId) ? { taskId: row.taskId } : {}),
     sequence: row.sequence,
     type: row.type,
     message: row.message,
@@ -584,13 +584,15 @@ export function toPrismaAgentHandoffCreate(
   return {
     id: handoff.id,
     projectId: handoff.projectId,
-    ...(handoff.taskId ? { taskId: handoff.taskId } : {}),
+    ...(isDefined(handoff.taskId) ? { taskId: handoff.taskId } : {}),
     fromRunId: handoff.fromRunId,
     fromRole: handoff.fromRole,
     toRole: handoff.toRole,
     state: handoff.state,
     summary: handoff.summary,
-    ...(handoff.blockingReason ? { blockingReason: handoff.blockingReason } : {}),
+    ...(isDefined(handoff.blockingReason)
+      ? { blockingReason: handoff.blockingReason }
+      : {}),
     ...(handoff.artifactRefs ? { artifactRefs: cloneArtifactRefs(handoff.artifactRefs) } : {}),
     createdAt: new Date(handoff.createdAt),
     updatedAt: new Date(handoff.updatedAt)
@@ -603,13 +605,13 @@ export function toRepositoryAgentHandoff(row: PrismaAgentHandoffRow): AgentHando
   return {
     id: row.id,
     projectId: row.projectId,
-    ...(row.taskId ? { taskId: row.taskId } : {}),
+    ...(isPresentRowValue(row.taskId) ? { taskId: row.taskId } : {}),
     fromRunId: row.fromRunId,
     fromRole: row.fromRole,
     toRole: row.toRole,
     state: row.state,
     summary: row.summary,
-    ...(row.blockingReason ? { blockingReason: row.blockingReason } : {}),
+    ...(isPresentRowValue(row.blockingReason) ? { blockingReason: row.blockingReason } : {}),
     ...(artifactRefs ? { artifactRefs } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
