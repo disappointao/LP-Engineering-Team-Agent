@@ -119,7 +119,7 @@ Rules 是 Agent 必须遵守的约束，来源可能包括：
 - approval state。
 - 是否可复用。
 
-当前项目 MCP 已有 registry 和可见工具计算，并会进入 Context Pack v0，但 MCP execution 仍未实现。Stage 4 已经先打通受控的 deployment skill command 执行，并以 `ToolObservationRecord`、脱敏 `tool.started/tool.completed/tool.failed` run event 形成第一版 durable observation/event 闭环；Stage 4.1 又把这个闭环接到 Web 工作台和 chat timeline。后续 MCP execution 应复用这个 observation 底座，而不是直接把输出拼到 message 里。
+当前项目 MCP 已有 registry、可见工具计算和进入 Context Pack v0 的边界；Stage 20 也已经实现 read-only deterministic MCP tool execution v0：API 侧先校验 project、connector、tool、role、permission、approval 和 read-only 边界，再通过 deterministic local executor 写入安全 `ToolObservationRecord` 和脱敏 run event。这里的学习点不是“MCP 已经完整接入”，而是第一版 MCP execution 必须先把授权、只读约束、observation 和 UI 可见摘要做成受控边界。真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution 仍是后续工作，不能绕过这个 observation 底座直接把工具输出拼到 message 里。
 
 重要学习点：agent 工具调用输出必须拆成 raw output 和 metadata summary。raw output 只留在受控 observation/日志边界内，不能直接喂给 UI 或聊天消息；UI 只展示 allowlist metadata，例如 command id、状态、退出码、耗时、截断摘要和脱敏错误。命令执行还必须同时绑定 approval、permission、secret redaction、scope、project id 和 pageVersion id，避免跨项目、跨版本或未授权执行。run event 本身要可检索、可过滤、可压缩，才能支撑刷新恢复、失败诊断、长历史摘要和后续流式 timeline。
 
