@@ -605,6 +605,15 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("当前没有可打断的任务。");
   });
 
+  it("renders recovery errors in the empty workbench state", async () => {
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ recoveryError: "task_not_found" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain("Recovery action could not be completed.");
+  });
+
   it("renders inline recovery actions without raw diagnostics", async () => {
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState({
@@ -629,6 +638,22 @@ describe("HomePage project flow errors", () => {
               rawPayload: "secret-token"
             },
             recoveryActions: ["retry_run", "resolve_blocker"]
+          },
+          {
+            runId: "run_worker_finalize",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "deployer",
+            state: "failed",
+            runRecordState: "running",
+            startedAt: "2026-05-20T00:00:10.000Z",
+            terminalEventType: "worker.job.completed",
+            diagnosticSummary: {
+              code: "worker_finalization_pending",
+              message: "Worker completed but the run was not finalized.",
+              source: "worker_job"
+            },
+            recoveryActions: ["resume_worker_finalization"]
           }
         ]
       }
@@ -644,16 +669,23 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Planner");
     expect(text).toContain("Failed");
     expect(text).toContain("Retry run");
+    expect(text).toContain("Resume finalization");
     expect(text).toContain("Resolve blocker");
     expect(text).toContain("Planner stopped before producing a brief.");
     expect(text).toContain("planner_failed");
     expect(text).not.toContain("secret-token");
-    expect(recoveryForms).toHaveLength(1);
-    expect(collectFormPayload(recoveryForms[0]!)).toEqual({
-      taskId: "task_1",
-      runId: "run_planner_failed",
-      action: "retry_run"
-    });
+    expect(recoveryForms.map(collectFormPayload)).toEqual([
+      {
+        taskId: "task_1",
+        runId: "run_planner_failed",
+        action: "retry_run"
+      },
+      {
+        taskId: "task_1",
+        runId: "run_worker_finalize",
+        action: "resume_worker_finalization"
+      }
+    ]);
   });
 
   it("does not expose deployment navigation in the local web flow", async () => {

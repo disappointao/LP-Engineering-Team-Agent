@@ -914,6 +914,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 {interruptErrorMessage ? (
                   <div className="formError" role="alert">{interruptErrorMessage}</div>
                 ) : null}
+                {recoveryErrorMessage ? (
+                  <div className="formError" role="alert">{recoveryErrorMessage}</div>
+                ) : null}
                 <div className="entryComposerShell">
                   <p>{copy.entry.placeholder}</p>
                   <div className="entryChipRow">
