@@ -302,17 +302,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </header>
 
-        <div className="conversationViewport">
-          <div className="conversationStack">
-            {activeView === "skills" ? (
-              <section className="skillsView" aria-labelledby="skills-title">
-                <header className="skillsHeader">
-                  <div>
-                    <h1 id="skills-title">{copy.skillsView.title}</h1>
-                    <p>{copy.skillsView.subtitle}</p>
-                  </div>
-                  <span>{activeSkillLabel}</span>
-                </header>
+        {activeView !== "workbench" ? (
+          <div className="conversationViewport">
+            <div className="conversationStack">
+              {activeView === "skills" ? (
+                <section className="skillsView" aria-labelledby="skills-title">
+                  <header className="skillsHeader">
+                    <div>
+                      <h1 id="skills-title">{copy.skillsView.title}</h1>
+                      <p>{copy.skillsView.subtitle}</p>
+                    </div>
+                    <span>{activeSkillLabel}</span>
+                  </header>
 
                 {skillErrorMessage ? (
                   <div className="formError" role="alert">{skillErrorMessage}</div>
@@ -911,33 +912,35 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </section>
             ) : null}
 
-            {activeView === "workbench" ? (
-              <StreamingWorkbench
-                action={submitPromptAction}
-                projectId={activeProject?.id}
-                taskId={pageState.kind === "task_ready" ? pageState.task.id : undefined}
-                implicitProjectName={copy.entry.implicitProjectName}
-                promptLabel={copy.projectFlow.promptLabel}
-                placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
-                addAttachmentLabel={composer.addAttachmentLabel}
-                runtimeChip={composer.runtimeChip}
-                sendLabel={composer.sendLabel}
-                streamingStatusLabel={copy.chat.streamingStatusLabel}
-                streamingErrorLabel={copy.chat.streamingErrorLabel}
-                interruptControl={
-                  <InterruptSubmitButton
-                    action={interruptCurrentTaskAction}
-                    state={pageState.kind === "task_ready"
-                      ? pageState.interrupt.state
-                      : "not_interruptible"}
-                    labels={{
-                      idle: composer.interruptLabel,
-                      stopping: copy.chat.interruptStoppingLabel,
-                      unavailable: copy.chat.interruptUnavailableLabel
-                    }}
-                  />
-                }
-              >
+            </div>
+          </div>
+        ) : (
+          <StreamingWorkbench
+            action={submitPromptAction}
+            projectId={activeProject?.id}
+            taskId={pageState.kind === "task_ready" ? pageState.task.id : undefined}
+            implicitProjectName={copy.entry.implicitProjectName}
+            promptLabel={copy.projectFlow.promptLabel}
+            placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
+            addAttachmentLabel={composer.addAttachmentLabel}
+            runtimeChip={composer.runtimeChip}
+            sendLabel={composer.sendLabel}
+            streamingStatusLabel={copy.chat.streamingStatusLabel}
+            streamingErrorLabel={copy.chat.streamingErrorLabel}
+            interruptControl={
+              <InterruptSubmitButton
+                action={interruptCurrentTaskAction}
+                state={pageState.kind === "task_ready"
+                  ? pageState.interrupt.state
+                  : "not_interruptible"}
+                labels={{
+                  idle: composer.interruptLabel,
+                  stopping: copy.chat.interruptStoppingLabel,
+                  unavailable: copy.chat.interruptUnavailableLabel
+                }}
+              />
+            }
+          >
                 {pageState.kind === "empty" ? (
                   <section className="entryPanel" aria-labelledby="entry-title">
                     <h1 id="entry-title">{copy.entry.title}</h1>
@@ -1058,10 +1061,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </section>
                   </>
                 ) : null}
-              </StreamingWorkbench>
-            ) : null}
-          </div>
-        </div>
+          </StreamingWorkbench>
+        )}
       </section>
     </main>
   );

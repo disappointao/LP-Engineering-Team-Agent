@@ -174,6 +174,39 @@ function collectStreamingWorkbenchProps(node: unknown): Array<Record<string, unk
   return [];
 }
 
+type ReactTestElement = {
+  type?: unknown;
+  props?: { children?: unknown; className?: unknown } & Record<string, unknown>;
+};
+
+function collectElementPaths(
+  node: unknown,
+  predicate: (element: ReactTestElement) => boolean,
+  ancestors: ReactTestElement[] = []
+): ReactTestElement[][] {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return [];
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap((child) => collectElementPaths(child, predicate, ancestors));
+  }
+  if (typeof node === "object" && "type" in node && "props" in node) {
+    const element = node as ReactTestElement;
+    const path = [...ancestors, element];
+    return [
+      ...(predicate(element) ? [path] : []),
+      ...collectElementPaths(element.props?.children, predicate, path)
+    ];
+  }
+  return [];
+}
+
+function hasClass(element: ReactTestElement | undefined, className: string): boolean {
+  return String(element?.props?.className ?? "")
+    .split(" ")
+    .includes(className);
+}
+
 function collectFormPayload(form: { props?: Record<string, unknown> }): Record<string, unknown> {
   return Object.fromEntries(
     collectElements(form.props?.children, "input").map((input) => [
@@ -550,6 +583,23 @@ describe("HomePage project flow errors", () => {
       streamingErrorLabel: "The chat response could not be generated."
     });
     expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
+  });
+
+  it("keeps the streaming workbench shell outside the scroll stack", async () => {
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const [streamingWorkbenchPath] = collectElementPaths(
+      page,
+      (element) =>
+        typeof element.type === "function" &&
+        element.type.name === "StreamingWorkbench"
+    );
+    const parent = streamingWorkbenchPath?.at(-2);
+
+    expect(streamingWorkbenchPath).toBeDefined();
+    expect(
+      streamingWorkbenchPath?.some((element) => hasClass(element, "conversationStack"))
+    ).toBe(false);
+    expect(hasClass(parent, "chatWorkspace")).toBe(true);
   });
 
   it("renders an enabled interrupt button for interruptible task state", async () => {

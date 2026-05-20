@@ -229,20 +229,29 @@ export function StreamingWorkbench({
 
   return (
     <>
-      {children}
-      {shouldRenderStreamingTurn(state) ? (
-        <article className="assistantTurn streamingTurn" aria-live="polite">
-          <div className="assistantIdentity">
-            <div className="assistantAvatar">LP</div>
-            <strong>LP Agent</strong>
-          </div>
-          <div className="assistantMessage">
-            {state.assistantContent ? <p>{state.assistantContent}</p> : null}
-            {visibleStatus ? <p className="streamingStatus">{visibleStatus}</p> : null}
-          </div>
-        </article>
-      ) : null}
-      <form action={action} className="composerDock" onSubmit={handleSubmit} ref={formRef}>
+      <div className="conversationViewport">
+        <div className="conversationStack">
+          {children}
+          {shouldRenderStreamingTurn(state) ? (
+            <article className="assistantTurn streamingTurn" aria-live="polite">
+              <div className="assistantIdentity">
+                <div className="assistantAvatar">LP</div>
+                <strong>LP Agent</strong>
+              </div>
+              <div className="assistantMessage">
+                {state.assistantContent ? <p>{state.assistantContent}</p> : null}
+                {visibleStatus ? <p className="streamingStatus">{visibleStatus}</p> : null}
+              </div>
+            </article>
+          ) : null}
+        </div>
+      </div>
+      <form
+        action={action}
+        className="composerDock"
+        onSubmit={handleSubmit}
+        ref={formRef}
+      >
         {projectId ? <input name="projectId" type="hidden" value={projectId} /> : null}
         {taskId ? <input name="taskId" type="hidden" value={taskId} /> : null}
         <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
