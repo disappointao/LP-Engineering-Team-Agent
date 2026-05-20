@@ -159,6 +159,9 @@ importers:
       '@lp-agent/skills':
         specifier: workspace:*
         version: link:../skills
+      '@lp-agent/worker-runtime':
+        specifier: workspace:*
+        version: link:../worker-runtime
       '@prisma/client':
         specifier: ^6.0.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
