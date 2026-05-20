@@ -25,6 +25,9 @@
 - Artifact workspace：durable artifact workspace、manifest/hash/summary、controlled artifact reader、metadata-only static diff、bounded snippet。
 - Collaboration primitives：local identity seam、workspace/project member repositories、project owner membership、approval actor audit context。
 - Postgres repository foundation v0：Prisma schema 已对齐 Agent runtime 核心 repository contract，并提供显式 opt-in 的 Prisma-backed repository adapter。
+- Web opt-in Postgres backend wiring v0：Web repository backend factory 支持 `WORKBENCH_REPOSITORY_BACKEND=json|memory|postgres`；默认 Web backend 仍是 `.lp-agent/workbench-state.json` JSON-file state。
+- Postgres Web backend：显式 opt-in 时需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`，缺失或初始化失败时 fail closed，不静默回退 JSON-file。
+- Web-facing Prisma repository closure：Stage 23 已补齐 Web 会读取的 project members、deployments、skills、models、MCP config/approval 等 repository 边界，避免 Postgres core state 和 JSON sidecar split-brain。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 当前仍明确后置：
@@ -35,7 +38,6 @@
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
-- Web opt-in Postgres backend wiring。
 - Auth/RBAC on top of Postgres。
 - Object storage / artifact file content migration。
 - Prisma migrations and production deployment docs。
@@ -119,35 +121,37 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 **实施计划：** `docs/superpowers/plans/2026-05-19-postgres-repository-foundation.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 23：Web Opt-in Postgres Backend Wiring v0
 
-**状态：** design 和 implementation plan 已确认，待实现。
+**状态：** 已实现。
 
-**为什么现在做：** Stage 22 已提供 Prisma-backed repository adapter，但 Web/API runtime 默认仍走 in-memory / JSON-file。下一步应先证明同一套 workbench flow 可以在显式开关下选择 Postgres backend，再考虑 production rollout、auth/RBAC 或 hosted 部署。
+Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend 仍是 `.lp-agent/workbench-state.json` JSON-file state；显式设置 `WORKBENCH_REPOSITORY_BACKEND=postgres` 时，Web/API runtime 选择 Prisma-backed repositories。
 
-**建议范围：**
+已实现范围：
 
-- 新增显式 backend 选择，例如 `WORKBENCH_REPOSITORY_BACKEND=postgres`，缺少 `DATABASE_URL`、workspace bootstrap 或 Prisma client 时 fail closed。
-- Web/API repository factory 支持 in-memory、JSON-file、Prisma 三种 backend；默认本地开发仍保持 JSON-file / deterministic 路径。
-- 补最小 Postgres-backed Web/API flow 覆盖，确认 task、message、snapshot、run timeline、tool observation、handoff 和 artifact workspace metadata 能通过同一 contract 使用。
-- 增加开发文档，说明如何准备 workspace/project seed、如何开启 opt-in backend、如何回到默认本地 backend。
+- `WORKBENCH_REPOSITORY_BACKEND=json|memory|postgres` Web repository backend factory。
+- Postgres path 需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`；缺失、非法 backend 值或初始化失败时 fail closed，不静默回退 JSON-file。
+- Web-facing Prisma repository closure 覆盖 project members、deployments、skills、models、MCP config/approval 等 Web 可见状态，避免 Postgres + JSON split-brain。
+- `WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert local organization/workspace prerequisites。
+- 开发文档说明 opt-in 命令、bootstrap 范围和回到默认 JSON-file backend 的方式。
 
-**非目标：**
+未实现范围：
 
 - 不做 production migration strategy、hosted auth、RBAC 或 invite flow。
 - 不迁移 artifact file content 到 object storage。
 - 不把 worker job queue 切到 Postgres。
+- 不迁移既有 JSON-file state。
 - 不改变默认本地开发 backend。
 
 **当前设计：** `docs/superpowers/specs/2026-05-20-web-opt-in-postgres-backend-wiring-design.md`。
 
 **当前实施计划：** `docs/superpowers/plans/2026-05-20-web-opt-in-postgres-backend-wiring.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 24：Worker Job Postgres Backend v0
 
-**状态：** Stage 23 之后推荐。
+**状态：** 下一阶段优先推荐。
 
 **为什么现在做：** Web workbench state 可选择 Postgres 后，worker queue 仍是 JSON-file。durable background workers、stale recovery、daemon heartbeat 和审计要进入多人/长期运行场景，需要把 worker job/log repository 单独迁出本地文件。
 
@@ -331,7 +335,8 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 ## 决策记录
 
 - Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。
-- Stage 23 优先做 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，不默认切换 runtime backend。
+- Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
+- Stage 24 下一阶段优先做 worker job Postgres backend；worker queue 仍是 JSON-file，不属于 Stage 23 迁移范围。
 - Worker job Postgres backend 应单独跟进，避免同时迁移 workbench state 和 queue semantics。
 - MCP worker execution 应等待 durable worker backend 和 recovery UI 更稳定后再做。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。

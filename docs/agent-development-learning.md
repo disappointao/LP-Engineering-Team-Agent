@@ -227,13 +227,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
 - Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
 - Postgres Repository Foundation v0 已把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract，并提供显式 opt-in 的 Prisma-backed repository adapter；默认本地开发和测试仍走 `in-memory` / `JSON-file` repositories。
-- Stage 23 design 已确认下一步做 Web opt-in Postgres backend wiring：Web/API runtime 通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
+- Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
 - 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
-- Postgres production rollout 还没实现；Stage 23 只规划 Web opt-in backend wiring，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs 或 worker job repository Postgres backend。
+- Postgres production rollout 还没实现；Stage 23 只完成 Web opt-in backend wiring，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs 或 worker job repository Postgres backend。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
@@ -389,14 +389,16 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 学习重点：repository backend 是 Agent 可观察性和恢复语义的基础设施；切换存储层时，service 层应继续依赖 stable contract，而不是把 Prisma 细节泄漏到 runtime、context assembler 或 Web timeline。
 - 数据层迁移不能削弱 Agent 的可观察性和安全边界。更 durable 的 Postgres 只应该保存安全摘要和受控 artifact 数据，不应该让 raw model output、raw tool output、secret 或完整 artifact 内容扩散到 timeline/context。
 
-已确认的 Stage 23 Web Opt-in Postgres Backend Wiring v0 设计和实施计划：
+已实现的 Stage 23 Web Opt-in Postgres Backend Wiring v0：
 
 - [2026-05-20-web-opt-in-postgres-backend-wiring-design.md](./superpowers/specs/2026-05-20-web-opt-in-postgres-backend-wiring-design.md)
 - 当前实现计划：[2026-05-20-web-opt-in-postgres-backend-wiring.md](./superpowers/plans/2026-05-20-web-opt-in-postgres-backend-wiring.md)
-- 这一阶段不是 production rollout，而是让 Web/API runtime 在显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 下选择 Prisma-backed `WorkbenchRepositories`。
+- 这一阶段不是 production rollout，而是让 Web/API runtime 在显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 下选择 Prisma-backed `WorkbenchRepositories`；默认 Web backend 仍是 `.lp-agent/workbench-state.json` JSON-file state。
+- Agent storage backend selection 是 runtime boundary，不是普通配置开关。切换 durable backend 时，必须保证同一个用户可见工作流读写同一套事实来源，否则 run timeline、context memory、approval、tool observation 和 Web 页面状态会互相矛盾。
+- Web-facing repository closure 防止 Postgres + JSON split-brain：Web 页面会读取 project members、deployments、skills、models、MCP config/approval 等状态，只迁移 project/task/run 这类 core state 不够。
 - Postgres backend 选择必须 fail closed：缺少 `DATABASE_URL`、缺少 `WORKBENCH_POSTGRES_WORKSPACE_ID`、Prisma client 初始化失败或 backend 值非法时，不应静默回退到 JSON-file。
-- Stage 23 需要补齐 Web-facing repository closure，因为当前 Web 页面会读取 project members、deployments、skills、models、MCP config/approval 等状态。只迁移 project/task/run 这类 core state 会制造 Postgres + JSON sidecar 的 split-brain。
-- 学习重点：Agent storage backend selection 是 runtime boundary，不是普通配置开关。切换 durable backend 时，必须保证同一个用户可见工作流读写同一套事实来源，否则 run timeline、context memory、approval、tool observation 和 Web 页面状态会互相矛盾。
+- 全局 async store 初始化失败时需要清理 rejected Promise cache；否则一次失败会污染后续修正配置后的请求。
+- `WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert local organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth，也不迁移既有 JSON-file state。
 
 已实现的 Stage 4 Skill Command MVP：
 

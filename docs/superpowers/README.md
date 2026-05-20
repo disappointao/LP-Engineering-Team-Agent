@@ -299,11 +299,11 @@
    - 在 Stage 22 design 后阅读，用于按 TDD 对齐 Prisma schema、提取 shared repository contract tests、实现 Prisma mappers、显式 opt-in Prisma-backed repository adapter、opt-in Postgres integration test 和文档收尾。
 
 74. `specs/2026-05-20-web-opt-in-postgres-backend-wiring-design.md`
-   - Stage 23 Web Opt-in Postgres Backend Wiring v0 design。
+   - Stage 23 Web Opt-in Postgres Backend Wiring v0 design（已实现）。
    - 在 Stage 22 plan 后阅读，用于把 Web/API runtime 从 JSON-file 默认路径扩展到显式 opt-in 的 Postgres backend，同时补齐 Web-facing Prisma repository closure，并继续排除 production migration、hosted auth/RBAC、object storage 和 worker queue Postgres backend。
 
 75. `plans/2026-05-20-web-opt-in-postgres-backend-wiring.md`
-   - Stage 23 Web Opt-in Postgres Backend Wiring v0 implementation plan。
+   - Stage 23 Web Opt-in Postgres Backend Wiring v0 implementation plan（已实现）。
    - 在 Stage 23 design 后阅读，用于按 TDD 补齐 Web-facing Prisma repository closure、实现 Web backend factory、异步接线 `getWebWorkbenchStore()`、补最小 Web Postgres flow 覆盖和文档收尾。
 
 ## 维护规则

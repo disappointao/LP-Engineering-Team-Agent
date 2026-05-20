@@ -20,6 +20,23 @@
 
 - `DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate` 验证 Prisma schema。
 
+### Web Postgres backend opt-in
+
+Web workbench 默认使用 JSON-file state，路径为 `.lp-agent/workbench-state.json`。Postgres backend 必须显式开启：
+
+```bash
+pnpm --filter @lp-agent/db db:generate
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+WORKBENCH_REPOSITORY_BACKEND=postgres \
+WORKBENCH_POSTGRES_WORKSPACE_ID=workspace_local \
+WORKBENCH_POSTGRES_BOOTSTRAP=1 \
+pnpm dev
+```
+
+Postgres 路径需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`；缺失时 fail closed，不会静默回退到 JSON-file。`WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert 本地 organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth、不迁移既有 JSON-file state，也不把 worker job queue 切到 Postgres。
+
+unset `WORKBENCH_REPOSITORY_BACKEND` 或设为 `json` 可回到默认 JSON-file backend。
+
 ## 当前 MVP 行为
 
 第一版实现使用 deterministic 本地服务处理模型调用、runtime execution、MCP 可见性和 Git deployment handoff。边界与 v1 设计保持一致，因此后续真实 provider 可以替换这些实现，而不需要改变产品流程。

@@ -113,6 +113,21 @@ pnpm build
 DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm --filter @lp-agent/db db:validate
 ```
 
+### 可选 Web Postgres backend
+
+Web workbench 默认 backend 仍是 JSON-file state，路径为 `.lp-agent/workbench-state.json`。需要显式 opt-in Postgres backend 时，先生成 Prisma client，再带上 Postgres 配置启动 Web：
+
+```bash
+pnpm --filter @lp-agent/db db:generate
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+WORKBENCH_REPOSITORY_BACKEND=postgres \
+WORKBENCH_POSTGRES_WORKSPACE_ID=workspace_local \
+WORKBENCH_POSTGRES_BOOTSTRAP=1 \
+pnpm dev
+```
+
+`WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert 本地 organization/workspace prerequisites；它不运行 production migrations、不创建 hosted auth，也不迁移既有 JSON-file state。unset `WORKBENCH_REPOSITORY_BACKEND` 或设为 `json` 可回到默认 JSON-file backend。
+
 ## 手动验收
 
 本地检查 Web V1 时使用：
