@@ -90,7 +90,8 @@ import HomePage from "./page";
 import {
   executeRunRecoveryAction,
   executeSkillCommandAction,
-  runLocalWorkerOnceAction
+  runLocalWorkerOnceAction,
+  submitPromptAction
 } from "./actions";
 
 async function renderHomePage({
@@ -146,6 +147,28 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
     return [
       ...(element.type === type ? [element as { props?: Record<string, unknown> }] : []),
       ...collectElements(element.props?.children, type)
+    ];
+  }
+  return [];
+}
+
+function collectStreamingWorkbenchProps(node: unknown): Array<Record<string, unknown>> {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return [];
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap(collectStreamingWorkbenchProps);
+  }
+  if (typeof node === "object" && "type" in node && "props" in node) {
+    const element = node as {
+      type?: { name?: string };
+      props?: { children?: unknown } & Record<string, unknown>;
+    };
+    return [
+      ...(element.type?.name === "StreamingWorkbench"
+        ? [element.props as Record<string, unknown>]
+        : []),
+      ...collectStreamingWorkbenchProps(element.props?.children)
     ];
   }
   return [];
@@ -488,16 +511,45 @@ describe("HomePage project flow errors", () => {
       searchParams: Promise.resolve({})
     });
     const text = collectText(page);
-    const inputs = collectElements(page, "input");
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
 
     expect(text).toContain("What can I help you build?");
     expect(text).toContain("Create static LP");
     expect(text).toContain("Plan a campaign");
     expect(text).not.toContain("Start with a local project");
     expect(text).not.toContain("Repository URL");
-    expect(
-      inputs.some((input) => input.props?.name === "prompt" && input.props?.disabled === true)
-    ).toBe(false);
+    expect(streamingWorkbenchProps).toMatchObject({
+      action: submitPromptAction,
+      implicitProjectName: "Untitled LP Project",
+      promptLabel: "LP request",
+      placeholder: "Assign a task or ask anything",
+      streamingStatusLabel: "Generating response",
+      streamingErrorLabel: "The chat response could not be generated."
+    });
+  });
+
+  it("wires active task context into the streaming workbench shell", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
+
+    expect(streamingWorkbenchProps).toMatchObject({
+      action: submitPromptAction,
+      projectId: "project_1",
+      taskId: "task_1",
+      implicitProjectName: "Untitled LP Project",
+      promptLabel: "LP request",
+      placeholder: "Message LP Agent",
+      addAttachmentLabel: "Add context",
+      runtimeChip: "Cloud runtime",
+      sendLabel: "Send",
+      streamingStatusLabel: "Generating response",
+      streamingErrorLabel: "The chat response could not be generated."
+    });
+    expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
   });
 
   it("renders an enabled interrupt button for interruptible task state", async () => {
@@ -539,7 +591,8 @@ describe("HomePage project flow errors", () => {
     };
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
-    const buttons = collectElements(page, "button");
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
+    const buttons = collectElements(streamingWorkbenchProps?.interruptControl, "button");
     const interruptButton = buttons.find((button) =>
       collectText(button).includes("Interrupt")
     );
@@ -587,7 +640,8 @@ describe("HomePage project flow errors", () => {
     };
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
-    const buttons = collectElements(page, "button");
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
+    const buttons = collectElements(streamingWorkbenchProps?.interruptControl, "button");
     const interruptButton = buttons.find((button) =>
       collectText(button).includes("Stopping...")
     );

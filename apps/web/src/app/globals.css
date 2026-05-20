@@ -1213,6 +1213,16 @@ button {
   overflow-wrap: anywhere;
 }
 
+.streamingTurn {
+  padding-top: 2px;
+}
+
+.streamingStatus {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
 .processBlock,
 .recoveryBlock,
 .deliveryBlock,
@@ -1687,6 +1697,11 @@ button {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
+}
+
+.composer .sendButton:disabled {
+  background: #9aa0a6;
+  border-color: #9aa0a6;
 }
 
 .composerDisabled {

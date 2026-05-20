@@ -44,6 +44,7 @@ import {
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 import { InterruptSubmitButton } from "./interrupt-submit-button";
+import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
 type PageSearchParams = Record<string, PageSearchParamValue>;
@@ -910,163 +911,157 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </section>
             ) : null}
 
-            {activeView === "workbench" && pageState.kind === "empty" ? (
-              <section className="entryPanel" aria-labelledby="entry-title">
-                <h1 id="entry-title">{copy.entry.title}</h1>
-                {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
-                {interruptErrorMessage ? (
-                  <div className="formError" role="alert">{interruptErrorMessage}</div>
-                ) : null}
-                {recoveryErrorMessage ? (
-                  <div className="formError" role="alert">{recoveryErrorMessage}</div>
-                ) : null}
-                <div className="entryComposerShell">
-                  <p>{copy.entry.placeholder}</p>
-                  <div className="entryChipRow">
-                    {copy.entry.chips.map((chip) => (
-                      <button type="button" key={chip}>{chip}</button>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
-            {activeView === "workbench" && chat ? (
-              <>
-                {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
-                {interruptErrorMessage ? (
-                  <div className="formError" role="alert">{interruptErrorMessage}</div>
-                ) : null}
-                {recoveryErrorMessage ? (
-                  <div className="formError" role="alert">{recoveryErrorMessage}</div>
-                ) : null}
-                <div className="userTurn" aria-label={copy.chat.userLabel}>
-                  <div className="messageBubble userMessage">{chat.userMessage}</div>
-                </div>
-
-                <article className="assistantTurn">
-                  <div className="assistantIdentity">
-                    <div className="assistantAvatar">LP</div>
-                    <strong>{chat.assistantName}</strong>
-                    <span>{chat.assistantBadge}</span>
-                  </div>
-
-                  <div className="assistantMessage">
-                    <p>{chat.assistantIntro}</p>
-
-                    <section className="processBlock" aria-label={copy.chat.toolsTitle}>
-                      <div className="processHeader">
-                        <strong>{copy.chat.toolsTitle}</strong>
-                        <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
-                      </div>
-                      <div className="toolTimeline">
-                        {chat.toolEvents.map((event) => (
-                          <div className="toolEvent" data-status={event.status} key={event.id}>
-                            <div className="toolStatusDot" aria-hidden="true" />
-                            <div>
-                              <div className="toolEventTop">
-                                <strong>{event.label}</strong>
-                                <span>{event.statusLabel}</span>
-                              </div>
-                              <p>{event.operation}</p>
-                              <small>{event.meta}</small>
-                            </div>
-                          </div>
+            {activeView === "workbench" ? (
+              <StreamingWorkbench
+                action={submitPromptAction}
+                projectId={activeProject?.id}
+                taskId={pageState.kind === "task_ready" ? pageState.task.id : undefined}
+                implicitProjectName={copy.entry.implicitProjectName}
+                promptLabel={copy.projectFlow.promptLabel}
+                placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
+                addAttachmentLabel={composer.addAttachmentLabel}
+                runtimeChip={composer.runtimeChip}
+                sendLabel={composer.sendLabel}
+                streamingStatusLabel={copy.chat.streamingStatusLabel}
+                streamingErrorLabel={copy.chat.streamingErrorLabel}
+                interruptControl={
+                  <InterruptSubmitButton
+                    action={interruptCurrentTaskAction}
+                    state={pageState.kind === "task_ready"
+                      ? pageState.interrupt.state
+                      : "not_interruptible"}
+                    labels={{
+                      idle: composer.interruptLabel,
+                      stopping: copy.chat.interruptStoppingLabel,
+                      unavailable: copy.chat.interruptUnavailableLabel
+                    }}
+                  />
+                }
+              >
+                {pageState.kind === "empty" ? (
+                  <section className="entryPanel" aria-labelledby="entry-title">
+                    <h1 id="entry-title">{copy.entry.title}</h1>
+                    {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
+                    {interruptErrorMessage ? (
+                      <div className="formError" role="alert">{interruptErrorMessage}</div>
+                    ) : null}
+                    {recoveryErrorMessage ? (
+                      <div className="formError" role="alert">{recoveryErrorMessage}</div>
+                    ) : null}
+                    <div className="entryComposerShell">
+                      <p>{copy.entry.placeholder}</p>
+                      <div className="entryChipRow">
+                        {copy.entry.chips.map((chip) => (
+                          <button type="button" key={chip}>{chip}</button>
                         ))}
                       </div>
-                    </section>
+                    </div>
+                  </section>
+                ) : null}
 
-                    {pageState.kind === "task_ready" &&
-                    (pageState.recovery?.runs.length ?? 0) > 0
-                      ? RecoveryBlock({ pageState, copy })
-                      : null}
+                {chat ? (
+                  <>
+                    {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
+                    {interruptErrorMessage ? (
+                      <div className="formError" role="alert">{interruptErrorMessage}</div>
+                    ) : null}
+                    {recoveryErrorMessage ? (
+                      <div className="formError" role="alert">{recoveryErrorMessage}</div>
+                    ) : null}
+                    <div className="userTurn" aria-label={copy.chat.userLabel}>
+                      <div className="messageBubble userMessage">{chat.userMessage}</div>
+                    </div>
 
-                    <p>{chat.assistantCompletion}</p>
+                    <article className="assistantTurn">
+                      <div className="assistantIdentity">
+                        <div className="assistantAvatar">LP</div>
+                        <strong>{chat.assistantName}</strong>
+                        <span>{chat.assistantBadge}</span>
+                      </div>
 
-                    {completedSnapshot ? (
-                      <>
-                        <section className="deliveryBlock" aria-label={copy.chat.artifactsTitle}>
-                          <div className="deliveryHeader">
-                            <strong>{copy.chat.taskComplete}</strong>
-                            <span>{copy.chat.resultRating}</span>
+                      <div className="assistantMessage">
+                        <p>{chat.assistantIntro}</p>
+
+                        <section className="processBlock" aria-label={copy.chat.toolsTitle}>
+                          <div className="processHeader">
+                            <strong>{copy.chat.toolsTitle}</strong>
+                            <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
                           </div>
-                          <div className="artifactGrid">
-                            {chat.artifacts.map((artifact) => (
-                              <a
-                                className="artifactCard"
-                                download={artifact.filename}
-                                href={artifact.href}
-                                key={artifact.id}
-                              >
-                                <span>{artifact.kind}</span>
-                                <strong>{artifact.filename}</strong>
-                                <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
-                              </a>
+                          <div className="toolTimeline">
+                            {chat.toolEvents.map((event) => (
+                              <div className="toolEvent" data-status={event.status} key={event.id}>
+                                <div className="toolStatusDot" aria-hidden="true" />
+                                <div>
+                                  <div className="toolEventTop">
+                                    <strong>{event.label}</strong>
+                                    <span>{event.statusLabel}</span>
+                                  </div>
+                                  <p>{event.operation}</p>
+                                  <small>{event.meta}</small>
+                                </div>
+                              </div>
                             ))}
                           </div>
-                          {pageState.kind === "task_ready" && pageState.artifactDiff ? (
-                            ArtifactDiffBlock({
-                              artifactDiff: pageState.artifactDiff,
-                              copy: copy.chat,
-                              previewSearchParams
-                            })
-                          ) : null}
                         </section>
 
-                        <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
-                          <div className="previewTitle">{copy.chat.previewTitle}</div>
-                          <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
-                        </section>
-                      </>
-                    ) : null}
-                  </div>
-                </article>
+                        {pageState.kind === "task_ready" &&
+                        (pageState.recovery?.runs.length ?? 0) > 0
+                          ? RecoveryBlock({ pageState, copy })
+                          : null}
 
-                <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
-                  <div>{copy.chat.suggestionsTitle}</div>
-                  {chat.suggestions.map((suggestion) => (
-                    <button type="button" key={suggestion}>{suggestion}</button>
-                  ))}
-                </section>
-              </>
+                        <p>{chat.assistantCompletion}</p>
+
+                        {completedSnapshot ? (
+                          <>
+                            <section className="deliveryBlock" aria-label={copy.chat.artifactsTitle}>
+                              <div className="deliveryHeader">
+                                <strong>{copy.chat.taskComplete}</strong>
+                                <span>{copy.chat.resultRating}</span>
+                              </div>
+                              <div className="artifactGrid">
+                                {chat.artifacts.map((artifact) => (
+                                  <a
+                                    className="artifactCard"
+                                    download={artifact.filename}
+                                    href={artifact.href}
+                                    key={artifact.id}
+                                  >
+                                    <span>{artifact.kind}</span>
+                                    <strong>{artifact.filename}</strong>
+                                    <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
+                                  </a>
+                                ))}
+                              </div>
+                              {pageState.kind === "task_ready" && pageState.artifactDiff ? (
+                                ArtifactDiffBlock({
+                                  artifactDiff: pageState.artifactDiff,
+                                  copy: copy.chat,
+                                  previewSearchParams
+                                })
+                              ) : null}
+                            </section>
+
+                            <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
+                              <div className="previewTitle">{copy.chat.previewTitle}</div>
+                              <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
+                            </section>
+                          </>
+                        ) : null}
+                      </div>
+                    </article>
+
+                    <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
+                      <div>{copy.chat.suggestionsTitle}</div>
+                      {chat.suggestions.map((suggestion) => (
+                        <button type="button" key={suggestion}>{suggestion}</button>
+                      ))}
+                    </section>
+                  </>
+                ) : null}
+              </StreamingWorkbench>
             ) : null}
           </div>
         </div>
-
-        {activeView === "workbench" ? (
-          <form action={submitPromptAction} className="composerDock">
-            <input name="projectId" type="hidden" value={activeProject?.id ?? ""} />
-            <input name="implicitProjectName" type="hidden" value={copy.entry.implicitProjectName} />
-            <div className="composer">
-              <button
-                type="button"
-                aria-label={composer.addAttachmentLabel}
-              >
-                +
-              </button>
-              <input
-                aria-label={copy.projectFlow.promptLabel}
-                name="prompt"
-                placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
-              />
-              <span>{composer.runtimeChip}</span>
-              <InterruptSubmitButton
-                action={interruptCurrentTaskAction}
-                state={pageState.kind === "task_ready"
-                  ? pageState.interrupt.state
-                  : "not_interruptible"}
-                labels={{
-                  idle: composer.interruptLabel,
-                  stopping: copy.chat.interruptStoppingLabel,
-                  unavailable: copy.chat.interruptUnavailableLabel
-                }}
-              />
-              <button type="submit" className="sendButton">
-                {composer.sendLabel}
-              </button>
-            </div>
-          </form>
-        ) : null}
       </section>
     </main>
   );

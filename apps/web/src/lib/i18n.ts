@@ -258,6 +258,8 @@ export interface WorkbenchCopy {
     interruptLabel: string;
     interruptStoppingLabel: string;
     interruptUnavailableLabel: string;
+    streamingStatusLabel: string;
+    streamingErrorLabel: string;
     recoveryTitle: string;
     recoverySubtitle: string;
     recoveryStateLabels: Record<
@@ -738,6 +740,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptLabel: "Interrupt",
       interruptStoppingLabel: "Stopping...",
       interruptUnavailableLabel: "Nothing running",
+      streamingStatusLabel: "Generating response",
+      streamingErrorLabel: "The chat response could not be generated.",
       recoveryTitle: "Run recovery",
       recoverySubtitle: "Safe recovery options derived from the run lifecycle.",
       recoveryStateLabels: {
@@ -1203,6 +1207,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptLabel: "打断",
       interruptStoppingLabel: "正在停止...",
       interruptUnavailableLabel: "当前没有可打断任务",
+      streamingStatusLabel: "正在生成回复",
+      streamingErrorLabel: "聊天回复生成失败。",
       recoveryTitle: "运行恢复",
       recoverySubtitle: "根据运行生命周期派生的安全恢复选项。",
       recoveryStateLabels: {
