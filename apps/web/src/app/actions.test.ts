@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
+  getWebWorkbenchStore: vi.fn(),
   createProject: vi.fn(),
   setCurrentProjectId: vi.fn(),
   setCurrentTaskId: vi.fn(),
@@ -45,26 +46,7 @@ vi.mock("../lib/workbench-session", () => ({
 }));
 
 vi.mock("../lib/workbench-store", () => ({
-  getWebWorkbenchStore: vi.fn(() => ({
-    createProject: mocks.createProject,
-    submitTaskPrompt: mocks.submitTaskPrompt,
-    interruptCurrentTask: mocks.interruptCurrentTask,
-    createSkillDraft: mocks.createSkillDraft,
-    validateSkillVersion: mocks.validateSkillVersion,
-    publishSkillVersion: mocks.publishSkillVersion,
-    bindSkillVersionToProject: mocks.bindSkillVersionToProject,
-    setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
-    executeSkillCommand: mocks.executeSkillCommand,
-    runLocalWorkerOnce: mocks.runLocalWorkerOnce,
-    createModelProvider: mocks.createModelProvider,
-    setModelProviderEnabled: mocks.setModelProviderEnabled,
-    upsertProjectModelRoute: mocks.upsertProjectModelRoute,
-    createMCPConnector: mocks.createMCPConnector,
-    setMCPConnectorEnabled: mocks.setMCPConnectorEnabled,
-    setMCPToolApproval: mocks.setMCPToolApproval,
-    executeMCPTool: mocks.executeMCPTool,
-    executeRunRecoveryAction: mocks.executeRunRecoveryAction
-  }))
+  getWebWorkbenchStore: mocks.getWebWorkbenchStore
 }));
 
 import {
@@ -163,6 +145,27 @@ describe("submitPromptAction", () => {
     mocks.currentTaskId = "task_1";
     mocks.revalidatePath.mockClear();
     mocks.redirect.mockClear();
+    mocks.getWebWorkbenchStore.mockReset();
+    mocks.getWebWorkbenchStore.mockResolvedValue({
+      createProject: mocks.createProject,
+      submitTaskPrompt: mocks.submitTaskPrompt,
+      interruptCurrentTask: mocks.interruptCurrentTask,
+      createSkillDraft: mocks.createSkillDraft,
+      validateSkillVersion: mocks.validateSkillVersion,
+      publishSkillVersion: mocks.publishSkillVersion,
+      bindSkillVersionToProject: mocks.bindSkillVersionToProject,
+      setProjectSkillBindingEnabled: mocks.setProjectSkillBindingEnabled,
+      executeSkillCommand: mocks.executeSkillCommand,
+      runLocalWorkerOnce: mocks.runLocalWorkerOnce,
+      createModelProvider: mocks.createModelProvider,
+      setModelProviderEnabled: mocks.setModelProviderEnabled,
+      upsertProjectModelRoute: mocks.upsertProjectModelRoute,
+      createMCPConnector: mocks.createMCPConnector,
+      setMCPConnectorEnabled: mocks.setMCPConnectorEnabled,
+      setMCPToolApproval: mocks.setMCPToolApproval,
+      executeMCPTool: mocks.executeMCPTool,
+      executeRunRecoveryAction: mocks.executeRunRecoveryAction
+    });
     mocks.createProject.mockReset();
     mocks.createProject.mockResolvedValue({ id: "project_3", name: "Spring LP", createdAt: "now" });
     mocks.setCurrentProjectId.mockClear();
@@ -407,6 +410,34 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
+  it("executes resume worker finalization recovery actions", async () => {
+    mocks.executeRunRecoveryAction.mockResolvedValue({
+      ok: true,
+      value: {
+        action: "resume_worker_finalization",
+        runId: "run_deployer_failed",
+        state: "completed"
+      }
+    });
+
+    await expectRedirect(
+      executeRunRecoveryAction(
+        buildRecoveryForm({
+          runId: "run_deployer_failed",
+          action: "resume_worker_finalization"
+        })
+      ),
+      "/"
+    );
+
+    expect(mocks.executeRunRecoveryAction).toHaveBeenCalledWith({
+      taskId: "task_1",
+      runId: "run_deployer_failed",
+      action: "resume_worker_finalization"
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
   it("redirects recovery action failures with safe error codes", async () => {
     mocks.executeRunRecoveryAction.mockResolvedValue({
       ok: false,
@@ -428,6 +459,7 @@ describe("submitPromptAction", () => {
     );
 
     expect(mocks.executeRunRecoveryAction).not.toHaveBeenCalled();
+    expect(mocks.getWebWorkbenchStore).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 

@@ -246,12 +246,11 @@ export async function interruptCurrentTaskAction(_formData?: FormData): Promise<
 }
 
 export async function executeRunRecoveryAction(formData: FormData): Promise<void> {
+  const taskId = String(formData.get("taskId") ?? "").trim();
+  const runId = String(formData.get("runId") ?? "").trim();
+  const action = parseRunRecoveryAction(formData.get("action"));
   const store = await getWebWorkbenchStore();
-  const result = await store.executeRunRecoveryAction({
-    taskId: String(formData.get("taskId") ?? "").trim(),
-    runId: String(formData.get("runId") ?? "").trim(),
-    action: parseRunRecoveryAction(formData.get("action"))
-  });
+  const result = await store.executeRunRecoveryAction({ taskId, runId, action });
   if (!result.ok) {
     redirectToRecoveryError(result.error);
   }
