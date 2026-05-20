@@ -5,17 +5,44 @@ import type {
 } from "@lp-agent/artifacts";
 import {
   toPrismaAgentHandoffCreate,
+  toPrismaDeploymentCreate,
+  toPrismaMCPConnectorCreate,
+  toPrismaMCPToolApprovalCreate,
+  toPrismaModelProviderCreate,
+  toPrismaModelRoutingPolicyCreate,
   toPrismaProjectCreate,
+  toPrismaProjectMemberCreate,
   toPrismaRunCreate,
   toPrismaRunEventCreate,
+  toPrismaSkillBindingCreate,
+  toPrismaSkillCreate,
+  toPrismaSkillVersionCreate,
   toRepositoryAgentHandoff,
+  toRepositoryDeployment,
+  toRepositoryMCPConnector,
+  toRepositoryMCPToolApproval,
+  toRepositoryModelProvider,
+  toRepositoryModelRoutingPolicy,
   toRepositoryProject,
+  toRepositoryProjectMember,
   toRepositoryRun,
   toRepositoryRunEvent,
+  toRepositorySkill,
+  toRepositorySkillBinding,
+  toRepositorySkillVersion,
   type PrismaAgentHandoffRow,
+  type PrismaDeploymentRow,
+  type PrismaMCPConnectorRow,
+  type PrismaMCPToolApprovalRow,
+  type PrismaModelProviderRow,
+  type PrismaModelRoutingPolicyRow,
   type PrismaProjectRow,
+  type PrismaProjectMemberRow,
   type PrismaRunEventRow,
-  type PrismaRunRow
+  type PrismaRunRow,
+  type PrismaSkillBindingRow,
+  type PrismaSkillRow,
+  type PrismaSkillVersionRow
 } from "./prisma-workbench-mappers";
 import type {
   AgentHandoffRecord,
@@ -67,6 +94,7 @@ export interface PrismaDelegate {
 
 export interface PrismaWorkbenchClient {
   project: PrismaDelegate;
+  projectMember: PrismaDelegate;
   workbenchTask: PrismaDelegate;
   workbenchMessage: PrismaDelegate;
   workbenchTaskSnapshot: PrismaDelegate;
@@ -74,6 +102,14 @@ export interface PrismaWorkbenchClient {
   pageVersion: PrismaDelegate;
   artifactWorkspace: PrismaDelegate;
   artifactWorkspaceFile: PrismaDelegate;
+  deployment: PrismaDelegate;
+  skill: PrismaDelegate;
+  skillVersion: PrismaDelegate;
+  skillBinding: PrismaDelegate;
+  modelProvider: PrismaDelegate;
+  modelRoutingPolicy: PrismaDelegate;
+  mCPConnector: PrismaDelegate;
+  mCPToolApproval: PrismaDelegate;
   run: PrismaDelegate;
   runEvent: PrismaDelegate;
   toolObservation: PrismaDelegate;
@@ -86,6 +122,8 @@ export interface PrismaWorkbenchRepositoriesOptions {
 }
 
 const ORDER_CREATED_ID_ASC: PrismaOrderBy = [{ createdAt: "asc" }, { id: "asc" }];
+const ORDER_CREATED_ID_DESC: PrismaOrderBy = [{ createdAt: "desc" }, { id: "desc" }];
+const ORDER_UPDATED_ID_ASC: PrismaOrderBy = [{ updatedAt: "asc" }, { id: "asc" }];
 const ORDER_STARTED_ID_ASC: PrismaOrderBy = [{ startedAt: "asc" }, { id: "asc" }];
 const ORDER_BRIEF_LATEST: PrismaOrderBy = [{ createdAt: "desc" }, { id: "desc" }];
 const ORDER_RUN_EVENT_SEQUENCE: PrismaOrderBy = [
@@ -123,26 +161,24 @@ export function createPrismaWorkbenchRepositories(
     workspaceMembers: createUnsupportedPrismaRepository<WorkspaceMemberRepository>(
       "workspaceMembers"
     ),
-    projectMembers: createUnsupportedPrismaRepository<ProjectMemberRepository>("projectMembers"),
+    projectMembers: createProjectMemberRepository(options.prisma.projectMember),
     briefs: createBriefRepository(options.prisma.lPBrief),
     pageVersions: createPageVersionRepository(options.prisma.pageVersion),
     artifactWorkspaces: createArtifactWorkspaceRepository(options.prisma.artifactWorkspace),
     artifactWorkspaceFiles: createArtifactWorkspaceFileRepository(
       options.prisma.artifactWorkspaceFile
     ),
-    deployments: createUnsupportedPrismaRepository<DeploymentRepository>("deployments"),
+    deployments: createDeploymentRepository(options.prisma.deployment),
     tasks: createWorkbenchTaskRepository(options.prisma.workbenchTask),
     messages: createWorkbenchMessageRepository(options.prisma.workbenchMessage),
     taskSnapshots: createWorkbenchTaskSnapshotRepository(options.prisma.workbenchTaskSnapshot),
-    skills: createUnsupportedPrismaRepository<SkillRepository>("skills"),
-    skillVersions: createUnsupportedPrismaRepository<SkillVersionRepository>("skillVersions"),
-    skillBindings: createUnsupportedPrismaRepository<SkillBindingRepository>("skillBindings"),
-    modelProviders: createUnsupportedPrismaRepository<ModelProviderRepository>("modelProviders"),
-    modelRoutingPolicies:
-      createUnsupportedPrismaRepository<ModelRoutingPolicyRepository>("modelRoutingPolicies"),
-    mcpConnectors: createUnsupportedPrismaRepository<MCPConnectorRepository>("mcpConnectors"),
-    mcpToolApprovals:
-      createUnsupportedPrismaRepository<MCPToolApprovalRepository>("mcpToolApprovals"),
+    skills: createSkillRepository(options.prisma.skill),
+    skillVersions: createSkillVersionRepository(options.prisma.skillVersion),
+    skillBindings: createSkillBindingRepository(options.prisma.skillBinding),
+    modelProviders: createModelProviderRepository(options.prisma.modelProvider),
+    modelRoutingPolicies: createModelRoutingPolicyRepository(options.prisma.modelRoutingPolicy),
+    mcpConnectors: createMCPConnectorRepository(options.prisma.mCPConnector),
+    mcpToolApprovals: createMCPToolApprovalRepository(options.prisma.mCPToolApproval),
     runs: createRunRepository(options.prisma.run),
     runEvents: createRunEventRepository(options.prisma.runEvent),
     toolObservations: createToolObservationRepository(options.prisma.toolObservation),
@@ -194,6 +230,357 @@ function createProjectRepository(delegate: PrismaDelegate, workspaceId: string):
           orderBy: ORDER_CREATED_ID_ASC
         }),
         (row) => toRepositoryProject(row as unknown as PrismaProjectRow)
+      );
+    }
+  };
+}
+
+function createProjectMemberRepository(delegate: PrismaDelegate): ProjectMemberRepository {
+  return {
+    async save(member) {
+      await upsert(
+        delegate,
+        { projectId_userId: { projectId: member.projectId, userId: member.userId } },
+        toPrismaProjectMemberCreate(member),
+        ["id", "projectId", "userId"],
+        ["displayName"]
+      );
+    },
+
+    async getById(memberId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: memberId } }),
+        (row) => toRepositoryProjectMember(row as unknown as PrismaProjectMemberRow)
+      );
+    },
+
+    async getByProjectAndUser(projectId, userId) {
+      return mapOptional(
+        await delegate.findUnique({
+          where: { projectId_userId: { projectId, userId } }
+        }),
+        (row) => toRepositoryProjectMember(row as unknown as PrismaProjectMemberRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositoryProjectMember(row as unknown as PrismaProjectMemberRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositoryProjectMember(row as unknown as PrismaProjectMemberRow)
+      );
+    }
+  };
+}
+
+function createDeploymentRepository(delegate: PrismaDelegate): DeploymentRepository {
+  return {
+    async save(deployment) {
+      await upsert(
+        delegate,
+        { id: deployment.id },
+        toPrismaDeploymentCreate(deployment),
+        ["id"]
+      );
+    },
+
+    async getByPageVersionId(pageVersionId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { pageVersionId } }),
+        (row) => toRepositoryDeployment(row as unknown as PrismaDeploymentRow)
+      );
+    },
+
+    async findLatestForProject(projectId) {
+      const rows = await delegate.findMany({
+        where: { projectId },
+        orderBy: ORDER_CREATED_ID_DESC,
+        take: 1
+      });
+      return mapOptional(rows[0], (row) =>
+        toRepositoryDeployment(row as unknown as PrismaDeploymentRow)
+      );
+    }
+  };
+}
+
+function createSkillRepository(delegate: PrismaDelegate): SkillRepository {
+  return {
+    async save(skill) {
+      await upsert(delegate, { id: skill.id }, toPrismaSkillCreate(skill));
+    },
+
+    async getById(skillId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: skillId } }),
+        (row) => toRepositorySkill(row as unknown as PrismaSkillRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_CREATED_ID_ASC }), (row) =>
+        toRepositorySkill(row as unknown as PrismaSkillRow)
+      );
+    }
+  };
+}
+
+function createSkillVersionRepository(delegate: PrismaDelegate): SkillVersionRepository {
+  return {
+    async save(version) {
+      await upsert(
+        delegate,
+        { skillId_version: { skillId: version.skillId, version: version.version } },
+        toPrismaSkillVersionCreate(version),
+        ["id", "skillId", "version"]
+      );
+    },
+
+    async getById(versionId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: versionId } }),
+        (row) => toRepositorySkillVersion(row as unknown as PrismaSkillVersionRow)
+      );
+    },
+
+    async getBySkillIdAndVersion(skillId, version) {
+      return mapOptional(
+        await delegate.findUnique({ where: { skillId_version: { skillId, version } } }),
+        (row) => toRepositorySkillVersion(row as unknown as PrismaSkillVersionRow)
+      );
+    },
+
+    async listForSkill(skillId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { skillId },
+          orderBy: ORDER_CREATED_ID_ASC
+        }),
+        (row) => toRepositorySkillVersion(row as unknown as PrismaSkillVersionRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_CREATED_ID_ASC }), (row) =>
+        toRepositorySkillVersion(row as unknown as PrismaSkillVersionRow)
+      );
+    }
+  };
+}
+
+function createSkillBindingRepository(delegate: PrismaDelegate): SkillBindingRepository {
+  return {
+    async save(binding) {
+      await upsert(
+        delegate,
+        {
+          skillVersionId_scope_targetKey: {
+            skillVersionId: binding.skillVersionId,
+            scope: binding.scope,
+            targetKey: binding.targetKey
+          }
+        },
+        toPrismaSkillBindingCreate(binding),
+        ["id", "skillVersionId", "scope", "targetKey"],
+        ["organizationId", "workspaceId", "projectId", "settings"]
+      );
+    },
+
+    async getById(bindingId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: bindingId } }),
+        (row) => toRepositorySkillBinding(row as unknown as PrismaSkillBindingRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { scope: "project", targetKey: projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositorySkillBinding(row as unknown as PrismaSkillBindingRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositorySkillBinding(row as unknown as PrismaSkillBindingRow)
+      );
+    }
+  };
+}
+
+function createModelProviderRepository(delegate: PrismaDelegate): ModelProviderRepository {
+  return {
+    async save(provider) {
+      await upsert(delegate, { id: provider.id }, toPrismaModelProviderCreate(provider));
+    },
+
+    async getById(providerId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: providerId } }),
+        (row) => toRepositoryModelProvider(row as unknown as PrismaModelProviderRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { scope: "project", targetKey: projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositoryModelProvider(row as unknown as PrismaModelProviderRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositoryModelProvider(row as unknown as PrismaModelProviderRow)
+      );
+    }
+  };
+}
+
+function createModelRoutingPolicyRepository(
+  delegate: PrismaDelegate
+): ModelRoutingPolicyRepository {
+  return {
+    async save(policy) {
+      await upsert(
+        delegate,
+        {
+          scope_targetKey_role: {
+            scope: policy.scope,
+            targetKey: policy.targetKey,
+            role: policy.role
+          }
+        },
+        toPrismaModelRoutingPolicyCreate(policy),
+        ["id", "scope", "targetKey", "role"],
+        ["fallback", "settings"]
+      );
+    },
+
+    async getById(policyId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: policyId } }),
+        (row) => toRepositoryModelRoutingPolicy(row as unknown as PrismaModelRoutingPolicyRow)
+      );
+    },
+
+    async getByProjectAndRole(projectId, role) {
+      return mapOptional(
+        await delegate.findUnique({
+          where: { scope_targetKey_role: { scope: "project", targetKey: projectId, role } }
+        }),
+        (row) => toRepositoryModelRoutingPolicy(row as unknown as PrismaModelRoutingPolicyRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { scope: "project", targetKey: projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositoryModelRoutingPolicy(row as unknown as PrismaModelRoutingPolicyRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositoryModelRoutingPolicy(row as unknown as PrismaModelRoutingPolicyRow)
+      );
+    }
+  };
+}
+
+function createMCPConnectorRepository(delegate: PrismaDelegate): MCPConnectorRepository {
+  return {
+    async save(connector) {
+      await upsert(
+        delegate,
+        { id: connector.id },
+        withMCPConnectorStorageDefaults(toPrismaMCPConnectorCreate(connector)),
+        ["id"],
+        ["description"]
+      );
+    },
+
+    async getById(connectorId) {
+      return mapOptional(
+        await delegate.findUnique({ where: { id: connectorId } }),
+        (row) => toRepositoryMCPConnector(row as unknown as PrismaMCPConnectorRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { scope: "project", targetKey: projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositoryMCPConnector(row as unknown as PrismaMCPConnectorRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositoryMCPConnector(row as unknown as PrismaMCPConnectorRow)
+      );
+    }
+  };
+}
+
+function createMCPToolApprovalRepository(delegate: PrismaDelegate): MCPToolApprovalRepository {
+  return {
+    async save(approval) {
+      await upsert(
+        delegate,
+        {
+          projectId_connectorId_toolName: {
+            projectId: approval.projectId,
+            connectorId: approval.connectorId,
+            toolName: approval.toolName
+          }
+        },
+        toPrismaMCPToolApprovalCreate(approval),
+        ["id", "projectId", "connectorId", "toolName"],
+        ["approvedByUserId"]
+      );
+    },
+
+    async getByProjectConnectorAndTool(projectId, connectorId, toolName) {
+      return mapOptional(
+        await delegate.findUnique({
+          where: { projectId_connectorId_toolName: { projectId, connectorId, toolName } }
+        }),
+        (row) => toRepositoryMCPToolApproval(row as unknown as PrismaMCPToolApprovalRow)
+      );
+    },
+
+    async listForProject(projectId) {
+      return mapRows(
+        await delegate.findMany({
+          where: { projectId },
+          orderBy: ORDER_UPDATED_ID_ASC
+        }),
+        (row) => toRepositoryMCPToolApproval(row as unknown as PrismaMCPToolApprovalRow)
+      );
+    },
+
+    async listAll() {
+      return mapRows(await delegate.findMany({ orderBy: ORDER_UPDATED_ID_ASC }), (row) =>
+        toRepositoryMCPToolApproval(row as unknown as PrismaMCPToolApprovalRow)
       );
     }
   };
@@ -854,6 +1241,14 @@ function mapOptional<TRecord>(
 
 function asPrismaRow(data: object): PrismaRow {
   return data as unknown as PrismaRow;
+}
+
+function withMCPConnectorStorageDefaults(data: object): PrismaRow {
+  return {
+    ...asPrismaRow(data),
+    transport: "static",
+    config: {}
+  };
 }
 
 function omitKeys(row: PrismaRow, keys: string[]): PrismaRow {

@@ -43,6 +43,40 @@ if (shouldRun) {
       });
     }
   });
+
+  it("persists Web-facing repository records with a real Prisma client", async () => {
+    await seedContractPrerequisites({
+      prisma,
+      organizationId,
+      workspaceId
+    });
+    const { createPrismaWorkbenchRepositories } = await import(
+      "./prisma-workbench-repositories"
+    );
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma,
+      workspaceId
+    });
+    const projectId = `${idPrefix}web_project`;
+    const timestamp = new Date().toISOString();
+
+    await repositories.projects.save({
+      id: projectId,
+      name: "Web integration project",
+      createdAt: timestamp
+    });
+    await repositories.projectMembers.save({
+      id: `${idPrefix}member`,
+      projectId,
+      userId: `${idPrefix}user`,
+      role: "owner",
+      displayName: "Integration User",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    await expect(repositories.projectMembers.listForProject(projectId)).resolves.toHaveLength(1);
+  });
 } else {
   describe("prisma postgres repository integration", () => {
     it("is skipped unless explicitly enabled with a database URL", () => {

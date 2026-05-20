@@ -32,6 +32,15 @@ interface FakeDelegateOptions {
 
 interface FakePrismaClientOptions {
   project?: FakeDelegateOptions;
+  projectMember?: FakeDelegateOptions;
+  deployment?: FakeDelegateOptions;
+  skill?: FakeDelegateOptions;
+  skillVersion?: FakeDelegateOptions;
+  skillBinding?: FakeDelegateOptions;
+  modelProvider?: FakeDelegateOptions;
+  modelRoutingPolicy?: FakeDelegateOptions;
+  mCPConnector?: FakeDelegateOptions;
+  mCPToolApproval?: FakeDelegateOptions;
   agentHandoff?: FakeDelegateOptions;
 }
 
@@ -503,6 +512,212 @@ describe("createPrismaWorkbenchRepositories", () => {
     ]);
     await expect(repositories.runEvents.listForTask("task_task_scope")).resolves.toEqual([]);
   });
+
+  it("persists Web-facing project state repositories", async () => {
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient(),
+      workspaceId: "workspace_default"
+    });
+
+    await repositories.projects.save({
+      id: "project_web",
+      name: "Web project",
+      createdAt
+    });
+    await repositories.projectMembers.save({
+      id: "member_web",
+      projectId: "project_web",
+      userId: "local-web-user",
+      role: "owner",
+      displayName: "Local user",
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.skills.save({
+      id: "skill_web",
+      name: "Deploy",
+      type: "deployment",
+      scope: "project",
+      createdAt
+    });
+    await repositories.skillVersions.save({
+      id: "skill_version_web",
+      skillId: "skill_web",
+      version: "1.0.0",
+      manifest: {
+        id: "skill_web",
+        name: "Deploy",
+        description: "Deploy landing pages",
+        version: "1.0.0",
+        type: "deployment",
+        scope: "project",
+        permissions: [],
+        requiredSecrets: [],
+        entrypoints: [],
+        reviewState: "published",
+        commands: []
+      },
+      content: "# Deploy",
+      contentType: "text/markdown",
+      reviewState: "published",
+      createdAt
+    });
+    await repositories.skillBindings.save({
+      id: "skill_binding_web",
+      skillVersionId: "skill_version_web",
+      scope: "project",
+      targetKey: "project_web",
+      projectId: "project_web",
+      enabled: true,
+      settings: { mode: "safe" },
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.modelProviders.save({
+      id: "provider_web",
+      scope: "project",
+      targetKey: "project_web",
+      name: "Primary",
+      provider: "custom",
+      config: {
+        api: "openai-completions",
+        baseUrl: "https://models.example.test",
+        apiKeyEnv: "MODEL_API_KEY",
+        models: [{ id: "gpt-5.4" }]
+      },
+      enabled: true,
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.modelRoutingPolicies.save({
+      id: "route_web",
+      scope: "project",
+      targetKey: "project_web",
+      role: "builder",
+      providerId: "provider_web",
+      model: "gpt-5.4",
+      fallback: { providerId: "provider_backup", model: "gpt-5.4-mini" },
+      settings: { temperature: 0.2 },
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.mcpConnectors.save({
+      id: "connector_web",
+      scope: "project",
+      targetKey: "project_web",
+      name: "Docs",
+      description: "Read docs",
+      tools: [
+        {
+          name: "search",
+          description: "Search docs",
+          permission: "read",
+          roles: ["planner"],
+          requiresApproval: false
+        }
+      ],
+      enabled: true,
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.mcpToolApprovals.save({
+      id: "approval_web",
+      projectId: "project_web",
+      connectorId: "connector_web",
+      toolName: "search",
+      state: "approved",
+      approvedByUserId: "local-web-user",
+      createdAt,
+      updatedAt: "2026-05-14T00:01:00.000Z"
+    });
+    await repositories.deployments.save({
+      id: "deployment_web",
+      projectId: "project_web",
+      pageVersionId: "page_version_web",
+      branch: "lp/project-web",
+      commitSha: "abc1234",
+      pullRequestUrl: "https://github.example.test/lp/pulls/1",
+      status: "pr_opened",
+      files: ["index.html", "styles.css", "script.js"]
+    });
+
+    await expect(repositories.projectMembers.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "member_web", userId: "local-web-user" })
+    ]);
+    await expect(
+      repositories.projectMembers.getByProjectAndUser("project_web", "local-web-user")
+    ).resolves.toMatchObject({ id: "member_web", role: "owner" });
+    await expect(repositories.skills.getById("skill_web")).resolves.toMatchObject({
+      id: "skill_web",
+      name: "Deploy"
+    });
+    await expect(
+      repositories.skillVersions.getBySkillIdAndVersion("skill_web", "1.0.0")
+    ).resolves.toMatchObject({ id: "skill_version_web", content: "# Deploy" });
+    await expect(repositories.skillBindings.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "skill_binding_web", settings: { mode: "safe" } })
+    ]);
+    await expect(repositories.modelProviders.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "provider_web", provider: "custom" })
+    ]);
+    await expect(
+      repositories.modelRoutingPolicies.getByProjectAndRole("project_web", "builder")
+    ).resolves.toMatchObject({ id: "route_web", model: "gpt-5.4" });
+    await expect(repositories.modelRoutingPolicies.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "route_web", role: "builder" })
+    ]);
+    await expect(repositories.mcpConnectors.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "connector_web", name: "Docs" })
+    ]);
+    await expect(
+      repositories.mcpToolApprovals.getByProjectConnectorAndTool(
+        "project_web",
+        "connector_web",
+        "search"
+      )
+    ).resolves.toMatchObject({ id: "approval_web", state: "approved" });
+    await expect(repositories.mcpToolApprovals.listForProject("project_web")).resolves.toEqual([
+      expect.objectContaining({ id: "approval_web", toolName: "search" })
+    ]);
+    await expect(repositories.deployments.getByPageVersionId("page_version_web")).resolves.toEqual({
+      id: "deployment_web",
+      projectId: "project_web",
+      pageVersionId: "page_version_web",
+      branch: "lp/project-web",
+      commitSha: "abc1234",
+      pullRequestUrl: "https://github.example.test/lp/pulls/1",
+      status: "pr_opened",
+      files: ["index.html", "styles.css", "script.js"]
+    });
+    await expect(repositories.deployments.findLatestForProject("project_web")).resolves.toEqual({
+      id: "deployment_web",
+      projectId: "project_web",
+      pageVersionId: "page_version_web",
+      branch: "lp/project-web",
+      commitSha: "abc1234",
+      pullRequestUrl: "https://github.example.test/lp/pulls/1",
+      status: "pr_opened",
+      files: ["index.html", "styles.css", "script.js"]
+    });
+  });
+
+  it("only leaves workspaceMembers unsupported in the Stage 23 Web path", async () => {
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient(),
+      workspaceId: "workspace_default"
+    });
+
+    await expect(repositories.workspaceMembers.listAll()).rejects.toThrow(
+      "Prisma repository workspaceMembers is not implemented"
+    );
+    await expect(repositories.projectMembers.listAll()).resolves.toEqual([]);
+    await expect(
+      repositories.deployments.findLatestForProject("project_missing")
+    ).resolves.toBeUndefined();
+    await expect(repositories.skills.listAll()).resolves.toEqual([]);
+    await expect(repositories.modelProviders.listAll()).resolves.toEqual([]);
+    await expect(repositories.mcpConnectors.listAll()).resolves.toEqual([]);
+  });
 });
 
 describe("createUnsupportedPrismaRepository", () => {
@@ -531,9 +746,18 @@ function createFakePrismaClient(options: FakePrismaClientOptions = {}) {
     pageVersion: createFakeDelegate(),
     artifactWorkspace: createFakeDelegate(),
     artifactWorkspaceFile: createFakeDelegate(),
+    projectMember: createFakeDelegate(options.projectMember),
+    deployment: createFakeDelegate(options.deployment),
     run: createFakeDelegate(),
     runEvent: createFakeDelegate(),
     toolObservation: createFakeDelegate(),
+    skill: createFakeDelegate(options.skill),
+    skillVersion: createFakeDelegate(options.skillVersion),
+    skillBinding: createFakeDelegate(options.skillBinding),
+    modelProvider: createFakeDelegate(options.modelProvider),
+    modelRoutingPolicy: createFakeDelegate(options.modelRoutingPolicy),
+    mCPConnector: createFakeDelegate(options.mCPConnector),
+    mCPToolApproval: createFakeDelegate(options.mCPToolApproval),
     agentHandoff: createFakeDelegate(options.agentHandoff)
   };
 }
@@ -601,7 +825,7 @@ function rejectPlainJsonNulls(row: FakeRow, keys: string[]): void {
 
 function matchesWhere(row: FakeRow, where: FakeWhere): boolean {
   return Object.entries(where).every(([key, expected]) => {
-    if (isRecord(expected) && !(key in row)) {
+    if (isRecord(expected)) {
       return Object.entries(expected).every(
         ([nestedKey, nestedExpected]) => row[nestedKey] === nestedExpected
       );
