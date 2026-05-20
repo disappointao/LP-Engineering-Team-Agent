@@ -11,6 +11,7 @@ import {
   type WorkerJobCompleteClaimedInput,
   type WorkerJobRecord
 } from "./index";
+import { runWorkerJobRepositoryContractTests } from "./worker-repository-contract";
 
 const tempDirs: string[] = [];
 
@@ -139,6 +140,15 @@ async function createTempFilePath(): Promise<string> {
   tempDirs.push(dir);
   return join(dir, "worker-jobs.json");
 }
+
+runWorkerJobRepositoryContractTests(
+  "in-memory",
+  () => new InMemoryWorkerJobRepository()
+);
+
+runWorkerJobRepositoryContractTests("json-file", async () =>
+  createJsonFileWorkerJobRepository({ filePath: await createTempFilePath() })
+);
 
 describe("InMemoryWorkerJobRepository", () => {
   it("saves, updates, lists, gets, and finds the oldest queued job", async () => {

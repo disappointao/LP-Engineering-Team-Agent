@@ -9,6 +9,7 @@ import {
   createJsonFileWorkerJobPayloadRepository,
   type WorkerJobPayloadRecord
 } from "./index";
+import { runWorkerJobPayloadRepositoryContractTests } from "./worker-repository-contract";
 
 const tempDirs: string[] = [];
 
@@ -47,6 +48,17 @@ async function expectRejectCode(
 ): Promise<void> {
   await expect(promise).rejects.toMatchObject({ code });
 }
+
+runWorkerJobPayloadRepositoryContractTests(
+  "in-memory",
+  () => new InMemoryWorkerJobPayloadRepository()
+);
+
+runWorkerJobPayloadRepositoryContractTests("json-file", async () =>
+  createJsonFileWorkerJobPayloadRepository({
+    filePath: await createTempFilePath()
+  })
+);
 
 describe("InMemoryWorkerJobPayloadRepository", () => {
   it("returns defensive copies from save and get operations", async () => {

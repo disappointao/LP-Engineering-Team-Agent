@@ -1,13 +1,35 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   InMemoryWorkerLogRepository,
   createJsonFileWorkerLogRepository,
   type WorkerLogRecord
 } from "./index";
+import { runWorkerLogRepositoryContractTests } from "./worker-repository-contract";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true }))
+  );
+});
+
+runWorkerLogRepositoryContractTests(
+  "in-memory",
+  () => new InMemoryWorkerLogRepository()
+);
+
+runWorkerLogRepositoryContractTests("json-file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "worker-logs-contract-"));
+  tempDirs.push(directory);
+  return createJsonFileWorkerLogRepository({
+    filePath: join(directory, "worker-logs.json")
+  });
+});
 
 describe("worker log repositories", () => {
   it("stores bounded in-memory logs sorted by timeline", async () => {
