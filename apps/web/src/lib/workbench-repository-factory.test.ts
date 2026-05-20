@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PrismaWorkbenchClient, WorkbenchRepositories } from "@lp-agent/db";
+import {
+  createInMemoryWorkbenchRepositories,
+  type PrismaWorkbenchClient,
+  type WorkbenchRepositories
+} from "@lp-agent/db";
 import {
   createWebWorkbenchRepositories,
   resolveWorkbenchRepositoryBackend
@@ -157,6 +161,49 @@ describe("createWebWorkbenchRepositories", () => {
         name: "Local Workspace"
       }
     });
+    expect(createPrismaRepositories).toHaveBeenCalledWith({
+      prisma,
+      workspaceId: "workspace_local"
+    });
+  });
+
+  it("supports a minimal Web flow through the postgres factory path", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const prisma = fakePrismaClient();
+    const loadPrismaClient = vi.fn().mockResolvedValue(prisma);
+    const createPrismaRepositories = vi.fn().mockReturnValue(repositories);
+
+    const result = await createWebWorkbenchRepositories({
+      env: {
+        WORKBENCH_REPOSITORY_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://user:pass@localhost:5432/lp_agent",
+        WORKBENCH_POSTGRES_WORKSPACE_ID: "workspace_local"
+      },
+      loadPrismaClient,
+      createPrismaRepositories
+    });
+
+    await result.projects.save({
+      id: "project_web_factory",
+      name: "Web factory project",
+      createdAt: "2026-05-14T00:00:00.000Z"
+    });
+    await result.tasks.save({
+      id: "task_web_factory",
+      title: "Build landing page",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_web_factory",
+      createdAt: "2026-05-14T00:01:00.000Z"
+    });
+
+    await expect(result.projects.getById("project_web_factory")).resolves.toMatchObject({
+      name: "Web factory project"
+    });
+    await expect(result.tasks.getById("task_web_factory")).resolves.toMatchObject({
+      projectId: "project_web_factory"
+    });
+    expect(loadPrismaClient).toHaveBeenCalledTimes(1);
     expect(createPrismaRepositories).toHaveBeenCalledWith({
       prisma,
       workspaceId: "workspace_local"

@@ -734,6 +734,38 @@ describe("createPrismaWorkbenchRepositories", () => {
     await expect(repositories.mcpToolApprovals.listAll()).resolves.toEqual([]);
   });
 
+  it("loads empty Web side panels without unsupported repository failures", async () => {
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient(),
+      workspaceId: "workspace_default"
+    });
+
+    await repositories.projects.save({
+      id: "project_empty_side_panels",
+      name: "Empty side panels",
+      createdAt
+    });
+
+    await expect(
+      repositories.projectMembers.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.skillBindings.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.modelProviders.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.modelRoutingPolicies.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.mcpConnectors.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.mcpToolApprovals.listForProject("project_empty_side_panels")
+    ).resolves.toEqual([]);
+  });
+
   it("clears nullable JSON repository fields without writing a plain JSON null", async () => {
     const repositories = createPrismaWorkbenchRepositories({
       prisma: createFakePrismaClient({
