@@ -110,11 +110,17 @@ if (shouldRun) {
           exitCode: 0
         }
       });
+      const expectedStdout = `Simulated deploy-preview for project ${projectId}.`;
       await expect(jobRepository.getById(queued.id)).resolves.toMatchObject({
         id: queued.id,
         state: "completed",
         resultSummary: {
-          stdout: `Simulated deploy-preview for project ${projectId}.`
+          state: "completed",
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+          stdoutBytes: Buffer.byteLength(expectedStdout, "utf8"),
+          stderrBytes: 0
         }
       });
       await expect(payloadRepository.getByJobId(queued.id)).resolves.toBeUndefined();
