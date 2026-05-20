@@ -61,6 +61,7 @@ import type {
   WorkerJobRepository,
   WorkerLogRepository
 } from "@lp-agent/worker-runtime";
+import { chunkAssistantText } from "./chat-stream";
 import { getLocalWorkbenchUser } from "./local-identity";
 import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
 import { createWebWorkbenchRepositories } from "./workbench-repository-factory";
@@ -346,6 +347,28 @@ export type SubmitTaskResult =
     }
   | { ok: false; error: ProjectFlowErrorCode };
 
+export type StreamingChatStartResult =
+  | {
+      ok: true;
+      taskId: string;
+      taskType: "general_chat";
+      projectId?: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      assistantContent: string;
+      chunks: string[];
+    }
+  | { ok: false; error: ProjectFlowErrorCode }
+  | {
+      ok: false;
+      error: "fallback_required";
+      taskType: Exclude<TaskType, "general_chat">;
+    };
+
+export type StreamingChatCompleteResult =
+  | { ok: true }
+  | { ok: false; error: ProjectFlowErrorCode };
+
 export type WorkbenchPageState =
   | {
       kind: "empty";
@@ -392,6 +415,16 @@ export interface WebWorkbenchStore {
     prompt: string;
     implicitProjectName: string;
   }): Promise<SubmitTaskResult>;
+  startStreamingChatPrompt(input: {
+    projectId?: string | null;
+    taskId?: string | null;
+    prompt: string;
+  }): Promise<StreamingChatStartResult>;
+  completeStreamingChatPrompt(input: {
+    taskId: string;
+    messageId: string;
+    content: string;
+  }): Promise<StreamingChatCompleteResult>;
   interruptCurrentTask(input: {
     taskId: string;
     reason?: string;
@@ -807,6 +840,64 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         snapshot,
         artifactDiff
       };
+    },
+
+    async startStreamingChatPrompt(input) {
+      const prompt = validatePromptInput(input.prompt);
+      if (!prompt.ok) {
+        return { ok: false, error: prompt.error };
+      }
+
+      const taskType = classifyTaskPrompt(prompt.value);
+      if (taskType !== "general_chat") {
+        return { ok: false, error: "fallback_required", taskType };
+      }
+
+      const requestedProjectId = input.projectId ?? undefined;
+      if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
+        return { ok: false, error: "project_not_found" };
+      }
+
+      const assistantContent = "I created a task thread and can continue from here.";
+      const started = await startStreamingChatThread({
+        repositories,
+        taskId: input.taskId ?? undefined,
+        title: deriveTaskTitle(prompt.value),
+        projectId: requestedProjectId,
+        userMessage: prompt.value,
+        assistantMessage: ""
+      });
+
+      return {
+        ok: true,
+        taskId: started.task.id,
+        taskType: "general_chat",
+        ...(started.task.projectId ? { projectId: started.task.projectId } : {}),
+        userMessageId: started.userMessage.id,
+        assistantMessageId: started.assistantMessage.id,
+        assistantContent,
+        chunks: chunkAssistantText(assistantContent, 12)
+      };
+    },
+
+    async completeStreamingChatPrompt(input) {
+      const task = await repositories.tasks.getById(input.taskId);
+      if (!task) {
+        return { ok: false, error: "generation_failed" };
+      }
+      const messages = await repositories.messages.listForTask(input.taskId);
+      const assistant = messages.find(
+        (message) => message.id === input.messageId && message.role === "assistant"
+      );
+      if (!assistant) {
+        return { ok: false, error: "generation_failed" };
+      }
+      await repositories.messages.save({
+        ...assistant,
+        content: input.content,
+        createdAt: assistant.createdAt
+      });
+      return { ok: true };
     },
 
     async submitTaskPrompt(input) {
@@ -1555,6 +1646,66 @@ async function saveTaskThread(input: {
     }
 
     return { ...task };
+  });
+}
+
+async function startStreamingChatThread(input: {
+  repositories: WorkbenchRepositories;
+  taskId?: string;
+  title: string;
+  projectId?: string;
+  userMessage: string;
+  assistantMessage: string;
+}): Promise<{
+  task: TaskRecord;
+  userMessage: ChatMessageRecord;
+  assistantMessage: ChatMessageRecord;
+}> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const now = new Date().toISOString();
+    const existingTasks = await input.repositories.tasks.listAll();
+    const existingMessages = await input.repositories.messages.listAll();
+    const existingTask = input.taskId
+      ? await input.repositories.tasks.getById(input.taskId)
+      : undefined;
+    const task: TaskRecord =
+      existingTask && existingTask.type === "general_chat"
+        ? existingTask
+        : {
+            id: nextSequentialId("task", existingTasks.map((record) => record.id)),
+            title: input.title,
+            type: "general_chat",
+            status: "complete",
+            ...(input.projectId ? { projectId: input.projectId } : {}),
+            createdAt: now
+          };
+    const userMessage: ChatMessageRecord = {
+      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      taskId: task.id,
+      role: "user",
+      content: input.userMessage,
+      createdAt: now
+    };
+    const assistantMessage: ChatMessageRecord = {
+      id: nextSequentialId(
+        "message",
+        [...existingMessages.map((record) => record.id), userMessage.id]
+      ),
+      taskId: task.id,
+      role: "assistant",
+      content: input.assistantMessage,
+      createdAt: now
+    };
+
+    await input.repositories.tasks.save(task);
+    await input.repositories.messages.save(userMessage);
+    await input.repositories.messages.save(assistantMessage);
+
+    return {
+      task: { ...task },
+      userMessage: { ...userMessage },
+      assistantMessage: { ...assistantMessage }
+    };
   });
 }
 

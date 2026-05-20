@@ -2253,6 +2253,75 @@ describe("web workbench store", () => {
     );
   });
 
+  describe("streaming chat prompt", () => {
+    it("starts an ordinary chat stream and persists refreshable messages", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+      expect(started.taskType).toBe("general_chat");
+      expect(started.chunks.join("")).toBe(started.assistantContent);
+
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          content: started.assistantContent
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const pageState = await store.getPageState({ taskId: started.taskId });
+      expect(pageState.kind).toBe("task_ready");
+      if (pageState.kind !== "task_ready") {
+        throw new Error("expected task_ready page state");
+      }
+      expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+      expect(pageState.messages[0]?.content).toBe("Help me write a campaign plan.");
+      expect(pageState.messages[1]?.content).toBe(started.assistantContent);
+    });
+
+    it("returns fallback_required for LP prompts without creating messages", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Create an ecommerce LP in HTML."
+      });
+
+      expect(started).toEqual({
+        ok: false,
+        error: "fallback_required",
+        taskType: "lp_generation"
+      });
+      await expect(repositories.messages.listAll()).resolves.toEqual([]);
+    });
+
+    it("rejects a missing project before saving streaming messages", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      await expect(
+        store.startStreamingChatPrompt({
+          projectId: "missing_project",
+          taskId: null,
+          prompt: "Hello"
+        })
+      ).resolves.toEqual({ ok: false, error: "project_not_found" });
+      await expect(repositories.messages.listAll()).resolves.toEqual([]);
+    });
+  });
+
   it("submits a project setup task without creating an implicit project", async () => {
     const store = createWebWorkbenchStore();
 
