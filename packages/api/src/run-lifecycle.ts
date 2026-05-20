@@ -58,6 +58,14 @@ export interface RunLifecycleView {
   recoveryActions: RunRecoveryAction[];
 }
 
+export function isUnsupportedRetryContext(
+  run: Pick<RunRecord, "contextSummary">
+): boolean {
+  return run.contextSummary.injected.some(
+    (entry) => entry.startsWith("skillCommand:") || entry.startsWith("mcpTool:")
+  );
+}
+
 export type DeriveRunLifecycleViewResult =
   | {
       ok: true;
@@ -201,7 +209,10 @@ async function buildRunLifecycleView(input: {
       state,
       terminalEventType: terminalEvent.type,
       diagnosticSummary: state === "failed" ? diagnosticSummary : undefined,
-      recoveryActions: state === "failed" ? ["retry_run"] : []
+      recoveryActions: applyUnsupportedRetryContext(
+        run,
+        state === "failed" ? ["retry_run"] : []
+      )
     };
   }
 
@@ -251,9 +262,9 @@ async function buildRunLifecycleView(input: {
       ...(linkedFields ?? {}),
       state: mapped.state,
       diagnosticSummary: mapped.diagnosticSummary,
-      recoveryActions: withOmittedWorkerRuntimeAction(
-        mapped.recoveryActions,
-        workerRuntimeOmitted
+      recoveryActions: applyUnsupportedRetryContext(
+        run,
+        withOmittedWorkerRuntimeAction(mapped.recoveryActions, workerRuntimeOmitted)
       )
     };
   }
@@ -288,11 +299,21 @@ async function buildRunLifecycleView(input: {
     ...(linkedFields ?? {}),
     state: mapped.state,
     diagnosticSummary: diagnosticSummary ?? mapped.diagnosticSummary,
-    recoveryActions: withOmittedWorkerRuntimeAction(
-      mapped.recoveryActions,
-      workerRuntimeOmitted
+    recoveryActions: applyUnsupportedRetryContext(
+      run,
+      withOmittedWorkerRuntimeAction(mapped.recoveryActions, workerRuntimeOmitted)
     )
   };
+}
+
+function applyUnsupportedRetryContext(
+  run: Pick<RunRecord, "contextSummary">,
+  actions: RunRecoveryAction[]
+): RunRecoveryAction[] {
+  if (!isUnsupportedRetryContext(run) || !actions.includes("retry_run")) {
+    return actions;
+  }
+  return actions.map((action) => (action === "retry_run" ? "inspect_manually" : action));
 }
 
 async function findBlockedInboundHandoff(

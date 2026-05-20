@@ -1988,7 +1988,8 @@ describe("HomePage project flow errors", () => {
       projectId: "project_1",
       skillVersionId: "skill_version_deploy",
       commandId: "publish_static",
-      pageVersionId: "page_version_1"
+      pageVersionId: "page_version_1",
+      taskId: "task_1"
     });
   });
 

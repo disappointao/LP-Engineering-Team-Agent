@@ -339,12 +339,14 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
   }
 
   const pageVersionId = String(formData.get("pageVersionId") ?? "").trim();
+  const taskId = String(formData.get("taskId") ?? "").trim();
   const store = await getWebWorkbenchStore();
   const result = await store.executeSkillCommand({
     projectId,
     skillVersionId: String(formData.get("skillVersionId") ?? "").trim(),
     commandId: String(formData.get("commandId") ?? "").trim(),
-    ...(pageVersionId ? { pageVersionId } : {})
+    ...(pageVersionId ? { pageVersionId } : {}),
+    ...(taskId ? { taskId } : {})
   });
   if (!result.ok) {
     redirectToSkillsWithError(result.error);

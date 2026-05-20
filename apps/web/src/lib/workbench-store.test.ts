@@ -261,6 +261,106 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("surfaces and resumes task-scoped worker finalization gaps for queued skill commands", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const workerQueueRuntime = createLocalWorkerQueueRuntime(await tempQueueFiles());
+    const store = createWebWorkbenchStore({
+      repositories,
+      workerQueueRuntime: workerQueueRuntime.runtime,
+      workerRuntime: workerQueueRuntime.runtime,
+      workerJobRepository: workerQueueRuntime.jobRepository,
+      workerLogRepository: workerQueueRuntime.workerLogRepository,
+      currentUser: {
+        id: "web-reviewer",
+        displayName: "Reviewer"
+      }
+    });
+    const project = await store.createProject({ name: "Recovery project" });
+    const task = await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a task-scoped landing page in HTML.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    if (!task.ok || !task.taskId) {
+      throw new Error("Expected task creation.");
+    }
+    const pageStateBeforeCommand = await store.getPageState({
+      projectId: project.id,
+      taskId: task.taskId
+    });
+    if (
+      pageStateBeforeCommand.kind !== "task_ready" ||
+      !pageStateBeforeCommand.snapshot?.currentPageVersion
+    ) {
+      throw new Error("Expected task page version.");
+    }
+    await savePublishedDeploymentSkill(repositories, project.id);
+
+    const command = await store.executeSkillCommand({
+      projectId: project.id,
+      skillVersionId: "skill_version_deploy",
+      commandId: "publish_static",
+      taskId: task.taskId,
+      pageVersionId: pageStateBeforeCommand.snapshot.currentPageVersion.id
+    });
+    if (!command.ok) {
+      throw new Error(`Expected queued command, got ${command.error}.`);
+    }
+    if (!("workerJobId" in command.value)) {
+      throw new Error("Expected queued command result.");
+    }
+    const workerJobId = command.value.workerJobId;
+    await expect(workerQueueRuntime.runtime.listJobsForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: workerJobId,
+        state: "queued"
+      })
+    ]);
+    const claim = await workerQueueRuntime.runtime.claimOldestQueuedForProject({
+      workerId: "test-worker",
+      projectId: project.id
+    });
+    if (!claim) {
+      throw new Error("Expected queued worker job claim.");
+    }
+    const workerJob = await workerQueueRuntime.runtime.runClaimedJob(claim);
+    expect(workerJob?.state).toBe("completed");
+
+    const pageStateWithGap = await store.getPageState({
+      projectId: project.id,
+      taskId: task.taskId
+    });
+    expect(pageStateWithGap.kind).toBe("task_ready");
+    if (pageStateWithGap.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(pageStateWithGap.recovery.runs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        runId: command.value.run.id,
+        recoveryActions: ["resume_worker_finalization"]
+      })
+    ]));
+
+    const recovered = await store.executeRunRecoveryAction({
+      taskId: task.taskId,
+      runId: command.value.run.id,
+      action: "resume_worker_finalization"
+    });
+
+    expect(recovered).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        action: "resume_worker_finalization",
+        runId: command.value.run.id,
+        state: "completed"
+      })
+    });
+    await expect(repositories.runs.getById(command.value.run.id)).resolves.toMatchObject({
+      state: "completed",
+      taskId: task.taskId
+    });
+  });
+
   it("exposes a project-scoped worker queue snapshot in page state", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workerQueueRuntime = createLocalWorkerQueueRuntime(await tempQueueFiles());

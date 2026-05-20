@@ -647,6 +647,79 @@ describe("execute run recovery retry", () => {
     ).resolves.toEqual({ ok: false, error: "retry_input_not_reconstructable" });
   });
 
+  it("fails closed instead of retrying MCP tool runs with reconstructable builder inputs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_mcp_tool_builder_1",
+      role: "builder",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z",
+      contextSummary: {
+        injected: ["mcpTool:connector_assets:searchAssets"],
+        omitted: []
+      }
+    });
+    await saveEvent(repositories, {
+      runId: "run_mcp_tool_builder_1",
+      type: "run.failed",
+      sequence: 1,
+      payload: { errorName: "mcp_tool_failed" }
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+    let generatePageVersionCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async (): Promise<PageVersionRecord> => {
+          generatePageVersionCalls += 1;
+          return {
+            id: "version_should_not_be_created",
+            projectId: "project_1",
+            briefId: "brief_1",
+            artifacts: {
+              indexHtml: "<!doctype html><html></html>",
+              stylesCss: ":root {}",
+              scriptJs: "window.lpAgent = true;"
+            },
+            reviewStatus: "pending",
+            findings: [],
+            createdAt: timestamp
+          };
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_mcp_tool_builder_1",
+      action: "retry_run"
+    });
+
+    expect(views).toEqual([
+      expect.objectContaining({
+        runId: "run_mcp_tool_builder_1",
+        recoveryActions: ["inspect_manually"]
+      })
+    ]);
+    expect(result).toEqual({ ok: false, error: "retry_input_not_reconstructable" });
+    expect(generatePageVersionCalls).toBe(0);
+  });
+
   it("fails closed when retry would overwrite an existing task snapshot output", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveTask(repositories);

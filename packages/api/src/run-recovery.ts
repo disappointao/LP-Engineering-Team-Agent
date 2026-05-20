@@ -8,6 +8,7 @@ import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { WorkerJobRecord } from "@lp-agent/worker-runtime";
 import {
   deriveRunLifecycleView,
+  isUnsupportedRetryContext,
   listRunLifecycleViewsForTask,
   type RunLifecycleState,
   type RunLifecycleView
@@ -158,6 +159,9 @@ export async function executeRunRecoveryAction(
     lifecycleResult.view.linkedWorkerJobId
   ) {
     return { ok: false, error: "worker_runtime_not_configured" };
+  }
+  if (input.action === "retry_run" && isUnsupportedRetryContext(run)) {
+    return { ok: false, error: "retry_input_not_reconstructable" };
   }
   if (!lifecycleResult.view.recoveryActions.includes(input.action)) {
     return { ok: false, error: "recovery_action_not_available" };
@@ -313,11 +317,7 @@ function toLifecycleState(state: string): RunLifecycleState {
 async function retryRun(
   input: ExecuteRunRecoveryActionInput & { run: RunRecord }
 ): Promise<RunRecoveryExecutionResult> {
-  if (
-    input.run.contextSummary.injected.some((entry) =>
-      entry.startsWith("skillCommand:")
-    )
-  ) {
+  if (isUnsupportedRetryContext(input.run)) {
     return { ok: false, error: "retry_input_not_reconstructable" };
   }
 

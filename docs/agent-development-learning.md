@@ -426,7 +426,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `resume_worker_finalization` 只处理 worker job 已 terminal 但 run/tool observation finalization 不完整的场景，并复用已有幂等 finalizer。
 - `retry_run` 只做 safely reconstructable single-run retry：创建新的 retry attempt / run id，不覆盖原 failed run，不自动重跑完整 `Planner -> Builder -> Reviewer -> Deployer` chain。
 - 输入无法从 repository 安全重建、目标输出会被覆盖、approval/blocker 语义不清或 side effect 不具备幂等性时，recovery action 必须 fail closed，并让 UI 展示 `inspect_manually` 或对应 guidance。
-- `retry_run` 已明确对 unsupported command side effects fail closed：`skill_command` / deployment 这类带外部 side effect 的命令不进入 Stage 25 可执行 retry 范围。
+- `retry_run` 已明确对 unsupported side-effect contexts fail closed：`skillCommand:` / deployment 和 `mcpTool:` 这类命令或工具 run 不进入 Stage 25 可执行 retry 范围，recovery view 只给 `inspect_manually` 等 guidance。
+- Web skill command forms 会携带当前 task scope；API 会校验 task 属于同一 project，并把 `taskId` 写入 run、run events 和 tool observation，让 worker finalization gaps 能从 task recovery UI 被发现和恢复。
 - `skill_command` retry 默认不进入 Stage 25 可执行范围；带外部 side effect 的命令重试需要独立的 approval / idempotency / audit contract。
 - 学习重点：recovery action contract 变成产品按钮时，必须在 server action 里重新派生当前 lifecycle，不信任浏览器提交的 action availability。可执行恢复动作不是“把失败 run 再跑一次”，而是受 ownership、input reconstruction、output conflict、approval 和 side-effect 边界约束的业务动作。
 

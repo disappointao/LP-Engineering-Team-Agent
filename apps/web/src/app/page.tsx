@@ -473,6 +473,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   type="hidden"
                                   value={currentPageVersionId ?? ""}
                                 />
+                                {pageState.kind === "task_ready" ? (
+                                  <input name="taskId" type="hidden" value={pageState.task.id} />
+                                ) : null}
                                 <button type="submit">
                                   {copy.skillsView.approveAndQueue}
                                 </button>

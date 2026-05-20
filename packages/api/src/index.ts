@@ -291,12 +291,11 @@ export interface ExecuteProjectSkillCommandInput {
   skillVersionId: string;
   commandId: string;
   pageVersionId?: string;
+  taskId?: string;
   approvedByUserId: string;
 }
 
-export interface EnqueueProjectSkillCommandInput extends ExecuteProjectSkillCommandInput {
-  taskId?: string;
-}
+export interface EnqueueProjectSkillCommandInput extends ExecuteProjectSkillCommandInput {}
 
 export interface SkillCommandExecutionResult {
   run: RunRecord;
@@ -1004,6 +1003,7 @@ export class DemoWorkbenchService {
     if (input.approvedByUserId.trim().length === 0) {
       throw new Error("skill_command_approval_required");
     }
+    const taskId = await this.resolveOptionalTaskIdForProject(input.projectId, input.taskId);
     const version = await this.getSkillVersionOrThrow(input.skillVersionId);
     const bindings = await this.repositories.skillBindings.listForProject(input.projectId);
     const binding = bindings.find(
@@ -1095,6 +1095,7 @@ export class DemoWorkbenchService {
       const run: RunRecord = {
         id: runId,
         projectId: input.projectId,
+        ...(taskId ? { taskId } : {}),
         role: "deployer",
         state: "running",
         startedAt,
@@ -1115,6 +1116,7 @@ export class DemoWorkbenchService {
           id: `${runId}_event_${sequence}`,
           runId,
           projectId: input.projectId,
+          ...(taskId ? { taskId } : {}),
           sequence,
           type,
           message,
@@ -1203,6 +1205,7 @@ export class DemoWorkbenchService {
         id: observationId,
         runId,
         projectId: input.projectId,
+        ...(taskId ? { taskId } : {}),
         toolName: `skill:${version.skillId}:${command.id}`,
         input: {
           skillId: version.skillId,
@@ -1255,6 +1258,7 @@ export class DemoWorkbenchService {
     if (input.approvedByUserId.trim().length === 0) {
       throw new Error("skill_command_approval_required");
     }
+    const taskId = await this.resolveOptionalTaskIdForProject(input.projectId, input.taskId);
     const version = await this.getSkillVersionOrThrow(input.skillVersionId);
     const bindings = await this.repositories.skillBindings.listForProject(input.projectId);
     const binding = bindings.find(
@@ -1333,7 +1337,7 @@ export class DemoWorkbenchService {
       const run: RunRecord = {
         id: runId,
         projectId: input.projectId,
-        ...(input.taskId ? { taskId: input.taskId } : {}),
+        ...(taskId ? { taskId } : {}),
         role: "deployer",
         state: "running",
         startedAt,
@@ -1351,7 +1355,7 @@ export class DemoWorkbenchService {
         id: observationId,
         runId,
         projectId: input.projectId,
-        ...(input.taskId ? { taskId: input.taskId } : {}),
+        ...(taskId ? { taskId } : {}),
         toolName: `skill:${version.skillId}:${command.id}`,
         input: {
           skillId: version.skillId,
@@ -1379,7 +1383,7 @@ export class DemoWorkbenchService {
           id: `${runId}_event_${sequence}`,
           runId,
           projectId: input.projectId,
-          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(taskId ? { taskId } : {}),
           sequence,
           type,
           message,
@@ -1420,7 +1424,7 @@ export class DemoWorkbenchService {
         workerJobId = workerJob.id;
         await saveEvent("worker.job.linked", "Worker job linked to task.", {
           ...basePayload,
-          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(taskId ? { taskId } : {}),
           runId,
           workerJobId,
           observationId
@@ -2596,6 +2600,21 @@ export class DemoWorkbenchService {
       throw new Error("Project not found.");
     }
     return project;
+  }
+
+  private async resolveOptionalTaskIdForProject(
+    projectId: string,
+    taskId: string | undefined
+  ): Promise<string | undefined> {
+    const normalizedTaskId = taskId?.trim();
+    if (!normalizedTaskId) {
+      return undefined;
+    }
+    const task = await this.repositories.tasks.getById(normalizedTaskId);
+    if (!task || task.projectId !== projectId) {
+      throw new Error("project_not_found");
+    }
+    return normalizedTaskId;
   }
 
   private async getBriefForProjectOrThrow(projectId: string, briefId: string): Promise<BriefRecord> {

@@ -241,6 +241,7 @@ export interface ExecuteSkillCommandFormInput {
   skillVersionId: string;
   commandId: string;
   pageVersionId?: string;
+  taskId?: string;
 }
 
 export interface ExecuteRunRecoveryFormInput {

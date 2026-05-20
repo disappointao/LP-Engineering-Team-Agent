@@ -119,6 +119,9 @@ function buildSkillCommandForm(input: Record<string, string> = {}): FormData {
   formData.set("skillVersionId", input.skillVersionId ?? "skill_version_1");
   formData.set("commandId", input.commandId ?? "publish_static");
   formData.set("pageVersionId", input.pageVersionId ?? "version_1");
+  if (input.taskId !== undefined) {
+    formData.set("taskId", input.taskId);
+  }
   return formData;
 }
 
@@ -708,6 +711,51 @@ describe("submitPromptAction", () => {
       projectId: "project_2",
       skillVersionId: "skill_version_1",
       commandId: "publish_static"
+    });
+  });
+
+  it("passes nonblank task ids when executing skill commands", async () => {
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_skill_command_1" },
+        observation: { id: "tool_observation_1" }
+      }
+    });
+
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm({ taskId: " task_1 " })),
+      "/?view=skills"
+    );
+
+    expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
+      projectId: "project_2",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      pageVersionId: "version_1",
+      taskId: "task_1"
+    });
+  });
+
+  it("omits blank task ids when executing skill commands", async () => {
+    mocks.executeSkillCommand.mockResolvedValue({
+      ok: true,
+      value: {
+        run: { id: "run_skill_command_1" },
+        observation: { id: "tool_observation_1" }
+      }
+    });
+
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm({ taskId: "   " })),
+      "/?view=skills"
+    );
+
+    expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
+      projectId: "project_2",
+      skillVersionId: "skill_version_1",
+      commandId: "publish_static",
+      pageVersionId: "version_1"
     });
   });
 
