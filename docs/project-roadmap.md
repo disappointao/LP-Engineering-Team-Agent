@@ -316,6 +316,14 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 - 如果 roadmap 因 Superpowers spec/plan 改变，也要保持 `docs/superpowers/README.md` 准确。
 - 如果变化与 Agent 开发学习相关，也要更新 `docs/agent-development-learning.md`。
 
+阶段收尾检查：
+
+- 确认当前工作区和目标分支包含本阶段实现；如果实现发生在独立 worktree 或阶段分支，先确认已合并，或明确标注尚未合并。
+- 确认本文件没有停留在“阶段已完成但推荐下一阶段队列为空”的状态。
+- 确认当前状态快照、明确后置项、已完成阶段记录、推荐下一阶段队列和决策记录互相一致。
+- 确认每个推荐阶段都有建议范围和非目标，且没有把多个大系统混成一个阶段。
+- 确认 `docs/superpowers/README.md` 和 `docs/agent-development-learning.md` 是否也因本阶段变化需要同步更新。
+
 ## 决策记录
 
 - Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。

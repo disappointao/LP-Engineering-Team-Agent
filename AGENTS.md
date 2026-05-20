@@ -52,3 +52,12 @@ Pull request 应包含简要说明、变更原因、运行过的验证命令，�
 新增或实质修改 agent runtime、run orchestration、context assembly、skills、model routing、MCP/tool execution、artifact workspace、multi-agent coordination，或与 Agent 学习相关的 specs/plans 时，必须在同一变更中更新 `docs/agent-development-learning.md`，让中文 Agent 开发笔记保持当前事实。该文件只记录 Agent 开发概念、难点、实现取舍和本项目 Agent 实践。更新前先判断变更是否讲清或改变了某个 Agent 概念或边界；普通项目维护不应写入，除非它直接影响 Agent runtime、context、tools、models、memory、retrieval、recovery、approval、observability 或 multi-agent coordination。
 
 当一个阶段完成、新阶段被规划，或推荐下一阶段优先级变化时，必须在同一变更中更新 `docs/project-roadmap.md`。未来 agent 选择下一阶段前应先读 roadmap，而不是只根据最新 commit history 推断优先级。
+
+阶段完成前必须执行收尾检查，不得只提交实现代码或只写 completion note：
+
+- 确认当前工作区和目标分支包含本阶段实现；如果使用独立 worktree 或阶段分支，先确认已合并，或在最终回复中明确说明尚未合并。
+- 检查 `docs/project-roadmap.md` 已同步：已完成阶段状态、当前状态快照、明确后置项、推荐下一阶段队列和决策记录都与当前事实一致。
+- 推荐下一阶段队列不得为空，默认保持 3-5 个近期阶段；每个近期阶段都要写清建议范围和非目标。
+- 涉及 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 的新增或实质更新时，同步检查 `docs/superpowers/README.md`。
+- 涉及 Agent runtime、context、tools、models、memory、retrieval、recovery、approval、observability 或 multi-agent coordination 的变更时，同步检查 `docs/agent-development-learning.md`。
+- 运行与本阶段风险相称的验证命令，并在最终回复或 PR 描述中列出；无法运行时说明具体原因。
