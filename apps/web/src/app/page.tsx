@@ -165,6 +165,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           })
         : createGeneralTaskThread({
             copy,
+            messages: pageState.messages,
             userMessage:
               pageState.messages.find((message) => message.role === "user")?.content ??
               pageState.task.title,
@@ -975,87 +976,102 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     {recoveryErrorMessage ? (
                       <div className="formError" role="alert">{recoveryErrorMessage}</div>
                     ) : null}
-                    <div className="userTurn" aria-label={copy.chat.userLabel}>
-                      <div className="messageBubble userMessage">{chat.userMessage}</div>
-                    </div>
+                    {chat.turns.map((turn, turnIndex) => (
+                      <React.Fragment key={turn.id}>
+                        <div className="userTurn" aria-label={copy.chat.userLabel}>
+                          <div className="messageBubble userMessage">{turn.userMessage}</div>
+                        </div>
 
-                    <article className="assistantTurn">
-                      <div className="assistantIdentity">
-                        <div className="assistantAvatar">LP</div>
-                        <strong>{chat.assistantName}</strong>
-                        <span>{chat.assistantBadge}</span>
-                      </div>
-
-                      <div className="assistantMessage">
-                        <p>{chat.assistantIntro}</p>
-
-                        <section className="processBlock" aria-label={copy.chat.toolsTitle}>
-                          <div className="processHeader">
-                            <strong>{copy.chat.toolsTitle}</strong>
-                            <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
+                        <article className="assistantTurn">
+                          <div className="assistantIdentity">
+                            <div className="assistantAvatar">LP</div>
+                            <strong>{chat.assistantName}</strong>
+                            <span>{chat.assistantBadge}</span>
                           </div>
-                          <div className="toolTimeline">
-                            {chat.toolEvents.map((event) => (
-                              <div className="toolEvent" data-status={event.status} key={event.id}>
-                                <div className="toolStatusDot" aria-hidden="true" />
-                                <div>
-                                  <div className="toolEventTop">
-                                    <strong>{event.label}</strong>
-                                    <span>{event.statusLabel}</span>
-                                  </div>
-                                  <p>{event.operation}</p>
-                                  <small>{event.meta}</small>
-                                </div>
+
+                          <div className="assistantMessage">
+                            <p>{chat.assistantIntro}</p>
+
+                            <section className="processBlock" aria-label={copy.chat.toolsTitle}>
+                              <div className="processHeader">
+                                <strong>{copy.chat.toolsTitle}</strong>
+                                <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
                               </div>
-                            ))}
-                          </div>
-                        </section>
-
-                        {pageState.kind === "task_ready" &&
-                        (pageState.recovery?.runs.length ?? 0) > 0
-                          ? RecoveryBlock({ pageState, copy })
-                          : null}
-
-                        <p>{chat.assistantCompletion}</p>
-
-                        {completedSnapshot ? (
-                          <>
-                            <section className="deliveryBlock" aria-label={copy.chat.artifactsTitle}>
-                              <div className="deliveryHeader">
-                                <strong>{copy.chat.taskComplete}</strong>
-                                <span>{copy.chat.resultRating}</span>
-                              </div>
-                              <div className="artifactGrid">
-                                {chat.artifacts.map((artifact) => (
-                                  <a
-                                    className="artifactCard"
-                                    download={artifact.filename}
-                                    href={artifact.href}
-                                    key={artifact.id}
+                              <div className="toolTimeline">
+                                {chat.toolEvents.map((event) => (
+                                  <div
+                                    className="toolEvent"
+                                    data-status={event.status}
+                                    key={`${turn.id}:${event.id}`}
                                   >
-                                    <span>{artifact.kind}</span>
-                                    <strong>{artifact.filename}</strong>
-                                    <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
-                                  </a>
+                                    <div className="toolStatusDot" aria-hidden="true" />
+                                    <div>
+                                      <div className="toolEventTop">
+                                        <strong>{event.label}</strong>
+                                        <span>{event.statusLabel}</span>
+                                      </div>
+                                      <p>{event.operation}</p>
+                                      <small>{event.meta}</small>
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
-                              {pageState.kind === "task_ready" && pageState.artifactDiff ? (
-                                ArtifactDiffBlock({
-                                  artifactDiff: pageState.artifactDiff,
-                                  copy: copy.chat,
-                                  previewSearchParams
-                                })
-                              ) : null}
                             </section>
 
-                            <section className="inlinePreview" aria-label={copy.chat.previewTitle}>
-                              <div className="previewTitle">{copy.chat.previewTitle}</div>
-                              <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
-                            </section>
-                          </>
-                        ) : null}
-                      </div>
-                    </article>
+                            {turnIndex === chat.turns.length - 1 &&
+                            pageState.kind === "task_ready" &&
+                            (pageState.recovery?.runs.length ?? 0) > 0
+                              ? RecoveryBlock({ pageState, copy })
+                              : null}
+
+                            <p>{turn.assistantCompletion}</p>
+
+                            {turnIndex === chat.turns.length - 1 && completedSnapshot ? (
+                              <>
+                                <section
+                                  className="deliveryBlock"
+                                  aria-label={copy.chat.artifactsTitle}
+                                >
+                                  <div className="deliveryHeader">
+                                    <strong>{copy.chat.taskComplete}</strong>
+                                    <span>{copy.chat.resultRating}</span>
+                                  </div>
+                                  <div className="artifactGrid">
+                                    {chat.artifacts.map((artifact) => (
+                                      <a
+                                        className="artifactCard"
+                                        download={artifact.filename}
+                                        href={artifact.href}
+                                        key={artifact.id}
+                                      >
+                                        <span>{artifact.kind}</span>
+                                        <strong>{artifact.filename}</strong>
+                                        <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
+                                      </a>
+                                    ))}
+                                  </div>
+                                  {pageState.kind === "task_ready" && pageState.artifactDiff ? (
+                                    ArtifactDiffBlock({
+                                      artifactDiff: pageState.artifactDiff,
+                                      copy: copy.chat,
+                                      previewSearchParams
+                                    })
+                                  ) : null}
+                                </section>
+
+                                <section
+                                  className="inlinePreview"
+                                  aria-label={copy.chat.previewTitle}
+                                >
+                                  <div className="previewTitle">{copy.chat.previewTitle}</div>
+                                  <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
+                                </section>
+                              </>
+                            ) : null}
+                          </div>
+                        </article>
+                      </React.Fragment>
+                    ))}
 
                     <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
                       <div>{copy.chat.suggestionsTitle}</div>

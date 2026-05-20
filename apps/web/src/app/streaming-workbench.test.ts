@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  createInitialStreamingWorkbenchState,
+  type StreamingWorkbenchState
+} from "./streaming-workbench-state";
+import {
   createStreamingChatRequestBody,
+  getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
   shouldRequestFallbackSubmitAfterCommit,
   getStreamingSubmitDecision
@@ -70,6 +75,54 @@ describe("streaming workbench submit interception", () => {
       preventDefault: true,
       streamPrompt: undefined
     });
+  });
+
+  it("uses a trimmed prompt for streaming while preserving the original value for fallback", () => {
+    const decision = getStreamingSubmitDecision({
+      promptValue: "  Build a spring launch page  ",
+      skipStreamingOnce: false
+    });
+
+    expect(decision).toMatchObject({
+      allowNativeSubmit: false,
+      preventDefault: true,
+      streamPrompt: "Build a spring launch page",
+      fallbackPrompt: "  Build a spring launch page  "
+    });
+  });
+});
+
+describe("streaming workbench terminal refresh state", () => {
+  it("clears terminal transient assistant state after requesting a refresh", () => {
+    const completedState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "completed",
+      assistantContent: "Persisted assistant reply"
+    };
+    const errorState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "error",
+      assistantContent: "Partial assistant reply",
+      errorMessage: "Stream failed"
+    };
+
+    expect(getTerminalStreamingStateAfterRefresh(completedState, true)).toEqual(
+      createInitialStreamingWorkbenchState()
+    );
+    expect(getTerminalStreamingStateAfterRefresh(errorState, true)).toEqual(
+      createInitialStreamingWorkbenchState()
+    );
+  });
+
+  it("keeps terminal error state visible when no refresh was requested", () => {
+    const errorState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "error",
+      assistantContent: "Partial assistant reply",
+      errorMessage: "Stream failed"
+    };
+
+    expect(getTerminalStreamingStateAfterRefresh(errorState, false)).toEqual(errorState);
   });
 });
 

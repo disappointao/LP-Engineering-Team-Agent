@@ -31,7 +31,8 @@ export interface StreamingWorkbenchProps {
 type StreamingWorkbenchAction =
   | { type: "start" }
   | { type: "event"; event: ChatStreamEvent }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "clear_transient_after_refresh" };
 
 function streamingWorkbenchReducer(
   state: StreamingWorkbenchState,
@@ -51,6 +52,8 @@ function streamingWorkbenchReducer(
         status: "error",
         errorMessage: action.message
       };
+    case "clear_transient_after_refresh":
+      return getTerminalStreamingStateAfterRefresh(state, true);
   }
 }
 
@@ -66,6 +69,17 @@ function shouldRenderStreamingTurn(state: StreamingWorkbenchState): boolean {
 
 function shouldRefreshAfterStream(state: StreamingWorkbenchState): boolean {
   return state.status === "completed" || state.status === "error";
+}
+
+export function getTerminalStreamingStateAfterRefresh(
+  state: StreamingWorkbenchState,
+  didRequestRefresh: boolean
+): StreamingWorkbenchState {
+  if (!didRequestRefresh || !shouldRefreshAfterStream(state)) {
+    return state;
+  }
+
+  return createInitialStreamingWorkbenchState();
 }
 
 function getVisibleStreamingStatus(
@@ -113,6 +127,7 @@ export function getPromptSubmissionControlState({
 
 export interface StreamingSubmitDecision {
   allowNativeSubmit: boolean;
+  fallbackPrompt?: string;
   preventDefault: boolean;
   streamPrompt?: string;
 }
@@ -141,6 +156,7 @@ export function getStreamingSubmitDecision({
 
   return {
     allowNativeSubmit: false,
+    fallbackPrompt: promptValue,
     preventDefault: true,
     streamPrompt
   };
@@ -267,6 +283,13 @@ export function StreamingWorkbench({
     dispatch({ type: "error", message: streamingErrorLabel });
   };
 
+  const refreshAndClearTerminalState = () => {
+    router.refresh();
+    const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
+    applyState(nextState);
+    dispatch({ type: "clear_transient_after_refresh" });
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     const formData = new FormData(event.currentTarget);
     const decision = getStreamingSubmitDecision({
@@ -294,7 +317,7 @@ export function StreamingWorkbench({
     };
     fallbackSubmittedRef.current = false;
     fallbackSubmitPendingRef.current = false;
-    submittedPromptRef.current = prompt;
+    submittedPromptRef.current = decision.fallbackPrompt ?? prompt;
     setFallbackPrompt(undefined);
     applyState(initialState);
     dispatch({ type: "start" });
@@ -310,7 +333,7 @@ export function StreamingWorkbench({
 
       if (!response.ok || !response.body) {
         dispatchError();
-        router.refresh();
+        refreshAndClearTerminalState();
         return;
       }
 
@@ -355,11 +378,11 @@ export function StreamingWorkbench({
       }
 
       if (shouldRefreshAfterStream(stateRef.current)) {
-        router.refresh();
+        refreshAndClearTerminalState();
       }
     } catch {
       dispatchError();
-      router.refresh();
+      refreshAndClearTerminalState();
     }
   };
 

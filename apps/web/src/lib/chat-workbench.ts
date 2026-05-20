@@ -28,12 +28,19 @@ export interface ChatComposerCopy {
   sendLabel: string;
 }
 
+export interface ChatWorkbenchTurn {
+  id: string;
+  userMessage: string;
+  assistantCompletion: string;
+}
+
 export interface ChatWorkbenchThread {
   userMessage: string;
   assistantName: string;
   assistantBadge: string;
   assistantIntro: string;
   assistantCompletion: string;
+  turns: ChatWorkbenchTurn[];
   toolEvents: ChatToolEvent[];
   artifacts: ChatArtifactCard[];
   suggestions: string[];
@@ -74,6 +81,13 @@ export function createChatWorkbenchThread({
     assistantBadge: copy.chat.assistantBadge,
     assistantIntro: copy.chat.intro,
     assistantCompletion: copy.chat.completion,
+    turns: [
+      {
+        id: "lp_generation",
+        userMessage: prompt,
+        assistantCompletion: copy.chat.completion
+      }
+    ],
     toolEvents,
     artifacts,
     suggestions: copy.chat.suggestions,
@@ -256,18 +270,27 @@ function toDisplayValue(value: unknown): string {
 export function createGeneralTaskThread({
   copy,
   userMessage,
-  assistantMessage
+  assistantMessage,
+  messages
 }: {
   copy: WorkbenchCopy;
   userMessage: string;
   assistantMessage: string;
+  messages?: GeneralTaskMessage[];
 }): ChatWorkbenchThread {
+  const turns = createGeneralTaskTurns({
+    assistantMessage,
+    messages,
+    userMessage
+  });
+
   return {
-    userMessage,
+    userMessage: turns[0]?.userMessage ?? userMessage,
     assistantName: copy.chat.assistantName,
     assistantBadge: copy.chat.assistantBadge,
     assistantIntro: copy.chat.generalIntro,
-    assistantCompletion: assistantMessage,
+    assistantCompletion: turns[0]?.assistantCompletion ?? assistantMessage,
+    turns,
     toolEvents: [
       {
         id: "assistant",
@@ -289,4 +312,51 @@ export function createGeneralTaskThread({
       sendLabel: copy.chat.sendLabel
     }
   };
+}
+
+interface GeneralTaskMessage {
+  id: string;
+  role: string;
+  content: string;
+}
+
+function createGeneralTaskTurns({
+  assistantMessage,
+  messages,
+  userMessage
+}: {
+  assistantMessage: string;
+  messages?: GeneralTaskMessage[];
+  userMessage: string;
+}): ChatWorkbenchTurn[] {
+  const turns: ChatWorkbenchTurn[] = [];
+  let pendingUser: GeneralTaskMessage | undefined;
+
+  for (const message of messages ?? []) {
+    if (message.role === "user") {
+      pendingUser = message;
+      continue;
+    }
+
+    if (message.role === "assistant" && pendingUser) {
+      turns.push({
+        id: `${pendingUser.id}:${message.id}`,
+        userMessage: pendingUser.content,
+        assistantCompletion: message.content
+      });
+      pendingUser = undefined;
+    }
+  }
+
+  if (turns.length > 0) {
+    return turns;
+  }
+
+  return [
+    {
+      id: "general_chat",
+      userMessage,
+      assistantCompletion: assistantMessage
+    }
+  ];
 }

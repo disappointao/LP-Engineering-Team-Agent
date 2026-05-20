@@ -2461,6 +2461,83 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("Static LP preview");
   });
 
+  it("renders all persisted general chat user and assistant turns in order", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [],
+      tasks: [
+        {
+          id: "task_1",
+          title: "Help me plan the campaign.",
+          type: "general_chat",
+          status: "complete",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      activeTaskId: "task_1",
+      task: {
+        id: "task_1",
+        title: "Help me plan the campaign.",
+        type: "general_chat",
+        status: "complete",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Help me plan the campaign.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Start with audience, offer, and channel sequencing.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        },
+        {
+          id: "message_3",
+          taskId: "task_1",
+          role: "user",
+          content: "Now add lifecycle email ideas.",
+          createdAt: "2026-05-12T08:01:00.000Z"
+        },
+        {
+          id: "message_4",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Use a teaser, launch, reminder, and last-call sequence.",
+          createdAt: "2026-05-12T08:01:01.000Z"
+        }
+      ],
+      interrupt: unavailableInterrupt
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Help me plan the campaign.");
+    expect(text).toContain("Start with audience, offer, and channel sequencing.");
+    expect(text).toContain("Now add lifecycle email ideas.");
+    expect(text).toContain("Use a teaser, launch, reminder, and last-call sequence.");
+    expect(text.indexOf("Help me plan the campaign.")).toBeLessThan(
+      text.indexOf("Start with audience, offer, and channel sequencing.")
+    );
+    expect(text.indexOf("Start with audience, offer, and channel sequencing.")).toBeLessThan(
+      text.indexOf("Now add lifecycle email ideas.")
+    );
+    expect(text.indexOf("Now add lifecycle email ideas.")).toBeLessThan(
+      text.indexOf("Use a teaser, launch, reminder, and last-call sequence.")
+    );
+  });
+
   it("does not show stale LP artifacts for a project-bound general task", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_2";
