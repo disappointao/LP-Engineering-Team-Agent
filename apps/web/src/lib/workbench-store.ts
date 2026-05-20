@@ -858,10 +858,22 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: "project_not_found" };
       }
 
+      const requestedTaskId = input.taskId ?? undefined;
+      if (requestedTaskId) {
+        const existingTask = await repositories.tasks.getById(requestedTaskId);
+        if (
+          !existingTask ||
+          existingTask.type !== "general_chat" ||
+          (existingTask.projectId ?? undefined) !== requestedProjectId
+        ) {
+          return { ok: false, error: "project_not_found" };
+        }
+      }
+
       const assistantContent = "I created a task thread and can continue from here.";
       const started = await startStreamingChatThread({
         repositories,
-        taskId: input.taskId ?? undefined,
+        taskId: requestedTaskId,
         title: deriveTaskTitle(prompt.value),
         projectId: requestedProjectId,
         userMessage: prompt.value,
@@ -889,7 +901,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const assistant = messages.find(
         (message) => message.id === input.messageId && message.role === "assistant"
       );
-      if (!assistant) {
+      const latestMessage = messages.at(-1);
+      if (!assistant || assistant.content !== "" || latestMessage?.id !== assistant.id) {
         return { ok: false, error: "generation_failed" };
       }
       await repositories.messages.save({
@@ -1669,7 +1682,9 @@ async function startStreamingChatThread(input: {
       ? await input.repositories.tasks.getById(input.taskId)
       : undefined;
     const task: TaskRecord =
-      existingTask && existingTask.type === "general_chat"
+      existingTask &&
+      existingTask.type === "general_chat" &&
+      (existingTask.projectId ?? undefined) === input.projectId
         ? existingTask
         : {
             id: nextSequentialId("task", existingTasks.map((record) => record.id)),

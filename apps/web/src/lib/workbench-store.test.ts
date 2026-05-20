@@ -2320,6 +2320,103 @@ describe("web workbench store", () => {
       ).resolves.toEqual({ ok: false, error: "project_not_found" });
       await expect(repositories.messages.listAll()).resolves.toEqual([]);
     });
+
+    it("rejects streaming chat reuse when the task belongs to another project", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const projectA = await store.createProject({ name: "Project A" });
+      const projectB = await store.createProject({ name: "Project B" });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: projectA.id,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+
+      await expect(
+        store.startStreamingChatPrompt({
+          projectId: projectB.id,
+          taskId: started.taskId,
+          prompt: "Continue this chat."
+        })
+      ).resolves.toEqual({ ok: false, error: "project_not_found" });
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages.map((message) => message.content)).toEqual([
+        "Help me write a campaign plan.",
+        ""
+      ]);
+    });
+
+    it("rejects streaming chat reuse of an LP generation task without appending messages", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const submitted = await store.submitTaskPrompt({
+        prompt: "Create an ecommerce LP in HTML.",
+        implicitProjectName: "Ecommerce LP"
+      });
+
+      expect(submitted.ok).toBe(true);
+      if (!submitted.ok) {
+        throw new Error("expected LP generation task to be created");
+      }
+      const originalMessages = await repositories.messages.listForTask(submitted.taskId);
+
+      await expect(
+        store.startStreamingChatPrompt({
+          projectId: submitted.projectId,
+          taskId: submitted.taskId,
+          prompt: "Continue this chat."
+        })
+      ).resolves.toEqual({ ok: false, error: "project_not_found" });
+
+      await expect(repositories.messages.listForTask(submitted.taskId)).resolves.toEqual(
+        originalMessages
+      );
+    });
+
+    it("rejects stale streaming assistant completion without overwriting content", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          content: started.assistantContent
+        })
+      ).resolves.toEqual({ ok: true });
+
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          content: "overwritten content"
+        })
+      ).resolves.toEqual({ ok: false, error: "generation_failed" });
+
+      const assistant = (await repositories.messages.listForTask(started.taskId)).find(
+        (message) => message.id === started.assistantMessageId
+      );
+      expect(assistant?.content).toBe(started.assistantContent);
+    });
   });
 
   it("submits a project setup task without creating an implicit project", async () => {
