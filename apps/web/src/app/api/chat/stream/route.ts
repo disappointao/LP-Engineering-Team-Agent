@@ -2,7 +2,10 @@ import {
   encodeChatStreamEvent,
   type ChatStreamEvent
 } from "../../../../lib/chat-stream";
-import { getWebWorkbenchStore } from "../../../../lib/workbench-store";
+import {
+  getWebWorkbenchStore,
+  type ProjectFlowErrorCode
+} from "../../../../lib/workbench-store";
 import {
   CURRENT_PROJECT_COOKIE,
   CURRENT_TASK_COOKIE,
@@ -18,6 +21,8 @@ type ChatStreamRequest = {
   prompt?: unknown;
 };
 
+type ChatStreamErrorCode = Extract<ChatStreamEvent, { type: "error" }>["code"];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -31,19 +36,37 @@ async function readChatStreamRequest(request: Request): Promise<ChatStreamReques
   }
 }
 
-function createEventStream(events: ChatStreamEvent[]): ReadableStream<Uint8Array> {
+type ChatStreamEnqueue = (event: ChatStreamEvent) => void;
+
+function createEventStream(
+  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
     start(controller) {
-      for (const event of events) {
+      const enqueue: ChatStreamEnqueue = (event) => {
         controller.enqueue(encoder.encode(encodeChatStreamEvent(event)));
-      }
-      controller.close();
+      };
+      void Promise.resolve()
+        .then(() => produceEvents(enqueue))
+        .catch(() => {
+          enqueue({
+            type: "error",
+            code: "generation_failed",
+            message: getSafeErrorMessage("generation_failed")
+          });
+        })
+        .finally(() => {
+          controller.close();
+        });
     }
   });
 }
 
-function createStreamResponse(events: ChatStreamEvent[], cookies: string[] = []): Response {
+function createStreamResponse(
+  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void,
+  cookies: string[] = []
+): Response {
   const headers = new Headers({
     "content-type": "application/x-ndjson; charset=utf-8",
     "cache-control": "no-store"
@@ -51,7 +74,13 @@ function createStreamResponse(events: ChatStreamEvent[], cookies: string[] = [])
   for (const cookie of cookies) {
     headers.append("set-cookie", cookie);
   }
-  return new Response(createEventStream(events), { headers });
+  return new Response(createEventStream(produceEvents), { headers });
+}
+
+function createSingleEventResponse(event: ChatStreamEvent): Response {
+  return createStreamResponse((enqueue) => {
+    enqueue(event);
+  });
 }
 
 function createCookie(name: string, value: string): string {
@@ -69,6 +98,17 @@ function getSafeErrorMessage(error: "prompt_required" | "project_not_found" | "g
   }
 }
 
+function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode {
+  switch (error) {
+    case "prompt_required":
+    case "project_not_found":
+    case "generation_failed":
+      return error;
+    default:
+      return "generation_failed";
+  }
+}
+
 function getStringOrSessionValue(value: unknown, sessionValue: string | undefined): string | null {
   return typeof value === "string" ? value : sessionValue ?? null;
 }
@@ -76,13 +116,11 @@ function getStringOrSessionValue(value: unknown, sessionValue: string | undefine
 export async function POST(request: Request): Promise<Response> {
   const payload = await readChatStreamRequest(request);
   if (!payload) {
-    return createStreamResponse([
-      {
-        type: "error",
-        code: "generation_failed",
-        message: "Unable to read chat request."
-      }
-    ]);
+    return createSingleEventResponse({
+      type: "error",
+      code: "generation_failed",
+      message: "Unable to read chat request."
+    });
   }
 
   const [sessionProjectId, sessionTaskId] = await Promise.all([
@@ -92,7 +130,7 @@ export async function POST(request: Request): Promise<Response> {
   const projectId = getStringOrSessionValue(payload.projectId, sessionProjectId);
   const taskId = getStringOrSessionValue(payload.taskId, sessionTaskId);
   const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
-  const store = getWebWorkbenchStore();
+  const store = await getWebWorkbenchStore();
   const started = await store.startStreamingChatPrompt({
     projectId,
     taskId,
@@ -101,73 +139,19 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!started.ok) {
     if (started.error === "fallback_required") {
-      return createStreamResponse([
-        {
-          type: "fallback.required",
-          reason: "unsupported_task_type",
-          taskType: started.taskType,
-          message: "Use the standard task flow for this prompt."
-        }
-      ]);
+      return createSingleEventResponse({
+        type: "fallback.required",
+        reason: "unsupported_task_type",
+        taskType: started.taskType,
+        message: "Use the standard task flow for this prompt."
+      });
     }
 
-    return createStreamResponse([
-      {
-        type: "error",
-        code: started.error,
-        message: getSafeErrorMessage(started.error)
-      }
-    ]);
-  }
-
-  const events: ChatStreamEvent[] = [
-    {
-      type: "task.created",
-      taskId: started.taskId,
-      ...(started.projectId ? { projectId: started.projectId } : {})
-    },
-    {
-      type: "run.status",
-      taskId: started.taskId,
-      state: "running",
-      label: "Generating response"
-    },
-    ...started.chunks.map(
-      (delta): ChatStreamEvent => ({
-        type: "assistant.delta",
-        taskId: started.taskId,
-        messageId: started.assistantMessageId,
-        delta
-      })
-    )
-  ];
-
-  const completed = await store.completeStreamingChatPrompt({
-    taskId: started.taskId,
-    messageId: started.assistantMessageId,
-    content: started.assistantContent
-  });
-
-  if (completed.ok) {
-    events.push(
-      {
-        type: "assistant.completed",
-        taskId: started.taskId,
-        messageId: started.assistantMessageId,
-        content: started.assistantContent
-      },
-      {
-        type: "run.status",
-        taskId: started.taskId,
-        state: "completed",
-        label: "Response complete"
-      }
-    );
-  } else {
-    events.push({
+    const errorCode = toChatStreamErrorCode(started.error);
+    return createSingleEventResponse({
       type: "error",
-      code: completed.error,
-      message: getSafeErrorMessage(completed.error)
+      code: errorCode,
+      message: getSafeErrorMessage(errorCode)
     });
   }
 
@@ -175,5 +159,54 @@ export async function POST(request: Request): Promise<Response> {
   if (started.projectId) {
     cookies.push(createCookie(CURRENT_PROJECT_COOKIE, started.projectId));
   }
-  return createStreamResponse(events, cookies);
+  return createStreamResponse(async (enqueue) => {
+    enqueue({
+      type: "task.created",
+      taskId: started.taskId,
+      ...(started.projectId ? { projectId: started.projectId } : {})
+    });
+    enqueue({
+      type: "run.status",
+      taskId: started.taskId,
+      state: "running",
+      label: "Generating response"
+    });
+    for (const delta of started.chunks) {
+      enqueue({
+        type: "assistant.delta",
+        taskId: started.taskId,
+        messageId: started.assistantMessageId,
+        delta
+      });
+    }
+
+    const completed = await store.completeStreamingChatPrompt({
+      taskId: started.taskId,
+      messageId: started.assistantMessageId,
+      content: started.assistantContent
+    });
+
+    if (completed.ok) {
+      enqueue({
+        type: "assistant.completed",
+        taskId: started.taskId,
+        messageId: started.assistantMessageId,
+        content: started.assistantContent
+      });
+      enqueue({
+        type: "run.status",
+        taskId: started.taskId,
+        state: "completed",
+        label: "Response complete"
+      });
+      return;
+    }
+
+    const errorCode = toChatStreamErrorCode(completed.error);
+    enqueue({
+      type: "error",
+      code: errorCode,
+      message: getSafeErrorMessage(errorCode)
+    });
+  }, cookies);
 }
