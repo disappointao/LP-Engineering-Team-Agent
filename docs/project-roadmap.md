@@ -24,6 +24,7 @@
 - Worker runtime / queue：job contract、sandbox policy、JSON-file persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat、stale safe claim recovery、bounded lifecycle logs、Web 只读 queue health、安全 simulated payload。
 - Artifact workspace：durable artifact workspace、manifest/hash/summary、controlled artifact reader、metadata-only static diff、bounded snippet。
 - Collaboration primitives：local identity seam、workspace/project member repositories、project owner membership、approval actor audit context。
+- Postgres repository foundation v0：Prisma schema 已对齐 Agent runtime 核心 repository contract，并提供显式 opt-in 的 Prisma-backed repository adapter。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 当前仍明确后置：
@@ -34,7 +35,11 @@
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
-- Postgres production rollout、完整 repository migration、真实多用户 auth/RBAC。
+- Web opt-in Postgres backend wiring。
+- Auth/RBAC on top of Postgres。
+- Object storage / artifact file content migration。
+- Prisma migrations and production deployment docs。
+- Worker job repository Postgres backend。
 - Desktop packaging 和 desktop filesystem workspace。
 
 ## 已完成阶段记录
@@ -89,11 +94,9 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 **实施计划：** `docs/superpowers/plans/2026-05-19-model-repair-retry-fallback.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 22：Postgres Repository v0
 
-**状态：** design 和 implementation plan 已确认，待实现。
+**状态：** 已实现 foundation v0。
 
 **为什么现在做：** Stage 18-21 已经把 run lifecycle、worker queue、MCP execution 和真实模型可靠性做到本地 MVP 可审计状态。下一步如果要支持严肃多人/公司内部使用，Postgres repository 是项目共享、auth、durable background workers 和 audit 的基础。
 
@@ -114,7 +117,9 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 **当前设计：** `docs/superpowers/specs/2026-05-19-postgres-repository-foundation-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-19-postgres-repository-foundation.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-19-postgres-repository-foundation.md`。
+
+## 推荐下一阶段队列
 
 ## Backlog 分组
 

@@ -291,11 +291,11 @@
    - 在 Stage 21 design 后阅读，用于审计 runtime provider retry、fallback metadata resolution、Planner/Builder one-shot repair、lifecycle diagnostics 和文档收尾的实现顺序。
 
 72. `specs/2026-05-19-postgres-repository-foundation-design.md`
-   - Stage 22 Postgres Repository Foundation v0 design。
+   - Stage 22 Postgres Repository Foundation v0 design（已实现 foundation v0）。
    - 在 Stage 21 plan 后阅读，用于把 Prisma schema 和当前核心 `WorkbenchRepositories` contract 对齐，并规划显式 opt-in 的 Prisma/Postgres repository adapter，同时不做完整 hosted auth、object storage、production rollout 或默认 Web backend 切换。
 
 73. `plans/2026-05-19-postgres-repository-foundation.md`
-   - Stage 22 Postgres Repository Foundation v0 implementation plan。
+   - Stage 22 Postgres Repository Foundation v0 implementation plan（已实现 foundation v0）。
    - 在 Stage 22 design 后阅读，用于按 TDD 对齐 Prisma schema、提取 shared repository contract tests、实现 Prisma mappers、显式 opt-in Prisma-backed repository adapter、opt-in Postgres integration test 和文档收尾。
 
 ## 维护规则
