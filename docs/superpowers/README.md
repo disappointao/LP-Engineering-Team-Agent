@@ -310,6 +310,10 @@
    - Stage 24 Worker Job Postgres Backend v0 design。
    - 在 Stage 23 plan 后阅读，用于把 worker job、safe persisted payload 和 bounded worker lifecycle log repository 扩展到显式 opt-in 的 Postgres backend，同时继续保留 JSON-file 默认路径、安全 payload 边界和不做真实 shell / production worker fleet 的限制。
 
+77. `plans/2026-05-20-worker-job-postgres-backend.md`
+   - Stage 24 Worker Job Postgres Backend v0 implementation plan。
+   - 在 Stage 24 design 后阅读，用于按 TDD 实现 Prisma worker job/payload/log schema、shared repository contracts、Prisma adapters、shared worker queue backend factory、Web/agent-worker opt-in wiring、integration coverage 和文档收尾。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

@@ -403,6 +403,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 已确认的 Stage 24 Worker Job Postgres Backend v0 设计：
 
 - [2026-05-20-worker-job-postgres-backend-design.md](./superpowers/specs/2026-05-20-worker-job-postgres-backend-design.md)
+- 当前实现计划：[2026-05-20-worker-job-postgres-backend.md](./superpowers/plans/2026-05-20-worker-job-postgres-backend.md)
 - 这一阶段把 worker queue 的 durable backend 从 JSON-file 扩展到显式 opt-in 的 Postgres：`WorkerJobRepository`、`WorkerJobPayloadRepository` 和 `WorkerLogRepository` 都纳入范围。
 - 默认 worker queue 仍是 JSON-file；`WORKER_REPOSITORY_BACKEND=postgres` 缺少 `DATABASE_URL`、Prisma client 初始化失败或 backend 值非法时必须 fail closed，不回退 JSON-file。
 - worker job Postgres backend 的关键语义是 claim token 条件更新：claim、heartbeat、complete claimed、running cancellation 和 stale recovery 都必须防止两个 worker 执行同一个 job。

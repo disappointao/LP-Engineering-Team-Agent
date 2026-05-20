@@ -151,7 +151,7 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 ### Stage 24：Worker Job Postgres Backend v0
 
-**状态：** design 已确认，下一步写 implementation plan。
+**状态：** design 和 implementation plan 已确认，待实现。
 
 **为什么现在做：** Web workbench state 可选择 Postgres 后，worker queue 仍是 JSON-file。durable background workers、stale recovery、daemon heartbeat 和审计要进入多人/长期运行场景，需要把 worker job/log repository 单独迁出本地文件。
 
@@ -170,6 +170,8 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 - 不做 raw stdout/stderr streaming。
 
 **当前设计：** `docs/superpowers/specs/2026-05-20-worker-job-postgres-backend-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-20-worker-job-postgres-backend.md`。
 
 ### Stage 25：Run Recovery UI v0
 
