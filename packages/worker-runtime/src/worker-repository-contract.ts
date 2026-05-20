@@ -345,6 +345,22 @@ export function runWorkerLogRepositoryContractTests(
       });
       expect(filtered.map((log) => log.id)).toEqual(["newer"]);
     });
+
+    it("limits listed logs to the newest requested records", async () => {
+      const repository = await createRepository();
+      for (let index = 0; index < 4; index += 1) {
+        await repository.append(
+          createContractWorkerLogRecord({
+            id: `log-${index}`,
+            createdAt: `2026-05-20T00:00:0${index}.000Z`
+          })
+        );
+      }
+
+      const logs = await repository.list({ limit: 2 });
+
+      expect(logs.map((log) => log.id)).toEqual(["log-3", "log-2"]);
+    });
   });
 }
 
