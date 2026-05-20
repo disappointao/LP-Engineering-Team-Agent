@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/worker-repository-contract.ts"
   },
   "scripts": {
     "test": "vitest run src/index.test.ts src/worker-job-repositories.test.ts src/worker-job-payload-repositories.test.ts src/worker-log-repositories.test.ts",

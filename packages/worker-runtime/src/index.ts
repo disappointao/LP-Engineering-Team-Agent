@@ -4,18 +4,6 @@ import { resolve, sep } from "node:path";
 import { InMemoryWorkerJobRepository } from "./worker-job-repositories";
 
 export {
-  createContractWorkerJobPayloadRecord,
-  createContractWorkerJobRecord,
-  createContractWorkerLogRecord,
-  runWorkerJobPayloadRepositoryContractTests,
-  runWorkerJobRepositoryContractTests,
-  runWorkerLogRepositoryContractTests,
-  type WorkerJobPayloadRepositoryFactory,
-  type WorkerJobRepositoryFactory,
-  type WorkerLogRepositoryFactory
-} from "./worker-repository-contract";
-
-export {
   InMemoryWorkerLogRepository,
   JsonFileWorkerLogRepository,
   createJsonFileWorkerLogRepository,
