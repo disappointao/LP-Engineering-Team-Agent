@@ -146,6 +146,28 @@ export function getStreamingSubmitDecision({
   };
 }
 
+export interface StreamingChatRequestBody {
+  prompt: string;
+  projectId?: string;
+  taskId: string | null;
+}
+
+export function createStreamingChatRequestBody({
+  prompt,
+  projectId,
+  taskId
+}: {
+  prompt: string;
+  projectId?: string;
+  taskId?: string;
+}): StreamingChatRequestBody {
+  return {
+    prompt,
+    ...(projectId === undefined ? {} : { projectId }),
+    taskId: taskId ?? null
+  };
+}
+
 export interface FallbackSubmitAfterCommitState {
   fallbackPrompt: string | undefined;
   fallbackSubmitPending: boolean;
@@ -283,7 +305,7 @@ export function StreamingWorkbench({
         headers: {
           "content-type": "application/json"
         },
-        body: JSON.stringify({ prompt, projectId, taskId })
+        body: JSON.stringify(createStreamingChatRequestBody({ prompt, projectId, taskId }))
       });
 
       if (!response.ok || !response.body) {

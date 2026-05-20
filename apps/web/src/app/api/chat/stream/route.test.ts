@@ -210,6 +210,50 @@ describe("POST /api/chat/stream", () => {
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
   });
 
+  it("does not use the session task fallback when taskId is explicitly null", async () => {
+    mocks.getCurrentTaskId.mockResolvedValue("task_lp");
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: false,
+      error: "prompt_required"
+    });
+    const { POST } = await import("./route");
+
+    await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello", taskId: null })
+      })
+    );
+
+    expect(mocks.startStreamingChatPrompt).toHaveBeenCalledWith({
+      projectId: null,
+      taskId: null,
+      prompt: "Hello"
+    });
+  });
+
+  it("uses the session task fallback when taskId is omitted", async () => {
+    mocks.getCurrentTaskId.mockResolvedValue("task_general");
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: false,
+      error: "prompt_required"
+    });
+    const { POST } = await import("./route");
+
+    await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+
+    expect(mocks.startStreamingChatPrompt).toHaveBeenCalledWith({
+      projectId: null,
+      taskId: "task_general",
+      prompt: "Hello"
+    });
+  });
+
   it("returns the response before assistant completion persistence resolves", async () => {
     const completion = deferred<{ ok: true }>();
     mocks.startStreamingChatPrompt.mockResolvedValue({

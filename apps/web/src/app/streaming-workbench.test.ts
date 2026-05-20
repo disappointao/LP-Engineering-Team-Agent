@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createStreamingChatRequestBody,
   getPromptSubmissionControlState,
   shouldRequestFallbackSubmitAfterCommit,
   getStreamingSubmitDecision
@@ -68,6 +69,22 @@ describe("streaming workbench submit interception", () => {
       allowNativeSubmit: false,
       preventDefault: true,
       streamPrompt: undefined
+    });
+  });
+});
+
+describe("streaming workbench chat stream request body", () => {
+  it("sends an explicit null taskId when no streaming task is available", () => {
+    expect(
+      createStreamingChatRequestBody({
+        prompt: "Hello",
+        projectId: "project_1",
+        taskId: undefined
+      })
+    ).toEqual({
+      prompt: "Hello",
+      projectId: "project_1",
+      taskId: null
     });
   });
 });

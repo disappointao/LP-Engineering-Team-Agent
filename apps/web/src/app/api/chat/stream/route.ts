@@ -132,7 +132,25 @@ function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode
   }
 }
 
-function getStringOrSessionValue(value: unknown, sessionValue: string | undefined): string | null {
+function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {
+  return Object.prototype.hasOwnProperty.call(payload, field);
+}
+
+function getStringOrNullOrSessionValue({
+  hasValue,
+  value,
+  sessionValue
+}: {
+  hasValue: boolean;
+  value: unknown;
+  sessionValue: string | undefined;
+}): string | null {
+  if (!hasValue || value === undefined) {
+    return sessionValue ?? null;
+  }
+  if (value === null) {
+    return null;
+  }
   return typeof value === "string" ? value : sessionValue ?? null;
 }
 
@@ -150,8 +168,16 @@ export async function POST(request: Request): Promise<Response> {
     getCurrentProjectId(),
     getCurrentTaskId()
   ]);
-  const projectId = getStringOrSessionValue(payload.projectId, sessionProjectId);
-  const taskId = getStringOrSessionValue(payload.taskId, sessionTaskId);
+  const projectId = getStringOrNullOrSessionValue({
+    hasValue: hasOwnField(payload, "projectId"),
+    value: payload.projectId,
+    sessionValue: sessionProjectId
+  });
+  const taskId = getStringOrNullOrSessionValue({
+    hasValue: hasOwnField(payload, "taskId"),
+    value: payload.taskId,
+    sessionValue: sessionTaskId
+  });
   const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
   const store = await getWebWorkbenchStore();
   const started = await store.startStreamingChatPrompt({
