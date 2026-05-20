@@ -398,6 +398,23 @@ describe("web workbench store", () => {
     expect(project.name).toBe("Memory backend project");
   });
 
+  it("retries global store initialization after repository backend setup fails", async () => {
+    vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "postgres");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("WORKBENCH_POSTGRES_WORKSPACE_ID", "workspace_local");
+    delete webStoreGlobal.__lpAgentWebWorkbenchStore;
+
+    await expect(getWebWorkbenchStore()).rejects.toThrow(
+      "DATABASE_URL is required for WORKBENCH_REPOSITORY_BACKEND=postgres"
+    );
+
+    vi.stubEnv("WORKBENCH_REPOSITORY_BACKEND", "memory");
+    const store = await getWebWorkbenchStore();
+    const project = await store.createProject({ name: "Recovered memory backend project" });
+
+    expect(project.name).toBe("Recovered memory backend project");
+  });
+
   it("runs one local worker job and finalizes the queued command", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const workerLogRepository = new InMemoryWorkerLogRepository();

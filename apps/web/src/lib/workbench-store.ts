@@ -1577,7 +1577,13 @@ async function createDefaultWebWorkbenchStore(): Promise<WebWorkbenchStore> {
 
 export function getWebWorkbenchStore(): Promise<WebWorkbenchStore> {
   if (!globalStore.__lpAgentWebWorkbenchStore) {
-    globalStore.__lpAgentWebWorkbenchStore = createDefaultWebWorkbenchStore();
+    const storePromise = createDefaultWebWorkbenchStore().catch((error: unknown) => {
+      if (globalStore.__lpAgentWebWorkbenchStore === storePromise) {
+        delete globalStore.__lpAgentWebWorkbenchStore;
+      }
+      throw error;
+    });
+    globalStore.__lpAgentWebWorkbenchStore = storePromise;
   }
   return globalStore.__lpAgentWebWorkbenchStore;
 }
