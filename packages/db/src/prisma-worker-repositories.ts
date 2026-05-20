@@ -189,7 +189,7 @@ export function createPrismaWorkerJobRepository(
         }
 
         const updateResult = await delegate.updateMany({
-          where: staleRecoveryWhere(record),
+          where: staleRecoveryWhere(record, input),
           data: mapPartialWorkerJobRecordToPrisma(recovery.record)
         });
         if (updateResult.count !== 1) {
@@ -470,13 +470,37 @@ function createStaleRecovery(
   };
 }
 
-function staleRecoveryWhere(record: WorkerJobRecord): PrismaWorkerWhere {
-  return {
+function staleRecoveryWhere(
+  record: WorkerJobRecord,
+  input: WorkerJobRecoverStaleInput
+): PrismaWorkerWhere {
+  const baseWhere: PrismaWorkerWhere = {
     id: record.id,
     state: "running",
     payloadSource: "safe_persisted",
     claimToken: record.claimToken ?? null
   };
+
+  if (record.heartbeatExpiresAt) {
+    return {
+      ...baseWhere,
+      heartbeatExpiresAt: { lt: new Date(input.staleBefore) }
+    };
+  }
+
+  if (record.startedAt && input.staleClaimTimeoutMs !== undefined) {
+    return {
+      ...baseWhere,
+      heartbeatExpiresAt: null,
+      startedAt: {
+        lt: new Date(
+          new Date(input.staleBefore).getTime() - input.staleClaimTimeoutMs
+        )
+      }
+    };
+  }
+
+  return baseWhere;
 }
 
 function isRecordStale(
@@ -577,14 +601,10 @@ async function trimLogsBestEffort(
   delegate: PrismaWorkerDelegate,
   maxRecords: number
 ): Promise<void> {
-  try {
-    const rows = await delegate.findMany({ orderBy: ORDER_CREATED_ID_DESC });
-    const staleIds = rows.slice(maxRecords).map((row) => row.id).filter(isString);
-    if (staleIds.length > 0) {
-      await delegate.deleteMany({ where: { id: { in: staleIds } } });
-    }
-  } catch {
-    // Logging should not fail a worker lifecycle transition because retention failed.
+  const rows = await delegate.findMany({ orderBy: ORDER_CREATED_ID_DESC });
+  const staleIds = rows.slice(maxRecords).map((row) => row.id).filter(isString);
+  if (staleIds.length > 0) {
+    await delegate.deleteMany({ where: { id: { in: staleIds } } });
   }
 }
 

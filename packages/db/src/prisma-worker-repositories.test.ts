@@ -33,6 +33,14 @@ interface FakeDelegate {
   deleteMany(input?: { where?: FakeWhere }): Promise<{ count: number }>;
 }
 
+interface FakeDelegateOptions {
+  beforeUpdateMany?: (context: {
+    input: { where: FakeWhere; data: FakeRow };
+    rows: FakeRow[];
+  }) => void;
+  failDeleteMany?: Error;
+}
+
 runWorkerJobRepositoryContractTests("prisma fake", () =>
   createPrismaWorkerJobRepository(createFakePrismaClient())
 );
@@ -125,6 +133,57 @@ describe("createPrismaWorkerJobRepository", () => {
       payloadSource: "process_memory"
     });
   });
+
+  it("does not recover a stale job that heartbeats before the conditional update", async () => {
+    let injectedHeartbeat = false;
+    const prisma = createFakePrismaClient({
+      workerJob: {
+        beforeUpdateMany({ input, rows }) {
+          if (
+            injectedHeartbeat ||
+            input.data.state !== "queued" ||
+            input.where.id !== "job-heartbeat-race"
+          ) {
+            return;
+          }
+
+          injectedHeartbeat = true;
+          const row = rows.find((stored) => stored.id === "job-heartbeat-race");
+          if (row) {
+            row.heartbeatExpiresAt = new Date("2026-05-20T00:10:00.000Z");
+            row.lastHeartbeatAt = new Date("2026-05-20T00:04:00.000Z");
+          }
+        }
+      }
+    });
+    const repository = createPrismaWorkerJobRepository(prisma);
+
+    await repository.save(
+      createContractWorkerJobRecord({
+        id: "job-heartbeat-race",
+        state: "running",
+        payloadSource: "safe_persisted",
+        startedAt: "2026-05-20T00:01:00.000Z",
+        claimedByWorkerId: "worker-1",
+        claimToken: "claim-token-1",
+        heartbeatExpiresAt: "2026-05-20T00:02:00.000Z"
+      })
+    );
+
+    await expect(
+      repository.recoverStale({
+        staleBefore: "2026-05-20T00:03:00.000Z",
+        recoveredAt: "2026-05-20T00:03:00.000Z",
+        maxStaleRecoveryCount: 1
+      })
+    ).resolves.toEqual([]);
+    await expect(repository.getById("job-heartbeat-race")).resolves.toMatchObject({
+      state: "running",
+      claimToken: "claim-token-1",
+      lastHeartbeatAt: "2026-05-20T00:04:00.000Z",
+      heartbeatExpiresAt: "2026-05-20T00:10:00.000Z"
+    });
+  });
 });
 
 describe("createPrismaWorkerJobPayloadRepository", () => {
@@ -170,21 +229,50 @@ describe("createPrismaWorkerLogRepository", () => {
       { id: "log-1" }
     ]);
   });
+
+  it("rejects append when maxRecords trim fails", async () => {
+    const prisma = createFakePrismaClient({
+      workerLog: {
+        failDeleteMany: new Error("delete failed")
+      }
+    });
+    const repository = createPrismaWorkerLogRepository(prisma, { maxRecords: 1 });
+
+    await repository.append(
+      createContractWorkerLogRecord({
+        id: "log-1",
+        createdAt: "2026-05-20T00:00:01.000Z"
+      })
+    );
+
+    await expect(
+      repository.append(
+        createContractWorkerLogRecord({
+          id: "log-2",
+          createdAt: "2026-05-20T00:00:02.000Z"
+        })
+      )
+    ).rejects.toThrow("delete failed");
+  });
 });
 
-function createFakePrismaClient(): PrismaWorkerClient & {
+function createFakePrismaClient(options: {
+  workerJob?: FakeDelegateOptions;
+  workerJobPayload?: FakeDelegateOptions;
+  workerLog?: FakeDelegateOptions;
+} = {}): PrismaWorkerClient & {
   workerJob: FakeDelegate;
   workerJobPayload: FakeDelegate;
   workerLog: FakeDelegate;
 } {
   return {
-    workerJob: createFakeDelegate(),
-    workerJobPayload: createFakeDelegate(),
-    workerLog: createFakeDelegate()
+    workerJob: createFakeDelegate(options.workerJob),
+    workerJobPayload: createFakeDelegate(options.workerJobPayload),
+    workerLog: createFakeDelegate(options.workerLog)
   };
 }
 
-function createFakeDelegate(): FakeDelegate {
+function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
   const delegate: FakeDelegate = {
     rows: [],
 
@@ -219,6 +307,7 @@ function createFakeDelegate(): FakeDelegate {
 
     async updateMany(input) {
       let count = 0;
+      options.beforeUpdateMany?.({ input, rows: delegate.rows });
       delegate.rows = delegate.rows.map((row) => {
         if (!matchesWhere(row, input.where)) {
           return row;
@@ -230,6 +319,9 @@ function createFakeDelegate(): FakeDelegate {
     },
 
     async deleteMany(input = {}) {
+      if (options.failDeleteMany) {
+        throw options.failDeleteMany;
+      }
       const originalLength = delegate.rows.length;
       delegate.rows = delegate.rows.filter(
         (row) => !matchesWhere(row, input.where ?? {})
