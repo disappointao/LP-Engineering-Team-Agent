@@ -1,6 +1,7 @@
 import type {
   BriefRecord,
   PageVersionRecord,
+  RunRecord,
   WorkbenchRepositories
 } from "@lp-agent/db";
 import type { DeploymentHandoff } from "@lp-agent/git-deployment";
@@ -160,7 +161,7 @@ export async function executeRunRecoveryAction(
   }
 
   if (input.action === "retry_run") {
-    return { ok: false, error: "retry_input_not_reconstructable" };
+    return retryRun({ ...input, run });
   }
 
   if (!input.workerRuntime) {
@@ -304,4 +305,144 @@ function toLifecycleState(state: string): RunLifecycleState {
     return state;
   }
   return "failed";
+}
+
+async function retryRun(
+  input: ExecuteRunRecoveryActionInput & { run: RunRecord }
+): Promise<RunRecoveryExecutionResult> {
+  if (
+    input.run.contextSummary.injected.some((entry) =>
+      entry.startsWith("skillCommand:")
+    )
+  ) {
+    return { ok: false, error: "retry_input_not_reconstructable" };
+  }
+
+  const task = await input.repositories.tasks.getById(input.taskId);
+  if (!task?.projectId || task.projectId !== input.run.projectId) {
+    return { ok: false, error: "task_not_found" };
+  }
+
+  const projectId = task.projectId;
+  const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
+  const retryRunId = await nextRetryRunId(input.repositories, input.runId);
+
+  try {
+    if (input.run.role === "planner") {
+      if (snapshot?.briefId) {
+        return { ok: false, error: "retry_target_conflict" };
+      }
+
+      const messages = await input.repositories.messages.listForTask(input.taskId);
+      const prompt = messages.find((message) => message.role === "user")?.content.trim();
+      if (!prompt) {
+        return { ok: false, error: "retry_input_not_reconstructable" };
+      }
+
+      const brief = await input.service.createBriefFromPrompt({
+        projectId,
+        prompt,
+        taskId: input.taskId,
+        runId: retryRunId
+      });
+      await input.repositories.taskSnapshots.save({
+        taskId: input.taskId,
+        projectId,
+        briefId: brief.id,
+        pageVersionId: snapshot?.pageVersionId,
+        createdAt: snapshot?.createdAt ?? retryTimestamp(input)
+      });
+      return retryRunCompleted(input.runId, retryRunId);
+    }
+
+    if (input.run.role === "builder") {
+      if (!snapshot?.briefId) {
+        return { ok: false, error: "retry_input_not_reconstructable" };
+      }
+      if (snapshot.pageVersionId) {
+        return { ok: false, error: "retry_target_conflict" };
+      }
+
+      const pageVersion = await input.service.generatePageVersion({
+        projectId,
+        briefId: snapshot.briefId,
+        taskId: input.taskId,
+        runId: retryRunId
+      });
+      await input.repositories.taskSnapshots.save({
+        taskId: input.taskId,
+        projectId,
+        briefId: snapshot.briefId,
+        pageVersionId: pageVersion.id,
+        createdAt: snapshot.createdAt
+      });
+      return retryRunCompleted(input.runId, retryRunId);
+    }
+
+    if (input.run.role === "reviewer") {
+      if (!snapshot?.pageVersionId) {
+        return { ok: false, error: "retry_input_not_reconstructable" };
+      }
+
+      await input.service.reviewPageVersion({
+        projectId,
+        pageVersionId: snapshot.pageVersionId,
+        taskId: input.taskId,
+        runId: retryRunId
+      });
+      return retryRunCompleted(input.runId, retryRunId);
+    }
+
+    if (input.run.role === "deployer") {
+      if (!snapshot?.pageVersionId) {
+        return { ok: false, error: "retry_input_not_reconstructable" };
+      }
+      if (await input.repositories.deployments.getByPageVersionId(snapshot.pageVersionId)) {
+        return { ok: false, error: "retry_target_conflict" };
+      }
+
+      await input.service.approveAndCreateDeployment({
+        projectId,
+        pageVersionId: snapshot.pageVersionId,
+        reviewerUserId: input.currentUserId,
+        taskId: input.taskId,
+        runId: retryRunId
+      });
+      return retryRunCompleted(input.runId, retryRunId);
+    }
+  } catch {
+    return { ok: false, error: "retry_failed" };
+  }
+
+  return { ok: false, error: "retry_input_not_reconstructable" };
+}
+
+async function nextRetryRunId(
+  repositories: WorkbenchRepositories,
+  baseRunId: string
+): Promise<string> {
+  const existingRunIds = new Set((await repositories.runs.listAll()).map((run) => run.id));
+  for (let attempt = 1; ; attempt += 1) {
+    const candidate = `${baseRunId}_retry_${attempt}`;
+    if (!existingRunIds.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+function retryRunCompleted(
+  runId: string,
+  newRunId: string
+): RunRecoveryExecutionResult {
+  return {
+    ok: true,
+    action: "retry_run",
+    runId,
+    newRunId,
+    state: "completed"
+  };
+}
+
+function retryTimestamp(input: ExecuteRunRecoveryActionInput): string {
+  return (input.now ?? (() => new Date()))().toISOString();
 }

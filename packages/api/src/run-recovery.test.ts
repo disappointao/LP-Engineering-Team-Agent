@@ -11,6 +11,7 @@ import {
   executeRunRecoveryAction,
   listRunRecoveryViewsForTask
 } from "./run-recovery";
+import { DemoWorkbenchService } from "./index";
 
 const timestamp = "2026-05-20T00:00:00.000Z";
 
@@ -514,5 +515,130 @@ describe("execute run recovery action", () => {
         expect.objectContaining({ type: "run.completed" })
       ])
     );
+  });
+});
+
+describe("execute run recovery retry", () => {
+  it("retries a failed planner run with a new run id and task snapshot brief", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_planner_failed",
+      role: "planner",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_failed",
+      type: "run.failed",
+      sequence: 1,
+      payload: {
+        errorName: "model_output_parse_failed",
+        rawModelOutput: "MODEL_SECRET_SHOULD_NOT_RENDER"
+      }
+    });
+
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: () => new Date("2026-05-20T00:10:00.000Z")
+    });
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run",
+      now: () => new Date("2026-05-20T00:10:00.000Z")
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      action: "retry_run",
+      runId: "run_planner_failed",
+      newRunId: "run_planner_failed_retry_1",
+      state: "completed"
+    });
+    await expect(repositories.runs.getById("run_planner_failed")).resolves.toMatchObject({
+      state: "failed"
+    });
+    await expect(repositories.runs.getById("run_planner_failed_retry_1")).resolves.toMatchObject({
+      role: "planner",
+      state: "completed",
+      taskId: "task_1"
+    });
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_1"
+    });
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+    expect(JSON.stringify(views)).not.toContain("MODEL_SECRET_SHOULD_NOT_RENDER");
+  });
+
+  it("fails closed instead of retrying skill command runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_skill_command_1",
+      role: "deployer",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z",
+      contextSummary: {
+        injected: ["skillCommand:skill_static_deploy:publish_static"],
+        omitted: []
+      }
+    });
+    await saveEvent(repositories, {
+      runId: "run_skill_command_1",
+      type: "run.failed",
+      sequence: 1,
+      payload: { errorName: "skill_command_failed" }
+    });
+
+    const service = new DemoWorkbenchService({ repositories });
+    await expect(
+      executeRunRecoveryAction({
+        repositories,
+        service,
+        currentUserId: "local-web-user",
+        taskId: "task_1",
+        runId: "run_skill_command_1",
+        action: "retry_run"
+      })
+    ).resolves.toEqual({ ok: false, error: "retry_input_not_reconstructable" });
+  });
+
+  it("fails closed when retry would overwrite an existing task snapshot output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_existing",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_planner_failed",
+      role: "planner",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    const service = new DemoWorkbenchService({ repositories });
+    await expect(
+      executeRunRecoveryAction({
+        repositories,
+        service,
+        currentUserId: "local-web-user",
+        taskId: "task_1",
+        runId: "run_planner_failed",
+        action: "retry_run"
+      })
+    ).resolves.toEqual({ ok: false, error: "retry_target_conflict" });
   });
 });

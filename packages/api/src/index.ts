@@ -253,11 +253,15 @@ export interface CreateProjectInput {
 export interface CreateBriefFromPromptInput {
   projectId: string;
   prompt: string;
+  taskId?: string;
+  runId?: string;
 }
 
 export interface GeneratePageVersionInput {
   projectId: string;
   briefId: string;
+  taskId?: string;
+  runId?: string;
 }
 
 export interface GetSnapshotForRecordsInput {
@@ -269,12 +273,16 @@ export interface GetSnapshotForRecordsInput {
 export interface ReviewPageVersionInput {
   projectId: string;
   pageVersionId: string;
+  taskId?: string;
+  runId?: string;
 }
 
 export interface ApproveAndCreateDeploymentInput {
   projectId: string;
   pageVersionId: string;
   reviewerUserId: string;
+  taskId?: string;
+  runId?: string;
 }
 
 export interface ExecuteProjectSkillCommandInput {
@@ -574,8 +582,9 @@ export class DemoWorkbenchService {
         repositories: this.repositories,
         service: this,
         runtime: this.plannerRuntime,
-        runId: `run_planner_${briefId}`,
+        runId: input.runId ?? `run_planner_${briefId}`,
         projectId: input.projectId,
+        taskId: input.taskId,
         role: "planner",
         input: {
           prompt: plannerPrompt
@@ -640,6 +649,7 @@ export class DemoWorkbenchService {
       await this.saveHandoffForRun({
         runId: run.id,
         projectId: input.projectId,
+        taskId: input.taskId,
         sequence: events.length + 1,
         fromRole: "planner",
         toRole: "builder",
@@ -680,8 +690,9 @@ export class DemoWorkbenchService {
         repositories: this.repositories,
         service: this,
         runtime: this.builderRuntime,
-        runId: `run_builder_${pageVersionId}`,
+        runId: input.runId ?? `run_builder_${pageVersionId}`,
         projectId: input.projectId,
+        taskId: input.taskId,
         role: "builder",
         input: {
           brief: copyBrief(brief.brief),
@@ -690,6 +701,7 @@ export class DemoWorkbenchService {
         beforeRuntime: () =>
           this.consumeReadyHandoffsForRun({
             projectId: input.projectId,
+            taskId: input.taskId,
             role: "builder",
             artifactRefs: {
               briefId: brief.id
@@ -807,6 +819,7 @@ export class DemoWorkbenchService {
         await this.saveArtifactWorkspaceCreatedEvent({
           runId: run.id,
           projectId: input.projectId,
+          taskId: input.taskId,
           sequence: events.length + 1,
           kind: "static_lp",
           manifest: workspaceManifest
@@ -814,6 +827,7 @@ export class DemoWorkbenchService {
         await this.saveHandoffForRun({
           runId: run.id,
           projectId: input.projectId,
+          taskId: input.taskId,
           sequence: events.length + 2,
           fromRole: "builder",
           toRole: "reviewer",
@@ -846,8 +860,9 @@ export class DemoWorkbenchService {
       repositories: this.repositories,
       service: this,
       runtime: this.reviewerRuntime,
-      runId: `run_reviewer_${pageVersion.id}`,
+      runId: input.runId ?? `run_reviewer_${pageVersion.id}`,
       projectId: input.projectId,
+      taskId: input.taskId,
       pageVersionId: pageVersion.id,
       role: "reviewer",
       input: {
@@ -857,6 +872,7 @@ export class DemoWorkbenchService {
       beforeRuntime: () =>
         this.consumeReadyHandoffsForRun({
           projectId: input.projectId,
+          taskId: input.taskId,
           role: "reviewer",
           artifactRefs: {
             pageVersionId: pageVersion.id
@@ -884,6 +900,7 @@ export class DemoWorkbenchService {
     await this.saveHandoffForRun({
       runId: run.id,
       projectId: input.projectId,
+      taskId: input.taskId,
       sequence: events.length + 1,
       fromRole: "reviewer",
       toRole: "deployer",
@@ -929,8 +946,9 @@ export class DemoWorkbenchService {
       repositories: this.repositories,
       service: this,
       runtime: this.deployerRuntime,
-      runId: `run_deployer_${pageVersion.id}`,
+      runId: input.runId ?? `run_deployer_${pageVersion.id}`,
       projectId: input.projectId,
+      taskId: input.taskId,
       pageVersionId: pageVersion.id,
       role: "deployer",
       input: {
@@ -939,6 +957,7 @@ export class DemoWorkbenchService {
       beforeRuntime: () =>
         this.consumeReadyHandoffsForRun({
           projectId: input.projectId,
+          taskId: input.taskId,
           role: "deployer",
           artifactRefs: {
             pageVersionId: pageVersion.id
