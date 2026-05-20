@@ -212,7 +212,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 5 Context Memory Retrieval v0：`ContextPack` 已注入同项目内的 deterministic `ContextMemory`，包含 message、run、tool observation 和 artifact metadata 摘要，并记录 memory trace。
 - Skill Command Web 模拟执行闭环：Web 已能从项目绑定 skills 发现可执行 command，完成一次性授权，通过 server action 调用 API/service，保存 observation/run events，并在 chat timeline 中展示安全输出摘要。
 - Stage 7 Collaboration Primitives v0：已实现本地 `local-web-user` identity helper、project owner membership 自动创建、workspace/project member repository、JSON-file 持久化、审批 actor 归属和 Web 项目成员只读展示。
-- Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file job persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat metadata、stale safe claim recovery、bounded lifecycle logs 和 Web 只读 worker queue health。
+- Worker runtime / queue v0：已实现 worker job contract、sandbox policy、JSON-file 默认 persistence、显式 opt-in Postgres worker job / safe payload / lifecycle log backend、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat metadata、stale safe claim recovery、bounded lifecycle logs 和 Web 只读 worker queue health。
 - Durable Artifact Workspace v0：已实现本地 artifact workspace/file repository、manifest/hash/summary、workspace-backed preview/export recovery 和 metadata-first context 注入。
 - Artifact Reader / Static Diff v0：已实现受控 artifact file 读取、8KB bounded snippet、metadata-only workspace/page-version diff 和 runtime/model no-content guard。
 - 第一个真实模型 provider adapter：`packages/model-gateway` 已实现 `anthropic-messages`。
@@ -225,7 +225,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `RuntimeRunContext` 已能承载 skills、MCP tools、approval、artifact workspace、model routing policy，并通过 Context Pack v0 进入 runtime。
 - run repository 和 event timeline 已有 deterministic v0，后续还要补恢复、失败诊断、流式 UI 和真实并发运行语义。
 - Controlled deployment skill command execution 已在 API/service 层实现，并通过 Web 模拟 runner 接入工作台；后续真实 deployment adapter 仍按 adapter/runner 方式迭代。
-- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery 和 Web 只读 queue health 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
+- Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery、Web 只读 queue health 和显式 opt-in Postgres worker queue backend 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
 - Postgres Repository Foundation v0 已把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract，并提供显式 opt-in 的 Prisma-backed repository adapter；默认本地开发和测试仍走 `in-memory` / `JSON-file` repositories。
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
@@ -233,7 +233,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 ### 还没做
 
 - 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
-- Postgres production rollout 还没实现；Stage 23 只完成 Web opt-in backend wiring，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs 或 worker job repository Postgres backend。
+- Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
@@ -400,16 +400,18 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 全局 async store 初始化失败时需要清理 rejected Promise cache；否则一次失败会污染后续修正配置后的请求。
 - `WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert local organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth，也不迁移既有 JSON-file state。
 
-已确认的 Stage 24 Worker Job Postgres Backend v0 设计：
+已实现的 Stage 24 Worker Job Postgres Backend v0：
 
 - [2026-05-20-worker-job-postgres-backend-design.md](./superpowers/specs/2026-05-20-worker-job-postgres-backend-design.md)
 - 当前实现计划：[2026-05-20-worker-job-postgres-backend.md](./superpowers/plans/2026-05-20-worker-job-postgres-backend.md)
-- 这一阶段把 worker queue 的 durable backend 从 JSON-file 扩展到显式 opt-in 的 Postgres：`WorkerJobRepository`、`WorkerJobPayloadRepository` 和 `WorkerLogRepository` 都纳入范围。
-- 默认 worker queue 仍是 JSON-file；`WORKER_REPOSITORY_BACKEND=postgres` 缺少 `DATABASE_URL`、Prisma client 初始化失败或 backend 值非法时必须 fail closed，不回退 JSON-file。
-- worker job Postgres backend 的关键语义是 claim token 条件更新：claim、heartbeat、complete claimed、running cancellation 和 stale recovery 都必须防止两个 worker 执行同一个 job。
+- 这一阶段已把 worker queue 的 durable backend 从 JSON-file 扩展到显式 opt-in 的 Postgres：`WorkerJobRepository`、`WorkerJobPayloadRepository` 和 `WorkerLogRepository` 都纳入范围。
+- worker queue backend selection 是独立 runtime boundary：`WORKER_REPOSITORY_BACKEND=postgres` 只迁移 worker job / payload / log storage，不改变 `WORKBENCH_REPOSITORY_BACKEND` 或 Web workbench state。
+- 默认 worker queue 仍是 JSON-file；`WORKER_REPOSITORY_BACKEND=postgres` 缺少 `DATABASE_URL`、Prisma client 初始化失败或 backend 值非法时 fail closed，不回退 JSON-file。
+- Web enqueue 和 `apps/agent-worker` 现在共用 `createWorkerQueueRuntime()` backend factory，避免 Web 写 JSON queue、worker 读 Postgres queue 这类 split-brain。
+- worker job Postgres backend 的关键语义是 claim token 条件更新：claim、heartbeat、complete claimed、running cancellation 和 stale recovery 都防止两个 worker 执行同一个 job。
 - safe persisted payload 可以进入 Postgres，但只能保存现有 `WorkerJobPayloadRecord` 的安全字段：`command`、bounded `args`、`envNames`、`workingDirectory`、`timeoutMs`；仍不能保存 env values、secret、raw stdout/stderr、artifact content 或足以恢复任意 shell execution 的 payload。
 - `WorkerJobPayload` 本阶段不强制 FK 到 `WorkerJob`，因为当前 `enqueueSafe()` 为了 cleanup safety 先保存 payload、再保存 job；强 FK 会破坏现有 contract，除非同时重写 runtime transaction boundary。
-- worker lifecycle log 进入 Postgres 后仍必须 bounded 和 sanitized，只保留 allowlisted payload keys，不能把 raw execution data 扩散到 audit log。
+- worker lifecycle log 进入 Postgres 后仍 bounded 和 sanitized，只保留 allowlisted payload keys，不能把 raw execution data 扩散到 audit log。
 
 已实现的 Stage 4 Skill Command MVP：
 

@@ -10,7 +10,7 @@
 
 - 与 workspace 依赖兼容的 Node.js。
 - pnpm。
-- 可选 Postgres 实例，用于未来 DB-backed 开发。
+- 可选 Postgres 实例，用于显式 opt-in 的 DB-backed 开发。
 
 ## 命令
 
@@ -33,9 +33,42 @@ WORKBENCH_POSTGRES_BOOTSTRAP=1 \
 pnpm dev
 ```
 
-Postgres 路径需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`；缺失时 fail closed，不会静默回退到 JSON-file。`WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert 本地 organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth、不迁移既有 JSON-file state，也不把 worker job queue 切到 Postgres。
+Postgres 路径需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`；缺失时 fail closed，不会静默回退到 JSON-file。`WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert 本地 organization/workspace prerequisites，不运行 production migrations、不创建 hosted auth、不迁移既有 JSON-file state，也不自动切换 worker job queue；worker queue backend 需要单独通过 `WORKER_REPOSITORY_BACKEND` 配置。
 
 unset `WORKBENCH_REPOSITORY_BACKEND` 或设为 `json` 可回到默认 JSON-file backend。
+
+### Worker Queue Repository Backend
+
+`WORKER_REPOSITORY_BACKEND` 只控制 worker queue storage，不控制 Web workbench state。unset 或设为 `json` 时，worker queue 使用本地 JSON files：
+
+- `.lp-agent/worker-jobs.json`
+- `.lp-agent/worker-payloads.json`
+- `.lp-agent/worker-logs.json`
+
+设为 `memory` 时使用 process-local repository，主要用于 deterministic tests。设为 `postgres` 时使用 Prisma-backed worker job、safe payload 和 lifecycle log repositories：
+
+```bash
+pnpm --filter @lp-agent/db db:generate
+WORKER_REPOSITORY_BACKEND=postgres \
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+pnpm dev
+```
+
+`apps/agent-worker` 使用相同 backend selection；Postgres 模式不需要 `WORKER_JOBS_FILE` 或 `WORKER_PAYLOADS_FILE`：
+
+```bash
+WORKER_REPOSITORY_BACKEND=postgres \
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+pnpm worker:dev
+```
+
+Worker payload safety 不因 Postgres 持久化而放宽。Postgres 只保存 safe simulated command fields：`command`、bounded `args`、`envNames`、`workingDirectory` 和 `timeoutMs`；不能保存 env values、secret、raw stdout/stderr、完整 artifact content 或任意 shell payload。
+
+可选真实 Postgres integration 覆盖默认跳过，需要显式开启：
+
+```bash
+POSTGRES_WORKER_REPOSITORY_TEST=1 DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" pnpm exec vitest run packages/db/src/prisma-worker-repositories.integration.test.ts
+```
 
 ## 当前 MVP 行为
 

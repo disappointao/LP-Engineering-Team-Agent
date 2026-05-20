@@ -128,6 +128,27 @@ pnpm dev
 
 `WORKBENCH_POSTGRES_BOOTSTRAP=1` 只 upsert 本地 organization/workspace prerequisites；它不运行 production migrations、不创建 hosted auth，也不迁移既有 JSON-file state。unset `WORKBENCH_REPOSITORY_BACKEND` 或设为 `json` 可回到默认 JSON-file backend。
 
+### 可选 Worker Queue Postgres backend
+
+Worker queue 默认仍使用本地 JSON files：`.lp-agent/worker-jobs.json`、`.lp-agent/worker-payloads.json` 和 `.lp-agent/worker-logs.json`。需要让 Web enqueue 和 `apps/agent-worker` 共用 Postgres worker job / payload / log repository 时，显式开启 worker backend：
+
+```bash
+pnpm --filter @lp-agent/db db:generate
+WORKER_REPOSITORY_BACKEND=postgres \
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+pnpm dev
+```
+
+Worker 进程使用同一组环境变量：
+
+```bash
+WORKER_REPOSITORY_BACKEND=postgres \
+DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
+pnpm worker:dev
+```
+
+Postgres worker backend 只影响 worker queue storage，不改变 Web workbench state backend，也不依赖 `WORKBENCH_REPOSITORY_BACKEND`。在 `WORKER_REPOSITORY_BACKEND=postgres` 下不需要 `WORKER_JOBS_FILE` 或 `WORKER_PAYLOADS_FILE`；缺少 `DATABASE_URL`、backend 值非法或 Prisma client 初始化失败时会 fail closed，不会静默回退到 JSON-file queue。
+
 ## 手动验收
 
 本地检查 Web V1 时使用：

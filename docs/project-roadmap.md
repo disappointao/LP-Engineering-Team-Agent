@@ -21,13 +21,14 @@
 - Run orchestration：deterministic Planner/Builder/Reviewer/Deployer run records、ordered run events、tool observations。
 - Agent run lifecycle / recovery v0：从 run events、worker jobs、tool observations 和 handoffs 派生 lifecycle view、diagnostic summary 和 recovery action contract，并强化 worker finalization 幂等性。
 - Agent handoff v0：固定 LP 链路 `Planner -> Builder -> Reviewer -> Deployer` 的结构化 handoff state。
-- Worker runtime / queue：job contract、sandbox policy、JSON-file persistence、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat、stale safe claim recovery、bounded lifecycle logs、Web 只读 queue health、安全 simulated payload。
+- Worker runtime / queue：job contract、sandbox policy、JSON-file 默认 persistence、显式 opt-in Postgres worker job / payload / log backend、cancel/interrupt、claim-token queue handoff、`apps/agent-worker` run-once / daemon polling loop、heartbeat、stale safe claim recovery、bounded lifecycle logs、Web 只读 queue health、安全 simulated payload。
 - Artifact workspace：durable artifact workspace、manifest/hash/summary、controlled artifact reader、metadata-only static diff、bounded snippet。
 - Collaboration primitives：local identity seam、workspace/project member repositories、project owner membership、approval actor audit context。
 - Postgres repository foundation v0：Prisma schema 已对齐 Agent runtime 核心 repository contract，并提供显式 opt-in 的 Prisma-backed repository adapter。
 - Web opt-in Postgres backend wiring v0：Web repository backend factory 支持 `WORKBENCH_REPOSITORY_BACKEND=json|memory|postgres`；默认 Web backend 仍是 `.lp-agent/workbench-state.json` JSON-file state。
 - Postgres Web backend：显式 opt-in 时需要 `DATABASE_URL` 和 `WORKBENCH_POSTGRES_WORKSPACE_ID`，缺失或初始化失败时 fail closed，不静默回退 JSON-file。
 - Web-facing Prisma repository closure：Stage 23 已补齐 Web 会读取的 project members、deployments、skills、models、MCP config/approval 等 repository 边界，避免 Postgres core state 和 JSON sidecar split-brain。
+- Worker queue opt-in Postgres backend：Stage 24 已实现 `WORKER_REPOSITORY_BACKEND=json|memory|postgres`，Web enqueue 和 `apps/agent-worker` 共用同一 backend selection helper；默认 worker queue 仍是 JSON-file。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 当前仍明确后置：
@@ -41,7 +42,6 @@
 - Auth/RBAC on top of Postgres。
 - Object storage / artifact file content migration。
 - Prisma migrations and production deployment docs。
-- Worker job repository Postgres backend。
 - Desktop packaging 和 desktop filesystem workspace。
 
 ## 已完成阶段记录
@@ -139,7 +139,7 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 - 不做 production migration strategy、hosted auth、RBAC 或 invite flow。
 - 不迁移 artifact file content 到 object storage。
-- 不把 worker job queue 切到 Postgres。
+- Worker queue Postgres backend 已在 Stage 24 单独完成，不属于 Stage 23 范围。
 - 不迁移既有 JSON-file state。
 - 不改变默认本地开发 backend。
 
@@ -147,22 +147,21 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 **当前实施计划：** `docs/superpowers/plans/2026-05-20-web-opt-in-postgres-backend-wiring.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 24：Worker Job Postgres Backend v0
 
-**状态：** design 和 implementation plan 已确认，待实现。
+**状态：** 已实现。
 
-**为什么现在做：** Web workbench state 可选择 Postgres 后，worker queue 仍是 JSON-file。durable background workers、stale recovery、daemon heartbeat 和审计要进入多人/长期运行场景，需要把 worker job/log repository 单独迁出本地文件。
+Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workbench state backend 和 worker queue backend 仍是两个独立 runtime boundary；默认本地 worker queue 继续使用 JSON-file。
 
-**建议范围：**
+已实现范围：
 
-- 为 worker job、worker lifecycle log、heartbeat/stale recovery 需要的持久字段补 Prisma schema 和 mapper。
-- 提取 worker job repository shared contract tests，覆盖 claim token、conditional update、cancel/interrupt、heartbeat、stale safe recovery 和 bounded lifecycle logs。
-- 新增 Prisma-backed worker job、safe persisted payload 和 worker lifecycle log repositories，并让 Web enqueue 与 `apps/agent-worker` 通过同一显式配置 opt-in。
-- 保留 JSON-file worker queue 作为默认本地和 deterministic test backend。
+- `WORKER_REPOSITORY_BACKEND=json|memory|postgres` shared worker queue backend factory。
+- Prisma worker job、safe persisted payload 和 bounded lifecycle log repositories。
+- shared repository contract tests 覆盖 claim token、conditional update、cancel/interrupt、heartbeat、stale safe recovery 和 bounded lifecycle logs。
+- Web enqueue 与 `apps/agent-worker` 通过同一 backend selection helper opt in Postgres，避免 queue split-brain。
+- 默认 JSON-file worker queue 不变；Postgres 模式缺少 `DATABASE_URL` 或初始化失败时 fail closed。
 
-**非目标：**
+未实现范围：
 
 - 不做 production process manager。
 - 不开放真实 shell runner 或 OS-level sandbox。
@@ -173,11 +172,13 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 **当前实施计划：** `docs/superpowers/plans/2026-05-20-worker-job-postgres-backend.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 25：Run Recovery UI v0
 
-**状态：** Stage 23-24 后推荐。
+**状态：** Stage 24 后推荐（当前推荐下一阶段）。
 
-**为什么现在做：** Stage 18 已有 lifecycle view、diagnostic summary 和 recovery action contract，但 Web 侧还没有把这些动作变成用户可见、可执行的恢复流程。Postgres-backed state 可选后，retry/resume 的价值会更明显。
+**为什么现在做：** Stage 18 已有 lifecycle view、diagnostic summary 和 recovery action contract，但 Web 侧还没有把这些动作变成用户可见、可执行的恢复流程。Workbench state 和 worker queue 都有显式 opt-in Postgres backend 后，retry/resume 的价值会更明显。
 
 **建议范围：**
 
@@ -195,7 +196,7 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 ### Stage 26：MCP Worker Execution v0
 
-**状态：** Stage 24-25 后推荐。
+**状态：** Stage 25 后推荐。
 
 **为什么现在做：** Stage 20 的 read-only MCP execution 已有 API 校验和安全 observation，但执行仍在 API 进程内通过 deterministic local executor 完成。worker queue durable backend 和 recovery UI 稳定后，可以把 MCP 执行迁到 worker 边界，保留审批和审计语义。
 
@@ -212,6 +213,26 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 - 不开放 write tools、filesystem、shell 或 deployment side effects。
 - 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
 - 不做 streaming MCP output。
+
+### Stage 27：Real MCP Adapter v0
+
+**状态：** Stage 26 后推荐。
+
+**为什么现在做：** MCP execution 先在 API 进程内用 deterministic local executor 打通授权、observation 和 timeline，再迁到 worker boundary。等 worker-backed path 稳定后，可以把真实 MCP SDK / remote server adapter 接到同一执行边界，而不是让 Web/API 直接拥有外部 tool side effects。
+
+**建议范围：**
+
+- 定义真实 MCP server adapter 边界，保持 connector、tool、role/permission、approval 和 read-only policy 校验不变。
+- 在 worker 执行路径内接入第一批受限 read-only MCP transport / client adapter，并把结果映射为 bounded / redacted `ToolObservationRecord`。
+- 增加 connector health、timeout、cancellation 和 provider/server error mapping 的 deterministic coverage。
+- 保持 Web MCP 页调用语义不变，只替换执行 backend。
+
+**非目标：**
+
+- 不开放 MCP write tools。
+- 不允许 shell、filesystem 或 deployment side effects。
+- 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
+- 不做企业级 connector marketplace 或 OAuth flow。
 
 ## Backlog 分组
 
@@ -340,9 +361,10 @@ Stage 23 v0 已实现 Web opt-in Postgres backend wiring。Web 默认 backend �
 
 - Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
-- Stage 24 下一阶段优先做 worker job Postgres backend；worker queue 仍是 JSON-file，不属于 Stage 23 迁移范围。
-- Worker job Postgres backend 应单独跟进，避免同时迁移 workbench state 和 queue semantics。
-- MCP worker execution 应等待 durable worker backend 和 recovery UI 更稳定后再做。
+- Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
+- Stage 25 下一阶段优先做 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程。
+- MCP worker execution 应等待 recovery UI 更稳定后再做。
+- 真实 MCP SDK / remote MCP server adapter 应等待 MCP worker execution 稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
 - 即使 workbench 持续演进，生成的 LP artifacts 也必须保持框架无关静态 HTML/CSS/JS。

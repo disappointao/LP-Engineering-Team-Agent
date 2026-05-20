@@ -307,11 +307,11 @@
    - 在 Stage 23 design 后阅读，用于按 TDD 补齐 Web-facing Prisma repository closure、实现 Web backend factory、异步接线 `getWebWorkbenchStore()`、补最小 Web Postgres flow 覆盖和文档收尾。
 
 76. `specs/2026-05-20-worker-job-postgres-backend-design.md`
-   - Stage 24 Worker Job Postgres Backend v0 design。
+   - Stage 24 Worker Job Postgres Backend v0 design（已实现）。
    - 在 Stage 23 plan 后阅读，用于把 worker job、safe persisted payload 和 bounded worker lifecycle log repository 扩展到显式 opt-in 的 Postgres backend，同时继续保留 JSON-file 默认路径、安全 payload 边界和不做真实 shell / production worker fleet 的限制。
 
 77. `plans/2026-05-20-worker-job-postgres-backend.md`
-   - Stage 24 Worker Job Postgres Backend v0 implementation plan。
+   - Stage 24 Worker Job Postgres Backend v0 implementation plan（已实现）。
    - 在 Stage 24 design 后阅读，用于按 TDD 实现 Prisma worker job/payload/log schema、shared repository contracts、Prisma adapters、shared worker queue backend factory、Web/agent-worker opt-in wiring、integration coverage 和文档收尾。
 
 ## 维护规则
