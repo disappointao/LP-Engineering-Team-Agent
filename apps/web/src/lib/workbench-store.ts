@@ -3,7 +3,9 @@ import {
   createWorkerQueueRuntime,
   createWorkerQueueSnapshot,
   deriveTaskInterruptView,
+  executeRunRecoveryAction as executeApiRunRecoveryAction,
   interruptTask,
+  listRunRecoveryViewsForTask,
   runLocalWorkerOnceAndFinalize,
   type AgentRole,
   type InterruptTaskResult,
@@ -18,8 +20,12 @@ import {
   type ProjectModelState,
   type ProjectRecord,
   type ProjectSkillState,
+  type RunLifecycleView,
   type RunEventRecord,
   type RunLocalWorkerOnceResult,
+  type RunRecoveryExecutionAction,
+  type RunRecoveryExecutionErrorCode,
+  type RunRecoveryExecutionResult,
   type SkillCommandExecutionResult,
   type SkillCommandQueueRuntime,
   type SkillBindingRecord,
@@ -79,6 +85,15 @@ export type InterruptFlowErrorCode =
 
 export type TaskInterrupt = TaskInterruptView;
 export type InterruptCurrentTaskResult = InterruptTaskResult;
+export type RunRecoveryFlowErrorCode = RunRecoveryExecutionErrorCode;
+
+export interface WorkbenchTaskRecoveryState {
+  runs: RunLifecycleView[];
+}
+
+export type RunRecoveryActionResult =
+  | { ok: true; value: RunRecoveryExecutionResult & { ok: true } }
+  | { ok: false; error: RunRecoveryFlowErrorCode };
 
 export type SkillFlowErrorCode =
   | "invalid_manifest_json"
@@ -228,6 +243,12 @@ export interface ExecuteSkillCommandFormInput {
   pageVersionId?: string;
 }
 
+export interface ExecuteRunRecoveryFormInput {
+  taskId: string;
+  runId: string;
+  action: RunRecoveryExecutionAction;
+}
+
 export interface CreateModelProviderFormInput {
   projectId: string;
   providerId: string;
@@ -351,6 +372,7 @@ export type WorkbenchPageState =
       messages: ChatMessageRecord[];
       runEvents: RunEventRecord[];
       interrupt: TaskInterrupt;
+      recovery: WorkbenchTaskRecoveryState;
       snapshot?: WorkbenchSnapshot;
       artifactDiff?: WebArtifactDiffState;
     };
@@ -373,6 +395,7 @@ export interface WebWorkbenchStore {
     taskId: string;
     reason?: string;
   }): Promise<InterruptCurrentTaskResult>;
+  executeRunRecoveryAction(input: ExecuteRunRecoveryFormInput): Promise<RunRecoveryActionResult>;
   createSkillDraft(input: CreateSkillDraftFormInput): Promise<SkillActionResult<SkillDraftResult>>;
   validateSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
   publishSkillVersion(skillVersionId: string): Promise<SkillActionResult<SkillVersionRecord>>;
@@ -752,6 +775,11 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               selectedPath: input?.artifactPath
             })
           : undefined;
+      const recovery = await listRunRecoveryViewsForTask({
+        repositories,
+        taskId: task.id,
+        workerRuntime: workerQueueRuntime ?? workerRuntime
+      });
       const skills = await loadSkillState(activeProjectId);
       return {
         kind: "task_ready",
@@ -772,6 +800,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           workerRuntime,
           taskId: task.id
         }),
+        recovery: {
+          runs: recovery
+        },
         snapshot,
         artifactDiff
       };
@@ -868,6 +899,22 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         taskId: input.taskId,
         reason: input.reason ?? "User interrupted the task."
       });
+    },
+
+    async executeRunRecoveryAction(input) {
+      const result = await executeApiRunRecoveryAction({
+        repositories,
+        service,
+        workerRuntime: workerQueueRuntime ?? workerRuntime,
+        currentUserId: currentUser.id,
+        taskId: input.taskId,
+        runId: input.runId,
+        action: input.action
+      });
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      return { ok: true, value: result };
     },
 
     async createSkillDraft(input) {

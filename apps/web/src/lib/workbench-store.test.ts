@@ -637,6 +637,135 @@ describe("web workbench store", () => {
     });
   });
 
+  it("includes task recovery views in task-ready page state", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "Recovery project" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Recover failed run",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-20T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Build a recovery LP.",
+      createdAt: "2026-05-20T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_planner_failed",
+      projectId: project.id,
+      taskId: "task_1",
+      role: "planner",
+      state: "failed",
+      startedAt: "2026-05-20T00:00:01.000Z",
+      completedAt: "2026-05-20T00:00:02.000Z",
+      contextSummary: { injected: [], omitted: [] }
+    });
+    await repositories.runEvents.save({
+      id: "run_planner_failed_event_1",
+      runId: "run_planner_failed",
+      projectId: project.id,
+      taskId: "task_1",
+      sequence: 1,
+      type: "run.failed",
+      message: "Planner failed.",
+      payload: {
+        errorName: "model_output_parse_failed",
+        rawModelOutput: "RAW_MODEL_SECRET"
+      },
+      createdAt: "2026-05-20T00:00:02.000Z"
+    });
+
+    const state = await store.getPageState({ taskId: "task_1" });
+
+    expect(state.kind).toBe("task_ready");
+    if (state.kind !== "task_ready") {
+      throw new Error("expected task_ready state");
+    }
+    expect(state.recovery.runs).toEqual([
+      expect.objectContaining({
+        runId: "run_planner_failed",
+        state: "failed",
+        recoveryActions: ["retry_run"],
+        diagnosticSummary: expect.objectContaining({
+          errorName: "model_output_parse_failed"
+        })
+      })
+    ]);
+    expect(JSON.stringify(state.recovery)).not.toContain("RAW_MODEL_SECRET");
+  });
+
+  it("executes run recovery through the web store", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({
+      repositories,
+      currentUser: {
+        id: "local-web-user",
+        displayName: "Local user"
+      }
+    });
+    const project = await store.createProject({ name: "Recovery project" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Recover failed run",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-20T00:00:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Build a recovery LP.",
+      createdAt: "2026-05-20T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_planner_failed",
+      projectId: project.id,
+      taskId: "task_1",
+      role: "planner",
+      state: "failed",
+      startedAt: "2026-05-20T00:00:01.000Z",
+      completedAt: "2026-05-20T00:00:02.000Z",
+      contextSummary: { injected: [], omitted: [] }
+    });
+    await repositories.runEvents.save({
+      id: "run_planner_failed_event_1",
+      runId: "run_planner_failed",
+      projectId: project.id,
+      taskId: "task_1",
+      sequence: 1,
+      type: "run.failed",
+      message: "Planner failed.",
+      payload: {
+        errorName: "model_output_parse_failed"
+      },
+      createdAt: "2026-05-20T00:00:02.000Z"
+    });
+
+    const result = await store.executeRunRecoveryAction({
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        action: "retry_run",
+        runId: "run_planner_failed",
+        newRunId: "run_planner_failed_retry_1",
+        state: "completed"
+      })
+    });
+  });
+
   it("returns task_not_found when interrupting a missing task without a worker runtime", async () => {
     const store = createWebWorkbenchStore();
 

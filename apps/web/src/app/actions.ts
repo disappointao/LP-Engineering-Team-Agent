@@ -8,6 +8,7 @@ import {
   type MCPFlowErrorCode,
   type ModelFlowErrorCode,
   type ProjectFlowErrorCode,
+  type RunRecoveryFlowErrorCode,
   type SkillCommandFlowErrorCode,
   type SkillCommandQueueFlowErrorCode,
   type SkillFlowErrorCode,
@@ -26,6 +27,10 @@ function redirectWithError(error: ProjectFlowErrorCode): never {
 
 function redirectToInterruptError(error: InterruptFlowErrorCode): never {
   redirect(`/?interruptError=${encodeURIComponent(error)}`);
+}
+
+function redirectToRecoveryError(error: RunRecoveryFlowErrorCode): never {
+  redirect(`/?recoveryError=${encodeURIComponent(error)}`);
 }
 
 function redirectToSkillsWithError(
@@ -54,6 +59,16 @@ function parseAgentRole(
     return value;
   }
   redirectToModelsWithError("model_role_unsupported");
+}
+
+function parseRunRecoveryAction(
+  rawValue: FormDataEntryValue | null
+): "resume_worker_finalization" | "retry_run" {
+  const value = String(rawValue ?? "");
+  if (value === "resume_worker_finalization" || value === "retry_run") {
+    return value;
+  }
+  redirectToRecoveryError("recovery_action_not_available");
 }
 
 const maxSkillContentBytes = 200000;
@@ -224,6 +239,21 @@ export async function interruptCurrentTaskAction(_formData?: FormData): Promise<
   });
   if (!result.ok) {
     redirectToInterruptError(result.error);
+  }
+
+  revalidatePath("/");
+  redirect("/");
+}
+
+export async function executeRunRecoveryAction(formData: FormData): Promise<void> {
+  const store = await getWebWorkbenchStore();
+  const result = await store.executeRunRecoveryAction({
+    taskId: String(formData.get("taskId") ?? "").trim(),
+    runId: String(formData.get("runId") ?? "").trim(),
+    action: parseRunRecoveryAction(formData.get("action"))
+  });
+  if (!result.ok) {
+    redirectToRecoveryError(result.error);
   }
 
   revalidatePath("/");

@@ -25,7 +25,8 @@ const mocks = vi.hoisted(() => ({
   createMCPConnector: vi.fn(),
   setMCPConnectorEnabled: vi.fn(),
   setMCPToolApproval: vi.fn(),
-  executeMCPTool: vi.fn()
+  executeMCPTool: vi.fn(),
+  executeRunRecoveryAction: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({
@@ -61,7 +62,8 @@ vi.mock("../lib/workbench-store", () => ({
     createMCPConnector: mocks.createMCPConnector,
     setMCPConnectorEnabled: mocks.setMCPConnectorEnabled,
     setMCPToolApproval: mocks.setMCPToolApproval,
-    executeMCPTool: mocks.executeMCPTool
+    executeMCPTool: mocks.executeMCPTool,
+    executeRunRecoveryAction: mocks.executeRunRecoveryAction
   }))
 }));
 
@@ -72,6 +74,7 @@ import {
   createProjectAction,
   createSkillDraftAction,
   executeMCPToolAction,
+  executeRunRecoveryAction,
   executeSkillCommandAction,
   interruptCurrentTaskAction,
   publishSkillVersionAction,
@@ -134,6 +137,18 @@ function buildSkillCommandForm(input: Record<string, string> = {}): FormData {
   formData.set("skillVersionId", input.skillVersionId ?? "skill_version_1");
   formData.set("commandId", input.commandId ?? "publish_static");
   formData.set("pageVersionId", input.pageVersionId ?? "version_1");
+  return formData;
+}
+
+function buildRecoveryForm(input: {
+  taskId?: string;
+  runId?: string;
+  action?: string;
+} = {}): FormData {
+  const formData = new FormData();
+  formData.set("taskId", input.taskId ?? "task_1");
+  formData.set("runId", input.runId ?? "run_planner_failed");
+  formData.set("action", input.action ?? "retry_run");
   return formData;
 }
 
@@ -229,6 +244,16 @@ describe("submitPromptAction", () => {
       value: {
         run: { id: "run_mcp_tool_1" },
         observation: { id: "tool_observation_1" }
+      }
+    });
+    mocks.executeRunRecoveryAction.mockReset();
+    mocks.executeRunRecoveryAction.mockResolvedValue({
+      ok: true,
+      value: {
+        action: "retry_run",
+        runId: "run_planner_failed",
+        newRunId: "run_planner_failed_retry_1",
+        state: "completed"
       }
     });
   });
@@ -358,6 +383,51 @@ describe("submitPromptAction", () => {
       "/?interruptError=interrupt_failed"
     );
 
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("executes a run recovery action and revalidates the workbench", async () => {
+    mocks.executeRunRecoveryAction.mockResolvedValue({
+      ok: true,
+      value: {
+        action: "retry_run",
+        runId: "run_planner_failed",
+        newRunId: "run_planner_failed_retry_1",
+        state: "completed"
+      }
+    });
+
+    await expectRedirect(executeRunRecoveryAction(buildRecoveryForm()), "/");
+
+    expect(mocks.executeRunRecoveryAction).toHaveBeenCalledWith({
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run"
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects recovery action failures with safe error codes", async () => {
+    mocks.executeRunRecoveryAction.mockResolvedValue({
+      ok: false,
+      error: "retry_input_not_reconstructable"
+    });
+
+    await expectRedirect(
+      executeRunRecoveryAction(buildRecoveryForm()),
+      "/?recoveryError=retry_input_not_reconstructable"
+    );
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("redirects unsupported recovery actions before calling the store", async () => {
+    await expectRedirect(
+      executeRunRecoveryAction(buildRecoveryForm({ action: "request_approval" })),
+      "/?recoveryError=recovery_action_not_available"
+    );
+
+    expect(mocks.executeRunRecoveryAction).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
