@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   createInMemoryWorkbenchRepositories,
+  type BriefRecord,
   type RunEventRecord,
   type RunRecord,
   type ToolObservationRecord,
   type WorkbenchRepositories
 } from "@lp-agent/db";
+import { sampleBrief } from "@lp-agent/lp-schema";
 import type { WorkerJobRecord } from "@lp-agent/worker-runtime";
 import {
   executeRunRecoveryAction,
@@ -738,6 +740,116 @@ describe("execute run recovery retry", () => {
       state: "completed",
       taskId: "task_1"
     });
+  });
+
+  it("prevents concurrent planner retries from overwriting the task snapshot", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_planner_failed",
+      role: "planner",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let createBriefCalls = 0;
+    let releaseFirstRetry = () => {};
+    let markFirstRetryStarted = () => {};
+    const firstRetryStarted = new Promise<void>((resolve) => {
+      markFirstRetryStarted = resolve;
+    });
+    const service = {
+      createBriefFromPrompt: async (input: {
+        projectId: string;
+        prompt: string;
+        taskId?: string;
+        runId?: string;
+      }): Promise<BriefRecord> => {
+        createBriefCalls += 1;
+        const callNumber = createBriefCalls;
+        if (callNumber === 1) {
+          markFirstRetryStarted();
+          await new Promise<void>((release) => {
+            releaseFirstRetry = release;
+          });
+        }
+        const brief: BriefRecord = {
+          id: `brief_${callNumber}`,
+          projectId: input.projectId,
+          prompt: input.prompt,
+          brief: sampleBrief,
+          createdAt: `2026-05-20T00:10:0${callNumber}.000Z`
+        };
+        await repositories.briefs.save(brief);
+        await repositories.runs.save({
+          id: input.runId ?? `run_planner_${brief.id}`,
+          projectId: input.projectId,
+          taskId: input.taskId,
+          role: "planner",
+          state: "completed",
+          startedAt: timestamp,
+          completedAt: `2026-05-20T00:10:0${callNumber}.000Z`,
+          contextSummary: {
+            injected: [],
+            omitted: []
+          }
+        });
+        return brief;
+      },
+      generatePageVersion: async () => {
+        throw new Error("not used");
+      },
+      reviewPageVersion: async () => {
+        throw new Error("not used");
+      },
+      approveAndCreateDeployment: async () => {
+        throw new Error("not used");
+      }
+    };
+
+    const firstRetry = executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run"
+    });
+    const secondRetry = executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run"
+    });
+
+    await firstRetryStarted;
+    releaseFirstRetry();
+
+    const results = await Promise.all([firstRetry, secondRetry]);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        {
+          ok: true,
+          action: "retry_run",
+          runId: "run_planner_failed",
+          newRunId: "run_planner_failed_retry_1",
+          state: "completed"
+        },
+        { ok: false, error: "retry_target_conflict" }
+      ])
+    );
+    expect(createBriefCalls).toBe(1);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      briefId: "brief_1"
+    });
+    await expect(repositories.briefs.getById("brief_2")).resolves.toBeUndefined();
   });
 
   it("passes fail-fast deployment creation into deployer retry failures", async () => {

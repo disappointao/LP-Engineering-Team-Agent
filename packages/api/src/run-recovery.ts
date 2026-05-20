@@ -327,12 +327,13 @@ async function retryRun(
   }
 
   const projectId = task.projectId;
-  const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
-  if (snapshot && snapshot.projectId !== projectId) {
-    return { ok: false, error: "retry_input_not_reconstructable" };
-  }
 
   return withRepositoryRetryLock(input.repositories, async () => {
+    const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
+    if (snapshot && snapshot.projectId !== projectId) {
+      return { ok: false, error: "retry_input_not_reconstructable" };
+    }
+
     const retryRunId = await nextRetryRunId(input.repositories, input.runId);
 
     try {
