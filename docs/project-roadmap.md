@@ -176,11 +176,13 @@ Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workb
 
 ### Stage 25：Run Recovery UI v0
 
-**状态：** 设计已确认，待 implementation plan。
+**状态：** 设计和 implementation plan 已写，待执行。
 
 **为什么现在做：** Stage 18 已有 lifecycle view、diagnostic summary 和 recovery action contract，但 Web 侧还没有把这些动作变成用户可见、可执行的恢复流程。Workbench state 和 worker queue 都有显式 opt-in Postgres backend 后，retry/resume 的价值会更明显。
 
 **当前设计：** `docs/superpowers/specs/2026-05-20-run-recovery-ui-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-20-run-recovery-ui.md`。
 
 **已确认范围：**
 
@@ -199,7 +201,7 @@ Stage 24 v0 已实现 worker queue 的显式 opt-in Postgres backend。Web workb
 
 ### Stage 26：MCP Worker Execution v0
 
-**状态：** Stage 25 plan/implementation 后推荐。
+**状态：** Stage 25 实现后推荐。
 
 **为什么现在做：** Stage 20 的 read-only MCP execution 已有 API 校验和安全 observation，但执行仍在 API 进程内通过 deterministic local executor 完成。worker queue durable backend 和 recovery UI 稳定后，可以把 MCP 执行迁到 worker 边界，保留审批和审计语义。
 

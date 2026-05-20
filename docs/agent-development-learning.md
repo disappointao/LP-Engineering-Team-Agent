@@ -228,7 +228,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery、Web 只读 queue health 和显式 opt-in Postgres worker queue backend 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
 - Postgres Repository Foundation v0 已把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract，并提供显式 opt-in 的 Prisma-backed repository adapter；默认本地开发和测试仍走 `in-memory` / `JSON-file` repositories。
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
-- Stage 25 Run Recovery UI v0 已确认设计：下一步把 `RunLifecycleView`、安全 diagnostics 和 recovery action contract 接到 Web task inline recovery block，并实现第一批受控 resume/retry server actions。
+- Stage 25 Run Recovery UI v0 已确认设计并写好实施计划：下一步把 `RunLifecycleView`、安全 diagnostics 和 recovery action contract 接到 Web task inline recovery block，并实现第一批受控 resume/retry server actions。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
@@ -418,6 +418,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 已确认设计的 Stage 25 Run Recovery UI v0：
 
 - [2026-05-20-run-recovery-ui-design.md](./superpowers/specs/2026-05-20-run-recovery-ui-design.md)
+- 当前实施计划：[2026-05-20-run-recovery-ui.md](./superpowers/plans/2026-05-20-run-recovery-ui.md)
 - 这一阶段把 Stage 18 的 `RunLifecycleView`、安全 `diagnosticSummary` 和 recovery action contract 接到 Web task inline recovery block。
 - 用户可见层只展示 role、state、terminal summary、安全诊断和推荐动作；不读取 raw worker payload、raw run event、raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
 - `resume_worker_finalization` 只处理 worker job 已 terminal 但 run/tool observation finalization 不完整的场景，并复用已有幂等 finalizer。
