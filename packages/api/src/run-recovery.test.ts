@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createInMemoryWorkbenchRepositories,
   type BriefRecord,
+  type PageVersionRecord,
   type RunEventRecord,
   type RunRecord,
   type ToolObservationRecord,
@@ -850,6 +851,205 @@ describe("execute run recovery retry", () => {
       briefId: "brief_1"
     });
     await expect(repositories.briefs.getById("brief_2")).resolves.toBeUndefined();
+  });
+
+  it("fails closed without retrying when the page version is already reviewed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await repositories.pageVersions.save({
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_reviewer_failed",
+      role: "reviewer",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_reviewer_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let reviewCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          reviewCalls += 1;
+          throw new Error("review must not be retried");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_reviewer_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    expect(reviewCalls).toBe(0);
+    await expect(repositories.pageVersions.getById("version_1")).resolves.toMatchObject({
+      reviewStatus: "passed",
+      findings: []
+    });
+  });
+
+  it("prevents concurrent reviewer retries from overwriting review output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await repositories.pageVersions.save({
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "pending",
+      findings: [],
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_reviewer_failed",
+      role: "reviewer",
+      state: "failed",
+      completedAt: "2026-05-20T00:00:03.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_reviewer_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let reviewCalls = 0;
+    let releaseFirstRetry = () => {};
+    let markFirstRetryStarted = () => {};
+    const firstRetryStarted = new Promise<void>((resolve) => {
+      markFirstRetryStarted = resolve;
+    });
+    const service = {
+      createBriefFromPrompt: async () => {
+        throw new Error("not used");
+      },
+      generatePageVersion: async () => {
+        throw new Error("not used");
+      },
+      reviewPageVersion: async (input: {
+        projectId: string;
+        pageVersionId: string;
+        taskId?: string;
+        runId?: string;
+      }): Promise<PageVersionRecord> => {
+        reviewCalls += 1;
+        const callNumber = reviewCalls;
+        if (callNumber === 1) {
+          markFirstRetryStarted();
+          await new Promise<void>((release) => {
+            releaseFirstRetry = release;
+          });
+        }
+        const pageVersion = await repositories.pageVersions.getById(input.pageVersionId);
+        if (!pageVersion) {
+          throw new Error("missing page version");
+        }
+        const reviewed: PageVersionRecord = {
+          ...pageVersion,
+          reviewStatus: "passed",
+          findings: []
+        };
+        await repositories.pageVersions.save(reviewed);
+        await repositories.runs.save({
+          id: input.runId ?? `run_reviewer_${input.pageVersionId}`,
+          projectId: input.projectId,
+          taskId: input.taskId,
+          role: "reviewer",
+          state: "completed",
+          startedAt: timestamp,
+          completedAt: `2026-05-20T00:10:0${callNumber}.000Z`,
+          contextSummary: {
+            injected: [],
+            omitted: []
+          }
+        });
+        return reviewed;
+      },
+      approveAndCreateDeployment: async () => {
+        throw new Error("not used");
+      }
+    };
+
+    const firstRetry = executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_reviewer_failed",
+      action: "retry_run"
+    });
+    const secondRetry = executeRunRecoveryAction({
+      repositories,
+      service,
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_reviewer_failed",
+      action: "retry_run"
+    });
+
+    await firstRetryStarted;
+    releaseFirstRetry();
+
+    const results = await Promise.all([firstRetry, secondRetry]);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        {
+          ok: true,
+          action: "retry_run",
+          runId: "run_reviewer_failed",
+          newRunId: "run_reviewer_failed_retry_1",
+          state: "completed"
+        },
+        { ok: false, error: "retry_target_conflict" }
+      ])
+    );
+    expect(reviewCalls).toBe(1);
+    await expect(repositories.pageVersions.getById("version_1")).resolves.toMatchObject({
+      reviewStatus: "passed",
+      findings: []
+    });
   });
 
   it("passes fail-fast deployment creation into deployer retry failures", async () => {

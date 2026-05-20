@@ -334,8 +334,6 @@ async function retryRun(
       return { ok: false, error: "retry_input_not_reconstructable" };
     }
 
-    const retryRunId = await nextRetryRunId(input.repositories, input.runId);
-
     try {
       if (input.run.role === "planner") {
         if (snapshot?.briefId) {
@@ -348,6 +346,7 @@ async function retryRun(
           return { ok: false, error: "retry_input_not_reconstructable" };
         }
 
+        const retryRunId = await nextRetryRunId(input.repositories, input.runId);
         const brief = await input.service.createBriefFromPrompt({
           projectId,
           prompt,
@@ -372,6 +371,7 @@ async function retryRun(
           return { ok: false, error: "retry_target_conflict" };
         }
 
+        const retryRunId = await nextRetryRunId(input.repositories, input.runId);
         const pageVersion = await input.service.generatePageVersion({
           projectId,
           briefId: snapshot.briefId,
@@ -393,6 +393,15 @@ async function retryRun(
           return { ok: false, error: "retry_input_not_reconstructable" };
         }
 
+        const pageVersion = await input.repositories.pageVersions.getById(snapshot.pageVersionId);
+        if (!pageVersion || pageVersion.projectId !== projectId) {
+          return { ok: false, error: "retry_input_not_reconstructable" };
+        }
+        if (pageVersion.reviewStatus !== "pending" || pageVersion.findings.length > 0) {
+          return { ok: false, error: "retry_target_conflict" };
+        }
+
+        const retryRunId = await nextRetryRunId(input.repositories, input.runId);
         await input.service.reviewPageVersion({
           projectId,
           pageVersionId: snapshot.pageVersionId,
@@ -410,6 +419,7 @@ async function retryRun(
           return { ok: false, error: "retry_target_conflict" };
         }
 
+        const retryRunId = await nextRetryRunId(input.repositories, input.runId);
         await input.service.approveAndCreateDeployment({
           projectId,
           pageVersionId: snapshot.pageVersionId,
