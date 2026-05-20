@@ -561,7 +561,7 @@ describe("HomePage project flow errors", () => {
     });
   });
 
-  it("wires active task context into the streaming workbench shell", async () => {
+  it("wires active LP project context into the streaming workbench shell without task context", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState();
@@ -572,7 +572,6 @@ describe("HomePage project flow errors", () => {
     expect(streamingWorkbenchProps).toMatchObject({
       action: submitPromptAction,
       projectId: "project_1",
-      taskId: "task_1",
       implicitProjectName: "Untitled LP Project",
       promptLabel: "LP request",
       placeholder: "Message LP Agent",
@@ -582,7 +581,59 @@ describe("HomePage project flow errors", () => {
       streamingStatusLabel: "Generating response",
       streamingErrorLabel: "The chat response could not be generated."
     });
+    expect(streamingWorkbenchProps?.taskId).toBeUndefined();
     expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
+  });
+
+  it("wires active general chat task context into the streaming workbench shell", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_general";
+    pageMocks.pageState = createCompletedLpPageState({
+      activeTaskId: "task_general",
+      tasks: [
+        {
+          id: "task_general",
+          title: "Help me write a campaign plan.",
+          type: "general_chat",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      task: {
+        id: "task_general",
+        title: "Help me write a campaign plan.",
+        type: "general_chat",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_general_user",
+          taskId: "task_general",
+          role: "user",
+          content: "Help me write a campaign plan.",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        },
+        {
+          id: "message_general_assistant",
+          taskId: "task_general",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:02:01.000Z"
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
+
+    expect(streamingWorkbenchProps).toMatchObject({
+      action: submitPromptAction,
+      projectId: "project_1",
+      taskId: "task_general"
+    });
   });
 
   it("keeps the streaming workbench shell outside the scroll stack", async () => {

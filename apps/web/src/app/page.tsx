@@ -180,6 +180,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     interruptLabel: copy.chat.interruptLabel,
     sendLabel: copy.chat.sendLabel
   };
+  const streamingTaskId =
+    pageState.kind === "task_ready" && pageState.task.type === "general_chat"
+      ? pageState.task.id
+      : undefined;
 
   return (
     <main className="appShell">
@@ -918,7 +922,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <StreamingWorkbench
             action={submitPromptAction}
             projectId={activeProject?.id}
-            taskId={pageState.kind === "task_ready" ? pageState.task.id : undefined}
+            taskId={streamingTaskId}
             implicitProjectName={copy.entry.implicitProjectName}
             promptLabel={copy.projectFlow.promptLabel}
             placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}

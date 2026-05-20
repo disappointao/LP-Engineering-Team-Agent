@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getPromptSubmissionControlState,
+  shouldRequestFallbackSubmitAfterCommit,
   getStreamingSubmitDecision
 } from "./streaming-workbench";
 
@@ -68,5 +69,37 @@ describe("streaming workbench submit interception", () => {
       preventDefault: true,
       streamPrompt: undefined
     });
+  });
+});
+
+describe("streaming workbench fallback submit handoff", () => {
+  it("requests a fallback submit after commit when the prompt exists and native fallback is pending", () => {
+    expect(
+      shouldRequestFallbackSubmitAfterCommit({
+        fallbackPrompt: "Build a launch page",
+        fallbackSubmitPending: true,
+        skipStreamingOnce: true
+      })
+    ).toBe(true);
+  });
+
+  it("does not request a fallback submit before the hidden prompt payload is committed", () => {
+    expect(
+      shouldRequestFallbackSubmitAfterCommit({
+        fallbackPrompt: undefined,
+        fallbackSubmitPending: true,
+        skipStreamingOnce: true
+      })
+    ).toBe(false);
+  });
+
+  it("does not request a fallback submit during normal streaming", () => {
+    expect(
+      shouldRequestFallbackSubmitAfterCommit({
+        fallbackPrompt: undefined,
+        fallbackSubmitPending: false,
+        skipStreamingOnce: false
+      })
+    ).toBe(false);
   });
 });

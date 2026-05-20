@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useReducer, useRef, useState } from "react";
+import React, { useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   decodeChatStreamLines,
@@ -146,6 +146,25 @@ export function getStreamingSubmitDecision({
   };
 }
 
+export interface FallbackSubmitAfterCommitState {
+  fallbackPrompt: string | undefined;
+  fallbackSubmitPending: boolean;
+  skipStreamingOnce: boolean;
+}
+
+export function shouldRequestFallbackSubmitAfterCommit({
+  fallbackPrompt,
+  fallbackSubmitPending,
+  skipStreamingOnce
+}: FallbackSubmitAfterCommitState): boolean {
+  return (
+    fallbackSubmitPending &&
+    skipStreamingOnce &&
+    fallbackPrompt !== undefined &&
+    fallbackPrompt.length > 0
+  );
+}
+
 export function StreamingWorkbench({
   children,
   action,
@@ -165,6 +184,7 @@ export function StreamingWorkbench({
   const formRef = useRef<HTMLFormElement>(null);
   const skipStreamingOnceRef = useRef(false);
   const fallbackSubmittedRef = useRef(false);
+  const fallbackSubmitPendingRef = useRef(false);
   const submittedPromptRef = useRef("");
   const stateRef = useRef(createInitialStreamingWorkbenchState());
   const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
@@ -183,6 +203,21 @@ export function StreamingWorkbench({
     streamingErrorLabel
   );
 
+  useEffect(() => {
+    if (
+      !shouldRequestFallbackSubmitAfterCommit({
+        fallbackPrompt,
+        fallbackSubmitPending: fallbackSubmitPendingRef.current,
+        skipStreamingOnce: skipStreamingOnceRef.current
+      })
+    ) {
+      return;
+    }
+
+    fallbackSubmitPendingRef.current = false;
+    formRef.current?.requestSubmit();
+  }, [fallbackPrompt]);
+
   const applyState = (nextState: StreamingWorkbenchState) => {
     stateRef.current = nextState;
   };
@@ -195,8 +230,8 @@ export function StreamingWorkbench({
     if (event.type === "fallback.required" && !fallbackSubmittedRef.current) {
       fallbackSubmittedRef.current = true;
       skipStreamingOnceRef.current = true;
+      fallbackSubmitPendingRef.current = true;
       setFallbackPrompt(submittedPromptRef.current);
-      globalThis.setTimeout(() => formRef.current?.requestSubmit(), 0);
     }
   };
 
@@ -236,6 +271,7 @@ export function StreamingWorkbench({
       status: "streaming" as const
     };
     fallbackSubmittedRef.current = false;
+    fallbackSubmitPendingRef.current = false;
     submittedPromptRef.current = prompt;
     setFallbackPrompt(undefined);
     applyState(initialState);
