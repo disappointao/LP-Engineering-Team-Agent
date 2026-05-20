@@ -203,6 +203,15 @@ export {
   type WorkerQueueSnapshot,
   type WorkerQueueSnapshotLog
 } from "./skill-command-worker-queue";
+export {
+  createWorkerQueueRuntime,
+  resolveWorkerRepositoryBackend,
+  type CreateWorkerQueueRuntimeOptions,
+  type WorkerQueueRuntimeEnv,
+  type WorkerQueueRuntimeRepositoryFactoryResult,
+  type WorkerQueueRuntimeRepositories,
+  type WorkerRepositoryBackend
+} from "./worker-queue-repository-factory";
 
 const repositoryIdLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
 const repositoryIdReservations = new WeakMap<WorkbenchRepositories, Set<string>>();
