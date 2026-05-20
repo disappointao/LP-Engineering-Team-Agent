@@ -313,7 +313,20 @@ function applyUnsupportedRetryContext(
   if (!isUnsupportedRetryContext(run) || !actions.includes("retry_run")) {
     return actions;
   }
-  return actions.map((action) => (action === "retry_run" ? "inspect_manually" : action));
+  return dedupeRecoveryActions(
+    actions.map((action) => (action === "retry_run" ? "inspect_manually" : action))
+  );
+}
+
+function dedupeRecoveryActions(actions: RunRecoveryAction[]): RunRecoveryAction[] {
+  const seen = new Set<RunRecoveryAction>();
+  return actions.filter((action) => {
+    if (seen.has(action)) {
+      return false;
+    }
+    seen.add(action);
+    return true;
+  });
 }
 
 async function findBlockedInboundHandoff(

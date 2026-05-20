@@ -2181,6 +2181,60 @@ describe("demo workbench service", () => {
     expect(runner.inputs).toEqual([]);
   });
 
+  it("rejects skill command task scope from another project without creating execution records", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runner = new RecordingToolCommandRunner({
+      state: "completed",
+      exitCode: 0,
+      stdout: "ok",
+      stderr: ""
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      toolCommandRunner: runner,
+      env: { STATIC_DEPLOY_TOKEN: "secret-token" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    const otherProject = await service.createProject({ name: "Other Project" });
+    await repositories.tasks.save({
+      id: "task_other_project",
+      title: "Other project task",
+      type: "lp_generation",
+      status: "complete",
+      projectId: otherProject.id,
+      createdAt: "2026-05-11T00:00:00.000Z"
+    });
+    const skill = await service.createSkillDraft({
+      manifestJson: JSON.stringify(
+        deploymentSkillManifest({ commands: [commandWithoutArtifacts()] })
+      ),
+      content: "# Static deploy",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: skill.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: skill.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    await expect(
+      service.executeProjectSkillCommand({
+        projectId: project.id,
+        skillVersionId: published.id,
+        commandId: "publish_static",
+        taskId: "task_other_project",
+        approvedByUserId: "user_1"
+      })
+    ).rejects.toThrow("project_not_found");
+
+    await expect(repositories.runs.listAll()).resolves.toEqual([]);
+    await expect(repositories.runEvents.listAll()).resolves.toEqual([]);
+    await expect(repositories.toolObservations.listAll()).resolves.toEqual([]);
+    expect(runner.inputs).toEqual([]);
+  });
+
   it("rejects command execution for non-deployment skills", async () => {
     const runner = new RecordingToolCommandRunner({
       state: "completed",

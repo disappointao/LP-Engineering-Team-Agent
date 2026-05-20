@@ -1025,6 +1025,37 @@ describe("deriveRunLifecycleView recovery safety", () => {
     expect(JSON.stringify(result)).not.toContain("secret tool output");
   });
 
+  it("deduplicates manual inspection guidance for unsupported retry context when worker runtime is omitted", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveRun(repositories, {
+      state: "failed",
+      contextSummary: {
+        injected: ["mcpTool:connector_assets:searchAssets"],
+        omitted: []
+      }
+    });
+    await saveEvent(repositories, {
+      type: "worker.job.linked",
+      payload: {
+        runId: "run_planner_1",
+        workerJobId: "worker_job_1",
+        observationId: "tool_observation_1"
+      }
+    });
+
+    const result = await deriveRunLifecycleView({
+      repositories,
+      runId: "run_planner_1"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      view: {
+        recoveryActions: ["inspect_manually"]
+      }
+    });
+  });
+
   it("uses terminal tool event diagnostics without exposing event messages", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveRun(repositories, { state: "failed" });
