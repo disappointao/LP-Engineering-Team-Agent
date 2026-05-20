@@ -93,6 +93,13 @@ async function captureUnhandledRejections(action: () => Promise<void>): Promise<
   return unhandledRejections;
 }
 
+function getSetCookieHeaderText(response: Response): string {
+  const getSetCookie = (
+    response.headers as Headers & { getSetCookie?: () => string[] }
+  ).getSetCookie?.bind(response.headers);
+  return getSetCookie ? getSetCookie().join("\n") : response.headers.get("set-cookie") ?? "";
+}
+
 describe("POST /api/chat/stream", () => {
   beforeEach(() => {
     mocks.startStreamingChatPrompt.mockReset();
@@ -252,6 +259,71 @@ describe("POST /api/chat/stream", () => {
       taskId: "task_general",
       prompt: "Hello"
     });
+  });
+
+  it("expires the current project cookie for successful explicit projectless streams", async () => {
+    mocks.getCurrentProjectId.mockResolvedValue("project_stale");
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_projectless",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "Hello there",
+      chunks: ["Hello there"]
+    });
+    mocks.completeStreamingChatPrompt.mockResolvedValue({ ok: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello", projectId: null, taskId: null })
+      })
+    );
+
+    expect(mocks.startStreamingChatPrompt).toHaveBeenCalledWith({
+      projectId: null,
+      taskId: null,
+      prompt: "Hello"
+    });
+    const setCookie = getSetCookieHeaderText(response);
+    expect(setCookie).toContain("lp-agent-current-task=task_projectless");
+    expect(setCookie).toContain("lp-agent-current-project=;");
+    expect(setCookie).toContain("Max-Age=0");
+  });
+
+  it("keeps the session project cookie active when projectId is omitted", async () => {
+    mocks.getCurrentProjectId.mockResolvedValue("project_session");
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_session_project",
+      taskType: "general_chat",
+      projectId: "project_session",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "Hello there",
+      chunks: ["Hello there"]
+    });
+    mocks.completeStreamingChatPrompt.mockResolvedValue({ ok: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+
+    expect(mocks.startStreamingChatPrompt).toHaveBeenCalledWith({
+      projectId: "project_session",
+      taskId: null,
+      prompt: "Hello"
+    });
+    const setCookie = getSetCookieHeaderText(response);
+    expect(setCookie).toContain("lp-agent-current-project=project_session");
+    expect(setCookie).not.toContain("lp-agent-current-project=;");
+    expect(setCookie).not.toContain("Max-Age=0");
   });
 
   it("returns the response before assistant completion persistence resolves", async () => {

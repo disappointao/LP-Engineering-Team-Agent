@@ -110,6 +110,10 @@ function createCookie(name: string, value: string): string {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax`;
 }
 
+function createExpiredCookie(name: string): string {
+  return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
 function getSafeErrorMessage(error: "prompt_required" | "project_not_found" | "generation_failed") {
   switch (error) {
     case "prompt_required":
@@ -207,6 +211,8 @@ export async function POST(request: Request): Promise<Response> {
   const cookies = [createCookie(CURRENT_TASK_COOKIE, started.taskId)];
   if (started.projectId) {
     cookies.push(createCookie(CURRENT_PROJECT_COOKIE, started.projectId));
+  } else if (hasOwnField(payload, "projectId") && payload.projectId === null) {
+    cookies.push(createExpiredCookie(CURRENT_PROJECT_COOKIE));
   }
   return createStreamResponse(async (enqueue) => {
     enqueue({

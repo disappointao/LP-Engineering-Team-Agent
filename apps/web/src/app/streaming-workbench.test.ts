@@ -93,12 +93,19 @@ describe("streaming workbench submit interception", () => {
 });
 
 describe("streaming workbench terminal refresh state", () => {
-  it("clears terminal transient assistant state after requesting a refresh", () => {
+  it("clears completed transient assistant state after requesting a refresh", () => {
     const completedState: StreamingWorkbenchState = {
       ...createInitialStreamingWorkbenchState(),
       status: "completed",
       assistantContent: "Persisted assistant reply"
     };
+
+    expect(getTerminalStreamingStateAfterRefresh(completedState, true)).toEqual(
+      createInitialStreamingWorkbenchState()
+    );
+  });
+
+  it("keeps terminal error state visible after requesting a refresh", () => {
     const errorState: StreamingWorkbenchState = {
       ...createInitialStreamingWorkbenchState(),
       status: "error",
@@ -106,11 +113,8 @@ describe("streaming workbench terminal refresh state", () => {
       errorMessage: "Stream failed"
     };
 
-    expect(getTerminalStreamingStateAfterRefresh(completedState, true)).toEqual(
-      createInitialStreamingWorkbenchState()
-    );
     expect(getTerminalStreamingStateAfterRefresh(errorState, true)).toEqual(
-      createInitialStreamingWorkbenchState()
+      errorState
     );
   });
 
@@ -127,6 +131,20 @@ describe("streaming workbench terminal refresh state", () => {
 });
 
 describe("streaming workbench chat stream request body", () => {
+  it("sends explicit null project and task ids when no streaming context is available", () => {
+    expect(
+      createStreamingChatRequestBody({
+        prompt: "Hello",
+        projectId: undefined,
+        taskId: undefined
+      })
+    ).toEqual({
+      prompt: "Hello",
+      projectId: null,
+      taskId: null
+    });
+  });
+
   it("sends an explicit null taskId when no streaming task is available", () => {
     expect(
       createStreamingChatRequestBody({

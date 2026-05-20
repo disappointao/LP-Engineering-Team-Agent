@@ -79,6 +79,10 @@ export function getTerminalStreamingStateAfterRefresh(
     return state;
   }
 
+  if (state.status === "error") {
+    return state;
+  }
+
   return createInitialStreamingWorkbenchState();
 }
 
@@ -164,7 +168,7 @@ export function getStreamingSubmitDecision({
 
 export interface StreamingChatRequestBody {
   prompt: string;
-  projectId?: string;
+  projectId: string | null;
   taskId: string | null;
 }
 
@@ -179,7 +183,7 @@ export function createStreamingChatRequestBody({
 }): StreamingChatRequestBody {
   return {
     prompt,
-    ...(projectId === undefined ? {} : { projectId }),
+    projectId: projectId ?? null,
     taskId: taskId ?? null
   };
 }
