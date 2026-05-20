@@ -191,6 +191,7 @@ export {
   type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
 export * from "./run-lifecycle";
+export * from "./run-recovery";
 export {
   createLocalWorkerQueueRuntime,
   createWorkerQueueSnapshot,
