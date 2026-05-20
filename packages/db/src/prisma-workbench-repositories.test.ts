@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
+import { objectEnumValues } from "@prisma/client/runtime/library";
 import {
   createPrismaWorkbenchRepositories,
   createUnsupportedPrismaRepository
@@ -732,6 +733,122 @@ describe("createPrismaWorkbenchRepositories", () => {
     await expect(repositories.mcpConnectors.listAll()).resolves.toEqual([]);
     await expect(repositories.mcpToolApprovals.listAll()).resolves.toEqual([]);
   });
+
+  it("clears nullable JSON repository fields without writing a plain JSON null", async () => {
+    const repositories = createPrismaWorkbenchRepositories({
+      prisma: createFakePrismaClient({
+        skillBinding: {
+          rejectPlainNullJsonKeys: ["settings"]
+        },
+        modelRoutingPolicy: {
+          rejectPlainNullJsonKeys: ["fallback", "settings"]
+        }
+      }),
+      workspaceId: "workspace_default"
+    });
+
+    await repositories.skillBindings.save({
+      id: "binding_json_clear",
+      skillVersionId: "skill_version_json_clear",
+      scope: "project",
+      targetKey: "project_json_clear",
+      projectId: "project_json_clear",
+      enabled: true,
+      settings: { mode: "safe" },
+      createdAt,
+      updatedAt: createdAt
+    });
+    await repositories.modelRoutingPolicies.save({
+      id: "policy_json_clear",
+      scope: "project",
+      targetKey: "project_json_clear",
+      role: "builder",
+      providerId: "provider_json_clear",
+      model: "gpt-5.4",
+      fallback: { providerId: "provider_backup", model: "gpt-5.4-mini" },
+      settings: { temperature: 0.2 },
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await expect(
+      repositories.skillBindings.save({
+        id: "binding_json_clear_replacement",
+        skillVersionId: "skill_version_json_clear",
+        scope: "project",
+        targetKey: "project_json_clear",
+        projectId: "project_json_clear",
+        enabled: false,
+        createdAt,
+        updatedAt: "2026-05-14T00:02:00.000Z"
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      repositories.modelRoutingPolicies.save({
+        id: "policy_json_clear_replacement",
+        scope: "project",
+        targetKey: "project_json_clear",
+        role: "builder",
+        providerId: "provider_json_clear",
+        model: "gpt-5.4-mini",
+        createdAt,
+        updatedAt: "2026-05-14T00:02:00.000Z"
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(repositories.skillBindings.getById("binding_json_clear")).resolves.toEqual({
+      id: "binding_json_clear",
+      skillVersionId: "skill_version_json_clear",
+      scope: "project",
+      targetKey: "project_json_clear",
+      projectId: "project_json_clear",
+      enabled: false,
+      createdAt,
+      updatedAt: "2026-05-14T00:02:00.000Z"
+    });
+    await expect(repositories.modelRoutingPolicies.getById("policy_json_clear")).resolves.toEqual({
+      id: "policy_json_clear",
+      scope: "project",
+      targetKey: "project_json_clear",
+      role: "builder",
+      providerId: "provider_json_clear",
+      model: "gpt-5.4-mini",
+      createdAt,
+      updatedAt: "2026-05-14T00:02:00.000Z"
+    });
+  });
+
+  it("does not match compound selectors when the selector name is wrong", async () => {
+    const delegate = createFakeDelegate();
+
+    await delegate.upsert({
+      where: {
+        scope_targetKey_role: {
+          scope: "project",
+          targetKey: "project_compound",
+          role: "builder"
+        }
+      },
+      create: {
+        id: "policy_compound",
+        scope: "project",
+        targetKey: "project_compound",
+        role: "builder"
+      },
+      update: {}
+    });
+
+    await expect(
+      delegate.findUnique({
+        where: {
+          wrong_targetKey_role: {
+            targetKey: "project_compound",
+            role: "builder"
+          }
+        }
+      })
+    ).resolves.toBeNull();
+  });
 });
 
 describe("createUnsupportedPrismaRepository", () => {
@@ -791,7 +908,7 @@ function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
         const existing = rows[existingIndex];
         rows[existingIndex] = cloneRow({
           ...existing,
-          ...input.update
+          ...normalizeFakePrismaJsonNulls(input.update)
         });
         return cloneRow(rows[existingIndex]);
       }
@@ -805,7 +922,7 @@ function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
         }
       }
 
-      const created = cloneRow(input.create);
+      const created = cloneRow(normalizeFakePrismaJsonNulls(input.create));
       rows.push(created);
       return cloneRow(created);
     },
@@ -840,6 +957,11 @@ function rejectPlainJsonNulls(row: FakeRow, keys: string[]): void {
 function matchesWhere(row: FakeRow, where: FakeWhere): boolean {
   return Object.entries(where).every(([key, expected]) => {
     if (isRecord(expected)) {
+      const nestedKeys = Object.keys(expected);
+      if (key !== nestedKeys.join("_")) {
+        return false;
+      }
+
       return Object.entries(expected).every(
         ([nestedKey, nestedExpected]) => row[nestedKey] === nestedExpected
       );
@@ -847,6 +969,15 @@ function matchesWhere(row: FakeRow, where: FakeWhere): boolean {
 
     return row[key] === expected;
   });
+}
+
+function normalizeFakePrismaJsonNulls(row: FakeRow): FakeRow {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      value === objectEnumValues.instances.DbNull ? null : value
+    ])
+  );
 }
 
 function compareRows(left: FakeRow, right: FakeRow, orderBy: FakeOrderBy): number {

@@ -3,6 +3,7 @@ import type {
   ArtifactWorkspaceFileRecord,
   ArtifactWorkspaceRecord
 } from "@lp-agent/artifacts";
+import { objectEnumValues } from "@prisma/client/runtime/library";
 import {
   toPrismaAgentHandoffCreate,
   toPrismaDeploymentCreate,
@@ -390,7 +391,9 @@ function createSkillBindingRepository(delegate: PrismaDelegate): SkillBindingRep
         },
         toPrismaSkillBindingCreate(binding),
         ["id", "skillVersionId", "scope", "targetKey"],
-        ["organizationId", "workspaceId", "projectId", "settings"]
+        ["organizationId", "workspaceId", "projectId"],
+        [],
+        ["settings"]
       );
     },
 
@@ -466,6 +469,8 @@ function createModelRoutingPolicyRepository(
         },
         toPrismaModelRoutingPolicyCreate(policy),
         ["id", "scope", "targetKey", "role"],
+        [],
+        [],
         ["fallback", "settings"]
       );
     },
@@ -1006,11 +1011,15 @@ async function upsert(
   data: object,
   updateOmitKeys: string[] = ["id"],
   nullableKeys: string[] = [],
-  emptyJsonObjectKeys: string[] = []
+  emptyJsonObjectKeys: string[] = [],
+  dbNullJsonKeys: string[] = []
 ): Promise<void> {
-  const row = materializeEmptyJsonObjects(
-    materializeNulls(asPrismaRow(data), nullableKeys),
-    emptyJsonObjectKeys
+  const row = materializeDbNulls(
+    materializeEmptyJsonObjects(
+      materializeNulls(asPrismaRow(data), nullableKeys),
+      emptyJsonObjectKeys
+    ),
+    dbNullJsonKeys
   );
   await delegate.upsert({
     where,
@@ -1274,6 +1283,16 @@ function materializeEmptyJsonObjects(row: PrismaRow, keys: string[]): PrismaRow 
   for (const key of keys) {
     if (!(key in copy)) {
       copy[key] = {};
+    }
+  }
+  return copy;
+}
+
+function materializeDbNulls(row: PrismaRow, keys: string[]): PrismaRow {
+  const copy = { ...row };
+  for (const key of keys) {
+    if (!(key in copy) || copy[key] === null) {
+      copy[key] = objectEnumValues.instances.DbNull;
     }
   }
   return copy;
