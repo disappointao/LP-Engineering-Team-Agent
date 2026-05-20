@@ -2,11 +2,20 @@ import type {
   AgentHandoffArtifactRefs,
   AgentHandoffRecord,
   AgentHandoffState,
+  MCPConnectorRecord,
+  MCPToolApprovalRecord,
+  ModelProviderRecord,
+  ModelRoutingPolicyRecord,
+  ProjectMemberRecord,
   ProjectRecord,
   RunEventRecord,
   RunRecord,
-  RunRecordState
+  RunRecordState,
+  SkillBindingRecord,
+  SkillRecord,
+  SkillVersionRecord
 } from "./workbench-repositories";
+import type { DeploymentHandoff } from "@lp-agent/git-deployment";
 import type { AgentRole } from "@lp-agent/model-gateway";
 
 export interface PrismaProjectRow {
@@ -21,6 +30,128 @@ export interface PrismaProjectCreate {
   workspaceId: string;
   name: string;
   createdAt: Date;
+}
+
+export interface PrismaProjectMemberRow extends PrismaProjectMemberCreate {}
+
+export interface PrismaProjectMemberCreate {
+  id: string;
+  projectId: string;
+  userId: string;
+  role: ProjectMemberRecord["role"];
+  displayName?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaSkillRow extends PrismaSkillCreate {}
+
+export interface PrismaSkillCreate {
+  id: string;
+  name: string;
+  type: SkillRecord["type"];
+  scope: SkillRecord["scope"];
+  createdAt: Date;
+}
+
+export interface PrismaSkillVersionRow extends PrismaSkillVersionCreate {}
+
+export interface PrismaSkillVersionCreate {
+  id: string;
+  skillId: string;
+  version: string;
+  manifest: SkillVersionRecord["manifest"];
+  content: string;
+  contentType: SkillVersionRecord["contentType"];
+  reviewState: SkillVersionRecord["reviewState"];
+  createdAt: Date;
+}
+
+export interface PrismaSkillBindingRow extends PrismaSkillBindingCreate {}
+
+export interface PrismaSkillBindingCreate {
+  id: string;
+  skillVersionId: string;
+  scope: SkillBindingRecord["scope"];
+  targetKey: string;
+  organizationId?: string | null;
+  workspaceId?: string | null;
+  projectId?: string | null;
+  enabled: boolean;
+  settings?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaModelProviderRow extends PrismaModelProviderCreate {}
+
+export interface PrismaModelProviderCreate {
+  id: string;
+  scope: ModelProviderRecord["scope"];
+  targetKey: string;
+  name: string;
+  provider: ModelProviderRecord["provider"];
+  config: ModelProviderRecord["config"];
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaModelRoutingPolicyRow extends PrismaModelRoutingPolicyCreate {}
+
+export interface PrismaModelRoutingPolicyCreate {
+  id: string;
+  scope: ModelRoutingPolicyRecord["scope"];
+  targetKey: string;
+  role: AgentRole;
+  providerId: string;
+  model: string;
+  fallback?: Record<string, unknown> | null;
+  settings?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaMCPConnectorRow extends PrismaMCPConnectorCreate {}
+
+export interface PrismaMCPConnectorCreate {
+  id: string;
+  scope: MCPConnectorRecord["scope"];
+  targetKey: string;
+  name: string;
+  description?: string | null;
+  toolsJson: MCPConnectorRecord["tools"];
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaMCPToolApprovalRow extends PrismaMCPToolApprovalCreate {}
+
+export interface PrismaMCPToolApprovalCreate {
+  id: string;
+  projectId: string;
+  connectorId: string;
+  toolName: string;
+  state: MCPToolApprovalRecord["state"];
+  approvedByUserId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrismaDeploymentRow extends PrismaDeploymentCreate {
+  createdAt: Date;
+}
+
+export interface PrismaDeploymentCreate {
+  id: string;
+  projectId: string;
+  pageVersionId: string;
+  branch: string;
+  commitSha: string;
+  pullRequestUrl: string;
+  status: DeploymentHandoff["status"];
+  files: unknown;
 }
 
 export interface PrismaRunRow {
@@ -116,6 +247,266 @@ export function toRepositoryProject(row: PrismaProjectRow): ProjectRecord {
     id: row.id,
     name: row.name,
     createdAt: row.createdAt.toISOString()
+  };
+}
+
+export function toPrismaProjectMemberCreate(
+  member: ProjectMemberRecord
+): PrismaProjectMemberCreate {
+  return {
+    id: member.id,
+    projectId: member.projectId,
+    userId: member.userId,
+    role: member.role,
+    ...(member.displayName ? { displayName: member.displayName } : {}),
+    createdAt: new Date(member.createdAt),
+    updatedAt: new Date(member.updatedAt)
+  };
+}
+
+export function toRepositoryProjectMember(row: PrismaProjectMemberRow): ProjectMemberRecord {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    userId: row.userId,
+    role: row.role,
+    ...(row.displayName ? { displayName: row.displayName } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaSkillCreate(skill: SkillRecord): PrismaSkillCreate {
+  return {
+    id: skill.id,
+    name: skill.name,
+    type: skill.type,
+    scope: skill.scope,
+    createdAt: new Date(skill.createdAt)
+  };
+}
+
+export function toRepositorySkill(row: PrismaSkillRow): SkillRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    scope: row.scope,
+    createdAt: row.createdAt.toISOString()
+  };
+}
+
+export function toPrismaSkillVersionCreate(
+  version: SkillVersionRecord
+): PrismaSkillVersionCreate {
+  return {
+    id: version.id,
+    skillId: version.skillId,
+    version: version.version,
+    manifest: cloneJson(version.manifest),
+    content: version.content,
+    contentType: version.contentType,
+    reviewState: version.reviewState,
+    createdAt: new Date(version.createdAt)
+  };
+}
+
+export function toRepositorySkillVersion(row: PrismaSkillVersionRow): SkillVersionRecord {
+  return {
+    id: row.id,
+    skillId: row.skillId,
+    version: row.version,
+    manifest: cloneJson(row.manifest),
+    content: row.content,
+    contentType: row.contentType,
+    reviewState: row.reviewState,
+    createdAt: row.createdAt.toISOString()
+  };
+}
+
+export function toPrismaSkillBindingCreate(
+  binding: SkillBindingRecord
+): PrismaSkillBindingCreate {
+  return {
+    id: binding.id,
+    skillVersionId: binding.skillVersionId,
+    scope: binding.scope,
+    targetKey: binding.targetKey,
+    ...(binding.organizationId ? { organizationId: binding.organizationId } : {}),
+    ...(binding.workspaceId ? { workspaceId: binding.workspaceId } : {}),
+    ...(binding.projectId ? { projectId: binding.projectId } : {}),
+    enabled: binding.enabled,
+    ...(binding.settings ? { settings: cloneRecord(binding.settings) } : {}),
+    createdAt: new Date(binding.createdAt),
+    updatedAt: new Date(binding.updatedAt)
+  };
+}
+
+export function toRepositorySkillBinding(row: PrismaSkillBindingRow): SkillBindingRecord {
+  return {
+    id: row.id,
+    skillVersionId: row.skillVersionId,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    ...(row.organizationId ? { organizationId: row.organizationId } : {}),
+    ...(row.workspaceId ? { workspaceId: row.workspaceId } : {}),
+    ...(row.projectId ? { projectId: row.projectId } : {}),
+    enabled: row.enabled,
+    ...(row.settings ? { settings: cloneRecord(row.settings) } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaModelProviderCreate(
+  provider: ModelProviderRecord
+): PrismaModelProviderCreate {
+  return {
+    id: provider.id,
+    scope: provider.scope,
+    targetKey: provider.targetKey,
+    name: provider.name,
+    provider: provider.provider,
+    config: cloneJson(provider.config),
+    enabled: provider.enabled,
+    createdAt: new Date(provider.createdAt),
+    updatedAt: new Date(provider.updatedAt)
+  };
+}
+
+export function toRepositoryModelProvider(row: PrismaModelProviderRow): ModelProviderRecord {
+  return {
+    id: row.id,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    name: row.name,
+    provider: row.provider,
+    config: cloneJson(row.config),
+    enabled: row.enabled,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaModelRoutingPolicyCreate(
+  policy: ModelRoutingPolicyRecord
+): PrismaModelRoutingPolicyCreate {
+  return {
+    id: policy.id,
+    scope: policy.scope,
+    targetKey: policy.targetKey,
+    role: policy.role,
+    providerId: policy.providerId,
+    model: policy.model,
+    ...(policy.fallback ? { fallback: cloneRecord(policy.fallback) } : {}),
+    ...(policy.settings ? { settings: cloneRecord(policy.settings) } : {}),
+    createdAt: new Date(policy.createdAt),
+    updatedAt: new Date(policy.updatedAt)
+  };
+}
+
+export function toRepositoryModelRoutingPolicy(
+  row: PrismaModelRoutingPolicyRow
+): ModelRoutingPolicyRecord {
+  return {
+    id: row.id,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    role: row.role,
+    providerId: row.providerId,
+    model: row.model,
+    ...(row.fallback ? { fallback: cloneRecord(row.fallback) } : {}),
+    ...(row.settings ? { settings: cloneRecord(row.settings) } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaMCPConnectorCreate(
+  connector: MCPConnectorRecord
+): PrismaMCPConnectorCreate {
+  return {
+    id: connector.id,
+    scope: connector.scope,
+    targetKey: connector.targetKey,
+    name: connector.name,
+    ...(connector.description ? { description: connector.description } : {}),
+    toolsJson: cloneJson(connector.tools),
+    enabled: connector.enabled,
+    createdAt: new Date(connector.createdAt),
+    updatedAt: new Date(connector.updatedAt)
+  };
+}
+
+export function toRepositoryMCPConnector(row: PrismaMCPConnectorRow): MCPConnectorRecord {
+  return {
+    id: row.id,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    name: row.name,
+    ...(row.description ? { description: row.description } : {}),
+    tools: cloneJson(row.toolsJson),
+    enabled: row.enabled,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaMCPToolApprovalCreate(
+  approval: MCPToolApprovalRecord
+): PrismaMCPToolApprovalCreate {
+  return {
+    id: approval.id,
+    projectId: approval.projectId,
+    connectorId: approval.connectorId,
+    toolName: approval.toolName,
+    state: approval.state,
+    ...(approval.approvedByUserId ? { approvedByUserId: approval.approvedByUserId } : {}),
+    createdAt: new Date(approval.createdAt),
+    updatedAt: new Date(approval.updatedAt)
+  };
+}
+
+export function toRepositoryMCPToolApproval(
+  row: PrismaMCPToolApprovalRow
+): MCPToolApprovalRecord {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    connectorId: row.connectorId,
+    toolName: row.toolName,
+    state: row.state,
+    ...(row.approvedByUserId ? { approvedByUserId: row.approvedByUserId } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export function toPrismaDeploymentCreate(
+  deployment: DeploymentHandoff
+): PrismaDeploymentCreate {
+  return {
+    id: deployment.id,
+    projectId: deployment.projectId,
+    pageVersionId: deployment.pageVersionId,
+    branch: deployment.branch,
+    commitSha: deployment.commitSha,
+    pullRequestUrl: deployment.pullRequestUrl,
+    files: [...deployment.files],
+    status: deployment.status
+  };
+}
+
+export function toRepositoryDeployment(row: PrismaDeploymentRow): DeploymentHandoff {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    pageVersionId: row.pageVersionId,
+    branch: row.branch,
+    commitSha: row.commitSha,
+    pullRequestUrl: row.pullRequestUrl,
+    files: ["index.html", "styles.css", "script.js"],
+    status: row.status
   };
 }
 
@@ -244,6 +635,10 @@ function emptyContextSummary(): RunRecord["contextSummary"] {
 
 function cloneRecord(record: Record<string, unknown>): Record<string, unknown> {
   return structuredClone(record);
+}
+
+function cloneJson<T>(value: T): T {
+  return structuredClone(value);
 }
 
 function cloneRecordOrDefault(value: unknown): Record<string, unknown> {
