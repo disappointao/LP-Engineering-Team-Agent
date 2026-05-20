@@ -105,4 +105,31 @@ describe("Prisma workbench schema contract", () => {
       "@@unique([workspaceId, path])"
     );
   });
+
+  it("contains Stage 23 Web-facing repository fields and models", async () => {
+    const schema = await readFile(schemaPath, "utf8");
+
+    for (const model of [
+      "MCPToolApproval",
+      "ProjectMember",
+      "SkillVersion",
+      "MCPConnector"
+    ]) {
+      expect(schema).toContain(`model ${model} `);
+    }
+
+    for (const field of [
+      "displayName",
+      "updatedAt",
+      "contentType",
+      "description",
+      "toolsJson",
+      "approvedByUserId",
+      "files"
+    ]) {
+      expect(schema).toContain(field);
+    }
+
+    expect(schema).toContain("@@unique([projectId, connectorId, toolName])");
+  });
 });

@@ -115,6 +115,7 @@ model Project {
   artifactWorkspaceFiles ArtifactWorkspaceFile[]
   agentHandoffs          AgentHandoff[]
   skillBindings          SkillBinding[]
+  mcpToolApprovals       MCPToolApproval[]
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
 
@@ -122,12 +123,14 @@ model Project {
 }
 
 model ProjectMember {
-  id        String      @id @default(cuid())
-  projectId String
-  userId    String
-  role      ProjectRole
-  project   Project     @relation(fields: [projectId], references: [id])
-  createdAt DateTime    @default(now())
+  id          String      @id @default(cuid())
+  projectId   String
+  userId      String
+  displayName String?
+  role        ProjectRole
+  project     Project     @relation(fields: [projectId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@unique([projectId, userId])
   @@index([userId])
@@ -273,16 +276,19 @@ model Artifact {
 }
 
 model MCPConnector {
-  id        String    @id
-  scope     SkillScope
-  targetKey String
-  name      String
-  transport String
-  config    Json
-  enabled   Boolean   @default(true)
-  tools     MCPTool[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String            @id
+  scope       SkillScope
+  targetKey   String
+  name        String
+  description String?
+  transport   String
+  config      Json
+  toolsJson   Json?
+  enabled     Boolean           @default(true)
+  tools       MCPTool[]
+  approvals   MCPToolApproval[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([scope, targetKey])
   @@index([enabled])
@@ -300,6 +306,24 @@ model MCPTool {
 
   @@unique([connectorId, name])
   @@index([permission])
+}
+
+model MCPToolApproval {
+  id               String       @id
+  projectId        String
+  connectorId      String
+  toolName         String
+  state            String
+  approvedByUserId String?
+  project          Project      @relation(fields: [projectId], references: [id])
+  connector        MCPConnector @relation(fields: [connectorId], references: [id])
+  createdAt        DateTime
+  updatedAt        DateTime
+
+  @@unique([projectId, connectorId, toolName])
+  @@index([projectId])
+  @@index([connectorId])
+  @@index([state])
 }
 
 model ModelProvider {
@@ -352,6 +376,7 @@ model SkillVersion {
   version     String
   manifest    Json
   content     String
+  contentType String           @default("text/markdown")
   reviewState SkillReviewState
   skill       Skill            @relation(fields: [skillId], references: [id])
   bindings    SkillBinding[]
@@ -483,6 +508,7 @@ model Deployment {
   commitSha      String
   pullRequestUrl String
   status         DeploymentStatus
+  files          Json
   project        Project     @relation(fields: [projectId], references: [id])
   pageVersion    PageVersion @relation(fields: [pageVersionId], references: [id])
   createdAt      DateTime    @default(now())
