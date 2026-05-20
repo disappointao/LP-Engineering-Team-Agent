@@ -271,6 +271,42 @@ describe("run recovery views", () => {
 
     expect(views.map((view) => view.runId)).not.toContain("run_planner_brief_1");
   });
+
+  it("keeps completed repaired runs non-actionable", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await saveRun(repositories, {
+      id: "run_builder_version_1",
+      role: "builder",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_version_1",
+      type: "model.output.parse_failed",
+      sequence: 1,
+      payload: { reason: "invalid_json" }
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_version_1",
+      type: "model.output.repair_started",
+      sequence: 2
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_version_1",
+      type: "run.completed",
+      sequence: 3
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views).toHaveLength(1);
+    expect(views[0]).toMatchObject({
+      state: "completed",
+      recoveryActions: []
+    });
+    expect(views[0]?.diagnosticSummary).toBeUndefined();
+  });
 });
 
 describe("execute run recovery action", () => {

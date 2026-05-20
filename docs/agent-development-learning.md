@@ -228,7 +228,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Worker/Sandbox Runtime Foundation 已有 v0 contract、queue、cancel、daemon polling、heartbeat、stale recovery、Web 只读 queue health 和显式 opt-in Postgres worker queue backend 闭环；后续还要补真实 runner、MCP worker execution、强 sandbox 和 raw stdout/stderr streaming。
 - Postgres Repository Foundation v0 已把 Prisma schema 对齐当前核心 `WorkbenchRepositories` contract，并提供显式 opt-in 的 Prisma-backed repository adapter；默认本地开发和测试仍走 `in-memory` / `JSON-file` repositories。
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
-- Stage 25 Run Recovery UI v0 已确认设计并写好实施计划：下一步把 `RunLifecycleView`、安全 diagnostics 和 recovery action contract 接到 Web task inline recovery block，并实现第一批受控 resume/retry server actions。
+- Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
@@ -239,7 +239,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
-- 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已确认恢复 UI 和第一批 retry/resume 设计，但团队审批和通用 DAG 仍未做。
+- 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已实现恢复 UI 和第一批 retry/resume server actions，但团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
 - 实时流式输出和真正的 interrupt/cancel。
 
@@ -415,15 +415,18 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - `WorkerJobPayload` 本阶段不强制 FK 到 `WorkerJob`，因为当前 `enqueueSafe()` 为了 cleanup safety 先保存 payload、再保存 job；强 FK 会破坏现有 contract，除非同时重写 runtime transaction boundary。
 - worker lifecycle log 进入 Postgres 后仍 bounded 和 sanitized，只保留 allowlisted payload keys，不能把 raw execution data 扩散到 audit log。
 
-已确认设计的 Stage 25 Run Recovery UI v0：
+已实现的 Stage 25 Run Recovery UI v0：
 
 - [2026-05-20-run-recovery-ui-design.md](./superpowers/specs/2026-05-20-run-recovery-ui-design.md)
 - 当前实施计划：[2026-05-20-run-recovery-ui.md](./superpowers/plans/2026-05-20-run-recovery-ui.md)
-- 这一阶段把 Stage 18 的 `RunLifecycleView`、安全 `diagnosticSummary` 和 recovery action contract 接到 Web task inline recovery block。
+- 这一阶段已把 Stage 18 的 `RunLifecycleView`、安全 `diagnosticSummary` 和 recovery action contract 接到 Web task inline recovery block。
+- Web task state 现在包含 recovery views；Web 只传 `taskId`、`runId` 和 action intent，页面展示 API 派生状态，不展示 raw lifecycle payload。
+- recovery server action 会在执行前重新读取 repository state 并重新派生 lifecycle，不信任浏览器提交的 action availability。
 - 用户可见层只展示 role、state、terminal summary、安全诊断和推荐动作；不读取 raw worker payload、raw run event、raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
 - `resume_worker_finalization` 只处理 worker job 已 terminal 但 run/tool observation finalization 不完整的场景，并复用已有幂等 finalizer。
 - `retry_run` 只做 safely reconstructable single-run retry：创建新的 retry attempt / run id，不覆盖原 failed run，不自动重跑完整 `Planner -> Builder -> Reviewer -> Deployer` chain。
 - 输入无法从 repository 安全重建、目标输出会被覆盖、approval/blocker 语义不清或 side effect 不具备幂等性时，recovery action 必须 fail closed，并让 UI 展示 `inspect_manually` 或对应 guidance。
+- `retry_run` 已明确对 unsupported command side effects fail closed：`skill_command` / deployment 这类带外部 side effect 的命令不进入 Stage 25 可执行 retry 范围。
 - `skill_command` retry 默认不进入 Stage 25 可执行范围；带外部 side effect 的命令重试需要独立的 approval / idempotency / audit contract。
 - 学习重点：recovery action contract 变成产品按钮时，必须在 server action 里重新派生当前 lifecycle，不信任浏览器提交的 action availability。可执行恢复动作不是“把失败 run 再跑一次”，而是受 ownership、input reconstruction、output conflict、approval 和 side-effect 边界约束的业务动作。
 

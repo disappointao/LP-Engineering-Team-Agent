@@ -315,11 +315,11 @@
    - 在 Stage 24 design 后阅读，用于按 TDD 实现 Prisma worker job/payload/log schema、shared repository contracts、Prisma adapters、shared worker queue backend factory、Web/agent-worker opt-in wiring、integration coverage 和文档收尾。
 
 78. `specs/2026-05-20-run-recovery-ui-design.md`
-   - Stage 25 Run Recovery UI v0 design。
+   - Stage 25 Run Recovery UI v0 design（已实现，当前已完成）。
    - 在 Stage 24 plan 后阅读，用于把已有 `RunLifecycleView`、安全 diagnostic summary 和 recovery action contract 接入 Web task inline recovery block，并规划 `resume_worker_finalization`、可控 `retry_run`、approval/blocker/manual inspect guidance，同时继续排除通用 DAG scheduler、自动完整 chain rerun、streaming UI 和团队审批队列。
 
 79. `plans/2026-05-20-run-recovery-ui.md`
-   - Stage 25 Run Recovery UI v0 implementation plan。
+   - Stage 25 Run Recovery UI v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 25 design 后阅读，用于按 TDD 实现 API recovery helper、controlled single-run retry、Web store/server action wiring、inline recovery block、回归覆盖和文档收尾。
 
 ## 维护规则

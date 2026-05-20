@@ -688,6 +688,80 @@ describe("HomePage project flow errors", () => {
     ]);
   });
 
+  it("renders cancelled, blocked, and worker finalization recovery rows safely", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      recovery: {
+        runs: [
+          {
+            runId: "run_cancelled_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "builder",
+            state: "cancelled",
+            runRecordState: "cancelled",
+            startedAt: "2026-05-20T00:00:01.000Z",
+            completedAt: "2026-05-20T00:00:02.000Z",
+            terminalEventType: "run.cancelled",
+            recoveryActions: []
+          },
+          {
+            runId: "run_blocked_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "reviewer",
+            state: "blocked",
+            runRecordState: "needs_input",
+            startedAt: "2026-05-20T00:00:03.000Z",
+            diagnosticSummary: {
+              code: "handoff_blocked",
+              message: "Run is blocked by an inbound handoff.",
+              source: "handoff"
+            },
+            recoveryActions: ["resolve_blocker"]
+          },
+          {
+            runId: "run_worker_gap_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "deployer",
+            state: "failed",
+            runRecordState: "running",
+            startedAt: "2026-05-20T00:00:04.000Z",
+            linkedWorkerJobId: "worker_job_1",
+            diagnosticSummary: {
+              code: "worker_finalization_incomplete",
+              message: "Worker job completed but run finalization is incomplete.",
+              source: "lifecycle",
+              eventType: "worker.job.linked",
+              errorName: "RAW_STDOUT_SECRET"
+            },
+            recoveryActions: ["resume_worker_finalization"]
+          }
+        ]
+      }
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const visibleText = collectText(page).join(" ");
+    const recoveryForms = collectElements(page, "form").filter(
+      (form) => form.props?.action === executeRunRecoveryAction
+    );
+
+    expect(visibleText).toContain("Stopped");
+    expect(visibleText).toContain("Resolve blocker");
+    expect(visibleText).toContain("Resume finalization");
+    expect(visibleText).toContain("Run is blocked by an inbound handoff.");
+    expect(visibleText).not.toContain("RAW_STDOUT_SECRET");
+    expect(recoveryForms.map(collectFormPayload)).toEqual([
+      {
+        taskId: "task_1",
+        runId: "run_worker_gap_1",
+        action: "resume_worker_finalization"
+      }
+    ]);
+  });
+
   it("does not expose deployment navigation in the local web flow", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({})
