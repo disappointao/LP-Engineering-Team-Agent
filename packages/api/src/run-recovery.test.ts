@@ -244,6 +244,29 @@ describe("run recovery views", () => {
 
     expect(views.map((view) => view.runId)).not.toContain("run_planner_stale_brief");
   });
+
+  it("ignores stale snapshot ids even when they point to same-project runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_2",
+      briefId: "brief_1",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_planner_brief_1",
+      projectId: "project_1",
+      taskId: undefined,
+      role: "planner",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views.map((view) => view.runId)).not.toContain("run_planner_brief_1");
+  });
 });
 
 describe("execute run recovery action", () => {

@@ -105,7 +105,7 @@ export async function listRunRecoveryViewsForTask(
   const viewsByRunId = new Map(directViews.map((view) => [view.runId, view]));
   const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
 
-  if (!snapshot) {
+  if (!snapshot || snapshot.projectId !== task.projectId) {
     return [...viewsByRunId.values()].sort(compareRunLifecycleViews);
   }
 
