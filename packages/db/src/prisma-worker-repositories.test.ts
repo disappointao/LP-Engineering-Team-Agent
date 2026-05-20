@@ -21,6 +21,7 @@ type FakeOrderBy = Array<Record<string, "asc" | "desc">>;
 interface FakeFindManyArgs {
   where?: FakeWhere;
   orderBy?: FakeOrderBy;
+  skip?: number;
   take?: number;
 }
 
@@ -34,10 +35,12 @@ interface FakeDelegate {
 }
 
 interface FakeDelegateOptions {
+  onFindMany?: (input: FakeFindManyArgs) => void;
   beforeUpdateMany?: (context: {
     input: { where: FakeWhere; data: FakeRow };
     rows: FakeRow[];
   }) => void;
+  failUnboundedFindMany?: Error;
   failDeleteMany?: Error;
 }
 
@@ -184,6 +187,124 @@ describe("createPrismaWorkerJobRepository", () => {
       heartbeatExpiresAt: "2026-05-20T00:10:00.000Z"
     });
   });
+
+  it("returns latest record when running cancellation loses a state race", async () => {
+    let injectedCompletion = false;
+    const prisma = createFakePrismaClient({
+      workerJob: {
+        beforeUpdateMany({ input, rows }) {
+          if (
+            injectedCompletion ||
+            input.data.cancelRequestedAt === undefined ||
+            input.where.id !== "job-running-race"
+          ) {
+            return;
+          }
+
+          injectedCompletion = true;
+          const row = rows.find((stored) => stored.id === "job-running-race");
+          if (row) {
+            row.state = "completed";
+            row.completedAt = new Date("2026-05-20T00:02:00.000Z");
+            row.resultSummary = {
+              state: "completed",
+              exitCode: 0,
+              stdout: "",
+              stderr: "",
+              stdoutBytes: 0,
+              stderrBytes: 0
+            };
+          }
+        }
+      }
+    });
+    const repository = createPrismaWorkerJobRepository(prisma);
+
+    await repository.save(
+      createContractWorkerJobRecord({
+        id: "job-running-race",
+        state: "running",
+        payloadSource: "safe_persisted",
+        startedAt: "2026-05-20T00:01:00.000Z",
+        claimToken: "claim-token-1"
+      })
+    );
+
+    await expect(
+      repository.requestRunningCancellation({
+        jobId: "job-running-race",
+        cancelRequestedAt: "2026-05-20T00:03:00.000Z",
+        cancelReason: "user_requested"
+      })
+    ).resolves.toMatchObject({
+      state: "completed",
+      completedAt: "2026-05-20T00:02:00.000Z"
+    });
+    await expect(repository.getById("job-running-race")).resolves.not.toMatchObject({
+      cancelRequestedAt: "2026-05-20T00:03:00.000Z"
+    });
+  });
+
+  it("returns latest record when queued cancellation loses a state race", async () => {
+    let injectedClaim = false;
+    const prisma = createFakePrismaClient({
+      workerJob: {
+        beforeUpdateMany({ input, rows }) {
+          if (
+            injectedClaim ||
+            input.data.state !== "cancelled" ||
+            input.where.id !== "job-queued-race"
+          ) {
+            return;
+          }
+
+          injectedClaim = true;
+          const row = rows.find((stored) => stored.id === "job-queued-race");
+          if (row) {
+            row.state = "running";
+            row.startedAt = new Date("2026-05-20T00:02:00.000Z");
+            row.claimedByWorkerId = "worker-1";
+            row.claimToken = "claim-token-1";
+          }
+        }
+      }
+    });
+    const repository = createPrismaWorkerJobRepository(prisma);
+
+    await repository.save(
+      createContractWorkerJobRecord({
+        id: "job-queued-race",
+        payloadSource: "safe_persisted"
+      })
+    );
+
+    await expect(
+      repository.cancelQueued({
+        jobId: "job-queued-race",
+        errorName: "worker_job_cancelled",
+        resultSummary: {
+          state: "cancelled",
+          stdout: "",
+          stderr: "Worker job cancelled before execution.",
+          stdoutBytes: 0,
+          stderrBytes: 38,
+          errorName: "worker_job_cancelled"
+        },
+        cancelRequestedAt: "2026-05-20T00:03:00.000Z",
+        cancelledAt: "2026-05-20T00:03:00.000Z",
+        completedAt: "2026-05-20T00:03:00.000Z",
+        cancelReason: "user_requested"
+      })
+    ).resolves.toMatchObject({
+      state: "running",
+      claimedByWorkerId: "worker-1",
+      claimToken: "claim-token-1"
+    });
+    await expect(repository.getById("job-queued-race")).resolves.not.toMatchObject({
+      state: "cancelled",
+      cancelReason: "user_requested"
+    });
+  });
 });
 
 describe("createPrismaWorkerJobPayloadRepository", () => {
@@ -230,11 +351,47 @@ describe("createPrismaWorkerLogRepository", () => {
     ]);
   });
 
-  it("rejects append when maxRecords trim fails", async () => {
+  it("trims persisted logs with a bounded cutoff query", async () => {
+    const findManyInputs: FakeFindManyArgs[] = [];
     const prisma = createFakePrismaClient({
       workerLog: {
-        failDeleteMany: new Error("delete failed")
+        onFindMany(input) {
+          findManyInputs.push(cloneRow(input));
+        },
+        failUnboundedFindMany: new Error("unbounded findMany")
       }
+    });
+    const repository = createPrismaWorkerLogRepository(prisma, { maxRecords: 2 });
+
+    for (let index = 0; index < 3; index += 1) {
+      await repository.append(
+        createContractWorkerLogRecord({
+          id: `bounded-log-${index}`,
+          createdAt: `2026-05-20T00:00:0${index}.000Z`
+        })
+      );
+    }
+
+    expect(
+      findManyInputs
+        .filter((input) => input.orderBy !== undefined)
+        .every((input) => input.take !== undefined)
+    ).toBe(true);
+    expect(findManyInputs).toContainEqual({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: 1,
+      take: 1
+    });
+    expect(prisma.workerLog.rows.map((row) => row.id).sort()).toEqual([
+      "bounded-log-1",
+      "bounded-log-2"
+    ]);
+  });
+
+  it("rejects append when maxRecords trim fails", async () => {
+    const workerLogOptions: FakeDelegateOptions = {};
+    const prisma = createFakePrismaClient({
+      workerLog: workerLogOptions
     });
     const repository = createPrismaWorkerLogRepository(prisma, { maxRecords: 1 });
 
@@ -244,6 +401,8 @@ describe("createPrismaWorkerLogRepository", () => {
         createdAt: "2026-05-20T00:00:01.000Z"
       })
     );
+
+    workerLogOptions.failDeleteMany = new Error("delete failed");
 
     await expect(
       repository.append(
@@ -300,9 +459,14 @@ function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
     },
 
     async findMany(input = {}) {
+      options.onFindMany?.(cloneRow(input));
+      if (options.failUnboundedFindMany && input.take === undefined) {
+        throw options.failUnboundedFindMany;
+      }
       let rows = delegate.rows.filter((row) => matchesWhere(row, input.where ?? {}));
       rows = sortRows(rows, input.orderBy ?? []);
-      return rows.slice(0, input.take ?? rows.length).map(cloneRow);
+      const skip = input.skip ?? 0;
+      return rows.slice(skip, skip + (input.take ?? rows.length)).map(cloneRow);
     },
 
     async updateMany(input) {

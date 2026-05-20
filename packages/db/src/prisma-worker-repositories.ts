@@ -29,11 +29,11 @@ import {
   type PrismaWorkerLogRow
 } from "./prisma-worker-mappers";
 
-export type PrismaWorkerWhere = Record<string, unknown>;
-export type PrismaWorkerOrderBy = Array<Record<string, "asc" | "desc">>;
-export type PrismaWorkerRow = Record<string, unknown>;
+type PrismaWorkerWhere = Record<string, unknown>;
+type PrismaWorkerOrderBy = Array<Record<string, "asc" | "desc">>;
+type PrismaWorkerRow = Record<string, unknown>;
 
-export interface PrismaWorkerDelegate {
+interface PrismaWorkerDelegate {
   upsert(input: {
     where: PrismaWorkerWhere;
     create: PrismaWorkerRow;
@@ -43,6 +43,7 @@ export interface PrismaWorkerDelegate {
   findMany(input?: {
     where?: PrismaWorkerWhere;
     orderBy?: PrismaWorkerOrderBy;
+    skip?: number;
     take?: number;
   }): Promise<PrismaWorkerRow[]>;
   updateMany(input: {
@@ -239,12 +240,17 @@ export function createPrismaWorkerJobRepository(
       }
 
       const updatedRecord = createRunningCancellationRecord(current, input);
-      await delegate.updateMany({
+      const result = await delegate.updateMany({
         where: { id: input.jobId, state: "running" },
         data: mapPartialWorkerJobRecordToPrisma(updatedRecord)
       });
 
-      return getById(input.jobId);
+      if (result.count === 1) {
+        return getById(input.jobId);
+      }
+
+      const latest = await getById(input.jobId);
+      return latest ? copyJobRecord(latest) : undefined;
     },
 
     async cancelQueued(input) {
@@ -257,12 +263,17 @@ export function createPrismaWorkerJobRepository(
       }
 
       const cancelledRecord = createQueuedCancellationRecord(current, input);
-      await delegate.updateMany({
+      const result = await delegate.updateMany({
         where: { id: input.jobId, state: "queued" },
         data: mapPartialWorkerJobRecordToPrisma(cancelledRecord)
       });
 
-      return getById(input.jobId);
+      if (result.count === 1) {
+        return getById(input.jobId);
+      }
+
+      const latest = await getById(input.jobId);
+      return latest ? copyJobRecord(latest) : undefined;
     }
   };
 }
@@ -317,7 +328,7 @@ export function createPrismaWorkerLogRepository(
         create: data,
         update: data
       });
-      await trimLogsBestEffort(delegate, maxRecords);
+      await trimLogs(delegate, maxRecords);
       return copyLogRecord(
         mapPrismaWorkerLogToRecord(row as unknown as PrismaWorkerLogRow)
       );
@@ -597,15 +608,28 @@ function logListWhere(input: WorkerLogListInput): PrismaWorkerWhere {
   };
 }
 
-async function trimLogsBestEffort(
+async function trimLogs(
   delegate: PrismaWorkerDelegate,
   maxRecords: number
 ): Promise<void> {
-  const rows = await delegate.findMany({ orderBy: ORDER_CREATED_ID_DESC });
-  const staleIds = rows.slice(maxRecords).map((row) => row.id).filter(isString);
-  if (staleIds.length > 0) {
-    await delegate.deleteMany({ where: { id: { in: staleIds } } });
+  const cutoffRows = await delegate.findMany({
+    orderBy: ORDER_CREATED_ID_DESC,
+    skip: maxRecords - 1,
+    take: 1
+  });
+  const cutoff = cutoffRows[0];
+  if (!cutoff || !(cutoff.createdAt instanceof Date) || !isString(cutoff.id)) {
+    return;
   }
+
+  await delegate.deleteMany({
+    where: {
+      OR: [
+        { createdAt: { lt: cutoff.createdAt } },
+        { createdAt: cutoff.createdAt, id: { lt: cutoff.id } }
+      ]
+    }
+  });
 }
 
 function normalizeMaxRecords(value: number | undefined): number {
