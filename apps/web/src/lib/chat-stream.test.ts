@@ -36,7 +36,36 @@ describe("chat stream contract", () => {
     expect(decoded.remainder).toBe('{"type"');
   });
 
+  it("rejects decoded events with unknown types", () => {
+    expect(() => decodeChatStreamLines('{"type":"unknown"}\n')).toThrow(
+      "chat_stream_event_invalid"
+    );
+  });
+
+  it("rejects decoded assistant deltas with missing or invalid fields", () => {
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"assistant.delta","taskId":"task_1","messageId":"message_1"}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"assistant.delta","taskId":"task_1","messageId":"message_1","delta":1}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+  });
+
   it("chunks assistant text without dropping whitespace", () => {
     expect(chunkAssistantText("hello world", 5)).toEqual(["hello", " worl", "d"]);
   });
+
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY, 1.5])(
+    "rejects invalid chunk size %s",
+    (chunkSize) => {
+      expect(() => chunkAssistantText("hello", chunkSize)).toThrow(
+        "chat_stream_chunk_size_invalid"
+      );
+    }
+  );
 });
