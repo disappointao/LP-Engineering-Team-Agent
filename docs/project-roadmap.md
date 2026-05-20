@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-19
+最后更新：2026-05-20
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -121,6 +121,86 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 
 ## 推荐下一阶段队列
 
+### Stage 23：Web Opt-in Postgres Backend Wiring v0
+
+**状态：** 推荐下一阶段。
+
+**为什么现在做：** Stage 22 已提供 Prisma-backed repository adapter，但 Web/API runtime 默认仍走 in-memory / JSON-file。下一步应先证明同一套 workbench flow 可以在显式开关下选择 Postgres backend，再考虑 production rollout、auth/RBAC 或 hosted 部署。
+
+**建议范围：**
+
+- 新增显式 backend 选择，例如 `WORKBENCH_REPOSITORY_BACKEND=postgres`，缺少 `DATABASE_URL`、workspace bootstrap 或 Prisma client 时 fail closed。
+- Web/API repository factory 支持 in-memory、JSON-file、Prisma 三种 backend；默认本地开发仍保持 JSON-file / deterministic 路径。
+- 补最小 Postgres-backed Web/API flow 覆盖，确认 task、message、snapshot、run timeline、tool observation、handoff 和 artifact workspace metadata 能通过同一 contract 使用。
+- 增加开发文档，说明如何准备 workspace/project seed、如何开启 opt-in backend、如何回到默认本地 backend。
+
+**非目标：**
+
+- 不做 production migration strategy、hosted auth、RBAC 或 invite flow。
+- 不迁移 artifact file content 到 object storage。
+- 不把 worker job queue 切到 Postgres。
+- 不改变默认本地开发 backend。
+
+### Stage 24：Worker Job Postgres Backend v0
+
+**状态：** Stage 23 之后推荐。
+
+**为什么现在做：** Web workbench state 可选择 Postgres 后，worker queue 仍是 JSON-file。durable background workers、stale recovery、daemon heartbeat 和审计要进入多人/长期运行场景，需要把 worker job/log repository 单独迁出本地文件。
+
+**建议范围：**
+
+- 为 worker job、worker lifecycle log、heartbeat/stale recovery 需要的持久字段补 Prisma schema 和 mapper。
+- 提取 worker job repository shared contract tests，覆盖 claim token、conditional update、cancel/interrupt、heartbeat、stale safe recovery 和 bounded lifecycle logs。
+- 新增 Prisma-backed worker job repository，并让 `apps/agent-worker` 通过显式配置 opt-in。
+- 保留 JSON-file worker queue 作为默认本地和 deterministic test backend。
+
+**非目标：**
+
+- 不做 production process manager。
+- 不开放真实 shell runner 或 OS-level sandbox。
+- 不把 MCP execution 迁到 worker。
+- 不做 raw stdout/stderr streaming。
+
+### Stage 25：Run Recovery UI v0
+
+**状态：** Stage 23-24 后推荐。
+
+**为什么现在做：** Stage 18 已有 lifecycle view、diagnostic summary 和 recovery action contract，但 Web 侧还没有把这些动作变成用户可见、可执行的恢复流程。Postgres-backed state 可选后，retry/resume 的价值会更明显。
+
+**建议范围：**
+
+- 在 Web task timeline / run panel 展示 `RunLifecycleView` 状态、安全诊断和推荐 recovery action。
+- 实现第一批安全 server action：`resume_worker_finalization`、可控 retry failed run、approval/blocker 指引。
+- 对 completed repaired run、failed parse/retry exhausted run、missing worker finalization、cancelled run 和 blocked handoff 增加 UI/API regression coverage。
+- 保持 diagnostic summary 脱敏，不展示 raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
+
+**非目标：**
+
+- 不做通用 DAG scheduler。
+- 不自动重跑整条 agent chain。
+- 不做 streaming UI。
+- 不实现团队审批队列。
+
+### Stage 26：MCP Worker Execution v0
+
+**状态：** Stage 24-25 后推荐。
+
+**为什么现在做：** Stage 20 的 read-only MCP execution 已有 API 校验和安全 observation，但执行仍在 API 进程内通过 deterministic local executor 完成。worker queue durable backend 和 recovery UI 稳定后，可以把 MCP 执行迁到 worker 边界，保留审批和审计语义。
+
+**建议范围：**
+
+- 将 read-only MCP execution 支持入队为 safe persisted worker payload，由 worker claim 后执行 deterministic local executor。
+- worker finalizer 回写 `ToolObservationRecord` 和 run events，并复用 Stage 18/19 的幂等 finalization、heartbeat 和 stale recovery 语义。
+- 映射 MCP cancellation、timeout、execution failure 到 bounded / redacted observation summary。
+- Web MCP 执行入口保持同一授权语义，只在配置开启时走 worker-backed path。
+
+**非目标：**
+
+- 不接真实 MCP SDK 或 remote MCP server adapter。
+- 不开放 write tools、filesystem、shell 或 deployment side effects。
+- 不保存 raw arguments、raw output、secret、完整 artifact 内容或本机绝对路径。
+- 不做 streaming MCP output。
+
 ## Backlog 分组
 
 ### Agent Runtime / Run Lifecycle
@@ -239,7 +319,9 @@ Stage 21 v0 已实现真实模型路径的可靠性增强：Planner / Builder st
 ## 决策记录
 
 - Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。
-- MCP execution 应等待 run lifecycle 和 worker daemon 语义更强后再做。
+- Stage 23 优先做 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，不默认切换 runtime backend。
+- Worker job Postgres backend 应单独跟进，避免同时迁移 workbench state 和 queue semantics。
+- MCP worker execution 应等待 durable worker backend 和 recovery UI 更稳定后再做。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
 - 即使 workbench 持续演进，生成的 LP artifacts 也必须保持框架无关静态 HTML/CSS/JS。
