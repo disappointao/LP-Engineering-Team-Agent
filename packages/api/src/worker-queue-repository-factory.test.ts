@@ -92,7 +92,7 @@ describe("worker queue repository factory", () => {
         envNames: [],
         timeoutMs: 30000
       },
-      createSimulatedSandboxPolicy()
+      createSimulatedSandboxPolicy({ allowedCommands: ["deploy preview"] })
     );
 
     expect(queued.state).toBe("queued");
@@ -138,12 +138,56 @@ describe("worker queue repository factory", () => {
         envNames: [],
         timeoutMs: 30000
       },
-      createSimulatedSandboxPolicy()
+      createSimulatedSandboxPolicy({ allowedCommands: ["deploy preview"] })
     );
 
     expect(await runtime.jobRepository.getById(queued.id)).toMatchObject({
       id: queued.id,
       state: "queued"
+    });
+  });
+
+  it("lets web enqueue and worker run through the same postgres repository set", async () => {
+    const repositories = createInMemoryWorkerRepositories();
+    const prisma = { prisma: true };
+    const options = {
+      env: {
+        WORKER_REPOSITORY_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://user:pass@localhost:5432/lp_agent"
+      },
+      loadPrismaClient: async () => prisma,
+      createPrismaWorkerRepositories: () => repositories
+    };
+    const webRuntime = await createWorkerQueueRuntime(options);
+    const workerRuntime = await createWorkerQueueRuntime(options);
+
+    const queued = await webRuntime.runtime.enqueueSafe(
+      {
+        projectId: "project-1",
+        kind: "tool_command",
+        commandId: "deploy-preview",
+        command: "deploy preview",
+        args: [],
+        envNames: [],
+        timeoutMs: 30000
+      },
+      createSimulatedSandboxPolicy({ allowedCommands: ["deploy preview"] })
+    );
+    const claim = await workerRuntime.runtime.claimOldestQueued({
+      workerId: "worker-1"
+    });
+
+    expect(claim?.record.id).toBe(queued.id);
+    const completed = claim
+      ? await workerRuntime.runtime.runClaimedJob(claim)
+      : undefined;
+    expect(completed).toMatchObject({
+      id: queued.id,
+      state: "completed"
+    });
+    await expect(repositories.payloadRepository.getByJobId(queued.id)).resolves.toBeUndefined();
+    await expect(repositories.jobRepository.getById(queued.id)).resolves.toMatchObject({
+      state: "completed"
     });
   });
 });
