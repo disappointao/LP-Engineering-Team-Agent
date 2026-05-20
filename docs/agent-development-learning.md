@@ -231,6 +231,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
+- Stage 26 Streaming Chat Transport and UI v0 已进入设计：下一步会新增普通聊天 streaming route / UI event contract，并保留现有 server action fallback。这个阶段只做 Web/API 实时反馈边界，不把 LP chain、MCP/tool-call streaming 或真实 provider token streaming 混入同一阶段。
 
 ### 还没做
 

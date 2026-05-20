@@ -322,6 +322,10 @@
    - Stage 25 Run Recovery UI v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 25 design 后阅读，用于按 TDD 实现 API recovery helper、controlled single-run retry、Web store/server action wiring、inline recovery block、回归覆盖和文档收尾。
 
+80. `specs/2026-05-20-streaming-chat-transport-ui-design.md`
+   - Stage 26 Streaming Chat Transport and UI v0 design。
+   - 在 Stage 25 plan 和当前 roadmap 后阅读，用于新增普通聊天 streaming route / UI event contract，同时保留 `submitPromptAction` fallback，并继续排除 LP agent chain、MCP/tool-call streaming、raw stdout/stderr streaming 和真实 provider token streaming。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

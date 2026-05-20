@@ -242,6 +242,8 @@ Stage 25 v0 已把 Stage 18 的 lifecycle view、diagnostic summary 和 recovery
 - 不做 raw stdout/stderr streaming。
 - 不引入 auth/RBAC、生产部署或 object storage。
 
+**设计：** `docs/superpowers/specs/2026-05-20-streaming-chat-transport-ui-design.md`。
+
 ### Stage 27：Real Chat Runtime and Skill Context v0
 
 **状态：** Stage 26 后推荐。
