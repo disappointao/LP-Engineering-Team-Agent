@@ -75,10 +75,16 @@ pnpm dev
 http://localhost:3000
 ```
 
-运行 deterministic worker demo：
+运行一次本地 worker queue。默认读取 JSON-file queue；没有待处理 job 时会输出 `jobId: null`：
 
 ```bash
 pnpm worker:dev
+```
+
+如需运行旧的 deterministic worker demo，可显式设置：
+
+```bash
+AGENT_WORKER_MODE=demo pnpm worker:dev
 ```
 
 ## 验证

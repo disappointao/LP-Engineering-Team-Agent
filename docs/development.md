@@ -62,6 +62,8 @@ DATABASE_URL="postgresql://user:pass@localhost:5432/lp_agent" \
 pnpm worker:dev
 ```
 
+`pnpm worker:dev` 默认运行一次 queue worker；没有待处理 job 时会输出空 job 结果。旧的 deterministic worker demo 仍可通过 `AGENT_WORKER_MODE=demo pnpm worker:dev` 显式运行。
+
 Worker payload safety 不因 Postgres 持久化而放宽。Postgres 只保存 safe simulated command fields：`command`、bounded `args`、`envNames`、`workingDirectory` 和 `timeoutMs`；不能保存 env values、secret、raw stdout/stderr、完整 artifact content 或任意 shell payload。
 
 可选真实 Postgres integration 覆盖默认跳过，需要显式开启：

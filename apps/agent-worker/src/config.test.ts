@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { resolveAgentWorkerMode } from "./config";
 
 describe("resolveAgentWorkerMode", () => {
-  it("uses demo mode when no worker queue backend is configured", () => {
-    expect(resolveAgentWorkerMode({})).toEqual({ mode: "demo" });
+  it("uses queue mode with the shared default JSON backend when no worker queue backend is configured", () => {
+    expect(resolveAgentWorkerMode({})).toEqual({ mode: "queue" });
+  });
+
+  it("keeps demo mode behind an explicit opt-in", () => {
+    expect(resolveAgentWorkerMode({ AGENT_WORKER_MODE: "demo" })).toEqual({
+      mode: "demo"
+    });
   });
 
   it("uses queue mode when both legacy JSON worker files are configured", () => {
@@ -32,19 +38,25 @@ describe("resolveAgentWorkerMode", () => {
     ).toEqual({ mode: "queue" });
   });
 
-  it("fails closed when only the legacy JSON jobs file is configured", () => {
-    expect(() =>
+  it("uses queue mode when only the legacy JSON jobs file is configured", () => {
+    expect(
       resolveAgentWorkerMode({
         WORKER_JOBS_FILE: "tmp/worker-jobs.json"
       })
-    ).toThrow("WORKER_PAYLOADS_FILE is required when WORKER_JOBS_FILE is set");
+    ).toEqual({ mode: "queue" });
   });
 
-  it("fails closed when only the legacy JSON payloads file is configured", () => {
-    expect(() =>
+  it("uses queue mode when only the legacy JSON payloads file is configured", () => {
+    expect(
       resolveAgentWorkerMode({
         WORKER_PAYLOADS_FILE: "tmp/worker-payloads.json"
       })
-    ).toThrow("WORKER_JOBS_FILE is required when WORKER_PAYLOADS_FILE is set");
+    ).toEqual({ mode: "queue" });
+  });
+
+  it("fails closed for unsupported explicit agent worker modes", () => {
+    expect(() => resolveAgentWorkerMode({ AGENT_WORKER_MODE: "invalid" })).toThrow(
+      "Unsupported AGENT_WORKER_MODE: invalid"
+    );
   });
 });

@@ -73,8 +73,69 @@ describe("prisma worker mappers", () => {
     expect(prisma.startedAt).toEqual(new Date("2026-05-20T00:00:01.000Z"));
     expect(prisma.completedAt).toBeNull();
     expect(prisma.errorName).toBeNull();
-    expect(prisma.resultSummary).toEqual(record.resultSummary);
-    expect(mapPrismaWorkerJobToRecord(prisma)).toEqual(record);
+    const expectedResultSummary = {
+      ...record.resultSummary,
+      stdout: "",
+      stderr: ""
+    };
+    expect(prisma.resultSummary).toEqual(expectedResultSummary);
+    expect(mapPrismaWorkerJobToRecord(prisma)).toEqual({
+      ...record,
+      resultSummary: expectedResultSummary
+    });
+  });
+
+  it("sanitizes worker job result output before persistence", () => {
+    const record: WorkerJobRecord = {
+      id: "job-1",
+      projectId: "project-1",
+      kind: "tool_command",
+      state: "completed",
+      payloadSource: "safe_persisted",
+      policy: {
+        mode: "simulate",
+        allowedCommands: ["deploy preview"],
+        timeoutMs: 30_000,
+        allowedEnvNames: [],
+        maxStdoutBytes: 2000,
+        maxStderrBytes: 2000,
+        network: "disabled"
+      },
+      inputSummary: {
+        projectId: "project-1",
+        kind: "tool_command",
+        command: "deploy preview",
+        argCount: 0,
+        envNames: [],
+        timeoutMs: 30_000
+      },
+      resultSummary: {
+        state: "completed",
+        exitCode: 0,
+        stdout: "raw stdout secret",
+        stderr: "raw stderr secret",
+        stdoutBytes: 17,
+        stderrBytes: 17
+      },
+      createdAt: "2026-05-20T00:00:00.000Z",
+      completedAt: "2026-05-20T00:00:01.000Z"
+    };
+
+    const prisma = mapWorkerJobRecordToPrisma(record);
+
+    expect(prisma.resultSummary).toEqual({
+      state: "completed",
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+      stdoutBytes: 17,
+      stderrBytes: 17
+    });
+    expect(JSON.stringify(prisma)).not.toContain("raw stdout secret");
+    expect(JSON.stringify(prisma)).not.toContain("raw stderr secret");
+    expect(mapPrismaWorkerJobToRecord(prisma).resultSummary).toEqual(
+      prisma.resultSummary
+    );
   });
 
   it("round-trips safe payload records with canonical env names and no raw fields persisted", () => {

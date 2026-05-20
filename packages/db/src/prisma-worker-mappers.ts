@@ -1,6 +1,7 @@
 import type {
   WorkerJobPayloadRecord,
   WorkerJobRecord,
+  WorkerJobResultSummary,
   WorkerLogRecord
 } from "@lp-agent/worker-runtime";
 
@@ -87,7 +88,9 @@ export function mapWorkerJobRecordToPrisma(
     payloadSource: record.payloadSource ?? null,
     policy: cloneJson(record.policy),
     inputSummary: cloneJson(record.inputSummary),
-    resultSummary: record.resultSummary ? cloneJson(record.resultSummary) : null,
+    resultSummary: record.resultSummary
+      ? sanitizeWorkerJobResultSummary(record.resultSummary)
+      : null,
     errorName: record.errorName ?? null,
     createdAt: new Date(record.createdAt),
     startedAt: toOptionalDate(record.startedAt),
@@ -108,6 +111,10 @@ export function mapWorkerJobRecordToPrisma(
 export function mapPrismaWorkerJobToRecord(
   row: PrismaWorkerJobRow
 ): WorkerJobRecord {
+  const resultSummary = isPresent(row.resultSummary)
+    ? sanitizeWorkerJobResultSummary(row.resultSummary)
+    : undefined;
+
   return {
     id: row.id,
     projectId: row.projectId,
@@ -118,13 +125,7 @@ export function mapPrismaWorkerJobToRecord(
       : {}),
     policy: cloneJson(row.policy) as WorkerJobRecord["policy"],
     inputSummary: cloneJson(row.inputSummary) as WorkerJobRecord["inputSummary"],
-    ...(isPresent(row.resultSummary)
-      ? {
-          resultSummary: cloneJson(
-            row.resultSummary
-          ) as WorkerJobRecord["resultSummary"]
-        }
-      : {}),
+    ...(resultSummary ? { resultSummary } : {}),
     ...(isPresent(row.errorName) ? { errorName: row.errorName } : {}),
     createdAt: row.createdAt.toISOString(),
     ...(row.startedAt ? { startedAt: row.startedAt.toISOString() } : {}),
@@ -246,6 +247,36 @@ function sanitizeWorkerLogPayload(
       .filter(([key, value]) => WORKER_LOG_PAYLOAD_KEYS.has(key) && value !== undefined)
       .map(([key, value]) => [key, cloneJson(value)])
       .filter(([, value]) => value !== undefined)
+  );
+}
+
+function sanitizeWorkerJobResultSummary(
+  value: unknown
+): WorkerJobResultSummary | undefined {
+  const result = toRecord(value);
+  if (!isWorkerJobResultState(result.state)) {
+    return undefined;
+  }
+
+  return {
+    state: result.state,
+    ...(typeof result.exitCode === "number" ? { exitCode: result.exitCode } : {}),
+    stdout: "",
+    stderr: "",
+    stdoutBytes: typeof result.stdoutBytes === "number" ? result.stdoutBytes : 0,
+    stderrBytes: typeof result.stderrBytes === "number" ? result.stderrBytes : 0,
+    ...(typeof result.errorName === "string" ? { errorName: result.errorName } : {})
+  };
+}
+
+function isWorkerJobResultState(
+  value: unknown
+): value is WorkerJobResultSummary["state"] {
+  return (
+    value === "completed" ||
+    value === "failed" ||
+    value === "rejected" ||
+    value === "cancelled"
   );
 }
 

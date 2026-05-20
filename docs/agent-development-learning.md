@@ -408,6 +408,7 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - worker queue backend selection 是独立 runtime boundary：`WORKER_REPOSITORY_BACKEND=postgres` 只迁移 worker job / payload / log storage，不改变 `WORKBENCH_REPOSITORY_BACKEND` 或 Web workbench state。
 - 默认 worker queue 仍是 JSON-file；`WORKER_REPOSITORY_BACKEND=postgres` 缺少 `DATABASE_URL`、Prisma client 初始化失败或 backend 值非法时 fail closed，不回退 JSON-file。
 - Web enqueue 和 `apps/agent-worker` 现在共用 `createWorkerQueueRuntime()` backend factory，避免 Web 写 JSON queue、worker 读 Postgres queue 这类 split-brain。
+- `pnpm worker:dev` 默认运行一次 shared queue worker，未设置 backend 时读取 JSON-file queue；旧 deterministic worker demo 需要显式 `AGENT_WORKER_MODE=demo`，避免默认 Web enqueue 和 worker consume 路径分裂。
 - worker job Postgres backend 的关键语义是 claim token 条件更新：claim、heartbeat、complete claimed、running cancellation 和 stale recovery 都防止两个 worker 执行同一个 job。
 - safe persisted payload 可以进入 Postgres，但只能保存现有 `WorkerJobPayloadRecord` 的安全字段：`command`、bounded `args`、`envNames`、`workingDirectory`、`timeoutMs`；仍不能保存 env values、secret、raw stdout/stderr、artifact content 或足以恢复任意 shell execution 的 payload。
 - `WorkerJobPayload` 本阶段不强制 FK 到 `WorkerJob`，因为当前 `enqueueSafe()` 为了 cleanup safety 先保存 payload、再保存 job；强 FK 会破坏现有 contract，除非同时重写 runtime transaction boundary。
