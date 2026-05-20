@@ -640,6 +640,16 @@ describe("createPrismaWorkbenchRepositories", () => {
       status: "pr_opened",
       files: ["index.html", "styles.css", "script.js"]
     });
+    await repositories.deployments.save({
+      id: "deployment_web_retry",
+      projectId: "project_web",
+      pageVersionId: "page_version_web",
+      branch: "lp/project-web-retry",
+      commitSha: "def5678",
+      pullRequestUrl: "https://github.example.test/lp/pulls/2",
+      status: "pr_opened",
+      files: ["index.html", "styles.css", "script.js"]
+    });
 
     await expect(repositories.projectMembers.listForProject("project_web")).resolves.toEqual([
       expect.objectContaining({ id: "member_web", userId: "local-web-user" })
@@ -683,9 +693,9 @@ describe("createPrismaWorkbenchRepositories", () => {
       id: "deployment_web",
       projectId: "project_web",
       pageVersionId: "page_version_web",
-      branch: "lp/project-web",
-      commitSha: "abc1234",
-      pullRequestUrl: "https://github.example.test/lp/pulls/1",
+      branch: "lp/project-web-retry",
+      commitSha: "def5678",
+      pullRequestUrl: "https://github.example.test/lp/pulls/2",
       status: "pr_opened",
       files: ["index.html", "styles.css", "script.js"]
     });
@@ -693,9 +703,9 @@ describe("createPrismaWorkbenchRepositories", () => {
       id: "deployment_web",
       projectId: "project_web",
       pageVersionId: "page_version_web",
-      branch: "lp/project-web",
-      commitSha: "abc1234",
-      pullRequestUrl: "https://github.example.test/lp/pulls/1",
+      branch: "lp/project-web-retry",
+      commitSha: "def5678",
+      pullRequestUrl: "https://github.example.test/lp/pulls/2",
       status: "pr_opened",
       files: ["index.html", "styles.css", "script.js"]
     });
@@ -715,8 +725,12 @@ describe("createPrismaWorkbenchRepositories", () => {
       repositories.deployments.findLatestForProject("project_missing")
     ).resolves.toBeUndefined();
     await expect(repositories.skills.listAll()).resolves.toEqual([]);
+    await expect(repositories.skillVersions.listAll()).resolves.toEqual([]);
+    await expect(repositories.skillBindings.listAll()).resolves.toEqual([]);
     await expect(repositories.modelProviders.listAll()).resolves.toEqual([]);
+    await expect(repositories.modelRoutingPolicies.listAll()).resolves.toEqual([]);
     await expect(repositories.mcpConnectors.listAll()).resolves.toEqual([]);
+    await expect(repositories.mcpToolApprovals.listAll()).resolves.toEqual([]);
   });
 });
 

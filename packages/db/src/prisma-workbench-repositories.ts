@@ -286,9 +286,9 @@ function createDeploymentRepository(delegate: PrismaDelegate): DeploymentReposit
     async save(deployment) {
       await upsert(
         delegate,
-        { id: deployment.id },
+        { pageVersionId: deployment.pageVersionId },
         toPrismaDeploymentCreate(deployment),
-        ["id"]
+        ["id", "pageVersionId"]
       );
     },
 
