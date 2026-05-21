@@ -4358,6 +4358,35 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(result)).not.toContain("model_provider_mock_route_disabled");
   });
 
+  it("returns safe assistant chat failure when context assembly fails after project lookup", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "This should not run."
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+    repositories.messages.listAll = async () => {
+      throw new Error("raw_context_assembly_failure");
+    };
+
+    await expect(
+      service.runAssistantChat({
+        projectId: project.id,
+        taskId: "task_1",
+        prompt: "Hello"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "generation_failed"
+    });
+    expect(assistantRuntime.requests).toEqual([]);
+  });
+
   it("assembles and validates a role-specific context pack", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });

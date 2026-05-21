@@ -48,7 +48,7 @@ export function createAssistantChatPrompt(input: {
   context: RuntimeRunContext;
   trace: ContextAssemblyTrace;
 }): string {
-  const sections = [
+  const contextSections = [
     "You are the ordinary chat assistant for LP Engineering Team Agent.",
     "Answer the user directly using the project context below.",
     "Do not claim that you executed MCP tools, shell commands, deployments, or artifact edits.",
@@ -56,11 +56,16 @@ export function createAssistantChatPrompt(input: {
     `Project: ${input.project.name} (${input.project.id})`,
     formatSkills(input.context.skills),
     formatMemory(input.context),
-    `Context trace: injected=${input.trace.injected.join(", ") || "none"}; omitted=${input.trace.omitted.join(", ") || "none"}`,
-    `User message:\n${input.userPrompt.trim()}`
+    `Context trace: injected=${input.trace.injected.join(", ") || "none"}; omitted=${input.trace.omitted.join(", ") || "none"}`
   ];
+  const userSection = formatBoundedUserMessage(input.userPrompt);
+  const separator = "\n\n";
+  const contextBudget = Math.max(0, maxPromptChars - userSection.length - separator.length);
+  const boundedContext = contextSections.join(separator).slice(0, contextBudget);
 
-  return sections.join("\n\n").slice(0, maxPromptChars);
+  return boundedContext.length > 0
+    ? [boundedContext, userSection].join(separator)
+    : userSection;
 }
 
 function formatSkills(skills: RuntimeSkillContext[]): string {
@@ -94,4 +99,10 @@ function formatMemory(context: RuntimeRunContext): string {
       .slice(0, maxMemoryMessages)
       .map((message) => `${message.role}: ${message.preview}`)
   ].join("\n");
+}
+
+function formatBoundedUserMessage(userPrompt: string): string {
+  const label = "User message:\n";
+  const promptBudget = Math.max(0, maxPromptChars - label.length);
+  return `${label}${userPrompt.trim().slice(0, promptBudget)}`;
 }

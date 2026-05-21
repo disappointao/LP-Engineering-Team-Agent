@@ -2216,28 +2216,34 @@ export class DemoWorkbenchService {
       return { ok: false, error: "project_not_found" };
     }
 
-    const contextPack = await assembleContextPack({
-      repositories: this.repositories,
-      service: this,
-      projectId: project.id,
-      taskId: input.taskId,
-      role: "assistant",
-      input: { prompt: input.prompt },
-      now: this.now
-    });
-    const contextSummary = createAssistantContextSummary({
-      project,
-      runtimeMode: this.env.REAL_MODEL_RUNTIME === "1" ? "real" : "deterministic",
-      skills: contextPack.runtimeContext.skills
-    });
-    const createdRunId = input.runId === undefined;
-    const runId =
-      input.runId ??
-      (await reserveRepositoryId(this.repositories, "run_assistant", async () =>
-        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
-      ));
+    let runId: string | undefined;
+    let contextSummary: AssistantContextSummary | undefined;
+    let createdRunId = false;
 
     try {
+      const contextPack = await assembleContextPack({
+        repositories: this.repositories,
+        service: this,
+        projectId: project.id,
+        taskId: input.taskId,
+        role: "assistant",
+        input: { prompt: input.prompt },
+        now: this.now
+      });
+      contextSummary = createAssistantContextSummary({
+        project,
+        runtimeMode: this.env.REAL_MODEL_RUNTIME === "1" ? "real" : "deterministic",
+        skills: contextPack.runtimeContext.skills
+      });
+      if (input.runId !== undefined) {
+        runId = input.runId;
+      } else {
+        runId = await reserveRepositoryId(this.repositories, "run_assistant", async () =>
+          (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+        );
+        createdRunId = true;
+      }
+
       const { result } = await runAgentStep({
         repositories: this.repositories,
         service: this,
@@ -2258,7 +2264,7 @@ export class DemoWorkbenchService {
       });
 
       if (result.state !== "completed" || !result.modelOutputText?.trim()) {
-        return { ok: false, error: "generation_failed", runId, contextSummary };
+        return createAssistantChatGenerationFailure(runId, contextSummary);
       }
 
       return {
@@ -2268,9 +2274,9 @@ export class DemoWorkbenchService {
         contextSummary
       };
     } catch {
-      return { ok: false, error: "generation_failed", runId, contextSummary };
+      return createAssistantChatGenerationFailure(runId, contextSummary);
     } finally {
-      if (createdRunId) {
+      if (createdRunId && runId) {
         releaseRepositoryId(this.repositories, runId);
       }
     }
@@ -4335,6 +4341,18 @@ async function reserveRepositoryId(
     reservations.add(id);
     return id;
   });
+}
+
+function createAssistantChatGenerationFailure(
+  runId: string | undefined,
+  contextSummary: AssistantContextSummary | undefined
+): RunAssistantChatResult {
+  return {
+    ok: false,
+    error: "generation_failed",
+    ...(runId !== undefined ? { runId } : {}),
+    ...(contextSummary !== undefined ? { contextSummary } : {})
+  };
 }
 
 function releaseRepositoryId(repositories: WorkbenchRepositories, id: string): void {

@@ -57,6 +57,33 @@ describe("assistant chat prompt", () => {
     expect(prompt.length).toBeLessThan(6000);
   });
 
+  it("keeps the user message when long skill context exceeds the prompt budget", () => {
+    const userPrompt = "Please answer this exact buyer positioning question.";
+    const prompt = createAssistantChatPrompt({
+      userPrompt,
+      project: { id: "project_1", name: "Spring Campaign" },
+      context: {
+        skills: Array.from({ length: 20 }, (_, index) => ({
+          id: `skill_${index + 1}`,
+          name: `Long Skill ${index + 1}`,
+          version: "1.0.0",
+          scope: "project",
+          permissions: ["brief:read"],
+          entrypoints: ["skill.md"],
+          content: `Long context ${index + 1}. `.repeat(200),
+          contentType: "text/markdown" as const
+        })),
+        mcpTools: [],
+        approval: { state: "not_required" },
+        artifactWorkspace: { mode: "memory", writableFiles: ["index.html"] }
+      },
+      trace: { injected: ["skills:20"], omitted: [] }
+    });
+
+    expect(prompt.length).toBeLessThanOrEqual(12000);
+    expect(prompt).toContain(`User message:\n${userPrompt}`);
+  });
+
   it("creates a safe context summary without raw skill content", () => {
     const summary = createAssistantContextSummary({
       project: { id: "project_1", name: "Spring Campaign" },
