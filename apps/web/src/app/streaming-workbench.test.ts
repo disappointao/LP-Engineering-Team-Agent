@@ -6,10 +6,15 @@ import {
   type StreamingWorkbenchState
 } from "./streaming-workbench-state";
 import {
+  completeLiveTaskFallbackHandoff,
+  createInitialLiveTaskFallbackHandoffState,
   createLiveTaskSubmitRequestBody,
   createStreamingChatRequestBody,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
+  isLiveTaskFallbackHandoffPending,
+  resetLiveTaskFallbackHandoff,
+  startLiveTaskFallbackHandoff,
   shouldRequestFallbackSubmitAfterCommit,
   shouldStartLiveTaskAfterFallback,
   getStreamingSubmitDecision,
@@ -245,6 +250,138 @@ describe("streaming workbench live task fallback", () => {
       prompt,
       implicitProjectName
     });
+  });
+
+  it("starts live task submit and skips the native fallback path for lp fallback", () => {
+    const handoff = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+
+    expect(handoff.action).toEqual({
+      endpoint: "/api/tasks/submit",
+      type: "start_live_task",
+      token: 1
+    });
+    expect(isLiveTaskFallbackHandoffPending(handoff.state)).toBe(true);
+  });
+
+  it("keeps non-lp fallback on the native fallback path", () => {
+    const handoff = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "project_setup"
+    });
+
+    expect(handoff.action).toEqual({ type: "start_native_fallback" });
+    expect(isLiveTaskFallbackHandoffPending(handoff.state)).toBe(false);
+  });
+
+  it("keeps prompt controls disabled while live task submit is pending", () => {
+    const controls = getPromptSubmissionControlState({
+      fallbackPrompt: undefined,
+      isStreaming: false,
+      liveTaskSubmitPending: true
+    });
+
+    expect(controls.visiblePromptDisabled).toBe(true);
+    expect(controls.hiddenPromptValue).toBeUndefined();
+    expect(collectEnabledPromptPayload(controls)).toEqual([]);
+  });
+
+  it("refreshes and clears transient fallback state after successful live submit", () => {
+    const started = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+    if (started.action.type !== "start_live_task") {
+      throw new Error("expected live task start");
+    }
+
+    const completed = completeLiveTaskFallbackHandoff({
+      state: started.state,
+      token: started.action.token,
+      ok: true
+    });
+    const fallbackState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "fallback_required",
+      fallbackMessage: "Starting live task"
+    };
+
+    expect(completed.action).toEqual({ type: "refresh_and_clear_transient" });
+    expect(isLiveTaskFallbackHandoffPending(completed.state)).toBe(false);
+    expect(getTerminalStreamingStateAfterRefresh(fallbackState, true)).toEqual(
+      createInitialStreamingWorkbenchState()
+    );
+  });
+
+  it("dispatches streaming error behavior after failed live submit", () => {
+    const started = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+    if (started.action.type !== "start_live_task") {
+      throw new Error("expected live task start");
+    }
+
+    const completed = completeLiveTaskFallbackHandoff({
+      state: started.state,
+      token: started.action.token,
+      ok: false
+    });
+
+    expect(completed.action).toEqual({ type: "dispatch_error" });
+    expect(isLiveTaskFallbackHandoffPending(completed.state)).toBe(false);
+  });
+
+  it("ignores stale completion for an older live submit token", () => {
+    const first = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+    if (first.action.type !== "start_live_task") {
+      throw new Error("expected first live task start");
+    }
+
+    const second = startLiveTaskFallbackHandoff({
+      state: resetLiveTaskFallbackHandoff(first.state),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+    if (second.action.type !== "start_live_task") {
+      throw new Error("expected second live task start");
+    }
+
+    const staleCompletion = completeLiveTaskFallbackHandoff({
+      state: second.state,
+      token: first.action.token,
+      ok: false
+    });
+
+    expect(staleCompletion.action).toEqual({ type: "ignore" });
+    expect(staleCompletion.state).toEqual(second.state);
+  });
+
+  it("ignores duplicate fallback events for the same submit", () => {
+    const first = startLiveTaskFallbackHandoff({
+      state: createInitialLiveTaskFallbackHandoffState(),
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+
+    const duplicate = startLiveTaskFallbackHandoff({
+      state: first.state,
+      fallbackReason: "unsupported_task_type",
+      taskType: "lp_generation"
+    });
+
+    expect(duplicate.action).toEqual({ type: "ignore" });
+    expect(duplicate.state).toEqual(first.state);
   });
 });
 

@@ -75,7 +75,7 @@ export function getTerminalStreamingStateAfterRefresh(
   state: StreamingWorkbenchState,
   didRequestRefresh: boolean
 ): StreamingWorkbenchState {
-  if (!didRequestRefresh || !shouldRefreshAfterStream(state)) {
+  if (!didRequestRefresh) {
     return state;
   }
 
@@ -83,7 +83,11 @@ export function getTerminalStreamingStateAfterRefresh(
     return state;
   }
 
-  return createInitialStreamingWorkbenchState();
+  if (state.status === "completed" || state.status === "fallback_required") {
+    return createInitialStreamingWorkbenchState();
+  }
+
+  return state;
 }
 
 function getVisibleStreamingStatus(
@@ -128,14 +132,17 @@ export interface PromptSubmissionControlState {
 
 export function getPromptSubmissionControlState({
   fallbackPrompt,
-  isStreaming
+  isStreaming,
+  liveTaskSubmitPending = false
 }: {
   fallbackPrompt?: string;
   isStreaming: boolean;
+  liveTaskSubmitPending?: boolean;
 }): PromptSubmissionControlState {
   const hiddenPromptValue =
     fallbackPrompt === undefined || fallbackPrompt.length === 0 ? undefined : fallbackPrompt;
-  const visiblePromptDisabled = isStreaming || hiddenPromptValue !== undefined;
+  const visiblePromptDisabled =
+    isStreaming || liveTaskSubmitPending || hiddenPromptValue !== undefined;
 
   if (hiddenPromptValue === undefined) {
     return { visiblePromptDisabled };
@@ -211,6 +218,8 @@ export interface LiveTaskSubmitRequestBody {
   implicitProjectName: string;
 }
 
+export const liveTaskSubmitEndpoint = "/api/tasks/submit";
+
 export function createLiveTaskSubmitRequestBody({
   prompt,
   implicitProjectName
@@ -226,6 +235,123 @@ export function shouldStartLiveTaskAfterFallback({
   taskType?: string;
 }): boolean {
   return fallbackReason === "unsupported_task_type" && taskType === "lp_generation";
+}
+
+export interface LiveTaskFallbackHandoffState {
+  nextToken: number;
+  pendingToken?: number;
+  fallbackSubmitted: boolean;
+}
+
+export type LiveTaskFallbackHandoffStartAction =
+  | { endpoint: typeof liveTaskSubmitEndpoint; type: "start_live_task"; token: number }
+  | { type: "start_native_fallback" }
+  | { type: "ignore" };
+
+export interface LiveTaskFallbackHandoffStartResult {
+  action: LiveTaskFallbackHandoffStartAction;
+  state: LiveTaskFallbackHandoffState;
+}
+
+export type LiveTaskFallbackHandoffCompletionAction =
+  | { type: "refresh_and_clear_transient" }
+  | { type: "dispatch_error" }
+  | { type: "ignore" };
+
+export interface LiveTaskFallbackHandoffCompletionResult {
+  action: LiveTaskFallbackHandoffCompletionAction;
+  state: LiveTaskFallbackHandoffState;
+}
+
+export function createInitialLiveTaskFallbackHandoffState(): LiveTaskFallbackHandoffState {
+  return {
+    fallbackSubmitted: false,
+    nextToken: 1
+  };
+}
+
+export function resetLiveTaskFallbackHandoff(
+  state: LiveTaskFallbackHandoffState
+): LiveTaskFallbackHandoffState {
+  return {
+    fallbackSubmitted: false,
+    nextToken: state.nextToken
+  };
+}
+
+export function isLiveTaskFallbackHandoffPending(
+  state: LiveTaskFallbackHandoffState
+): boolean {
+  return state.pendingToken !== undefined;
+}
+
+export function startLiveTaskFallbackHandoff({
+  state,
+  fallbackReason,
+  taskType
+}: {
+  state: LiveTaskFallbackHandoffState;
+  fallbackReason: string;
+  taskType?: string;
+}): LiveTaskFallbackHandoffStartResult {
+  if (state.fallbackSubmitted) {
+    return {
+      action: { type: "ignore" },
+      state
+    };
+  }
+
+  if (
+    shouldStartLiveTaskAfterFallback({
+      fallbackReason,
+      taskType
+    })
+  ) {
+    const token = state.nextToken;
+    return {
+      action: { endpoint: liveTaskSubmitEndpoint, type: "start_live_task", token },
+      state: {
+        fallbackSubmitted: true,
+        nextToken: token + 1,
+        pendingToken: token
+      }
+    };
+  }
+
+  return {
+    action: { type: "start_native_fallback" },
+    state: {
+      fallbackSubmitted: true,
+      nextToken: state.nextToken
+    }
+  };
+}
+
+export function completeLiveTaskFallbackHandoff({
+  state,
+  token,
+  ok
+}: {
+  state: LiveTaskFallbackHandoffState;
+  token: number;
+  ok: boolean;
+}): LiveTaskFallbackHandoffCompletionResult {
+  if (state.pendingToken !== token) {
+    return {
+      action: { type: "ignore" },
+      state
+    };
+  }
+
+  const nextState: LiveTaskFallbackHandoffState = {
+    fallbackSubmitted: state.fallbackSubmitted,
+    nextToken: state.nextToken
+  };
+
+  return {
+    action: { type: ok ? "refresh_and_clear_transient" : "dispatch_error" },
+    state: nextState
+  };
 }
 
 export interface FallbackSubmitAfterCommitState {
@@ -265,11 +391,14 @@ export function StreamingWorkbench({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const skipStreamingOnceRef = useRef(false);
-  const fallbackSubmittedRef = useRef(false);
   const fallbackSubmitPendingRef = useRef(false);
+  const liveTaskFallbackHandoffRef = useRef(
+    createInitialLiveTaskFallbackHandoffState()
+  );
   const submittedPromptRef = useRef("");
   const stateRef = useRef(createInitialStreamingWorkbenchState());
   const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
+  const [liveTaskSubmitPending, setLiveTaskSubmitPending] = useState(false);
   const [state, dispatch] = useReducer(
     streamingWorkbenchReducer,
     createInitialStreamingWorkbenchState()
@@ -277,7 +406,8 @@ export function StreamingWorkbench({
   const isStreaming = state.status === "streaming";
   const promptSubmissionControls = getPromptSubmissionControlState({
     fallbackPrompt,
-    isStreaming
+    isStreaming,
+    liveTaskSubmitPending
   });
   const visibleStatus = getVisibleStreamingStatus(
     state,
@@ -304,6 +434,13 @@ export function StreamingWorkbench({
     stateRef.current = nextState;
   };
 
+  const applyLiveTaskFallbackHandoffState = (
+    nextState: LiveTaskFallbackHandoffState
+  ) => {
+    liveTaskFallbackHandoffRef.current = nextState;
+    setLiveTaskSubmitPending(isLiveTaskFallbackHandoffPending(nextState));
+  };
+
   const dispatchError = () => {
     const nextState: StreamingWorkbenchState = {
       ...stateRef.current,
@@ -314,29 +451,66 @@ export function StreamingWorkbench({
     dispatch({ type: "error", message: streamingErrorLabel });
   };
 
-  const startLiveTaskFromFallback = async () => {
+  const completeLiveTaskFromFallback = ({
+    token,
+    ok
+  }: {
+    token: number;
+    ok: boolean;
+  }) => {
+    const completed = completeLiveTaskFallbackHandoff({
+      state: liveTaskFallbackHandoffRef.current,
+      token,
+      ok
+    });
+    applyLiveTaskFallbackHandoffState(completed.state);
+
+    if (completed.action.type === "ignore") {
+      return;
+    }
+
+    if (completed.action.type === "dispatch_error") {
+      dispatchError();
+      return;
+    }
+
+    router.refresh();
+    const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
+    applyState(nextState);
+    dispatch({ type: "clear_transient_after_refresh" });
+  };
+
+  const startLiveTaskFromFallback = async ({
+    endpoint,
+    token,
+    prompt
+  }: {
+    endpoint: typeof liveTaskSubmitEndpoint;
+    token: number;
+    prompt: string;
+  }) => {
     try {
-      const response = await fetch("/api/tasks/submit", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json"
         },
         body: JSON.stringify(
           createLiveTaskSubmitRequestBody({
-            prompt: submittedPromptRef.current,
+            prompt,
             implicitProjectName
           })
         )
       });
 
       if (!response.ok) {
-        dispatchError();
+        completeLiveTaskFromFallback({ token, ok: false });
         return;
       }
 
-      router.refresh();
+      completeLiveTaskFromFallback({ token, ok: true });
     } catch {
-      dispatchError();
+      completeLiveTaskFromFallback({ token, ok: false });
     }
   };
 
@@ -345,15 +519,24 @@ export function StreamingWorkbench({
     applyState(nextState);
     dispatch({ type: "event", event });
 
-    if (event.type === "fallback.required" && !fallbackSubmittedRef.current) {
-      fallbackSubmittedRef.current = true;
-      if (
-        shouldStartLiveTaskAfterFallback({
-          fallbackReason: event.reason,
-          taskType: event.taskType
-        })
-      ) {
-        void startLiveTaskFromFallback();
+    if (event.type === "fallback.required") {
+      const handoff = startLiveTaskFallbackHandoff({
+        state: liveTaskFallbackHandoffRef.current,
+        fallbackReason: event.reason,
+        taskType: event.taskType
+      });
+      applyLiveTaskFallbackHandoffState(handoff.state);
+
+      if (handoff.action.type === "ignore") {
+        return;
+      }
+
+      if (handoff.action.type === "start_live_task") {
+        void startLiveTaskFromFallback({
+          endpoint: handoff.action.endpoint,
+          token: handoff.action.token,
+          prompt: submittedPromptRef.current
+        });
         return;
       }
 
@@ -395,7 +578,9 @@ export function StreamingWorkbench({
       ...createInitialStreamingWorkbenchState(),
       status: "streaming" as const
     };
-    fallbackSubmittedRef.current = false;
+    applyLiveTaskFallbackHandoffState(
+      resetLiveTaskFallbackHandoff(liveTaskFallbackHandoffRef.current)
+    );
     fallbackSubmitPendingRef.current = false;
     submittedPromptRef.current = decision.fallbackPrompt ?? prompt;
     setFallbackPrompt(undefined);
