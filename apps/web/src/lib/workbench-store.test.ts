@@ -951,6 +951,219 @@ describe("web workbench store", () => {
     expect(JSON.stringify(state.recovery)).not.toContain("RAW_MODEL_SECRET");
   });
 
+  describe("live task state", () => {
+    it("returns safe live state with lifecycle, recovery, worker queue, and artifact progress", async () => {
+      const store = createWebWorkbenchStore();
+      const result = await store.submitTaskPrompt({
+        prompt: "Create a spring launch LP with static HTML CSS JS",
+        implicitProjectName: "Live State Project"
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok || !result.projectId) {
+        throw new Error("expected LP task");
+      }
+
+      const live = await store.getLiveTaskState({
+        taskId: result.taskId,
+        projectId: result.projectId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+
+      expect(live.value).toMatchObject({
+        taskId: result.taskId,
+        projectId: result.projectId,
+        taskType: "lp_generation",
+        isTerminal: true,
+        nextPollMs: 0
+      });
+      expect(live.value.runs.map((run) => run.role)).toEqual([
+        "planner",
+        "builder",
+        "reviewer",
+        "deployer"
+      ]);
+      expect(live.value.artifactProgress?.pageVersionId).toBe(
+        live.value.snapshot?.currentPageVersion?.id
+      );
+      expect(live.value.artifactProgress?.artifactWorkspaceId).toBe(
+        live.value.snapshot?.currentPageVersion?.artifactWorkspaceId
+      );
+      expect(live.value.workerQueue.counts).toMatchObject({
+        queued: 0,
+        running: 0
+      });
+      expect(JSON.stringify(live.value)).not.toContain("<!doctype html");
+      expect(JSON.stringify(live.value)).not.toContain("window.lpAgent");
+    });
+
+    it("fails closed when the requested project does not own the task", async () => {
+      const store = createWebWorkbenchStore();
+      const first = await store.submitTaskPrompt({
+        prompt: "Create an LP for one project",
+        implicitProjectName: "First Project"
+      });
+      const secondProject = await store.createProject({ name: "Second Project" });
+
+      if (!first.ok) {
+        throw new Error("expected first task");
+      }
+
+      await expect(
+        store.getLiveTaskState({
+          taskId: first.taskId,
+          projectId: secondProject.id
+        })
+      ).resolves.toEqual({ ok: false, error: "project_not_found" });
+    });
+
+    it("does not expose raw run event payload fields in live state", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const result = await store.submitTaskPrompt({
+        prompt: "Create a spring launch LP with a custom run event",
+        implicitProjectName: "Run Event Leak Project"
+      });
+
+      if (!result.ok || !result.projectId) {
+        throw new Error("expected LP task");
+      }
+
+      await repositories.runEvents.save({
+        id: "run_event_with_raw_model_output",
+        runId: "run_planner_brief_1",
+        projectId: result.projectId,
+        taskId: result.taskId,
+        sequence: 99,
+        type: "model.completed",
+        message: "model completed with raw output",
+        payload: {
+          type: "model.completed",
+          runId: "run_planner_brief_1",
+          role: "planner",
+          provider: "mock-openai",
+          model: "planning-model",
+          usage: { inputTokens: 1, outputTokens: 2 },
+          summary: "RAW_MODEL_OUTPUT_SECRET /Users/ao/.env SECRET_TOKEN=secret",
+          artifactRefs: { localPath: "/Users/ao/site/.env" },
+          files: [{ path: "/Users/ao/site/.env", summary: "RAW_TOOL_OUTPUT_SECRET" }],
+          rawModelOutput: "RAW_MODEL_OUTPUT_SECRET"
+        },
+        createdAt: "2026-05-20T00:00:02.000Z"
+      });
+
+      const live = await store.getLiveTaskState({
+        taskId: result.taskId,
+        projectId: result.projectId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(JSON.stringify(live.value)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+      expect(JSON.stringify(live.value)).not.toContain("RAW_TOOL_OUTPUT_SECRET");
+      expect(JSON.stringify(live.value)).not.toContain("/Users/ao");
+      expect(JSON.stringify(live.value)).not.toContain(".env");
+      expect(JSON.stringify(live.value)).not.toContain("SECRET_TOKEN");
+      expect(JSON.stringify(live.value)).not.toContain("rawModelOutput");
+      expect(live.value.runEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "run_event_with_raw_model_output",
+            type: "model.completed",
+            payload: {
+              type: "model.completed",
+              runId: "run_planner_brief_1",
+              role: "planner",
+              provider: "mock-openai",
+              model: "planning-model",
+              usage: { inputTokens: 1, outputTokens: 2 }
+            }
+          })
+        ])
+      );
+    });
+
+    it("does not expose selected artifact snippet content in live state", async () => {
+      const store = createWebWorkbenchStore();
+      const result = await store.submitTaskPrompt({
+        prompt: "Create a spring launch LP with static HTML CSS JS",
+        implicitProjectName: "Snippet Leak Project"
+      });
+
+      if (!result.ok || !result.projectId) {
+        throw new Error("expected LP task");
+      }
+
+      const live = await store.getLiveTaskState({
+        taskId: result.taskId,
+        projectId: result.projectId,
+        artifactPath: "styles.css"
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(live.value.artifactDiff?.selectedSnippet).toMatchObject({
+        path: "styles.css",
+        shortSha256: expect.any(String),
+        maxBytes: expect.any(Number)
+      });
+      expect(live.value.artifactDiff?.selectedSnippet).not.toHaveProperty("content");
+      expect(JSON.stringify(live.value)).not.toContain(":root");
+    });
+
+    it("does not copy future raw fields into live snapshot or artifact DTOs", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const result = await store.submitTaskPrompt({
+        prompt: "Create a spring launch LP with static HTML CSS JS",
+        implicitProjectName: "Future Field Leak Project"
+      });
+
+      if (!result.ok || !result.projectId) {
+        throw new Error("expected LP task");
+      }
+
+      const project = await repositories.projects.getById(result.projectId);
+      const pageVersion = await repositories.pageVersions.findLatestForProject(result.projectId);
+      if (!project || !pageVersion) {
+        throw new Error("expected project and page version");
+      }
+
+      await repositories.projects.save({
+        ...project,
+        futureRawSnapshotField: "RAW_SNAPSHOT_SECRET"
+      } as typeof project);
+      await repositories.pageVersions.save({
+        ...pageVersion,
+        futureRawPageVersionField: "RAW_PAGE_VERSION_SECRET"
+      } as typeof pageVersion);
+
+      const live = await store.getLiveTaskState({
+        taskId: result.taskId,
+        projectId: result.projectId,
+        artifactPath: "styles.css"
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(live.value.snapshot?.currentPageVersion).not.toHaveProperty("artifacts");
+      expect(JSON.stringify(live.value)).not.toContain("RAW_SNAPSHOT_SECRET");
+      expect(JSON.stringify(live.value)).not.toContain("RAW_PAGE_VERSION_SECRET");
+      expect(live.value.artifactDiff).not.toHaveProperty("selectedSnippet.content");
+      expect(live.value.artifactDiff?.selectedSnippet).not.toHaveProperty("content");
+    });
+  });
+
   it("executes run recovery through the web store", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const store = createWebWorkbenchStore({

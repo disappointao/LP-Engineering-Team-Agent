@@ -424,6 +424,175 @@ export type WorkbenchPageState =
       artifactDiff?: WebArtifactDiffState;
     };
 
+type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
+
+export type LiveTaskStateErrorCode = "task_not_found" | "project_not_found";
+
+export interface LiveTaskArtifactProgress {
+  pageVersionId: string;
+  artifactWorkspaceId?: string;
+  fileCount: number;
+  changedFileCount: number;
+  previewVersionKey: string;
+}
+
+export interface LiveTaskProject {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface LiveTaskBrief {
+  id: string;
+  projectId: string;
+  prompt: string;
+  createdAt: string;
+}
+
+export interface LiveTaskPageVersion {
+  id: string;
+  projectId: string;
+  briefId: string;
+  artifactWorkspaceId?: string;
+  reviewStatus: NonNullable<WorkbenchSnapshot["currentPageVersion"]>["reviewStatus"];
+  findings: NonNullable<WorkbenchSnapshot["currentPageVersion"]>["findings"];
+  createdAt: string;
+}
+
+export interface LiveTaskDeployment {
+  id: string;
+  projectId: string;
+  pageVersionId: string;
+  branch: string;
+  commitSha: string;
+  pullRequestUrl: string;
+  files: string[];
+  status: NonNullable<WorkbenchSnapshot["deployment"]>["status"];
+}
+
+export interface LiveTaskSnapshot {
+  project: LiveTaskProject;
+  brief?: LiveTaskBrief;
+  currentPageVersion?: LiveTaskPageVersion;
+  deployment?: LiveTaskDeployment;
+}
+
+export interface LiveTaskRunEventPayload {
+  type?: string;
+  runId?: string;
+  role?: string;
+  state?: string;
+  provider?: string;
+  model?: string;
+  skillCount?: number;
+  toolCount?: number;
+  approvalState?: string;
+  artifactId?: string;
+  workspaceId?: string;
+  artifactWorkspaceId?: string;
+  pageVersionId?: string;
+  kind?: string;
+  fileCount?: number;
+  handoffId?: string;
+  fromRunId?: string;
+  fromRole?: string;
+  toRole?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  artifactRefs?: Record<string, string>;
+  files?: Array<{
+    path?: string;
+    kind?: string;
+    sizeBytes?: number;
+    sha256?: string;
+  }>;
+}
+
+type LiveTaskStringPayloadKey =
+  | "type"
+  | "runId"
+  | "role"
+  | "state"
+  | "provider"
+  | "model"
+  | "approvalState"
+  | "artifactId"
+  | "workspaceId"
+  | "artifactWorkspaceId"
+  | "pageVersionId"
+  | "kind"
+  | "handoffId"
+  | "fromRunId"
+  | "fromRole"
+  | "toRole";
+
+type LiveTaskNumberPayloadKey = "skillCount" | "toolCount" | "fileCount";
+
+export interface LiveTaskRunEvent {
+  id: string;
+  projectId: string;
+  taskId?: string;
+  runId: string;
+  type: string;
+  createdAt: string;
+  payload?: LiveTaskRunEventPayload;
+}
+
+export interface LiveTaskArtifactSnippet {
+  path: ArtifactWorkspaceFilePath;
+  sizeBytes?: number;
+  sha256?: string;
+  shortSha256?: string;
+  omittedReason?: WebArtifactSnippetOmittedReason;
+  maxBytes: number;
+}
+
+export interface LiveTaskArtifactDiffFile {
+  path: ArtifactWorkspaceFilePath;
+  state: WebArtifactDiffFileState;
+  sizeBytes?: number;
+  sha256?: string;
+  shortSha256?: string;
+  summary?: string;
+  canPreview: boolean;
+}
+
+export interface LiveTaskArtifactDiffState {
+  projectId: string;
+  pageVersionId: string;
+  artifactWorkspaceId?: string;
+  previousPageVersionId?: string;
+  files: LiveTaskArtifactDiffFile[];
+  selectedSnippet?: LiveTaskArtifactSnippet;
+  errorCode?: WebArtifactDiffState["errorCode"];
+}
+
+export interface LiveTaskStatePayload {
+  taskId: string;
+  projectId?: string;
+  taskType: TaskType;
+  taskStatus: TaskStatus;
+  stateVersion: string;
+  isTerminal: boolean;
+  nextPollMs: number;
+  updatedAt: string;
+  messages: ChatMessageRecord[];
+  runs: RunLifecycleView[];
+  runEvents: LiveTaskRunEvent[];
+  recovery: WorkbenchTaskRecoveryState;
+  workerQueue: WorkerQueueSnapshot;
+  interrupt: TaskInterrupt;
+  snapshot?: LiveTaskSnapshot;
+  artifactDiff?: LiveTaskArtifactDiffState;
+  artifactProgress?: LiveTaskArtifactProgress;
+}
+
+export type LiveTaskStateResult =
+  | { ok: true; value: LiveTaskStatePayload }
+  | { ok: false; error: LiveTaskStateErrorCode };
+
 export interface WebWorkbenchStore {
   createProject(input: CreateProjectFormInput): Promise<ProjectRecord>;
   listProjects(): Promise<ProjectRecord[]>;
@@ -433,6 +602,11 @@ export interface WebWorkbenchStore {
     taskId?: string | null;
     artifactPath?: string | null;
   }): Promise<WorkbenchPageState>;
+  getLiveTaskState(input: {
+    taskId: string;
+    projectId?: string | null;
+    artifactPath?: string | null;
+  }): Promise<LiveTaskStateResult>;
   submitTaskPrompt(input: {
     taskId?: string | null;
     projectId?: string | null;
@@ -680,6 +854,285 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     logs: []
   });
 
+  function isLiveTaskTerminal(pageState: TaskReadyPageState): boolean {
+    const runningRun = pageState.recovery.runs.some((run) =>
+      ["queued", "running", "waiting_for_approval", "cancelling"].includes(run.state)
+    );
+    const activeWorkerCount =
+      pageState.workerQueue.counts.queued + pageState.workerQueue.counts.running;
+    return !runningRun && activeWorkerCount === 0;
+  }
+
+  function buildLiveTaskStateVersion(pageState: TaskReadyPageState): string {
+    const parts = [
+      pageState.task.createdAt,
+      pageState.messages.at(-1)?.id ?? "no-message",
+      pageState.runEvents.at(-1)?.id ?? "no-event",
+      pageState.snapshot?.currentPageVersion?.id ?? "no-page",
+      pageState.artifactDiff?.artifactWorkspaceId ?? "no-workspace",
+      String(pageState.workerQueue.counts.queued),
+      String(pageState.workerQueue.counts.running)
+    ];
+    return parts.join(":");
+  }
+
+  function buildArtifactProgress(
+    artifactDiff: WebArtifactDiffState | undefined
+  ): LiveTaskArtifactProgress | undefined {
+    if (!artifactDiff) {
+      return undefined;
+    }
+    const changedFileCount = artifactDiff.files.filter((file) => file.state !== "unchanged").length;
+    return {
+      pageVersionId: artifactDiff.pageVersionId,
+      artifactWorkspaceId: artifactDiff.artifactWorkspaceId,
+      fileCount: artifactDiff.files.length,
+      changedFileCount,
+      previewVersionKey: [
+        artifactDiff.pageVersionId,
+        artifactDiff.artifactWorkspaceId ?? "no-workspace",
+        ...artifactDiff.files.map((file) => `${file.path}:${file.shortSha256 ?? "no-hash"}`)
+      ].join("|")
+    };
+  }
+
+  function buildLiveTaskSnapshot(
+    snapshot: WorkbenchSnapshot | undefined
+  ): LiveTaskSnapshot | undefined {
+    if (!snapshot) {
+      return undefined;
+    }
+    return {
+      project: {
+        id: snapshot.project.id,
+        name: snapshot.project.name,
+        createdAt: snapshot.project.createdAt
+      },
+      ...(snapshot.brief
+        ? {
+            brief: {
+              id: snapshot.brief.id,
+              projectId: snapshot.brief.projectId,
+              prompt: snapshot.brief.prompt,
+              createdAt: snapshot.brief.createdAt
+            }
+          }
+        : {}),
+      ...(snapshot.currentPageVersion
+        ? {
+            currentPageVersion: {
+              id: snapshot.currentPageVersion.id,
+              projectId: snapshot.currentPageVersion.projectId,
+              briefId: snapshot.currentPageVersion.briefId,
+              artifactWorkspaceId: snapshot.currentPageVersion.artifactWorkspaceId,
+              reviewStatus: snapshot.currentPageVersion.reviewStatus,
+              findings: snapshot.currentPageVersion.findings,
+              createdAt: snapshot.currentPageVersion.createdAt
+            }
+          }
+        : {}),
+      ...(snapshot.deployment
+        ? {
+            deployment: {
+              id: snapshot.deployment.id,
+              projectId: snapshot.deployment.projectId,
+              pageVersionId: snapshot.deployment.pageVersionId,
+              branch: snapshot.deployment.branch,
+              commitSha: snapshot.deployment.commitSha,
+              pullRequestUrl: snapshot.deployment.pullRequestUrl,
+              files: [...snapshot.deployment.files],
+              status: snapshot.deployment.status
+            }
+          }
+        : {})
+    };
+  }
+
+  function addStringPayloadValue(
+    target: LiveTaskRunEventPayload,
+    source: Record<string, unknown>,
+    key: LiveTaskStringPayloadKey
+  ): void {
+    const value = source[key];
+    if (typeof value === "string" && isSafeLiveTaskPayloadToken(value)) {
+      target[key] = value;
+    }
+  }
+
+  function addNumberPayloadValue(
+    target: LiveTaskRunEventPayload,
+    source: Record<string, unknown>,
+    key: LiveTaskNumberPayloadKey
+  ): void {
+    const value = source[key];
+    if (typeof value === "number") {
+      target[key] = value;
+    }
+  }
+
+  function isSafeLiveTaskPayloadToken(value: string): boolean {
+    return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+  }
+
+  function isSafeLiveTaskArtifactRefKey(
+    key: string
+  ): key is "briefId" | "pageVersionId" | "artifactWorkspaceId" {
+    return key === "briefId" || key === "pageVersionId" || key === "artifactWorkspaceId";
+  }
+
+  function isSafeLiveTaskArtifactRefValue(value: string): boolean {
+    return /^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+$/.test(value);
+  }
+
+  function normalizeLiveTaskRunEventFilePath(value: unknown): ArtifactWorkspaceFilePath | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    try {
+      return normalizeArtifactWorkspaceFilePath(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  function sanitizeLiveTaskRunEventPayload(
+    payload: Record<string, unknown>
+  ): LiveTaskRunEventPayload | undefined {
+    const safe: LiveTaskRunEventPayload = {};
+    const stringKeys: LiveTaskStringPayloadKey[] = [
+      "type",
+      "runId",
+      "role",
+      "state",
+      "provider",
+      "model",
+      "approvalState",
+      "artifactId",
+      "workspaceId",
+      "artifactWorkspaceId",
+      "pageVersionId",
+      "kind",
+      "handoffId",
+      "fromRunId",
+      "fromRole",
+      "toRole"
+    ];
+    const numberKeys: LiveTaskNumberPayloadKey[] = ["skillCount", "toolCount", "fileCount"];
+
+    for (const key of stringKeys) {
+      addStringPayloadValue(safe, payload, key);
+    }
+    for (const key of numberKeys) {
+      addNumberPayloadValue(safe, payload, key);
+    }
+
+    const usage = payload.usage;
+    if (usage && typeof usage === "object" && !Array.isArray(usage)) {
+      const usageRecord = usage as Record<string, unknown>;
+      safe.usage = {
+        ...(typeof usageRecord.inputTokens === "number"
+          ? { inputTokens: usageRecord.inputTokens }
+          : {}),
+        ...(typeof usageRecord.outputTokens === "number"
+          ? { outputTokens: usageRecord.outputTokens }
+          : {})
+      };
+    }
+
+    const artifactRefs = payload.artifactRefs;
+    if (artifactRefs && typeof artifactRefs === "object" && !Array.isArray(artifactRefs)) {
+      const refs = Object.entries(artifactRefs as Record<string, unknown>).filter(
+        (entry): entry is ["briefId" | "pageVersionId" | "artifactWorkspaceId", string] =>
+          isSafeLiveTaskArtifactRefKey(entry[0]) &&
+          typeof entry[1] === "string" &&
+          isSafeLiveTaskArtifactRefValue(entry[1])
+      );
+      if (refs.length > 0) {
+        safe.artifactRefs = Object.fromEntries(refs);
+      }
+    }
+
+    if (Array.isArray(payload.files)) {
+      const files = payload.files
+        .filter((file): file is Record<string, unknown> => Boolean(file) && typeof file === "object")
+        .map((file) => {
+          const path = normalizeLiveTaskRunEventFilePath(file.path);
+          return {
+            ...(path ? { path } : {}),
+            ...(typeof file.kind === "string" && isSafeLiveTaskPayloadToken(file.kind)
+              ? { kind: file.kind }
+              : {}),
+            ...(typeof file.sizeBytes === "number" ? { sizeBytes: file.sizeBytes } : {}),
+            ...(typeof file.sha256 === "string" && /^[a-f0-9]{64}$/.test(file.sha256)
+              ? { sha256: file.sha256 }
+              : {})
+          };
+        })
+        .filter((file) => Object.keys(file).length > 0);
+      if (files.length > 0) {
+        safe.files = files;
+      }
+    }
+
+    return Object.keys(safe).length > 0 ? safe : undefined;
+  }
+
+  function sanitizeLiveTaskRunEvent(event: RunEventRecord): LiveTaskRunEvent {
+    const payload = sanitizeLiveTaskRunEventPayload(event.payload);
+    return {
+      id: event.id,
+      projectId: event.projectId,
+      ...(event.taskId ? { taskId: event.taskId } : {}),
+      runId: event.runId,
+      type: event.type,
+      createdAt: event.createdAt,
+      ...(payload ? { payload } : {})
+    };
+  }
+
+  function buildLiveArtifactSnippet(
+    snippet: WebArtifactSnippetView | undefined
+  ): LiveTaskArtifactSnippet | undefined {
+    if (!snippet) {
+      return undefined;
+    }
+    return {
+      path: snippet.path,
+      sizeBytes: snippet.sizeBytes,
+      sha256: snippet.sha256,
+      shortSha256: snippet.shortSha256,
+      omittedReason: snippet.omittedReason,
+      maxBytes: snippet.maxBytes
+    };
+  }
+
+  function buildLiveArtifactDiff(
+    artifactDiff: WebArtifactDiffState | undefined
+  ): LiveTaskArtifactDiffState | undefined {
+    if (!artifactDiff) {
+      return undefined;
+    }
+    return {
+      projectId: artifactDiff.projectId,
+      pageVersionId: artifactDiff.pageVersionId,
+      artifactWorkspaceId: artifactDiff.artifactWorkspaceId,
+      previousPageVersionId: artifactDiff.previousPageVersionId,
+      files: artifactDiff.files.map((file) => ({
+        path: file.path,
+        state: file.state,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256,
+        shortSha256: file.shortSha256,
+        summary: file.summary,
+        canPreview: file.canPreview
+      })),
+      ...(artifactDiff.selectedSnippet
+        ? { selectedSnippet: buildLiveArtifactSnippet(artifactDiff.selectedSnippet) }
+        : {}),
+      errorCode: artifactDiff.errorCode
+    };
+  }
+
   function createEmptyVisibleToolsByRole(): ProjectMCPState["visibleToolsByRole"] {
     return {
       assistant: [],
@@ -883,6 +1336,41 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         },
         snapshot,
         artifactDiff
+      };
+    },
+
+    async getLiveTaskState(input) {
+      const pageState = await this.getPageState(input);
+      if (pageState.kind !== "task_ready") {
+        const task = await repositories.tasks.getById(input.taskId);
+        return {
+          ok: false,
+          error: task ? "project_not_found" : "task_not_found"
+        };
+      }
+
+      const isTerminal = isLiveTaskTerminal(pageState);
+      return {
+        ok: true,
+        value: {
+          taskId: pageState.task.id,
+          ...(pageState.task.projectId ? { projectId: pageState.task.projectId } : {}),
+          taskType: pageState.task.type,
+          taskStatus: pageState.task.status,
+          stateVersion: buildLiveTaskStateVersion(pageState),
+          isTerminal,
+          nextPollMs: isTerminal ? 0 : 1200,
+          updatedAt: new Date().toISOString(),
+          messages: pageState.messages,
+          runs: pageState.recovery.runs,
+          runEvents: pageState.runEvents.map(sanitizeLiveTaskRunEvent),
+          recovery: pageState.recovery,
+          workerQueue: pageState.workerQueue,
+          interrupt: pageState.interrupt,
+          snapshot: buildLiveTaskSnapshot(pageState.snapshot),
+          artifactDiff: buildLiveArtifactDiff(pageState.artifactDiff),
+          artifactProgress: buildArtifactProgress(pageState.artifactDiff)
+        }
       };
     },
 
