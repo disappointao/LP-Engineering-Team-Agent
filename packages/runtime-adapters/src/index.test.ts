@@ -880,8 +880,12 @@ describe("local agent runtime adapter", () => {
   });
 
   it("clones assistant model routing policy into runtime model calls", async () => {
-    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const gateway = new RecordingModelGateway();
     const runtime = new LocalAgentRuntimeAdapter(gateway);
+    const policy = {
+      ...createDefaultModelPolicy(),
+      assistant: { provider: "project-openai", model: "gpt-5.4" }
+    };
 
     await runtime.run({
       runId: "run_assistant_routing",
@@ -890,17 +894,19 @@ describe("local agent runtime adapter", () => {
       input: { prompt: "Answer with project context" },
       context: {
         ...createDefaultRuntimeContext(),
-        modelRoutingPolicy: {
-          ...createDefaultModelPolicy(),
-          assistant: { provider: "project-openai", model: "gpt-5.4" }
-        }
+        modelRoutingPolicy: policy
       }
     });
+    policy.assistant.model = "mutated";
 
-    expect(gateway.getAuditLog()[0]).toMatchObject({
+    expect(gateway.requests[0]).toMatchObject({
       role: "assistant",
-      provider: "project-openai",
-      model: "gpt-5.4"
+      routingPolicy: {
+        assistant: {
+          provider: "project-openai",
+          model: "gpt-5.4"
+        }
+      }
     });
   });
 
