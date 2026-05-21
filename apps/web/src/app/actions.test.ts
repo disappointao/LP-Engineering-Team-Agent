@@ -278,6 +278,7 @@ describe("submitPromptAction", () => {
     await expectRedirect(submitPromptAction(buildPromptForm({ projectId: "project_1" })), "/");
 
     expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
       projectId: "project_2",
       prompt: "Build a spring landing page.",
       implicitProjectName: "Untitled LP Project"
@@ -292,11 +293,35 @@ describe("submitPromptAction", () => {
     await expectRedirect(submitPromptAction(buildPromptForm(input)), "/");
 
     expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
       projectId: "project_2",
       prompt: "Build a spring landing page.",
       implicitProjectName: "Untitled LP Project"
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("passes current task id to submitTaskPrompt", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.currentTaskId = "task_1";
+    mocks.submitTaskPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+
+    await expectRedirect(
+      submitPromptAction(buildPromptForm({ prompt: "Make the CTA stronger" })),
+      "/"
+    );
+
+    expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
+      projectId: "project_1",
+      prompt: "Make the CTA stronger",
+      implicitProjectName: "Untitled LP Project"
+    });
   });
 
   it("redirects with the store error when task submission fails", async () => {
@@ -348,6 +373,7 @@ describe("submitPromptAction", () => {
     );
 
     expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
       projectId: undefined,
       prompt: "Help me write a campaign plan.",
       implicitProjectName: "Untitled LP Project"

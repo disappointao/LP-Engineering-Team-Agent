@@ -209,6 +209,7 @@ export async function createProjectAction(formData: FormData): Promise<void> {
 
 export async function submitPromptAction(formData: FormData): Promise<void> {
   const currentProjectId = await getCurrentProjectId();
+  const currentTaskId = await getCurrentTaskId();
   const store = await getWebWorkbenchStore();
   const prompt = String(formData.get("prompt") ?? "");
   const implicitProjectName = String(
@@ -216,6 +217,7 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
   );
 
   const result = await store.submitTaskPrompt({
+    taskId: currentTaskId,
     projectId: currentProjectId,
     prompt,
     implicitProjectName

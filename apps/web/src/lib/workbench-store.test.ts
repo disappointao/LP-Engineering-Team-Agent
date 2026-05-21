@@ -2845,6 +2845,50 @@ describe("web workbench store", () => {
     );
   });
 
+  it("continues an existing LP task by creating a new page version", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "Make the hero CTA more urgent and add a FAQ section",
+      implicitProjectName: "Spring Sale"
+    });
+
+    expect(second).toEqual({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([
+      expect.objectContaining({ id: "version_1" }),
+      expect.objectContaining({ id: "version_2" })
+    ]);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      briefId: "brief_2",
+      pageVersionId: "version_2"
+    });
+    const messages = await repositories.messages.listForTask("task_1");
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant"
+    ]);
+  });
+
   it("keeps the page version when Deployer fails", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const deployerRuntime = new StaticRuntime({ state: "failed" });

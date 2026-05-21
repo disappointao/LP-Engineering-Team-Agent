@@ -433,6 +433,7 @@ export interface WebWorkbenchStore {
     artifactPath?: string | null;
   }): Promise<WorkbenchPageState>;
   submitTaskPrompt(input: {
+    taskId?: string | null;
     projectId?: string | null;
     prompt: string;
     implicitProjectName: string;
@@ -536,7 +537,10 @@ const lpKeywords = [
   "html",
   "官网",
   "活动页",
-  "电商"
+  "电商",
+  "hero",
+  "cta",
+  "faq"
 ];
 
 const projectKeywords = ["创建项目", "new project", "create project"];
@@ -1006,6 +1010,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           repositories,
           service,
           currentUser,
+          requestedTaskId: input.taskId ?? undefined,
           requestedProjectId,
           prompt: prompt.value,
           implicitProjectName: input.implicitProjectName
@@ -1805,6 +1810,7 @@ async function runLpTaskPrompt(input: {
   repositories: WorkbenchRepositories;
   service: DemoWorkbenchService;
   currentUser: WorkbenchUserIdentity;
+  requestedTaskId?: string;
   requestedProjectId?: string;
   prompt: string;
   implicitProjectName: string;
@@ -1817,18 +1823,41 @@ async function runLpTaskPrompt(input: {
     projectId = project.id;
   }
 
-  const { task } = await createTaskThread({
-    repositories: input.repositories,
-    title: deriveTaskTitle(input.prompt),
-    type: "lp_generation",
-    projectId,
-    userMessage: input.prompt
-  });
-  await saveTaskSnapshot({
-    repositories: input.repositories,
-    taskId: task.id,
-    projectId
-  });
+  const existingTask = input.requestedTaskId
+    ? await input.repositories.tasks.getById(input.requestedTaskId)
+    : undefined;
+  const reusableTask =
+    existingTask && existingTask.type === "lp_generation" && existingTask.projectId === projectId
+      ? existingTask
+      : undefined;
+  const task = reusableTask
+    ? { ...reusableTask }
+    : (
+        await createTaskThread({
+          repositories: input.repositories,
+          title: deriveTaskTitle(input.prompt),
+          type: "lp_generation",
+          projectId,
+          userMessage: input.prompt
+        })
+      ).task;
+  if (reusableTask) {
+    await appendTaskMessage({
+      repositories: input.repositories,
+      taskId: reusableTask.id,
+      role: "user",
+      content: input.prompt
+    });
+  } else {
+    await saveTaskSnapshot({
+      repositories: input.repositories,
+      taskId: task.id,
+      projectId
+    });
+  }
+
+  const previousSnapshot = await input.repositories.taskSnapshots.getByTaskId(task.id);
+  const previousPageVersionId = previousSnapshot?.pageVersionId;
 
   try {
     const chain = await runLpAgentChainForTask({
@@ -1837,7 +1866,8 @@ async function runLpTaskPrompt(input: {
       currentUser: input.currentUser,
       taskId: task.id,
       projectId,
-      prompt: input.prompt
+      prompt: input.prompt,
+      previousPageVersionId
     });
     await saveTaskSnapshot({
       repositories: input.repositories,
