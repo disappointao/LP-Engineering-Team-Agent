@@ -261,6 +261,12 @@ export interface WorkbenchCopy {
     interruptUnavailableLabel: string;
     streamingStatusLabel: string;
     streamingErrorLabel: string;
+    liveTaskTitle: string;
+    liveTaskIdle: string;
+    liveTaskRunning: string;
+    liveTaskCompleted: string;
+    liveTaskArtifactReady: string;
+    liveTaskRefreshError: string;
     recoveryTitle: string;
     recoverySubtitle: string;
     recoveryStateLabels: Record<
@@ -746,6 +752,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptUnavailableLabel: "Nothing running",
       streamingStatusLabel: "Generating response",
       streamingErrorLabel: "The chat response could not be generated.",
+      liveTaskTitle: "Live task progress",
+      liveTaskIdle: "Waiting for task activity",
+      liveTaskRunning: "Task is running",
+      liveTaskCompleted: "Task facts are current",
+      liveTaskArtifactReady: "Artifact workspace ready",
+      liveTaskRefreshError: "Task progress could not be refreshed.",
       recoveryTitle: "Run recovery",
       recoverySubtitle: "Safe recovery options derived from the run lifecycle.",
       recoveryStateLabels: {
@@ -1216,6 +1228,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptUnavailableLabel: "当前没有可打断任务",
       streamingStatusLabel: "正在生成回复",
       streamingErrorLabel: "聊天回复生成失败。",
+      liveTaskTitle: "实时任务进度",
+      liveTaskIdle: "等待任务活动",
+      liveTaskRunning: "任务正在运行",
+      liveTaskCompleted: "任务事实已更新",
+      liveTaskArtifactReady: "产物工作区已就绪",
+      liveTaskRefreshError: "任务进度刷新失败。",
       recoveryTitle: "运行恢复",
       recoverySubtitle: "根据运行生命周期派生的安全恢复选项。",
       recoveryStateLabels: {

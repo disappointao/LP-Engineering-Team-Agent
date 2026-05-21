@@ -1223,6 +1223,67 @@ button {
   font-weight: 760;
 }
 
+.liveTaskPanel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.liveTaskHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.liveTaskHeader strong {
+  font-size: 0.86rem;
+  font-weight: 830;
+}
+
+.liveTaskStatus {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 780;
+}
+
+.liveTaskMeta,
+.liveTaskProgressSummary,
+.liveTaskError {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.liveTaskMeta,
+.liveTaskProgressSummary {
+  color: var(--muted);
+}
+
+.liveTaskArtifact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.liveTaskArtifact strong {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
+.liveTaskError {
+  color: var(--danger);
+  font-weight: 760;
+}
+
 .processBlock,
 .recoveryBlock,
 .deliveryBlock,

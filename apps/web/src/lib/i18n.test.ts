@@ -112,6 +112,16 @@ describe("web i18n", () => {
     expect(zh.chat.bytesLabel(1280)).toBe("1,280 字节");
   });
 
+  it("exposes localized live task progress labels", () => {
+    const en = getWorkbenchCopy("en");
+    const zh = getWorkbenchCopy("zh-CN");
+
+    expect(en.chat.liveTaskTitle).toBe("Live task progress");
+    expect(en.chat.liveTaskRefreshError).toBe("Task progress could not be refreshed.");
+    expect(zh.chat.liveTaskTitle).toBe("实时任务进度");
+    expect(zh.chat.liveTaskRefreshError).toBe("任务进度刷新失败。");
+  });
+
   it("has localized model provider protocol copy", () => {
     const zh = getWorkbenchCopy("zh-CN");
     const en = getWorkbenchCopy("en");
