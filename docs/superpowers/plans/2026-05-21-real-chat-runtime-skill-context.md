@@ -1,8 +1,10 @@
 # Real Chat Runtime and Skill Context v0 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** Implemented and archived. This plan records the Stage 27 execution history; do not treat it as the current next-stage checklist. Future agents should read `docs/project-roadmap.md` first and use Stage 28 as the current recommended next stage.
+>
+> **Execution record:** Completed with `superpowers:subagent-driven-development`, TDD per task, spec review and code quality review gates, targeted regression, `pnpm test`, and `pnpm typecheck`.
 
-**Goal:** Build Stage 27 so project-bound ordinary chat can use a real provider-backed `assistant` runtime with bounded skill context while preserving deterministic defaults and Stage 26 streaming behavior.
+**Goal:** Stage 27 lets project-bound ordinary chat use a real provider-backed `assistant` runtime with bounded skill context while preserving deterministic defaults and Stage 26 streaming behavior.
 
 **Architecture:** Add `assistant` as a first-class agent/model role across schema, model gateway, runtime, API orchestration, Web model routing, and chat streaming. The API service owns assistant chat runtime execution and prompt assembly; the Web store and route keep transport concerns separate and only stream safe UI events.
 
@@ -12,7 +14,7 @@
 
 ## Scope Guard
 
-This plan implements only Stage 27 from `docs/superpowers/specs/2026-05-21-real-chat-runtime-skill-context-design.md`.
+This plan implemented only Stage 27 from `docs/superpowers/specs/2026-05-21-real-chat-runtime-skill-context-design.md`.
 
 It does not implement LP chain end-to-end, MCP execution, tool-call conversion, provider token streaming, real shell execution, deployment runner changes, usage/cost reporting, auth/RBAC, object storage, or Postgres production rollout.
 
@@ -30,7 +32,7 @@ It does not implement LP chain end-to-end, MCP execution, tool-call conversion, 
 - Modify `apps/web/src/app/api/chat/stream/route.ts` and `apps/web/src/app/api/chat/stream/route.test.ts` to emit context summary and safe runtime failure events.
 - Modify `apps/web/src/app/streaming-workbench-state.ts`, `apps/web/src/app/streaming-workbench-state.test.ts`, `apps/web/src/app/streaming-workbench.tsx`, and `apps/web/src/app/streaming-workbench.test.ts` to render project/skill context summary during streaming.
 - Modify `apps/web/src/app/actions.ts`, `apps/web/src/app/actions.test.ts`, `apps/web/src/app/page.tsx`, `apps/web/src/app/page.test.ts`, `apps/web/src/lib/i18n.ts`, and `apps/web/src/lib/i18n.test.ts` so Models UI can configure `assistant` routes and the workbench top bar shows assistant route status.
-- Modify `docs/superpowers/README.md` and `docs/project-roadmap.md` at the end of the implementation to mark the Stage 27 plan as current and keep the reading order accurate.
+- Modify `docs/superpowers/README.md` and `docs/project-roadmap.md` at the end of the implementation to mark Stage 27 complete and keep the reading order accurate.
 
 ## Task 1: Add `assistant` Role to Shared Schema and Model Gateway
 
@@ -40,7 +42,7 @@ It does not implement LP chain end-to-end, MCP execution, tool-call conversion, 
 - Modify: `packages/model-gateway/src/index.ts`
 - Modify: `packages/model-gateway/src/index.test.ts`
 
-- [ ] **Step 1: Write failing schema and gateway tests**
+- [x] **Step 1: Write failing schema and gateway tests**
 
 Add this test to `packages/lp-schema/src/index.test.ts`:
 
@@ -85,7 +87,7 @@ it("routes agent roles through configured providers", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -95,7 +97,7 @@ pnpm exec vitest run packages/lp-schema/src/index.test.ts packages/model-gateway
 
 Expected: failures mention invalid enum value for `assistant` and role list mismatch.
 
-- [ ] **Step 3: Implement role and default policy**
+- [x] **Step 3: Implement role and default policy**
 
 In `packages/lp-schema/src/index.ts`, change `AgentRoleSchema`:
 
@@ -133,7 +135,7 @@ export const createDefaultModelPolicy = (): ModelRoutingPolicy => ({
 
 Keep `clonePolicy()` based on `agentRoles`; that loop will include `assistant` after the role list change.
 
-- [ ] **Step 4: Update policy literals in model-gateway tests**
+- [x] **Step 4: Update policy literals in model-gateway tests**
 
 In `packages/model-gateway/src/index.test.ts`, any explicit `ModelRoutingPolicy` literal must include:
 
@@ -153,7 +155,7 @@ Use this order in literals:
 }
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run:
 
@@ -163,7 +165,7 @@ pnpm exec vitest run packages/lp-schema/src/index.test.ts packages/model-gateway
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/lp-schema/src/index.ts packages/lp-schema/src/index.test.ts packages/model-gateway/src/index.ts packages/model-gateway/src/index.test.ts
@@ -176,7 +178,7 @@ git commit -m "add assistant model role"
 - Modify: `packages/runtime-adapters/src/index.ts`
 - Modify: `packages/runtime-adapters/src/index.test.ts`
 
-- [ ] **Step 1: Write failing runtime tests**
+- [x] **Step 1: Write failing runtime tests**
 
 Add these tests to `packages/runtime-adapters/src/index.test.ts`:
 
@@ -243,7 +245,7 @@ it("types assistant cancellation runtime events", () => {
 });
 ```
 
-- [ ] **Step 2: Run runtime tests to verify failure**
+- [x] **Step 2: Run runtime tests to verify failure**
 
 Run:
 
@@ -253,7 +255,7 @@ pnpm exec vitest run packages/runtime-adapters/src/index.test.ts
 
 Expected: TypeScript or test failures mention missing `assistant` route in cloned policy and missing `run.cancelled` event type.
 
-- [ ] **Step 3: Implement runtime event and policy clone**
+- [x] **Step 3: Implement runtime event and policy clone**
 
 In `packages/runtime-adapters/src/index.ts`, add `run.cancelled` to `RuntimeEvent`:
 
@@ -287,7 +289,7 @@ Update explicit model policy literals in `packages/runtime-adapters/src/index.te
 assistant: { provider: "mock-openai", model: "assistant-model" },
 ```
 
-- [ ] **Step 4: Run runtime tests**
+- [x] **Step 4: Run runtime tests**
 
 Run:
 
@@ -297,7 +299,7 @@ pnpm exec vitest run packages/runtime-adapters/src/index.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/runtime-adapters/src/index.ts packages/runtime-adapters/src/index.test.ts
@@ -312,7 +314,7 @@ git commit -m "support assistant runtime role"
 - Modify: `packages/api/src/run-orchestrator.test.ts`
 - Modify: `packages/api/src/services.test.ts`
 
-- [ ] **Step 1: Write failing run-orchestrator test**
+- [x] **Step 1: Write failing run-orchestrator test**
 
 Add this test to `packages/api/src/run-orchestrator.test.ts`:
 
@@ -372,7 +374,7 @@ it("persists assistant cancelled runs and cancellation events", async () => {
 });
 ```
 
-- [ ] **Step 2: Write failing context policy test**
+- [x] **Step 2: Write failing context policy test**
 
 In `packages/api/src/services.test.ts`, add this assertion to the existing model route resolution test block or add a new test:
 
@@ -390,7 +392,7 @@ it("resolves default assistant model route for projects", async () => {
 });
 ```
 
-- [ ] **Step 3: Run focused API tests to verify failure**
+- [x] **Step 3: Run focused API tests to verify failure**
 
 Run:
 
@@ -400,7 +402,7 @@ pnpm exec vitest run packages/api/src/run-orchestrator.test.ts packages/api/src/
 
 Expected: failures mention `assistant` not assignable in `runAgentStep()` and missing `assistant` in Context Pack model routing policy schema.
 
-- [ ] **Step 4: Implement role types and context schema**
+- [x] **Step 4: Implement role types and context schema**
 
 In `packages/api/src/run-orchestrator.ts`, change role type fields to `AgentRole`:
 
@@ -446,7 +448,7 @@ const ModelRoutingPolicySchema = z.object({
 });
 ```
 
-- [ ] **Step 5: Update default policy assembly in API service**
+- [x] **Step 5: Update default policy assembly in API service**
 
 In `packages/api/src/index.ts`, update `resolveModelRoutingPolicyForProject()`:
 
@@ -485,7 +487,7 @@ const mcpTools =
     : await this.resolveVisibleMCPTools({ projectId, role, skillVersions });
 ```
 
-- [ ] **Step 6: Update API test policy literals**
+- [x] **Step 6: Update API test policy literals**
 
 In `packages/api/src/*.test.ts`, every explicit `resolvedPolicy` or `ModelRoutingPolicy` literal must include:
 
@@ -507,7 +509,7 @@ rg -n "resolvedPolicy: \\{|visibleToolsByRole: \\{|ModelRoutingPolicy" packages/
 
 Expected: all policy and visible-tool literals include `assistant`.
 
-- [ ] **Step 7: Run API tests**
+- [x] **Step 7: Run API tests**
 
 Run:
 
@@ -517,7 +519,7 @@ pnpm exec vitest run packages/api/src/run-orchestrator.test.ts packages/api/src/
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/api/src/context-assembler.ts packages/api/src/run-orchestrator.ts packages/api/src/run-orchestrator.test.ts packages/api/src/services.test.ts
@@ -532,7 +534,7 @@ git commit -m "extend api orchestration for assistant role"
 - Modify: `packages/api/src/index.ts`
 - Modify: `packages/api/src/services.test.ts`
 
-- [ ] **Step 1: Write prompt builder tests**
+- [x] **Step 1: Write prompt builder tests**
 
 Create `packages/api/src/assistant-chat.test.ts`:
 
@@ -622,7 +624,7 @@ describe("assistant chat prompt", () => {
 });
 ```
 
-- [ ] **Step 2: Run prompt builder tests to verify failure**
+- [x] **Step 2: Run prompt builder tests to verify failure**
 
 Run:
 
@@ -632,7 +634,7 @@ pnpm exec vitest run packages/api/src/assistant-chat.test.ts
 
 Expected: module not found for `./assistant-chat`.
 
-- [ ] **Step 3: Implement assistant prompt builder**
+- [x] **Step 3: Implement assistant prompt builder**
 
 Create `packages/api/src/assistant-chat.ts`:
 
@@ -733,7 +735,7 @@ function formatMemory(context: RuntimeRunContext): string {
 }
 ```
 
-- [ ] **Step 4: Write failing service tests**
+- [x] **Step 4: Write failing service tests**
 
 In the `StaticRuntime` and `MutableRuntime` helpers near the bottom of `packages/api/src/services.test.ts`, include model text in returned runtime results:
 
@@ -812,7 +814,7 @@ it("returns safe assistant chat failure without raw provider details", async () 
 });
 ```
 
-- [ ] **Step 5: Run service tests to verify failure**
+- [x] **Step 5: Run service tests to verify failure**
 
 Run:
 
@@ -822,7 +824,7 @@ pnpm exec vitest run packages/api/src/assistant-chat.test.ts packages/api/src/se
 
 Expected: failure for missing `assistantRuntime` option and `runAssistantChat()`.
 
-- [ ] **Step 6: Implement `assistantRuntime` and `runAssistantChat()`**
+- [x] **Step 6: Implement `assistantRuntime` and `runAssistantChat()`**
 
 In `packages/api/src/index.ts`, extend service options and class fields:
 
@@ -946,7 +948,7 @@ async runAssistantChat(input: RunAssistantChatInput): Promise<RunAssistantChatRe
 }
 ```
 
-- [ ] **Step 7: Run API tests**
+- [x] **Step 7: Run API tests**
 
 Run:
 
@@ -956,7 +958,7 @@ pnpm exec vitest run packages/api/src/assistant-chat.test.ts packages/api/src/se
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/api/src/assistant-chat.ts packages/api/src/assistant-chat.test.ts packages/api/src/index.ts packages/api/src/services.test.ts
@@ -971,7 +973,7 @@ git commit -m "add assistant chat runtime service"
 - Modify: `apps/web/src/lib/workbench-store.ts`
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 
-- [ ] **Step 1: Write failing chat stream tests**
+- [x] **Step 1: Write failing chat stream tests**
 
 Add tests to `apps/web/src/lib/chat-stream.test.ts`:
 
@@ -1006,7 +1008,7 @@ it("decodes cancelled run status events", () => {
 });
 ```
 
-- [ ] **Step 2: Write failing store tests**
+- [x] **Step 2: Write failing store tests**
 
 Add tests to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -1058,7 +1060,7 @@ it("keeps projectless streaming chat deterministic with no context summary skill
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -1068,7 +1070,7 @@ pnpm exec vitest run apps/web/src/lib/chat-stream.test.ts apps/web/src/lib/workb
 
 Expected: failures mention unknown `context.summary` event and missing `contextSummary` in streaming result.
 
-- [ ] **Step 4: Implement stream event type and parser**
+- [x] **Step 4: Implement stream event type and parser**
 
 In `apps/web/src/lib/chat-stream.ts`, extend `ChatStreamEvent`:
 
@@ -1124,7 +1126,7 @@ case "context.summary":
   );
 ```
 
-- [ ] **Step 5: Implement store context summary wiring**
+- [x] **Step 5: Implement store context summary wiring**
 
 In `apps/web/src/lib/workbench-store.ts`, extend `StreamingChatStartResult` success shape:
 
@@ -1173,7 +1175,7 @@ if (requestedProjectId) {
 
 Keep projectless chat on the existing deterministic sentence.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -1183,7 +1185,7 @@ pnpm exec vitest run apps/web/src/lib/chat-stream.test.ts apps/web/src/lib/workb
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/chat-stream.ts apps/web/src/lib/chat-stream.test.ts apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts
@@ -1200,7 +1202,7 @@ git commit -m "wire assistant context into chat stream"
 - Modify: `apps/web/src/app/streaming-workbench.tsx`
 - Modify: `apps/web/src/app/streaming-workbench.test.ts`
 
-- [ ] **Step 1: Write failing route test**
+- [x] **Step 1: Write failing route test**
 
 In `apps/web/src/app/api/chat/stream/route.test.ts`, add to the successful streaming test setup:
 
@@ -1232,7 +1234,7 @@ expect(events[1]).toMatchObject({
 });
 ```
 
-- [ ] **Step 2: Write failing streaming state test**
+- [x] **Step 2: Write failing streaming state test**
 
 Add to `apps/web/src/app/streaming-workbench-state.test.ts`:
 
@@ -1259,7 +1261,7 @@ it("stores safe context summary from stream events", () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -1269,7 +1271,7 @@ pnpm exec vitest run apps/web/src/app/api/chat/stream/route.test.ts apps/web/src
 
 Expected: failures mention missing context summary stream event and missing `contextSummary` state.
 
-- [ ] **Step 4: Emit `context.summary` from route**
+- [x] **Step 4: Emit `context.summary` from route**
 
 In `apps/web/src/app/api/chat/stream/route.ts`, after `task.created`:
 
@@ -1292,7 +1294,7 @@ return createSingleEventResponse({
 });
 ```
 
-- [ ] **Step 5: Store and render context summary state**
+- [x] **Step 5: Store and render context summary state**
 
 In `apps/web/src/app/streaming-workbench-state.ts`, add type and state field:
 
@@ -1353,7 +1355,7 @@ In `apps/web/src/app/streaming-workbench.tsx`, render summary inside the streami
 ) : null}
 ```
 
-- [ ] **Step 6: Add UI render test**
+- [x] **Step 6: Add UI render test**
 
 In `apps/web/src/app/streaming-workbench.test.ts`, add a fetch stream fixture containing:
 
@@ -1377,7 +1379,7 @@ expect(collectText(rendered).join(" ")).toContain("Skills: 1");
 expect(collectText(rendered).join(" ")).toContain("Runtime: real");
 ```
 
-- [ ] **Step 7: Run focused Web tests**
+- [x] **Step 7: Run focused Web tests**
 
 Run:
 
@@ -1387,7 +1389,7 @@ pnpm exec vitest run apps/web/src/app/api/chat/stream/route.test.ts apps/web/src
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/app/api/chat/stream/route.ts apps/web/src/app/api/chat/stream/route.test.ts apps/web/src/app/streaming-workbench-state.ts apps/web/src/app/streaming-workbench-state.test.ts apps/web/src/app/streaming-workbench.tsx apps/web/src/app/streaming-workbench.test.ts
@@ -1404,7 +1406,7 @@ git commit -m "show assistant chat context summary"
 - Modify: `apps/web/src/lib/i18n.ts`
 - Modify: `apps/web/src/lib/i18n.test.ts`
 
-- [ ] **Step 1: Write failing action and i18n tests**
+- [x] **Step 1: Write failing action and i18n tests**
 
 In `apps/web/src/app/actions.test.ts`, add an upsert route test using role `assistant`:
 
@@ -1438,7 +1440,7 @@ expect(zh.chat.assistantModelRoute("provider_openai/gpt-5.4")).toBe(
 );
 ```
 
-- [ ] **Step 2: Write failing page tests**
+- [x] **Step 2: Write failing page tests**
 
 In `apps/web/src/app/page.test.ts`, update default `resolvedPolicy` literals to include assistant. Add assertions in models view tests:
 
@@ -1487,7 +1489,7 @@ it("shows the assistant model route signal in the workbench top bar", async () =
 });
 ```
 
-- [ ] **Step 3: Run Web UI tests to verify failure**
+- [x] **Step 3: Run Web UI tests to verify failure**
 
 Run:
 
@@ -1497,7 +1499,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts apps/web/src/app/page.test
 
 Expected: failures mention unsupported role `assistant`, missing assistant label, and route count mismatch.
 
-- [ ] **Step 4: Implement action parser and role order**
+- [x] **Step 4: Implement action parser and role order**
 
 In `apps/web/src/app/actions.ts`, update `parseAgentRole()`:
 
@@ -1536,7 +1538,7 @@ const assistantModelLabel = copy.chat.assistantModelRoute(
 
 Replace the top-bar usage of `builderModelLabel` with `assistantModelLabel`.
 
-- [ ] **Step 5: Implement labels**
+- [x] **Step 5: Implement labels**
 
 In `apps/web/src/lib/i18n.ts`, add `assistantModelRoute` to chat copy type:
 
@@ -1566,7 +1568,7 @@ assistant: "Assistant",
 assistant: "聊天助手",
 ```
 
-- [ ] **Step 6: Update Web policy literals**
+- [x] **Step 6: Update Web policy literals**
 
 In `apps/web/src/app/page.test.ts`, `apps/web/src/lib/workbench-store.test.ts`, and any Web test with `resolvedPolicy`, add:
 
@@ -1582,7 +1584,7 @@ rg -n "resolvedPolicy: \\{" apps/web/src
 
 Expected: every displayed policy literal includes `assistant`.
 
-- [ ] **Step 7: Run focused Web tests**
+- [x] **Step 7: Run focused Web tests**
 
 Run:
 
@@ -1592,7 +1594,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts apps/web/src/app/page.test
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/app/actions.ts apps/web/src/app/actions.test.ts apps/web/src/app/page.tsx apps/web/src/app/page.test.ts apps/web/src/lib/i18n.ts apps/web/src/lib/i18n.test.ts
@@ -1606,7 +1608,7 @@ git commit -m "expose assistant model route in web"
 - Modify: `docs/project-roadmap.md`
 - Modify if implementation details change Agent concepts: `docs/agent-development-learning.md`
 
-- [ ] **Step 1: Run targeted regression suite**
+- [x] **Step 1: Run targeted regression suite**
 
 Run:
 
@@ -1616,7 +1618,7 @@ pnpm exec vitest run packages/lp-schema/src/index.test.ts packages/model-gateway
 
 Expected: PASS.
 
-- [ ] **Step 2: Run workspace verification**
+- [x] **Step 2: Run workspace verification**
 
 Run:
 
@@ -1627,39 +1629,39 @@ pnpm typecheck
 
 Expected: both commands complete successfully.
 
-- [ ] **Step 3: Update Superpowers README**
+- [x] **Step 3: Update Superpowers README**
 
-In `docs/superpowers/README.md`, change item 82 and add item 83:
+In `docs/superpowers/README.md`, keep item 82 and item 83 aligned with the completed implementation:
 
 ```md
 82. `specs/2026-05-21-real-chat-runtime-skill-context-design.md`
-   - Stage 27 Real Chat Runtime and Skill Context v0 design（设计已确认）。
-   - 在 Stage 26 implementation plan 和当前 roadmap 后阅读，用于新增普通聊天专用 `assistant` role、project-bound real chat runtime、skill context prompt 注入、Chat UI context summary，以及继续排除 LP chain、MCP execution、真实 shell/deployment 和 provider token streaming。
+   - Stage 27 Real Chat Runtime and Skill Context v0 design（已实现，当前已完成）。
+   - 在 Stage 26 implementation plan 和当前 roadmap 后阅读，用于理解已新增的普通聊天专用 `assistant` role、project-bound real chat runtime、skill context prompt 注入、Chat UI context summary，以及继续排除 LP chain、MCP execution、真实 shell/deployment 和 provider token streaming 的历史范围。
 
 83. `plans/2026-05-21-real-chat-runtime-skill-context.md`
-   - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan。
-   - 在 Stage 27 design 后阅读，用于按 TDD 实现 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration 和 verification。
+   - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests、review gates、最终验证和文档收尾历史；该 plan 已归档为完成态，不再作为当前执行 checklist。
 ```
 
-- [ ] **Step 4: Update roadmap**
+- [x] **Step 4: Update roadmap**
 
-In `docs/project-roadmap.md`, update Stage 27 status and add the plan link:
+In `docs/project-roadmap.md`, move Stage 27 into completed records, add the design/plan links, and make Stage 28 the current recommended next stage:
 
 ```md
-**状态：** 当前推荐下一阶段；设计和实施计划已确认，待实现。
+### Stage 27：Real Chat Runtime and Skill Context v0
+
+**状态：** 已实现，当前已完成。
 
 **当前设计：** `docs/superpowers/specs/2026-05-21-real-chat-runtime-skill-context-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-real-chat-runtime-skill-context.md`。
 ```
 
-If implementation has been completed before this task runs, move Stage 27 into the completed stage record and make Stage 28 the current recommended next stage.
+- [x] **Step 5: Update Agent learning notes only if needed**
 
-- [ ] **Step 5: Update Agent learning notes only if needed**
+Update `docs/agent-development-learning.md` if any current-state note still says Stage 27 is unimplemented; after completion it must say `assistant` is a first-class model/runtime role, project-bound ordinary chat uses `runAssistantChat()`, Web emits safe `context.summary`, and real runtime remains `REAL_MODEL_RUNTIME=1` opt-in.
 
-If implementation changed the concept from the design, edit `docs/agent-development-learning.md` in section `2.12 普通聊天也需要明确 Agent role` with the exact new fact. If implementation matches the design, leave that file unchanged.
-
-- [ ] **Step 6: Check formatting and status**
+- [x] **Step 6: Check formatting and status**
 
 Run:
 
@@ -1670,7 +1672,7 @@ git status --short --branch
 
 Expected: no whitespace errors; only intended Stage 27 implementation and docs files are modified.
 
-- [ ] **Step 7: Commit docs and final implementation state**
+- [x] **Step 7: Commit docs and final implementation state**
 
 ```bash
 git add docs/superpowers/README.md docs/project-roadmap.md docs/agent-development-learning.md
@@ -1685,7 +1687,7 @@ git add packages apps
 git commit -m "implement assistant chat runtime"
 ```
 
-- [ ] **Step 8: Final verification after commits**
+- [x] **Step 8: Final verification after commits**
 
 Run:
 

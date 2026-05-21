@@ -336,7 +336,7 @@
 
 83. `plans/2026-05-21-real-chat-runtime-skill-context.md`
    - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan（已实现，当前已完成）。
-   - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests 和文档收尾历史。
+   - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests、review gates、最终验证和文档收尾历史；该 plan 已归档为完成态，不再作为当前执行 checklist。
 
 ## 维护规则
 
