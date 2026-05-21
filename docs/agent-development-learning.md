@@ -241,6 +241,8 @@ Stage 29 v0 先用短轮询 task state refresh，而不是直接上 SSE。这里
 
 这两条边界不能混在一起。run timeline payload 只能包含 safe summary，不能把 raw model output、raw artifact content、secret、raw worker payload、raw tool output、本机路径或完整 stdout/stderr 送到浏览器。
 
+Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/api/chat/stream`；当服务端判断 prompt 是 LP 任务并返回 `fallback.required` 时，客户端调用 live task submit route 创建 task 并启动 in-process LP chain，然后通过 task state polling 观察 repository facts。这个边界保留了 Stage 26 的 text streaming，同时让 LP workflow 不再依赖阻塞式表单提交才能回到页面。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型
