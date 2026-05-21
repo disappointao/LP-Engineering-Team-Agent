@@ -228,6 +228,10 @@ describe("live task panel polling helpers", () => {
       previousPreviewVersionKey: "page_1|workspace_1|index.html:aaa",
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
     });
+    const firstArtifactDecision = getLiveTaskPreviewRefreshDecision({
+      previousPreviewVersionKey: undefined,
+      nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
+    });
     const repeatDecision = getLiveTaskPreviewRefreshDecision({
       previousPreviewVersionKey: firstDecision.nextPreviewVersionKey,
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
@@ -239,6 +243,10 @@ describe("live task panel polling helpers", () => {
     });
 
     expect(firstDecision).toEqual({
+      shouldRefresh: true,
+      nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
+    });
+    expect(firstArtifactDecision).toEqual({
       shouldRefresh: true,
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
     });

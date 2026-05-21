@@ -153,14 +153,21 @@ export function getLiveTaskPreviewRefreshDecision({
   shouldRefresh: boolean;
   nextPreviewVersionKey?: string;
 } {
+  const hasResetPreviewVersionKey = resetPreviewVersionKey !== undefined;
   const baselinePreviewVersionKey =
-    resetPreviewVersionKey ?? previousPreviewVersionKey;
+    hasResetPreviewVersionKey ? resetPreviewVersionKey : previousPreviewVersionKey;
+  const firstDefinedPreviewVersionKey =
+    !hasResetPreviewVersionKey &&
+    previousPreviewVersionKey === undefined &&
+    nextPreviewVersionKey !== undefined;
 
   return {
-    shouldRefresh: shouldRefreshForLiveArtifact({
-      previousPreviewVersionKey: baselinePreviewVersionKey,
-      nextPreviewVersionKey
-    }),
+    shouldRefresh:
+      firstDefinedPreviewVersionKey ||
+      shouldRefreshForLiveArtifact({
+        previousPreviewVersionKey: baselinePreviewVersionKey,
+        nextPreviewVersionKey
+      }),
     nextPreviewVersionKey:
       nextPreviewVersionKey ?? baselinePreviewVersionKey
   };
