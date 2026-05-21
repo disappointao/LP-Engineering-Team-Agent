@@ -367,7 +367,12 @@ export type StreamingChatStartResult =
       contextSummary: StreamingChatContextSummary;
       chunks: string[];
     }
-  | { ok: false; error: ProjectFlowErrorCode }
+  | {
+      ok: false;
+      error: ProjectFlowErrorCode;
+      taskId?: string;
+      projectId?: string;
+    }
   | {
       ok: false;
       error: "fallback_required";
@@ -902,7 +907,17 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           prompt: prompt.value
         });
         if (!assistant.ok) {
-          return { ok: false, error: assistant.error };
+          await appendStreamingChatUserMessage({
+            repositories,
+            taskId: streamTaskId,
+            content: prompt.value
+          });
+          return {
+            ok: false,
+            error: assistant.error,
+            taskId: streamTaskId,
+            projectId: requestedProjectId
+          };
         }
         assistantContent = assistant.content;
         contextSummary = assistant.contextSummary;
@@ -1773,6 +1788,27 @@ async function ensureStreamingChatTask(input: {
     await input.repositories.tasks.save(task);
 
     return { ...task };
+  });
+}
+
+async function appendStreamingChatUserMessage(input: {
+  repositories: WorkbenchRepositories;
+  taskId: string;
+  content: string;
+}): Promise<ChatMessageRecord> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const existingMessages = await input.repositories.messages.listAll();
+    const message: ChatMessageRecord = {
+      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      taskId: input.taskId,
+      role: "user",
+      content: input.content,
+      createdAt: new Date().toISOString()
+    };
+
+    await input.repositories.messages.save(message);
+
+    return { ...message };
   });
 }
 

@@ -201,6 +201,26 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const errorCode = toChatStreamErrorCode(started.error);
+    if (started.taskId) {
+      const taskId = started.taskId;
+      const projectId = started.projectId;
+      const cookies = [createCookie(CURRENT_TASK_COOKIE, taskId)];
+      if (projectId) {
+        cookies.push(createCookie(CURRENT_PROJECT_COOKIE, projectId));
+      }
+      return createStreamResponse((enqueue) => {
+        enqueue({
+          type: "task.created",
+          taskId,
+          ...(projectId ? { projectId } : {})
+        });
+        enqueue({
+          type: "error",
+          code: errorCode,
+          message: getSafeErrorMessage(errorCode)
+        });
+      }, cookies);
+    }
     return createSingleEventResponse({
       type: "error",
       code: errorCode,

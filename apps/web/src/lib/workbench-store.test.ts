@@ -62,6 +62,7 @@ const emptyWorkerQueueSnapshot = {
 const tempDirs: string[] = [];
 const originalEnv = {
   LP_AGENT_WORKBENCH_STATE_FILE: process.env.LP_AGENT_WORKBENCH_STATE_FILE,
+  REAL_MODEL_RUNTIME: process.env.REAL_MODEL_RUNTIME,
   WORKER_REPOSITORY_BACKEND: process.env.WORKER_REPOSITORY_BACKEND,
   WORKER_JOBS_FILE: process.env.WORKER_JOBS_FILE,
   WORKER_PAYLOADS_FILE: process.env.WORKER_PAYLOADS_FILE,
@@ -2331,6 +2332,37 @@ describe("web workbench store", () => {
         runs[0]?.id,
         runs[0]?.id
       ]);
+    });
+
+    it("announces failed project-bound assistant starts without leaving empty tasks", async () => {
+      process.env.REAL_MODEL_RUNTIME = "1";
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const project = await store.createProject({ name: "Spring Campaign" });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: project.id,
+        taskId: null,
+        prompt: "How should this page sound?"
+      });
+
+      expect(started).toMatchObject({
+        ok: false,
+        error: "generation_failed",
+        taskId: "task_1",
+        projectId: project.id
+      });
+      const tasks = await repositories.tasks.listAll();
+      expect(tasks).toEqual([
+        expect.objectContaining({
+          id: "task_1",
+          projectId: project.id,
+          type: "general_chat"
+        })
+      ]);
+      const messages = await repositories.messages.listForTask("task_1");
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
+      expect(messages[0]?.content).toBe("How should this page sound?");
     });
 
     it("keeps projectless streaming chat deterministic with no context summary skills", async () => {

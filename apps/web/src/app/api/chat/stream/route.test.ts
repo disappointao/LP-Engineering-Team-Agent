@@ -269,6 +269,42 @@ describe("POST /api/chat/stream", () => {
     });
   });
 
+  it("announces task-scoped generation failures after a task is created", async () => {
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: false,
+      error: "generation_failed",
+      taskId: "task_1",
+      projectId: "project_1"
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ projectId: "project_1", prompt: "Hello" })
+      })
+    );
+
+    const setCookie = getSetCookieHeaderText(response);
+    expect(setCookie).toContain("lp-agent-current-task=task_1");
+    expect(setCookie).toContain("lp-agent-current-project=project_1");
+    expect(decodeChatStreamLines(await response.text())).toEqual({
+      events: [
+        {
+          type: "task.created",
+          taskId: "task_1",
+          projectId: "project_1"
+        },
+        {
+          type: "error",
+          code: "generation_failed",
+          message: "The chat response could not be generated."
+        }
+      ],
+      remainder: ""
+    });
+  });
+
   it("uses the session task fallback when taskId is omitted", async () => {
     mocks.getCurrentTaskId.mockResolvedValue("task_general");
     mocks.startStreamingChatPrompt.mockResolvedValue({
