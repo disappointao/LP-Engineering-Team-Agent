@@ -852,6 +852,12 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         taskId: task.id,
         workerRuntime: workerQueueRuntime ?? workerRuntime
       });
+      const recoveryRuns = snapshot?.currentPageVersion
+        ? applyBlockedReviewRecoveryState({
+            recovery,
+            currentPageVersion: snapshot.currentPageVersion
+          })
+        : recovery;
       const skills = await loadSkillState(activeProjectId);
       return {
         kind: "task_ready",
@@ -873,7 +879,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           taskId: task.id
         }),
         recovery: {
-          runs: recovery
+          runs: recoveryRuns
         },
         snapshot,
         artifactDiff
@@ -1744,6 +1750,37 @@ async function saveTaskSnapshot(input: {
   });
 }
 
+function applyBlockedReviewRecoveryState(input: {
+  recovery: RunLifecycleView[];
+  currentPageVersion: NonNullable<WorkbenchSnapshot["currentPageVersion"]>;
+}): RunLifecycleView[] {
+  if (input.currentPageVersion.reviewStatus !== "failed") {
+    return input.recovery;
+  }
+
+  const reviewerRunId = `run_reviewer_${input.currentPageVersion.id}`;
+  return input.recovery.map((view) => {
+    if (view.runId !== reviewerRunId || view.state === "blocked") {
+      return view;
+    }
+
+    return {
+      ...view,
+      state: "blocked",
+      blockedReason: input.currentPageVersion.findings
+        .filter((finding) => finding.blocksDeployment || finding.severity === "blocking")
+        .map((finding) => `${finding.target}: ${finding.explanation}`)
+        .join("; "),
+      diagnosticSummary: {
+        code: "review_blocked_deployment",
+        message: "Reviewer blocked deployment.",
+        source: "handoff"
+      },
+      recoveryActions: ["resolve_blocker"]
+    };
+  });
+}
+
 async function runLpAgentChainForTask(input: {
   repositories: WorkbenchRepositories;
   service: DemoWorkbenchService;
@@ -1846,11 +1883,16 @@ async function runLpTaskPrompt(input: {
       briefId: chain.briefId,
       pageVersionId: chain.pageVersionId
     });
+    const pageVersion = await input.repositories.pageVersions.getById(chain.pageVersionId);
+    const assistantSummary =
+      pageVersion?.reviewStatus === "failed"
+        ? "LP artifacts need review attention before deployment."
+        : "LP artifacts are ready for review.";
     await appendTaskMessage({
       repositories: input.repositories,
       taskId: task.id,
       role: "assistant",
-      content: "LP artifacts are ready for review."
+      content: assistantSummary
     });
     return { ok: true, taskId: task.id, taskType: "lp_generation", projectId };
   } catch {

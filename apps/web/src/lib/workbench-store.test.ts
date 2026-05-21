@@ -2801,6 +2801,74 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("keeps blocked Reviewer results without creating a Deployer run", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const reviewerRuntime = new RecordingRuntime({
+      state: "completed",
+      findings: [
+        {
+          severity: "blocking",
+          target: "hero.cta",
+          explanation: "Missing call to action.",
+          suggestedFix: "Add a primary CTA.",
+          blocksDeployment: true
+        }
+      ]
+    });
+    const deployerRuntime = new RecordingRuntime({ state: "completed" });
+    const store = createWebWorkbenchStore({ repositories, reviewerRuntime, deployerRuntime });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+    await expect(repositories.runs.getById("run_deployer_version_1")).resolves.toBeUndefined();
+    await expect(repositories.pageVersions.getById("version_1")).resolves.toMatchObject({
+      reviewStatus: "failed"
+    });
+    const pageState = await store.getPageState({ projectId: "project_1", taskId: "task_1" });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected task state");
+    }
+    expect(pageState.recovery.runs.some((view) => view.state === "blocked")).toBe(true);
+    expect(pageState.messages[1]?.content).toBe(
+      "LP artifacts need review attention before deployment."
+    );
+  });
+
+  it("keeps the page version when Deployer fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const deployerRuntime = new StaticRuntime({ state: "failed" });
+    const store = createWebWorkbenchStore({ repositories, deployerRuntime });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskId: "task_1",
+      projectId: "project_1"
+    });
+    await expect(repositories.pageVersions.getById("version_1")).resolves.toMatchObject({
+      id: "version_1",
+      reviewStatus: "passed"
+    });
+    await expect(repositories.deployments.getByPageVersionId("version_1")).resolves.toBeUndefined();
+  });
+
   it("submits a project setup task without creating an implicit project", async () => {
     const store = createWebWorkbenchStore();
 
