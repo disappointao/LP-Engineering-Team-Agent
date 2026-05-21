@@ -678,6 +678,26 @@ describe("execute run recovery retry", () => {
   it("Planner retry uses the recent user message before the failed run for a continued LP attempt", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveTask(repositories);
+    await repositories.briefs.save({
+      id: "brief_1",
+      projectId: "project_1",
+      prompt: "Build a recovery LP.",
+      brief: sampleBrief,
+      createdAt: "2026-05-20T00:01:00.000Z"
+    });
+    await repositories.pageVersions.save({
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-20T00:02:00.000Z"
+    });
     await repositories.taskSnapshots.save({
       taskId: "task_1",
       projectId: "project_1",
@@ -698,13 +718,6 @@ describe("execute run recovery retry", () => {
       role: "user",
       content: "Revise the hero for enterprise buyers.",
       createdAt: "2026-05-20T00:05:00.000Z"
-    });
-    await repositories.messages.save({
-      id: "message_4",
-      taskId: "task_1",
-      role: "user",
-      content: "This prompt belongs to a later attempt.",
-      createdAt: "2026-05-20T00:06:00.000Z"
     });
     await saveRun(repositories, {
       id: "run_planner_failed",
@@ -765,6 +778,142 @@ describe("execute run recovery retry", () => {
       briefId: "brief_2",
       pageVersionId: undefined
     });
+  });
+
+  it("fails closed for an older failed planner run after a newer LP attempt succeeds", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.briefs.save({
+      id: "brief_1",
+      projectId: "project_1",
+      prompt: "Build a recovery LP.",
+      brief: sampleBrief,
+      createdAt: "2026-05-20T00:01:00.000Z"
+    });
+    await repositories.pageVersions.save({
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-20T00:02:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_2",
+      taskId: "task_1",
+      role: "assistant",
+      content: "LP artifacts are ready for review.",
+      createdAt: "2026-05-20T00:02:30.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_3",
+      taskId: "task_1",
+      role: "user",
+      content: "Make the page more concise.",
+      createdAt: "2026-05-20T00:03:00.000Z"
+    });
+    await saveRun(repositories, {
+      id: "run_planner_failed",
+      role: "planner",
+      state: "failed",
+      startedAt: "2026-05-20T00:03:30.000Z",
+      completedAt: "2026-05-20T00:03:45.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_planner_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+    await repositories.messages.save({
+      id: "message_4",
+      taskId: "task_1",
+      role: "assistant",
+      content: "LP generation failed. Open recovery details for the failed run.",
+      createdAt: "2026-05-20T00:04:00.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_5",
+      taskId: "task_1",
+      role: "user",
+      content: "Use an enterprise style instead.",
+      createdAt: "2026-05-20T00:06:00.000Z"
+    });
+    await repositories.briefs.save({
+      id: "brief_2",
+      projectId: "project_1",
+      prompt: "Use an enterprise style instead.",
+      brief: sampleBrief,
+      createdAt: "2026-05-20T00:06:30.000Z"
+    });
+    await repositories.pageVersions.save({
+      id: "version_2",
+      projectId: "project_1",
+      briefId: "brief_2",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "passed",
+      findings: [],
+      createdAt: "2026-05-20T00:07:00.000Z"
+    });
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2",
+      createdAt: "2026-05-20T00:01:00.000Z"
+    });
+
+    let createBriefCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async (input): Promise<BriefRecord> => {
+          createBriefCalls += 1;
+          const brief: BriefRecord = {
+            id: "brief_retry_should_not_be_saved",
+            projectId: input.projectId,
+            prompt: input.prompt,
+            brief: sampleBrief,
+            createdAt: "2026-05-20T00:10:00.000Z"
+          };
+          await repositories.briefs.save(brief);
+          return brief;
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_planner_failed",
+      action: "retry_run",
+      now: () => new Date("2026-05-20T00:10:00.000Z")
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    expect(createBriefCalls).toBe(0);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2"
+    });
+    await expect(
+      repositories.briefs.getById("brief_retry_should_not_be_saved")
+    ).resolves.toBeUndefined();
   });
 
   it("fails closed instead of retrying skill command runs", async () => {

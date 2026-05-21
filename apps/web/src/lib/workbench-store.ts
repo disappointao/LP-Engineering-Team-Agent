@@ -537,10 +537,7 @@ const lpKeywords = [
   "html",
   "官网",
   "活动页",
-  "电商",
-  "hero",
-  "cta",
-  "faq"
+  "电商"
 ];
 
 const projectKeywords = ["创建项目", "new project", "create project"];
@@ -999,18 +996,39 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: prompt.error };
       }
 
-      const taskType = classifyTaskPrompt(prompt.value);
       const requestedProjectId = input.projectId ?? undefined;
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
         return { ok: false, error: "project_not_found" };
       }
 
+      const requestedTaskId = input.taskId ?? undefined;
+      if (requestedTaskId) {
+        const existingTask = await repositories.tasks.getById(requestedTaskId);
+        const continuationProjectId = requestedProjectId ?? existingTask?.projectId;
+        if (
+          existingTask?.type === "lp_generation" &&
+          existingTask.projectId !== undefined &&
+          existingTask.projectId === continuationProjectId
+        ) {
+          return runLpTaskPrompt({
+            repositories,
+            service,
+            currentUser,
+            requestedTaskId,
+            requestedProjectId: continuationProjectId,
+            prompt: prompt.value,
+            implicitProjectName: input.implicitProjectName
+          });
+        }
+      }
+
+      const taskType = classifyTaskPrompt(prompt.value);
       if (taskType === "lp_generation") {
         return runLpTaskPrompt({
           repositories,
           service,
           currentUser,
-          requestedTaskId: input.taskId ?? undefined,
+          requestedTaskId,
           requestedProjectId,
           prompt: prompt.value,
           implicitProjectName: input.implicitProjectName

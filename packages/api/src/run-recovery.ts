@@ -426,16 +426,31 @@ async function retryRun(
       if (input.run.role === "planner") {
         const messages = await input.repositories.messages.listForTask(input.taskId);
         const promptMessage = selectUserMessageForRun(messages, input.run);
-        const prompt = promptMessage?.content.trim();
+        if (!promptMessage) {
+          return { ok: false, error: "retry_input_not_reconstructable" };
+        }
+        const prompt = promptMessage.content.trim();
         if (!prompt) {
           return { ok: false, error: "retry_input_not_reconstructable" };
         }
-        const isContinuationRetry =
-          snapshot !== undefined &&
-          promptMessage !== undefined &&
-          promptMessage.createdAt > snapshot.createdAt;
-        if (snapshot?.briefId && !isContinuationRetry) {
+        const latestUserMessage = selectLatestUserMessage(messages);
+        if (promptMessage.id !== latestUserMessage?.id) {
           return { ok: false, error: "retry_target_conflict" };
+        }
+        if (snapshot?.briefId || snapshot?.pageVersionId) {
+          const snapshotOutputTimestamp = await resolveSnapshotOutputTimestamp({
+            repositories: input.repositories,
+            snapshot
+          });
+          if (!snapshotOutputTimestamp.ok) {
+            return { ok: false, error: "retry_target_conflict" };
+          }
+          if (
+            snapshotOutputTimestamp.timestamp &&
+            snapshotOutputTimestamp.timestamp > input.run.startedAt
+          ) {
+            return { ok: false, error: "retry_target_conflict" };
+          }
         }
 
         const retryRunId = await nextRetryRunId(input.repositories, input.runId);
@@ -587,6 +602,39 @@ function selectUserMessageForRun(
         message.content.trim().length > 0
     )
     .at(-1);
+}
+
+function selectLatestUserMessage(
+  messages: WorkbenchMessageRecord[]
+): WorkbenchMessageRecord | undefined {
+  return messages
+    .filter((message) => message.role === "user" && message.content.trim().length > 0)
+    .at(-1);
+}
+
+async function resolveSnapshotOutputTimestamp(input: {
+  repositories: WorkbenchRepositories;
+  snapshot: { briefId?: string; pageVersionId?: string };
+}): Promise<{ ok: true; timestamp?: string } | { ok: false }> {
+  const timestamps: string[] = [];
+  if (input.snapshot.briefId) {
+    const brief = await input.repositories.briefs.getById(input.snapshot.briefId);
+    if (!brief) {
+      return { ok: false };
+    }
+    timestamps.push(brief.createdAt);
+  }
+  if (input.snapshot.pageVersionId) {
+    const pageVersion = await input.repositories.pageVersions.getById(
+      input.snapshot.pageVersionId
+    );
+    if (!pageVersion) {
+      return { ok: false };
+    }
+    timestamps.push(pageVersion.createdAt);
+  }
+  const timestamp = timestamps.sort().at(-1);
+  return timestamp ? { ok: true, timestamp } : { ok: true };
 }
 
 async function consumedHandoffPageVersionIdForRun(

@@ -2334,6 +2334,8 @@ describe("web workbench store", () => {
     expect(classifyTaskPrompt("new project for spring campaign")).toBe("project_setup");
     expect(classifyTaskPrompt("create a landing page for my project")).toBe("lp_generation");
     expect(classifyTaskPrompt("create project for spring campaign")).toBe("project_setup");
+    expect(classifyTaskPrompt("How should I organize an FAQ?")).toBe("general_chat");
+    expect(classifyTaskPrompt("What makes a CTA effective?")).toBe("general_chat");
   });
 
   it("derives implicit LP project names from the prompt with a fallback", () => {
@@ -2862,7 +2864,7 @@ describe("web workbench store", () => {
     const second = await store.submitTaskPrompt({
       taskId: first.taskId,
       projectId: first.projectId,
-      prompt: "Make the hero CTA more urgent and add a FAQ section",
+      prompt: "make it shorter",
       implicitProjectName: "Spring Sale"
     });
 
