@@ -53,7 +53,7 @@ export function shouldPollLiveTask(state: LiveTaskPanelState): boolean {
   if (!state.payload) {
     return true;
   }
-  return !state.payload.isTerminal && state.payload.nextPollMs > 0;
+  return !state.payload.isTerminal;
 }
 
 export function getNextPollMs(

@@ -67,6 +67,28 @@ describe("live task state helpers", () => {
     expect(getNextPollMs(state)).toBe(0);
   });
 
+  it("keeps polling non-terminal payloads with invalid poll hints", () => {
+    const zeroHintState = reduceLiveTaskState(createInitialLiveTaskState(), {
+      type: "payload",
+      payload: {
+        ...payload,
+        nextPollMs: 0
+      }
+    });
+    const negativeHintState = reduceLiveTaskState(createInitialLiveTaskState(), {
+      type: "payload",
+      payload: {
+        ...payload,
+        nextPollMs: -1
+      }
+    });
+
+    expect(shouldPollLiveTask(zeroHintState)).toBe(true);
+    expect(getNextPollMs(zeroHintState)).toBe(1200);
+    expect(shouldPollLiveTask(negativeHintState)).toBe(true);
+    expect(getNextPollMs(negativeHintState)).toBe(1200);
+  });
+
   it("requests router refresh when artifact version key changes", () => {
     expect(
       shouldRefreshForLiveArtifact({
