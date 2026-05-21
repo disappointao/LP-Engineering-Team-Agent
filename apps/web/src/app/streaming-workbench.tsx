@@ -206,6 +206,28 @@ export function createStreamingChatRequestBody({
   };
 }
 
+export interface LiveTaskSubmitRequestBody {
+  prompt: string;
+  implicitProjectName: string;
+}
+
+export function createLiveTaskSubmitRequestBody({
+  prompt,
+  implicitProjectName
+}: LiveTaskSubmitRequestBody): LiveTaskSubmitRequestBody {
+  return { prompt, implicitProjectName };
+}
+
+export function shouldStartLiveTaskAfterFallback({
+  fallbackReason,
+  taskType
+}: {
+  fallbackReason: string;
+  taskType?: string;
+}): boolean {
+  return fallbackReason === "unsupported_task_type" && taskType === "lp_generation";
+}
+
 export interface FallbackSubmitAfterCommitState {
   fallbackPrompt: string | undefined;
   fallbackSubmitPending: boolean;
@@ -282,19 +304,6 @@ export function StreamingWorkbench({
     stateRef.current = nextState;
   };
 
-  const dispatchEvent = (event: ChatStreamEvent) => {
-    const nextState = reduceStreamingWorkbenchEvent(stateRef.current, event);
-    applyState(nextState);
-    dispatch({ type: "event", event });
-
-    if (event.type === "fallback.required" && !fallbackSubmittedRef.current) {
-      fallbackSubmittedRef.current = true;
-      skipStreamingOnceRef.current = true;
-      fallbackSubmitPendingRef.current = true;
-      setFallbackPrompt(submittedPromptRef.current);
-    }
-  };
-
   const dispatchError = () => {
     const nextState: StreamingWorkbenchState = {
       ...stateRef.current,
@@ -303,6 +312,55 @@ export function StreamingWorkbench({
     };
     applyState(nextState);
     dispatch({ type: "error", message: streamingErrorLabel });
+  };
+
+  const startLiveTaskFromFallback = async () => {
+    try {
+      const response = await fetch("/api/tasks/submit", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(
+          createLiveTaskSubmitRequestBody({
+            prompt: submittedPromptRef.current,
+            implicitProjectName
+          })
+        )
+      });
+
+      if (!response.ok) {
+        dispatchError();
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      dispatchError();
+    }
+  };
+
+  const dispatchEvent = (event: ChatStreamEvent) => {
+    const nextState = reduceStreamingWorkbenchEvent(stateRef.current, event);
+    applyState(nextState);
+    dispatch({ type: "event", event });
+
+    if (event.type === "fallback.required" && !fallbackSubmittedRef.current) {
+      fallbackSubmittedRef.current = true;
+      if (
+        shouldStartLiveTaskAfterFallback({
+          fallbackReason: event.reason,
+          taskType: event.taskType
+        })
+      ) {
+        void startLiveTaskFromFallback();
+        return;
+      }
+
+      skipStreamingOnceRef.current = true;
+      fallbackSubmitPendingRef.current = true;
+      setFallbackPrompt(submittedPromptRef.current);
+    }
   };
 
   const refreshAndClearTerminalState = () => {

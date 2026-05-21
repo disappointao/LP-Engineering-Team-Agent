@@ -6,10 +6,12 @@ import {
   type StreamingWorkbenchState
 } from "./streaming-workbench-state";
 import {
+  createLiveTaskSubmitRequestBody,
   createStreamingChatRequestBody,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
   shouldRequestFallbackSubmitAfterCommit,
+  shouldStartLiveTaskAfterFallback,
   getStreamingSubmitDecision,
   StreamingContextSummary
 } from "./streaming-workbench";
@@ -213,6 +215,36 @@ describe("streaming workbench fallback submit handoff", () => {
         skipStreamingOnce: false
       })
     ).toBe(false);
+  });
+});
+
+describe("streaming workbench live task fallback", () => {
+  it("starts a live task after lp generation fallback is required", () => {
+    expect(
+      shouldStartLiveTaskAfterFallback({
+        fallbackReason: "unsupported_task_type",
+        taskType: "lp_generation"
+      })
+    ).toBe(true);
+  });
+
+  it("does not start a live task for non-lp fallback", () => {
+    expect(
+      shouldStartLiveTaskAfterFallback({
+        fallbackReason: "unsupported_task_type",
+        taskType: "project_setup"
+      })
+    ).toBe(false);
+  });
+
+  it("creates the live task submit request body", () => {
+    const prompt = "Build an LP";
+    const implicitProjectName = "Untitled LP Project";
+
+    expect(createLiveTaskSubmitRequestBody({ prompt, implicitProjectName })).toEqual({
+      prompt,
+      implicitProjectName
+    });
   });
 });
 
