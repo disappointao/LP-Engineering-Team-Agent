@@ -356,6 +356,16 @@ export type SubmitTaskResult =
       projectId?: string;
     };
 
+export type LiveTaskPromptStartResult =
+  | {
+      ok: true;
+      taskId: string;
+      taskType: TaskType;
+      projectId?: string;
+      completion: Promise<SubmitTaskResult>;
+    }
+  | { ok: false; error: ProjectFlowErrorCode };
+
 export interface StreamingChatContextSummary {
   projectId?: string;
   projectName?: string;
@@ -613,6 +623,12 @@ export interface WebWorkbenchStore {
     prompt: string;
     implicitProjectName: string;
   }): Promise<SubmitTaskResult>;
+  startLiveTaskPrompt(input: {
+    taskId?: string | null;
+    projectId?: string | null;
+    prompt: string;
+    implicitProjectName: string;
+  }): Promise<LiveTaskPromptStartResult>;
   startStreamingChatPrompt(input: {
     projectId?: string | null;
     taskId?: string | null;
@@ -1549,6 +1565,86 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
     },
 
+    async startLiveTaskPrompt(input) {
+      const prompt = validatePromptInput(input.prompt);
+      if (!prompt.ok) {
+        return { ok: false, error: prompt.error };
+      }
+
+      const requestedProjectId = input.projectId ?? undefined;
+      if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
+        return { ok: false, error: "project_not_found" };
+      }
+
+      const requestedTaskId = input.taskId ?? undefined;
+      if (requestedTaskId) {
+        const existingTask = await repositories.tasks.getById(requestedTaskId);
+        const continuationProjectId = requestedProjectId ?? existingTask?.projectId;
+        if (
+          existingTask?.type === "lp_generation" &&
+          existingTask.projectId !== undefined &&
+          existingTask.projectId === continuationProjectId
+        ) {
+          const prepared = await prepareLpTaskPrompt({
+            repositories,
+            service,
+            requestedTaskId,
+            requestedProjectId: continuationProjectId,
+            prompt: prompt.value,
+            implicitProjectName: input.implicitProjectName
+          });
+          const completion = completePreparedLpTaskPrompt({
+            repositories,
+            service,
+            currentUser,
+            task: prepared.task,
+            projectId: prepared.projectId,
+            prompt: prompt.value,
+            previousPageVersionId: prepared.previousPageVersionId
+          });
+          completion.catch(() => undefined);
+          return {
+            ok: true,
+            taskId: prepared.task.id,
+            taskType: "lp_generation",
+            projectId: prepared.projectId,
+            completion
+          };
+        }
+      }
+
+      const taskType = classifyTaskPrompt(prompt.value);
+      if (taskType !== "lp_generation") {
+        return { ok: false, error: "generation_failed" };
+      }
+
+      const prepared = await prepareLpTaskPrompt({
+        repositories,
+        service,
+        requestedTaskId,
+        requestedProjectId,
+        prompt: prompt.value,
+        implicitProjectName: input.implicitProjectName
+      });
+      const completion = completePreparedLpTaskPrompt({
+        repositories,
+        service,
+        currentUser,
+        task: prepared.task,
+        projectId: prepared.projectId,
+        prompt: prompt.value,
+        previousPageVersionId: prepared.previousPageVersionId
+      });
+      completion.catch(() => undefined);
+      return {
+        ok: true,
+        taskId: prepared.task.id,
+        taskType: "lp_generation",
+        projectId: prepared.projectId,
+        completion
+      };
+    },
+
     async interruptCurrentTask(input) {
       const task = await repositories.tasks.getById(input.taskId);
       if (!task) {
@@ -2331,6 +2427,37 @@ async function runLpTaskPrompt(input: {
   prompt: string;
   implicitProjectName: string;
 }): Promise<SubmitTaskResult> {
+  const prepared = await prepareLpTaskPrompt({
+    repositories: input.repositories,
+    service: input.service,
+    requestedTaskId: input.requestedTaskId,
+    requestedProjectId: input.requestedProjectId,
+    prompt: input.prompt,
+    implicitProjectName: input.implicitProjectName
+  });
+  return completePreparedLpTaskPrompt({
+    repositories: input.repositories,
+    service: input.service,
+    currentUser: input.currentUser,
+    task: prepared.task,
+    projectId: prepared.projectId,
+    prompt: input.prompt,
+    previousPageVersionId: prepared.previousPageVersionId
+  });
+}
+
+async function prepareLpTaskPrompt(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  requestedTaskId?: string;
+  requestedProjectId?: string;
+  prompt: string;
+  implicitProjectName: string;
+}): Promise<{
+  task: TaskRecord;
+  projectId: string;
+  previousPageVersionId?: string;
+}> {
   let projectId = input.requestedProjectId;
   if (!projectId) {
     const project = await input.service.createProject({
@@ -2375,20 +2502,32 @@ async function runLpTaskPrompt(input: {
   const previousSnapshot = await input.repositories.taskSnapshots.getByTaskId(task.id);
   const previousPageVersionId = previousSnapshot?.pageVersionId;
 
+  return { task, projectId, previousPageVersionId };
+}
+
+async function completePreparedLpTaskPrompt(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  currentUser: WorkbenchUserIdentity;
+  task: TaskRecord;
+  projectId: string;
+  prompt: string;
+  previousPageVersionId?: string;
+}): Promise<SubmitTaskResult> {
   try {
     const chain = await runLpAgentChainForTask({
       repositories: input.repositories,
       service: input.service,
       currentUser: input.currentUser,
-      taskId: task.id,
-      projectId,
+      taskId: input.task.id,
+      projectId: input.projectId,
       prompt: input.prompt,
-      previousPageVersionId
+      previousPageVersionId: input.previousPageVersionId
     });
     await saveTaskSnapshot({
       repositories: input.repositories,
-      taskId: task.id,
-      projectId,
+      taskId: input.task.id,
+      projectId: input.projectId,
       briefId: chain.briefId,
       pageVersionId: chain.pageVersionId
     });
@@ -2399,24 +2538,29 @@ async function runLpTaskPrompt(input: {
         : "LP artifacts are ready for review.";
     await appendTaskMessage({
       repositories: input.repositories,
-      taskId: task.id,
+      taskId: input.task.id,
       role: "assistant",
       content: assistantSummary
     });
-    return { ok: true, taskId: task.id, taskType: "lp_generation", projectId };
+    return {
+      ok: true,
+      taskId: input.task.id,
+      taskType: "lp_generation",
+      projectId: input.projectId
+    };
   } catch {
     await appendTaskMessage({
       repositories: input.repositories,
-      taskId: task.id,
+      taskId: input.task.id,
       role: "assistant",
       content: "LP generation failed. Open recovery details for the failed run."
     });
     return {
       ok: false,
       error: "generation_failed",
-      taskId: task.id,
+      taskId: input.task.id,
       taskType: "lp_generation",
-      projectId
+      projectId: input.projectId
     };
   }
 }

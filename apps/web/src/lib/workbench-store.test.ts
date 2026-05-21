@@ -3027,6 +3027,114 @@ describe("web workbench store", () => {
     });
   });
 
+  describe("live task prompt start", () => {
+    it("returns an LP task before the async chain finishes", async () => {
+      let releaseBuilder!: () => void;
+      const builderGate = new Promise<void>((resolve) => {
+        releaseBuilder = resolve;
+      });
+      const runtime = {
+        async run(input: RuntimeRunRequest) {
+          if (input.role === "builder") {
+            await builderGate;
+          }
+          return {
+            runId: input.runId,
+            projectId: input.projectId,
+            role: input.role,
+            state: "completed" as const,
+            modelOutputText:
+              input.role === "planner"
+                ? JSON.stringify({
+                    ...sampleBrief,
+                    title: "Launch a live LP",
+                    objective: "Launch a live LP",
+                    audience: "Operators",
+                    offer: "No-refresh progress",
+                    cta: {
+                      label: "Start",
+                      href: "#start",
+                      intent: "primary conversion"
+                    },
+                    sections: [
+                      {
+                        ...sampleBrief.sections[0],
+                        headline: "Hero",
+                        body: "Live progress",
+                        cta: {
+                          label: "Start",
+                          href: "#start",
+                          intent: "primary conversion"
+                        }
+                      }
+                    ]
+                  })
+                : JSON.stringify({
+                    indexHtml:
+                      '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Live</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>Live</h1></main><script src="script.js"></script></body></html>',
+                    stylesCss: ":root { color-scheme: light; } body { margin: 0; }",
+                    scriptJs: "window.lpAgent = { ready: true };"
+                  }),
+            events: [
+              {
+                type: "run.completed" as const,
+                message: `${input.role} run completed.`,
+                runId: input.runId,
+                role: input.role,
+                state: "completed" as const
+              }
+            ]
+          };
+        }
+      };
+      const store = createWebWorkbenchStore({
+        env: { REAL_MODEL_RUNTIME: "1" },
+        modelFetch: async () => new Response("{}"),
+        plannerRuntime: runtime,
+        builderRuntime: runtime
+      });
+
+      const started = await store.startLiveTaskPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Create a live progress LP",
+        implicitProjectName: "Live Progress"
+      });
+
+      expect(started).toMatchObject({
+        ok: true,
+        taskType: "lp_generation"
+      });
+      if (!started.ok || !started.projectId) {
+        throw new Error("expected started LP task");
+      }
+
+      const runningState = await store.getLiveTaskState({
+        projectId: started.projectId,
+        taskId: started.taskId
+      });
+      expect(runningState.ok).toBe(true);
+      if (!runningState.ok) {
+        throw new Error("expected running state");
+      }
+      expect(runningState.value.messages[0]?.content).toBe("Create a live progress LP");
+      expect(runningState.value.snapshot?.currentPageVersion).toBeUndefined();
+
+      releaseBuilder();
+      await started.completion;
+
+      const completedState = await store.getLiveTaskState({
+        projectId: started.projectId,
+        taskId: started.taskId
+      });
+      expect(completedState.ok).toBe(true);
+      if (!completedState.ok) {
+        throw new Error("expected completed state");
+      }
+      expect(completedState.value.artifactProgress?.fileCount).toBe(3);
+    });
+  });
+
   it("creates an LP task and user message before Planner runs", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const plannerRuntime = new StaticRuntime({ state: "failed" });
