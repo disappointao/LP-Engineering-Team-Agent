@@ -339,12 +339,12 @@
    - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests、review gates、最终验证和文档收尾历史；该 plan 已归档为完成态，不再作为当前执行 checklist。
 
 84. `specs/2026-05-21-lp-agent-chain-end-to-end-design.md`
-   - Stage 28 LP Agent Chain End-to-End v0 design（当前推荐下一阶段设计）。
+   - Stage 28 LP Agent Chain End-to-End v0 design（已实现，当前已完成）。
    - 在 Stage 27 implementation plan 和当前 roadmap 后阅读，用于把 Web 提交 LP 复杂任务时的固定 `Planner -> Builder -> Reviewer -> Deployer` 链路改成 task-first orchestration，确保真实 Planner/Builder structured output、durable artifact workspace、Reviewer blocked、Deployer handoff、失败 recovery 和后续修改都绑定到同一个 task。
 
 85. `plans/2026-05-21-lp-agent-chain-end-to-end.md`
-   - Stage 28 LP Agent Chain End-to-End v0 implementation plan（当前推荐下一阶段实施计划）。
-   - 在 Stage 28 design 后阅读，用于按 TDD 实现 task-first LP chain orchestration、同 task run 绑定、durable artifact workspace、Reviewer blocked / Deployer failure 边界、继续修改、真实 Planner/Builder structured output 覆盖和文档收尾。
+   - Stage 28 LP Agent Chain End-to-End v0 implementation plan（已实现后标记为完成）。
+   - 在 Stage 28 design 后阅读，用于审计 task-first LP chain orchestration、同 task run 绑定、durable artifact workspace、Reviewer blocked / Deployer failure 边界、继续修改、测试和文档收尾。
 
 ## 维护规则
 

@@ -1,6 +1,10 @@
 # LP Agent Chain End-to-End v0 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Status:** Implemented and archived. This plan records the Stage 28 execution history; future agents should read `docs/project-roadmap.md` before choosing the next stage.
+>
+> **Execution record:** Completed with task-first LP chain orchestration, focused Web/API regression, `pnpm test`, and `pnpm typecheck`.
 
 **Goal:** Build Stage 28 so Web LP prompts create a task first, run the fixed `Planner -> Builder -> Reviewer -> Deployer` chain with that `taskId`, persist durable artifacts, and preserve observable recovery facts on failure.
 
@@ -31,7 +35,7 @@ It does not implement a generic DAG scheduler, MCP execution, real shell executi
 - Modify: `apps/web/src/lib/workbench-store.ts`
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 
-- [ ] **Step 1: Write failing tests for pre-run task persistence**
+- [x] **Step 1: Write failing tests for pre-run task persistence**
 
 Add tests to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -140,7 +144,7 @@ it("creates an LP task and user message before Planner runs", async () => {
 
 Also extend `SubmitTaskResult` assertions in existing tests so failed LP generation can include `taskId`, `projectId`, and `taskType`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -150,7 +154,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "creates an LP 
 
 Expected: FAIL because `WebWorkbenchStoreOptions` does not accept `plannerRuntime`, and `submitTaskPrompt()` currently creates the task only after the LP chain succeeds.
 
-- [ ] **Step 3: Add runtime injection options for focused store tests**
+- [x] **Step 3: Add runtime injection options for focused store tests**
 
 In `apps/web/src/lib/workbench-store.ts`, import the runtime type:
 
@@ -194,7 +198,7 @@ const service = new DemoWorkbenchService({
 });
 ```
 
-- [ ] **Step 4: Add helper functions for LP task thread persistence**
+- [x] **Step 4: Add helper functions for LP task thread persistence**
 
 In `apps/web/src/lib/workbench-store.ts`, add these helpers near `saveTaskThread()`:
 
@@ -273,7 +277,7 @@ async function saveTaskSnapshot(input: {
 }
 ```
 
-- [ ] **Step 5: Extend `SubmitTaskResult` for safe failed task redirects**
+- [x] **Step 5: Extend `SubmitTaskResult` for safe failed task redirects**
 
 In `apps/web/src/lib/workbench-store.ts`, update the failed result branch:
 
@@ -294,7 +298,7 @@ export type SubmitTaskResult =
     };
 ```
 
-- [ ] **Step 6: Run focused test**
+- [x] **Step 6: Run focused test**
 
 Run:
 
@@ -304,7 +308,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "creates an LP 
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts
@@ -318,7 +322,7 @@ git commit -m "add lp task thread helpers"
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 - Modify: `apps/web/src/lib/web-v1-smoke.test.ts`
 
-- [ ] **Step 1: Write failing end-to-end store test**
+- [x] **Step 1: Write failing end-to-end store test**
 
 Add this test to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -383,7 +387,7 @@ Add or update `apps/web/src/lib/web-v1-smoke.test.ts` so the smoke test asserts 
 expect(pageState.snapshot?.deployment?.pageVersionId).toBe(pageVersion?.id);
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -394,7 +398,7 @@ pnpm exec vitest run apps/web/src/lib/web-v1-smoke.test.ts
 
 Expected: FAIL because existing LP submission does not create Deployer runs and Planner / Builder / Reviewer runs do not receive task ids.
 
-- [ ] **Step 3: Add LP chain orchestration helper**
+- [x] **Step 3: Add LP chain orchestration helper**
 
 In `apps/web/src/lib/workbench-store.ts`, add this helper near `saveTaskThread()`:
 
@@ -459,7 +463,7 @@ async function runLpAgentChainForTask(input: {
 
 Task 6 will extend this helper to pass `input.previousPageVersionId` as Builder context once the API service accepts `contextPageVersionId`.
 
-- [ ] **Step 4: Route LP prompts through task-first orchestration**
+- [x] **Step 4: Route LP prompts through task-first orchestration**
 
 In `submitTaskPrompt()`, replace the current `if (taskType === "lp_generation" && projectId) { ... }` block with this structure:
 
@@ -549,7 +553,7 @@ async function runLpTaskPrompt(input: {
 }
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run:
 
@@ -560,7 +564,7 @@ pnpm exec vitest run apps/web/src/lib/web-v1-smoke.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts apps/web/src/lib/web-v1-smoke.test.ts
@@ -575,7 +579,7 @@ git commit -m "run lp chain under task id"
 - Modify: `apps/web/src/app/actions.ts`
 - Modify: `apps/web/src/app/actions.test.ts`
 
-- [ ] **Step 1: Write failing store tests for Planner and Builder failure**
+- [x] **Step 1: Write failing store tests for Planner and Builder failure**
 
 Add these tests to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -639,7 +643,7 @@ it("does not save page versions when Builder fails under an LP task", async () =
 });
 ```
 
-- [ ] **Step 2: Write failing action test for failed task redirect**
+- [x] **Step 2: Write failing action test for failed task redirect**
 
 In `apps/web/src/app/actions.test.ts`, add:
 
@@ -666,7 +670,7 @@ it("keeps the failed LP task selected when generation fails after task creation"
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -677,7 +681,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts -t "keeps the failed LP ta
 
 Expected: FAIL because `getPageState()` filters run events through snapshot-derived run ids and `submitPromptAction()` discards failed result task metadata.
 
-- [ ] **Step 4: Load LP run events by task id**
+- [x] **Step 4: Load LP run events by task id**
 
 In `getPageState()`, replace the `runEvents` assignment with:
 
@@ -696,7 +700,7 @@ const runEvents =
 
 This keeps older snapshot-derived tasks visible while Stage 28 task-bound runs use the direct repository query.
 
-- [ ] **Step 5: Preserve failed task selection in `submitPromptAction()`**
+- [x] **Step 5: Preserve failed task selection in `submitPromptAction()`**
 
 In `apps/web/src/app/actions.ts`, change the failed branch:
 
@@ -712,7 +716,7 @@ if (!result.ok) {
 }
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -723,7 +727,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts -t "keeps the failed LP ta
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts apps/web/src/app/actions.ts apps/web/src/app/actions.test.ts
@@ -737,7 +741,7 @@ git commit -m "preserve failed lp task facts"
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 - Modify: `apps/web/src/app/page.test.ts`
 
-- [ ] **Step 1: Write failing Reviewer blocked test**
+- [x] **Step 1: Write failing Reviewer blocked test**
 
 Add to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -783,7 +787,7 @@ it("keeps blocked Reviewer results without creating a Deployer run", async () =>
 });
 ```
 
-- [ ] **Step 2: Write failing Deployer failure test**
+- [x] **Step 2: Write failing Deployer failure test**
 
 Add to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -813,7 +817,7 @@ it("keeps the page version when Deployer fails", async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -823,7 +827,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "Reviewer resul
 
 Expected: FAIL until `runLpAgentChainForTask()` treats Reviewer blocked as chain-complete and Deployer failure as a safe task failure with preserved page version.
 
-- [ ] **Step 4: Adjust `runLpAgentChainForTask()` blocked behavior**
+- [x] **Step 4: Adjust `runLpAgentChainForTask()` blocked behavior**
 
 In `runLpAgentChainForTask()`, keep the existing conditional:
 
@@ -840,7 +844,7 @@ if (reviewedPageVersion.reviewStatus === "passed") {
 
 Do not throw when `reviewedPageVersion.reviewStatus === "failed"`. Return the reviewed page version id so the task snapshot points at the blocked artifact.
 
-- [ ] **Step 5: Ensure task summary copy distinguishes blocked review**
+- [x] **Step 5: Ensure task summary copy distinguishes blocked review**
 
 In `runLpTaskPrompt()`, after `runLpAgentChainForTask()`, load the page version and choose assistant copy:
 
@@ -858,7 +862,7 @@ await appendTaskMessage({
 });
 ```
 
-- [ ] **Step 6: Run focused tests and affected page tests**
+- [x] **Step 6: Run focused tests and affected page tests**
 
 Run:
 
@@ -869,7 +873,7 @@ pnpm exec vitest run apps/web/src/app/page.test.ts -t "recovery|LP"
 
 Expected: PASS. If the page test filter selects no tests, run the full page test command in Task 8.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts apps/web/src/app/page.test.ts
@@ -884,7 +888,7 @@ git commit -m "handle lp review and deployer boundaries"
 - Modify: `apps/web/src/app/actions.ts`
 - Modify: `apps/web/src/app/actions.test.ts`
 
-- [ ] **Step 1: Write failing same-task modification test**
+- [x] **Step 1: Write failing same-task modification test**
 
 Add to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -934,7 +938,7 @@ it("continues an existing LP task by creating a new page version", async () => {
 });
 ```
 
-- [ ] **Step 2: Write failing action test that passes current task id**
+- [x] **Step 2: Write failing action test that passes current task id**
 
 In `apps/web/src/app/actions.test.ts`, update the existing successful `submitPromptAction` test or add:
 
@@ -964,7 +968,7 @@ it("passes current task id to submitTaskPrompt", async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -975,7 +979,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts -t "passes current task id
 
 Expected: FAIL because `submitTaskPrompt()` does not accept `taskId` and action does not pass it.
 
-- [ ] **Step 4: Extend store and action input**
+- [x] **Step 4: Extend store and action input**
 
 In `WebWorkbenchStore.submitTaskPrompt` input type, add:
 
@@ -995,7 +999,7 @@ const result = await store.submitTaskPrompt({
 });
 ```
 
-- [ ] **Step 5: Reuse an existing LP task when ownership matches**
+- [x] **Step 5: Reuse an existing LP task when ownership matches**
 
 In `runLpTaskPrompt()`, add `requestedTaskId?: string` to the input. Before creating a new task, resolve an existing task:
 
@@ -1048,7 +1052,7 @@ previousPageVersionId
 
 At this point the previous page version id is retained by the helper input. Task 6 wires it into Builder runtime context after the API signature is extended.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -1059,7 +1063,7 @@ pnpm exec vitest run apps/web/src/app/actions.test.ts -t "passes current task id
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts apps/web/src/app/actions.ts apps/web/src/app/actions.test.ts
@@ -1074,7 +1078,7 @@ git commit -m "support continued lp task edits"
 - Modify: `apps/web/src/lib/workbench-store.ts`
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 
-- [ ] **Step 1: Write failing API context test**
+- [x] **Step 1: Write failing API context test**
 
 Add to `packages/api/src/services.test.ts`:
 
@@ -1114,7 +1118,7 @@ it("passes previous page version artifact workspace metadata into Builder contex
 });
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run:
 
@@ -1124,7 +1128,7 @@ pnpm exec vitest run packages/api/src/services.test.ts -t "previous page version
 
 Expected: FAIL because `GeneratePageVersionInput` has no `contextPageVersionId`.
 
-- [ ] **Step 3: Add context page version input**
+- [x] **Step 3: Add context page version input**
 
 In `packages/api/src/index.ts`, extend `GeneratePageVersionInput`:
 
@@ -1166,7 +1170,7 @@ const pageVersion = await input.service.generatePageVersion({
 });
 ```
 
-- [ ] **Step 4: Run API context test**
+- [x] **Step 4: Run API context test**
 
 Run:
 
@@ -1176,7 +1180,7 @@ pnpm exec vitest run packages/api/src/services.test.ts -t "previous page version
 
 Expected: PASS.
 
-- [ ] **Step 5: Run store continuation test again**
+- [x] **Step 5: Run store continuation test again**
 
 Run:
 
@@ -1186,7 +1190,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "continues an e
 
 Expected: PASS and TypeScript accepts the `contextPageVersionId` call from `runLpAgentChainForTask()`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/api/src/index.ts packages/api/src/services.test.ts apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts
@@ -1199,7 +1203,7 @@ git commit -m "inject previous lp artifact context"
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 - Modify: `packages/api/src/services.test.ts`
 
-- [ ] **Step 1: Write failing Web real-runtime chain test**
+- [x] **Step 1: Write failing Web real-runtime chain test**
 
 Add to `apps/web/src/lib/workbench-store.test.ts`:
 
@@ -1295,7 +1299,7 @@ function createStructuredLPModelFetch(): typeof fetch {
 }
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run:
 
@@ -1305,7 +1309,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "real-runtime s
 
 Expected: FAIL because `WebWorkbenchStoreOptions` does not yet expose `env` and `modelFetch`.
 
-- [ ] **Step 3: Expose `env` and `modelFetch` in store options**
+- [x] **Step 3: Expose `env` and `modelFetch` in store options**
 
 In `apps/web/src/lib/workbench-store.ts`, import `RuntimeEnvironment` from API and `ModelFetch` from model-gateway:
 
@@ -1328,7 +1332,7 @@ env: options.env,
 modelFetch: options.modelFetch,
 ```
 
-- [ ] **Step 4: Run real-runtime focused test**
+- [x] **Step 4: Run real-runtime focused test**
 
 Run:
 
@@ -1338,7 +1342,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts -t "real-runtime s
 
 Expected: PASS.
 
-- [ ] **Step 5: Run API structured runtime regression**
+- [x] **Step 5: Run API structured runtime regression**
 
 Run:
 
@@ -1348,7 +1352,7 @@ pnpm exec vitest run packages/api/src/services.test.ts -t "REAL_MODEL_RUNTIME|pa
 
 Expected: PASS. If the test name filter selects no tests, run `pnpm exec vitest run packages/api/src/services.test.ts`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.ts apps/web/src/lib/workbench-store.test.ts packages/api/src/services.test.ts
@@ -1363,7 +1367,7 @@ git commit -m "test real lp chain runtime"
 - Modify: `apps/web/src/lib/workbench-store.test.ts`
 - Modify: `apps/web/src/lib/web-v1-smoke.test.ts`
 
-- [ ] **Step 1: Run Web-focused tests**
+- [x] **Step 1: Run Web-focused tests**
 
 Run:
 
@@ -1373,7 +1377,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts apps/web/src/app/a
 
 Expected: PASS. Read the output and list every failing test name before editing.
 
-- [ ] **Step 2: Fix action/page expectations caused by task-first LP flow**
+- [x] **Step 2: Fix action/page expectations caused by task-first LP flow**
 
 If page or action tests fail because LP results now include deployment handoff or failed task metadata, update the expected objects to include these exact fields:
 
@@ -1399,7 +1403,7 @@ For failed LP state, assert recovery remains visible:
 expect(pageState.recovery.runs.length).toBeGreaterThan(0);
 ```
 
-- [ ] **Step 3: Re-run Web-focused tests**
+- [x] **Step 3: Re-run Web-focused tests**
 
 Run:
 
@@ -1409,7 +1413,7 @@ pnpm exec vitest run apps/web/src/lib/workbench-store.test.ts apps/web/src/app/a
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/src/lib/workbench-store.test.ts apps/web/src/app/actions.test.ts apps/web/src/app/page.test.ts apps/web/src/lib/web-v1-smoke.test.ts
@@ -1424,7 +1428,7 @@ git commit -m "cover lp chain web flow"
 - Modify: `docs/project-roadmap.md`
 - Modify: `docs/agent-development-learning.md`
 
-- [ ] **Step 1: Mark plan execution status**
+- [x] **Step 1: Mark plan execution status**
 
 After implementation and verification, update this plan header by adding an execution record below the required sub-skill line:
 
@@ -1436,7 +1440,7 @@ After implementation and verification, update this plan header by adding an exec
 
 Also change completed task checkboxes from `- [ ]` to `- [x]` only for tasks actually completed.
 
-- [ ] **Step 2: Update Superpowers README**
+- [x] **Step 2: Update Superpowers README**
 
 In `docs/superpowers/README.md`, add the implementation plan entry immediately after the Stage 28 design entry:
 
@@ -1446,7 +1450,7 @@ In `docs/superpowers/README.md`, add the implementation plan entry immediately a
    - 在 Stage 28 design 后阅读，用于审计 task-first LP chain orchestration、同 task run 绑定、durable artifact workspace、Reviewer blocked / Deployer failure 边界、继续修改、测试和文档收尾。
 ```
 
-- [ ] **Step 3: Update roadmap**
+- [x] **Step 3: Update roadmap**
 
 In `docs/project-roadmap.md`, move Stage 28 from current recommended to completed once implementation is merged. Add:
 
@@ -1466,7 +1470,7 @@ Add a decision record:
 - Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff 和 recovery facts。
 ```
 
-- [ ] **Step 4: Update Agent learning notes**
+- [x] **Step 4: Update Agent learning notes**
 
 In `docs/agent-development-learning.md`, update the Stage 28 bullets to present implementation facts:
 
@@ -1474,7 +1478,7 @@ In `docs/agent-development-learning.md`, update the Stage 28 bullets to present 
 - Stage 28 LP Agent Chain End-to-End v0 已实现：Web LP 复杂任务采用 task-first fixed chain orchestration；Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 都绑定到同一个 task。Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下继续走真实模型 structured output；Reviewer / Deployer 仍 deterministic / policy-driven。
 ```
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 ```bash
 git add docs/superpowers/plans/2026-05-21-lp-agent-chain-end-to-end.md docs/superpowers/README.md docs/project-roadmap.md docs/agent-development-learning.md

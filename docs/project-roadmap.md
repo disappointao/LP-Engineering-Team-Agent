@@ -32,6 +32,7 @@
 - Worker queue opt-in Postgres backend：Stage 24 已实现 `WORKER_REPOSITORY_BACKEND=json|memory|postgres`，Web enqueue 和 `apps/agent-worker` 共用同一 backend selection helper；默认 worker queue 仍是 JSON-file。
 - Streaming chat transport / UI v0：普通聊天已有 Web/API NDJSON streaming route、client transient streaming state、terminal persistence / refresh recovery 和 server action fallback。
 - Real chat runtime / skill context v0：project-bound 普通聊天已有独立 `assistant` role、真实 model runtime opt-in、bounded skill prompt context、safe context summary stream 和 Models UI route configuration；projectless chat 继续保持 deterministic / no-context。
+- LP Agent Chain End-to-End v0：Web LP 复杂任务已采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff、继续修改上下文和 recovery facts；Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下走真实模型 structured output。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 ## 第一版可用闭环目标
@@ -49,7 +50,6 @@
 
 当前第一版可用闭环优先补齐：
 
-- LP agent chain 的 Web/API/worker end-to-end 执行路径。
 - Skill-only 上下文和 skill command 可观察工作流；MCP 暂不作为近期目标。
 - Live run timeline、artifact progress 和 no-refresh task state。
 - Browser E2E acceptance 和 alpha hardening。
@@ -272,36 +272,37 @@ Stage 27 v0 已把 project-bound 普通聊天从 deterministic response 升级�
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-real-chat-runtime-skill-context.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 28：LP Agent Chain End-to-End v0
 
-**状态：** 当前推荐下一阶段；设计和实施计划已确认，待执行。
+**状态：** 已实现。
 
-**为什么现在做：** 用户的核心复杂任务是“写 LP / 做 LP 等工作流任务”。当前已经有固定 LP 链路、真实 Planner/Builder structured output、artifact workspace、handoff、worker queue 和 recovery UI，但 Web 需要把这些能力组织成一个可用的端到端任务体验。
+Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff 和 recovery facts。
 
-**建议范围：**
+已实现范围：
 
-- Web 提交 LP 复杂任务后，API 创建可观察的 `Planner -> Builder -> Reviewer -> Deployer` chain，并把每个 run / handoff / artifact update 展示在 task timeline。
-- `REAL_MODEL_RUNTIME=1` 下 Planner / Builder 使用真实模型 structured output；Reviewer / Deployer 可先保持 deterministic / policy-driven，以确保第一版稳定。
-- Builder 成功后写 durable artifact workspace，Web artifact preview/export 自动更新。
-- Reviewer blocked、模型 parse/retry exhausted、worker finalization gap 等失败继续通过 Stage 25 recovery UI 暴露。
-- LP task 支持继续对话式修改：下一轮输入能引用当前 project/task/artifact metadata 和 bound skills。
+- Web 提交 LP 复杂任务时先创建或复用 `lp_generation` task，并把 user / assistant message 保留在同一 task thread。
+- 固定 `Planner -> Builder -> Reviewer -> Deployer` chain 在同一个 `taskId` 下运行，snapshot 会逐步保存 project / brief / page version。
+- Builder 成功后写 durable artifact workspace；Reviewer 通过后创建 deployment handoff；Reviewer blocked 和 Deployer failure 保留可见 recovery facts。
+- 同一 LP task 支持继续输入修改，下一轮 Builder context 显式绑定上一版 artifact workspace metadata，避免被同项目其它 page version 污染。
+- Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下可通过真实模型 structured output 走 Web store；Reviewer / Deployer 仍保持 deterministic / policy-driven。
 
-**非目标：**
+未实现范围：
 
-- 不做通用 DAG scheduler；只覆盖固定 LP 链路。
-- 不自动真实部署。
+- 不做通用 DAG scheduler。
+- 不做真实外部部署。
 - 不做 MCP、write tools 或 shell execution。
 - 不做多人审批队列。
+- 不做 no-refresh live timeline；该体验进入 Stage 29。
 
 **设计：** `docs/superpowers/specs/2026-05-21-lp-agent-chain-end-to-end-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-lp-agent-chain-end-to-end.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 29：Live Run Timeline and Artifact Progress v0
 
-**状态：** Stage 28 后推荐。
+**状态：** 当前推荐下一阶段。
 
 **为什么现在做：** LP 链路端到端可跑后，用户还需要不刷新页面就能理解任务正在做什么。Stage 26 解决 assistant text streaming，本阶段把 run events、worker state、recovery view 和 artifact progress 统一成 live task panel。
 
@@ -471,7 +472,7 @@ Stage 27 v0 已把 project-bound 普通聊天从 deterministic response 升级�
 - Stage 25 的 `retry_run` 只做 safely reconstructable single-run retry，创建新 retry attempt，不覆盖原 failed run，也不自动重跑完整 agent chain。
 - Stage 26 已完成 Streaming Chat Transport and UI v0，提供普通问答的 Web/API NDJSON streaming 边界。
 - Stage 27 已完成 Real Chat Runtime and Skill Context v0：新增独立 `assistant` route，而不是复用 `planner` route；普通聊天真实模型 v0 聚焦 project-bound chat，projectless chat 继续保持 deterministic / no-context。
-- Stage 28 当前推荐补齐固定 LP Agent Chain End-to-End v0；设计和实施计划已确认采用 task-first orchestration，把已有 Planner / Builder / Reviewer / Deployer 能力组织成可用的 Web/API 任务体验，Planner / Builder 先支持真实模型 structured output，Reviewer / Deployer 保持 deterministic / policy-driven。
+- Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff 和 recovery facts。
 - MCP Worker Execution、真实 MCP SDK / remote MCP server adapter 和 MCP write tools 已后置到 backlog，等待 Web/API/Skill/LP 第一版可用闭环稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
