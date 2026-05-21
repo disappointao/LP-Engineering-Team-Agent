@@ -302,7 +302,7 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 ### Stage 29：Live Run Timeline and Artifact Progress v0
 
-**状态：** 当前推荐下一阶段。
+**状态：** 当前准备实施；设计已批准。
 
 **为什么现在做：** LP 链路端到端可跑后，用户还需要不刷新页面就能理解任务正在做什么。Stage 26 解决 assistant text streaming，本阶段把 run events、worker state、recovery view 和 artifact progress 统一成 live task panel。
 
@@ -320,6 +320,8 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 - 不做实时多人协作。
 - 不引入生产 observability stack。
 - 不做 object storage migration。
+
+**设计：** `docs/superpowers/specs/2026-05-21-live-run-timeline-artifact-progress-design.md`。
 
 ### Stage 30：Skill-Only Alpha Hardening v0
 
