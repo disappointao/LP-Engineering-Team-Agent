@@ -4623,6 +4623,49 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(parsedContextPack)).not.toContain("SNIPPET_HTML_SECRET");
   });
 
+  it("passes previous page version artifact workspace metadata into Builder context", async () => {
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const service = new DemoWorkbenchService({ builderRuntime, now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const firstBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a landing page"
+    });
+    const firstVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: firstBrief.id
+    });
+    const latestBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Create a newer unrelated landing page"
+    });
+    const latestVersion = await service.generatePageVersion({
+      projectId: project.id,
+      briefId: latestBrief.id
+    });
+    const secondBrief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Add a FAQ section"
+    });
+
+    expect(latestVersion.artifactWorkspaceId).not.toBe(firstVersion.artifactWorkspaceId);
+    await service.generatePageVersion({
+      projectId: project.id,
+      briefId: secondBrief.id,
+      contextPageVersionId: firstVersion.id
+    });
+
+    expect(builderRuntime.requests.at(-1)?.context?.artifactWorkspace.workspaceId).toBe(
+      firstVersion.artifactWorkspaceId
+    );
+    expect(JSON.stringify(builderRuntime.requests.at(-1)?.context?.artifactWorkspace)).not.toContain(
+      "<!doctype html"
+    );
+  });
+
   it("omits invalid artifact snippet paths without echoing raw input", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({

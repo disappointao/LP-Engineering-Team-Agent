@@ -1797,7 +1797,8 @@ async function runLpAgentChainForTask(input: {
   const pageVersion = await input.service.generatePageVersion({
     projectId: input.projectId,
     briefId: brief.id,
-    taskId: input.taskId
+    taskId: input.taskId,
+    contextPageVersionId: input.previousPageVersionId
   });
   await saveTaskSnapshot({
     repositories: input.repositories,

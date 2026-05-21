@@ -269,6 +269,7 @@ export interface GeneratePageVersionInput {
   briefId: string;
   taskId?: string;
   runId?: string;
+  contextPageVersionId?: string;
 }
 
 export interface GetSnapshotForRecordsInput {
@@ -699,6 +700,10 @@ export class DemoWorkbenchService {
   async generatePageVersion(input: GeneratePageVersionInput): Promise<PageVersionRecord> {
     await this.getProjectOrThrow(input.projectId);
     const brief = await this.getBriefForProjectOrThrow(input.projectId, input.briefId);
+    const contextPageVersionId = input.contextPageVersionId;
+    if (contextPageVersionId) {
+      await this.getPageVersionForProjectOrThrow(input.projectId, contextPageVersionId);
+    }
     const pageVersionId = await reserveRepositoryId(this.repositories, "version", async () => {
       const [existingPageVersions, existingWorkspaces] = await Promise.all([
         this.repositories.pageVersions.listAll(),
@@ -724,6 +729,7 @@ export class DemoWorkbenchService {
         runId: input.runId ?? `run_builder_${pageVersionId}`,
         projectId: input.projectId,
         taskId: input.taskId,
+        pageVersionId: contextPageVersionId,
         role: "builder",
         input: {
           brief: copyBrief(brief.brief),

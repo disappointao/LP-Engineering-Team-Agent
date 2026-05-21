@@ -2849,7 +2849,11 @@ describe("web workbench store", () => {
 
   it("continues an existing LP task by creating a new page version", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
-    const store = createWebWorkbenchStore({ repositories });
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const store = createWebWorkbenchStore({ repositories, builderRuntime });
 
     const first = await store.submitTaskPrompt({
       prompt: "Create a landing page for a spring sale",
@@ -2860,6 +2864,19 @@ describe("web workbench store", () => {
     if (!first.ok || !first.projectId) {
       throw new Error("expected first LP task");
     }
+    await saveManualPageVersion({
+      repositories,
+      projectId: first.projectId,
+      briefId: "brief_external",
+      pageVersionId: "version_external",
+      workspaceId: "artifact_workspace_external",
+      artifacts: {
+        indexHtml: "<!doctype html><html><body>External latest</body></html>",
+        stylesCss: "body { color: #abcdef; }",
+        scriptJs: "window.lpAgent = 'external';"
+      },
+      createdAt: "2026-05-22T00:02:00.000Z"
+    });
 
     const second = await store.submitTaskPrompt({
       taskId: first.taskId,
@@ -2874,14 +2891,19 @@ describe("web workbench store", () => {
       taskType: "lp_generation",
       projectId: "project_1"
     });
-    await expect(repositories.pageVersions.listAll()).resolves.toEqual([
-      expect.objectContaining({ id: "version_1" }),
-      expect.objectContaining({ id: "version_2" })
-    ]);
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "version_1" }),
+        expect.objectContaining({ id: "version_2" })
+      ])
+    );
     await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
       briefId: "brief_2",
       pageVersionId: "version_2"
     });
+    expect(builderRuntime.requests.at(-1)?.context?.artifactWorkspace.workspaceId).toBe(
+      "artifact_workspace_1"
+    );
     const messages = await repositories.messages.listForTask("task_1");
     expect(messages.map((message) => message.role)).toEqual([
       "user",
