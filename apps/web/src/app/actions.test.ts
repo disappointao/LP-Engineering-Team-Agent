@@ -312,6 +312,27 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("keeps the failed LP task selected when generation fails after task creation", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.getWebWorkbenchStore.mockResolvedValue({
+      submitTaskPrompt: vi.fn().mockResolvedValue({
+        ok: false,
+        error: "generation_failed",
+        taskId: "task_1",
+        taskType: "lp_generation",
+        projectId: "project_1"
+      })
+    });
+
+    await expectRedirect(
+      submitPromptAction(buildPromptForm({ prompt: "Create an ecommerce LP in HTML." })),
+      "/?error=generation_failed"
+    );
+
+    expect(mocks.setCurrentTaskId).toHaveBeenCalledWith("task_1");
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
+  });
+
   it("submits a general task without a current project", async () => {
     mocks.currentProjectId = undefined;
     mocks.submitTaskPrompt.mockResolvedValue({

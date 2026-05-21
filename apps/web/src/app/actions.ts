@@ -221,6 +221,12 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
     implicitProjectName
   });
   if (!result.ok) {
+    if (result.taskId) {
+      await setCurrentTaskId(result.taskId);
+    }
+    if (result.projectId) {
+      await setCurrentProjectId(result.projectId);
+    }
     redirectWithError(result.error);
   }
 

@@ -2627,6 +2627,64 @@ describe("web workbench store", () => {
     });
   });
 
+  it("returns a failed LP task with recovery facts when Planner fails", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({
+      repositories,
+      plannerRuntime: new StaticRuntime({ state: "failed" })
+    });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskId: "task_1",
+      projectId: "project_1"
+    });
+    await expect(repositories.briefs.listAll()).resolves.toEqual([]);
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([]);
+    const pageState = await store.getPageState({ projectId: "project_1", taskId: "task_1" });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected task state");
+    }
+    expect(pageState.runEvents.map((event) => event.runId)).toContain("run_planner_brief_1");
+    expect(pageState.recovery.runs.map((view) => view.runId)).toContain("run_planner_brief_1");
+  });
+
+  it("does not save page versions when Builder fails under an LP task", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({
+      repositories,
+      builderRuntime: new StaticRuntime({ state: "failed" })
+    });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskId: "task_1",
+      projectId: "project_1"
+    });
+    await expect(repositories.briefs.listAll()).resolves.toHaveLength(1);
+    await expect(repositories.pageVersions.listAll()).resolves.toEqual([]);
+    await expect(repositories.artifactWorkspaces.listAll()).resolves.toEqual([]);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_1"
+    });
+  });
+
   it("runs Planner Builder Reviewer and Deployer under the same LP task", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const plannerRuntime = new RecordingRuntime({ state: "completed" });

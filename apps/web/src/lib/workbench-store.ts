@@ -819,12 +819,21 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
       const activeProjectId = taskProject?.id ?? requestedProjectId;
       const snapshotRef = await repositories.taskSnapshots.getByTaskId(task.id);
-      const runEvents = activeProjectId
+      const taskRunEvents = await repositories.runEvents.listForTask(task.id);
+      const snapshotRunEvents = activeProjectId
         ? filterRunEventsForSnapshot(
             await repositories.runEvents.listForProject(activeProjectId),
             snapshotRef
           )
         : [];
+      const taskRunEventIds = new Set(taskRunEvents.map((event) => event.id));
+      const runEvents =
+        taskRunEvents.length > 0
+          ? [
+              ...taskRunEvents,
+              ...snapshotRunEvents.filter((event) => !taskRunEventIds.has(event.id))
+            ]
+          : snapshotRunEvents;
       const snapshot = snapshotRef
         ? await service.getSnapshotForRecords({
             projectId: snapshotRef.projectId,
