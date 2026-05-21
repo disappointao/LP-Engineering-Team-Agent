@@ -37,6 +37,10 @@ type LiveTaskStateRouteResponse =
   | { ok: true; value: LiveTaskStatePayload }
   | { ok: false; error: string };
 
+export type LiveTaskStateRouteResult =
+  | { ok: true; payload: LiveTaskStatePayload }
+  | { ok: false; error: string; retryable: boolean };
+
 const retryPollMs = 3000;
 const activeRunStates = new Set([
   "queued",
@@ -44,6 +48,123 @@ const activeRunStates = new Set([
   "waiting_for_approval",
   "cancelling"
 ]);
+const permanentRouteErrors = new Set(["task_not_found", "project_not_found"]);
+const permanentRouteStatuses = new Set([403, 404]);
+
+function isLiveTaskStateRouteResponse(
+  value: unknown
+): value is LiveTaskStateRouteResponse {
+  if (!value || typeof value !== "object" || !("ok" in value)) {
+    return false;
+  }
+
+  const response = value as { ok?: unknown; error?: unknown; value?: unknown };
+  if (response.ok === true) {
+    return response.value !== undefined;
+  }
+  return response.ok === false && typeof response.error === "string";
+}
+
+async function readLiveTaskStateRouteResponse(
+  response: Response
+): Promise<LiveTaskStateRouteResponse | undefined> {
+  try {
+    const json = await response.json();
+    return isLiveTaskStateRouteResponse(json) ? json : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPermanentLiveTaskRouteFailure({
+  error,
+  status
+}: {
+  error?: string;
+  status?: number;
+}): boolean {
+  return (
+    (error !== undefined && permanentRouteErrors.has(error)) ||
+    (status !== undefined && permanentRouteStatuses.has(status))
+  );
+}
+
+export async function fetchLiveTaskStateRoute({
+  taskId,
+  fetcher = fetch
+}: {
+  taskId: string;
+  fetcher?: typeof fetch;
+}): Promise<LiveTaskStateRouteResult> {
+  try {
+    const response = await fetcher(
+      `/api/tasks/${encodeURIComponent(taskId)}/state`,
+      { cache: "no-store" }
+    );
+    const result = await readLiveTaskStateRouteResponse(response);
+
+    if (response.ok && result?.ok) {
+      return {
+        ok: true,
+        payload: result.value
+      };
+    }
+
+    const error = result?.ok === false ? result.error : `http_${response.status}`;
+    return {
+      ok: false,
+      error,
+      retryable: !isPermanentLiveTaskRouteFailure({
+        error,
+        status: response.status
+      })
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "network_error",
+      retryable: true
+    };
+  }
+}
+
+export function getLiveTaskFailureRetryMs({
+  retryable,
+  state
+}: {
+  retryable: boolean;
+  state: LiveTaskPanelState;
+}): number {
+  if (!retryable || !shouldPollLiveTask(state)) {
+    return 0;
+  }
+  return retryPollMs;
+}
+
+export function getLiveTaskPreviewRefreshDecision({
+  previousPreviewVersionKey,
+  nextPreviewVersionKey,
+  resetPreviewVersionKey
+}: {
+  previousPreviewVersionKey?: string;
+  nextPreviewVersionKey?: string;
+  resetPreviewVersionKey?: string;
+}): {
+  shouldRefresh: boolean;
+  nextPreviewVersionKey?: string;
+} {
+  const baselinePreviewVersionKey =
+    resetPreviewVersionKey ?? previousPreviewVersionKey;
+
+  return {
+    shouldRefresh: shouldRefreshForLiveArtifact({
+      previousPreviewVersionKey: baselinePreviewVersionKey,
+      nextPreviewVersionKey
+    }),
+    nextPreviewVersionKey:
+      nextPreviewVersionKey ?? baselinePreviewVersionKey
+  };
+}
 
 function getActiveRun(payload?: LiveTaskStatePayload) {
   return payload?.runs.find((run) => activeRunStates.has(run.state));
@@ -145,6 +266,7 @@ export function LiveTaskPanel({
 
     let isMounted = true;
     stateRef.current = createInitialLiveTaskState();
+    previousPreviewVersionKeyRef.current = initialPreviewVersionKey;
 
     const clearPollTimer = () => {
       if (timerRef.current !== undefined) {
@@ -163,32 +285,34 @@ export function LiveTaskPanel({
       }, delayMs);
     };
 
-    const dispatchRefreshError = () => {
+    const dispatchRefreshError = (retryable: boolean) => {
       const nextState = reduceAndDispatch(stateRef, dispatch, {
         type: "error",
         message: copy.liveTaskRefreshError
       });
-      if (shouldPollLiveTask(nextState)) {
-        schedulePoll(retryPollMs);
+      const retryMs = getLiveTaskFailureRetryMs({
+        retryable,
+        state: nextState
+      });
+      if (retryMs > 0) {
+        schedulePoll(retryMs);
       }
     };
 
     const applyPayload = (payload: LiveTaskStatePayload) => {
-      const nextPreviewVersionKey = payload.artifactProgress?.previewVersionKey;
-      const shouldRefresh = shouldRefreshForLiveArtifact({
+      const previewRefreshDecision = getLiveTaskPreviewRefreshDecision({
         previousPreviewVersionKey: previousPreviewVersionKeyRef.current,
-        nextPreviewVersionKey
+        nextPreviewVersionKey: payload.artifactProgress?.previewVersionKey
       });
       const nextState = reduceAndDispatch(stateRef, dispatch, {
         type: "payload",
         payload
       });
 
-      if (nextPreviewVersionKey !== undefined) {
-        previousPreviewVersionKeyRef.current = nextPreviewVersionKey;
-      }
+      previousPreviewVersionKeyRef.current =
+        previewRefreshDecision.nextPreviewVersionKey;
 
-      if (shouldRefresh) {
+      if (previewRefreshDecision.shouldRefresh) {
         router.refresh();
       }
 
@@ -200,34 +324,16 @@ export function LiveTaskPanel({
     const pollTaskState = async () => {
       reduceAndDispatch(stateRef, dispatch, { type: "loading" });
 
-      try {
-        const response = await fetch(
-          `/api/tasks/${encodeURIComponent(taskId)}/state`,
-          { cache: "no-store" }
-        );
-        if (!isMounted) {
-          return;
-        }
-        if (!response.ok) {
-          dispatchRefreshError();
-          return;
-        }
-
-        const result = (await response.json()) as LiveTaskStateRouteResponse;
-        if (!isMounted) {
-          return;
-        }
-        if (!result.ok) {
-          dispatchRefreshError();
-          return;
-        }
-
-        applyPayload(result.value);
-      } catch {
-        if (isMounted) {
-          dispatchRefreshError();
-        }
+      const result = await fetchLiveTaskStateRoute({ taskId });
+      if (!isMounted) {
+        return;
       }
+      if (!result.ok) {
+        dispatchRefreshError(result.retryable);
+        return;
+      }
+
+      applyPayload(result.payload);
     };
 
     void pollTaskState();
