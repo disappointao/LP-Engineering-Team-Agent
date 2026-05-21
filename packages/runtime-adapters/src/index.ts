@@ -261,6 +261,13 @@ export type RuntimeEvent =
       state: "completed";
     }
   | {
+      type: "run.cancelled";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      state: "cancelled";
+    }
+  | {
       type: "run.failed";
       message: string;
       runId?: string;
@@ -689,6 +696,7 @@ function cloneRuntimeMemoryArtifactFile(
 
 function cloneModelRoutingPolicy(policy: ModelRoutingPolicy): ModelRoutingPolicy {
   return {
+    assistant: { ...policy.assistant },
     planner: { ...policy.planner },
     builder: { ...policy.builder },
     reviewer: { ...policy.reviewer },

@@ -833,6 +833,7 @@ describe("local agent runtime adapter", () => {
           writableFiles: ["index.html", "styles.css", "script.js"]
         },
         modelRoutingPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "project-openai", model: "gpt-5.4" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -854,6 +855,67 @@ describe("local agent runtime adapter", () => {
     );
   });
 
+  it("runs an assistant flow without LP artifacts or review findings", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+
+    const result = await runtime.run({
+      runId: "run_assistant_task_1",
+      projectId: "project_1",
+      role: "assistant",
+      input: { prompt: "Explain this project" },
+      context: createDefaultRuntimeContext()
+    });
+
+    expect(result.state).toBe("completed");
+    expect(result.modelOutputText).toBe("assistant response from mock-openai/assistant-model");
+    expect(result.artifacts).toBeUndefined();
+    expect(result.findings).toBeUndefined();
+    expect(result.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "run.completed"
+    ]);
+  });
+
+  it("clones assistant model routing policy into runtime model calls", async () => {
+    const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
+    const runtime = new LocalAgentRuntimeAdapter(gateway);
+
+    await runtime.run({
+      runId: "run_assistant_routing",
+      projectId: "project_1",
+      role: "assistant",
+      input: { prompt: "Answer with project context" },
+      context: {
+        ...createDefaultRuntimeContext(),
+        modelRoutingPolicy: {
+          ...createDefaultModelPolicy(),
+          assistant: { provider: "project-openai", model: "gpt-5.4" }
+        }
+      }
+    });
+
+    expect(gateway.getAuditLog()[0]).toMatchObject({
+      role: "assistant",
+      provider: "project-openai",
+      model: "gpt-5.4"
+    });
+  });
+
+  it("types assistant cancellation runtime events", () => {
+    const event: RuntimeEvent = {
+      type: "run.cancelled",
+      message: "assistant run cancelled",
+      runId: "run_assistant_1",
+      role: "assistant",
+      state: "cancelled"
+    };
+
+    expect(event.state).toBe("cancelled");
+  });
+
   it("surfaces sanitized provider metadata in model completed events", async () => {
     const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
     const runtime = new LocalAgentRuntimeAdapter(gateway);
@@ -872,6 +934,7 @@ describe("local agent runtime adapter", () => {
           writableFiles: ["index.html", "styles.css", "script.js"]
         },
         modelRoutingPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: {
             provider: "zhipu",
