@@ -59,6 +59,10 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key));
+}
+
 function isRunState(
   value: unknown
 ): value is Extract<ChatStreamEvent, { type: "run.status" }>["state"] {
@@ -80,6 +84,7 @@ function isContextSummarySkill(
 ): value is { id: string; name: string; version: string } {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ["id", "name", "version"]) &&
     isString(value.id) &&
     isString(value.name) &&
     isString(value.version)
@@ -127,12 +132,22 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
       return isString(value.taskId) && isRunState(value.state) && isString(value.label);
     case "context.summary":
       return (
+        hasOnlyKeys(value, [
+          "type",
+          "taskId",
+          "projectId",
+          "projectName",
+          "runtimeMode",
+          "skillCount",
+          "skills"
+        ]) &&
         isString(value.taskId) &&
         (value.projectId === undefined || isString(value.projectId)) &&
         (value.projectName === undefined || isString(value.projectName)) &&
         isRuntimeMode(value.runtimeMode) &&
         isNonNegativeSafeInteger(value.skillCount) &&
         Array.isArray(value.skills) &&
+        value.skillCount === value.skills.length &&
         value.skills.every(isContextSummarySkill)
       );
     case "fallback.required":

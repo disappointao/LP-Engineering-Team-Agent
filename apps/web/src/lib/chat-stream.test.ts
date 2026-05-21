@@ -54,6 +54,30 @@ describe("chat stream contract", () => {
     ]);
   });
 
+  it("rejects context summary skill entries with raw content fields", () => {
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"context.summary","taskId":"task_1","runtimeMode":"real","skillCount":1,"skills":[{"id":"skill_brand","name":"Brand Voice","version":"1.0.0","content":"raw skill prompt"}]}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+  });
+
+  it("rejects context summaries with mismatched skill counts", () => {
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"context.summary","taskId":"task_1","runtimeMode":"real","skillCount":2,"skills":[{"id":"skill_brand","name":"Brand Voice","version":"1.0.0"}]}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+  });
+
+  it("rejects context summaries with unsafe top-level raw fields", () => {
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"context.summary","taskId":"task_1","runtimeMode":"real","skillCount":0,"skills":[],"content":"raw assembled context"}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+  });
+
   it("decodes cancelled run status events", () => {
     const decoded = decodeChatStreamLines(
       '{"type":"run.status","taskId":"task_1","state":"cancelled","label":"Cancelled"}\n'
