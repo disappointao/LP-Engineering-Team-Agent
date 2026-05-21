@@ -4292,15 +4292,25 @@ describe("demo workbench service", () => {
   });
 
   it("runs assistant chat with project-bound published skills", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new RecordingRuntime({
       state: "completed",
       modelOutputText: "Use a confident buyer-focused tone."
     });
     const service = new DemoWorkbenchService({
+      repositories,
       assistantRuntime,
       now: fixedClock()
     });
     const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Buyer answer",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
     const draft = await service.createSkillDraft({
       manifestJson: JSON.stringify(brandSkillManifest({ version: "0.1.0" })),
       content: "# Brand Voice\nUse a confident buyer-focused tone.",
@@ -4339,11 +4349,21 @@ describe("demo workbench service", () => {
   });
 
   it("returns safe assistant chat failure without raw provider details", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
+      repositories,
       env: { REAL_MODEL_RUNTIME: "1" },
       now: fixedClock()
     });
     const project = await service.createProject({ name: "Project" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
 
     const result = await service.runAssistantChat({
       projectId: project.id,
@@ -4370,6 +4390,14 @@ describe("demo workbench service", () => {
       now: fixedClock()
     });
     const project = await service.createProject({ name: "Project" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
     repositories.messages.listAll = async () => {
       throw new Error("raw_context_assembly_failure");
     };
@@ -4384,6 +4412,34 @@ describe("demo workbench service", () => {
       ok: false,
       error: "generation_failed"
     });
+    expect(assistantRuntime.requests).toEqual([]);
+  });
+
+  it("rejects assistant chat task ids from another project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "Should not run."
+    });
+    const service = new DemoWorkbenchService({ repositories, assistantRuntime, now: fixedClock() });
+    const project = await service.createProject({ name: "Project A" });
+    const otherProject = await service.createProject({ name: "Project B" });
+    await repositories.tasks.save({
+      id: "task_other_project",
+      title: "Other chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: otherProject.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const result = await service.runAssistantChat({
+      projectId: project.id,
+      taskId: "task_other_project",
+      prompt: "Hello"
+    });
+
+    expect(result).toEqual({ ok: false, error: "project_not_found" });
     expect(assistantRuntime.requests).toEqual([]);
   });
 

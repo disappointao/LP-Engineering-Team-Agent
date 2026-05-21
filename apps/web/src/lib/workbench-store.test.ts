@@ -2291,7 +2291,8 @@ describe("web workbench store", () => {
     });
 
     it("streams project-bound assistant runtime content with safe context summary", async () => {
-      const store = createWebWorkbenchStore();
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
       const project = await store.createProject({ name: "Spring Campaign" });
 
       const started = await store.startStreamingChatPrompt({
@@ -2315,6 +2316,21 @@ describe("web workbench store", () => {
         throw new Error("Expected streaming chat start");
       }
       expect(started.assistantContent).toContain("assistant response");
+
+      const runs = await repositories.runs.listForTask(started.taskId);
+      expect(runs).toEqual([
+        expect.objectContaining({
+          taskId: started.taskId,
+          role: "assistant"
+        })
+      ]);
+      const events = await repositories.runEvents.listForTask(started.taskId);
+      expect(events.map((event) => event.runId)).toEqual([
+        runs[0]?.id,
+        runs[0]?.id,
+        runs[0]?.id,
+        runs[0]?.id
+      ]);
     });
 
     it("keeps projectless streaming chat deterministic with no context summary skills", async () => {

@@ -880,6 +880,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         }
       }
 
+      const title = deriveTaskTitle(prompt.value);
+      let streamTaskId = requestedTaskId;
       let assistantContent = "I created a task thread and can continue from here.";
       let contextSummary: StreamingChatContextSummary = {
         runtimeMode: "deterministic",
@@ -887,9 +889,16 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         skills: []
       };
       if (requestedProjectId) {
+        const chatTask = await ensureStreamingChatTask({
+          repositories,
+          taskId: requestedTaskId,
+          title,
+          projectId: requestedProjectId
+        });
+        streamTaskId = chatTask.id;
         const assistant = await service.runAssistantChat({
           projectId: requestedProjectId,
-          ...(requestedTaskId ? { taskId: requestedTaskId } : {}),
+          taskId: streamTaskId,
           prompt: prompt.value
         });
         if (!assistant.ok) {
@@ -901,8 +910,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
       const started = await startStreamingChatThread({
         repositories,
-        taskId: requestedTaskId,
-        title: deriveTaskTitle(prompt.value),
+        taskId: streamTaskId,
+        title,
         projectId: requestedProjectId,
         userMessage: prompt.value,
         assistantMessage: ""
@@ -1707,22 +1716,13 @@ async function startStreamingChatThread(input: {
     const now = new Date().toISOString();
     const existingTasks = await input.repositories.tasks.listAll();
     const existingMessages = await input.repositories.messages.listAll();
-    const existingTask = input.taskId
-      ? await input.repositories.tasks.getById(input.taskId)
-      : undefined;
-    const task: TaskRecord =
-      existingTask &&
-      existingTask.type === "general_chat" &&
-      (existingTask.projectId ?? undefined) === input.projectId
-        ? existingTask
-        : {
-            id: nextSequentialId("task", existingTasks.map((record) => record.id)),
-            title: input.title,
-            type: "general_chat",
-            status: "complete",
-            ...(input.projectId ? { projectId: input.projectId } : {}),
-            createdAt: now
-          };
+    const task = getOrCreateStreamingChatTask({
+      existingTasks,
+      taskId: input.taskId,
+      title: input.title,
+      projectId: input.projectId,
+      now
+    });
     const userMessage: ChatMessageRecord = {
       id: nextSequentialId("message", existingMessages.map((record) => record.id)),
       taskId: task.id,
@@ -1751,6 +1751,57 @@ async function startStreamingChatThread(input: {
       assistantMessage: { ...assistantMessage }
     };
   });
+}
+
+async function ensureStreamingChatTask(input: {
+  repositories: WorkbenchRepositories;
+  taskId?: string;
+  title: string;
+  projectId?: string;
+}): Promise<TaskRecord> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const now = new Date().toISOString();
+    const existingTasks = await input.repositories.tasks.listAll();
+    const task = getOrCreateStreamingChatTask({
+      existingTasks,
+      taskId: input.taskId,
+      title: input.title,
+      projectId: input.projectId,
+      now
+    });
+
+    await input.repositories.tasks.save(task);
+
+    return { ...task };
+  });
+}
+
+function getOrCreateStreamingChatTask(input: {
+  existingTasks: TaskRecord[];
+  taskId?: string;
+  title: string;
+  projectId?: string;
+  now: string;
+}): TaskRecord {
+  const existingTask = input.taskId
+    ? input.existingTasks.find((task) => task.id === input.taskId)
+    : undefined;
+  if (
+    existingTask &&
+    existingTask.type === "general_chat" &&
+    (existingTask.projectId ?? undefined) === input.projectId
+  ) {
+    return existingTask;
+  }
+
+  return {
+    id: nextSequentialId("task", input.existingTasks.map((record) => record.id)),
+    title: input.title,
+    type: "general_chat",
+    status: "complete",
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+    createdAt: input.now
+  };
 }
 
 async function withRepositoryTaskLock<T>(

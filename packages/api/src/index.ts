@@ -2216,6 +2216,13 @@ export class DemoWorkbenchService {
       return { ok: false, error: "project_not_found" };
     }
 
+    let taskId: string | undefined;
+    try {
+      taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
+    } catch {
+      return { ok: false, error: "project_not_found" };
+    }
+
     let runId: string | undefined;
     let contextSummary: AssistantContextSummary | undefined;
     let createdRunId = false;
@@ -2225,7 +2232,7 @@ export class DemoWorkbenchService {
         repositories: this.repositories,
         service: this,
         projectId: project.id,
-        taskId: input.taskId,
+        taskId,
         role: "assistant",
         input: { prompt: input.prompt },
         now: this.now
@@ -2250,7 +2257,7 @@ export class DemoWorkbenchService {
         runtime: this.assistantRuntime,
         runId,
         projectId: project.id,
-        taskId: input.taskId,
+        taskId,
         role: "assistant",
         input: {
           prompt: createAssistantChatPrompt({
