@@ -342,6 +342,10 @@
    - Stage 28 LP Agent Chain End-to-End v0 design（当前推荐下一阶段设计）。
    - 在 Stage 27 implementation plan 和当前 roadmap 后阅读，用于把 Web 提交 LP 复杂任务时的固定 `Planner -> Builder -> Reviewer -> Deployer` 链路改成 task-first orchestration，确保真实 Planner/Builder structured output、durable artifact workspace、Reviewer blocked、Deployer handoff、失败 recovery 和后续修改都绑定到同一个 task。
 
+85. `plans/2026-05-21-lp-agent-chain-end-to-end.md`
+   - Stage 28 LP Agent Chain End-to-End v0 implementation plan（当前推荐下一阶段实施计划）。
+   - 在 Stage 28 design 后阅读，用于按 TDD 实现 task-first LP chain orchestration、同 task run 绑定、durable artifact workspace、Reviewer blocked / Deployer failure 边界、继续修改、真实 Planner/Builder structured output 覆盖和文档收尾。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
