@@ -51,6 +51,7 @@ describe("Web V1 smoke", () => {
     const pageVersion = pageState.snapshot?.currentPageVersion;
 
     expect(pageVersion?.artifactWorkspaceId).toBeTruthy();
+    expect(pageState.snapshot?.deployment?.pageVersionId).toBe(pageVersion?.id);
 
     const artifacts = pageVersion?.artifacts;
 

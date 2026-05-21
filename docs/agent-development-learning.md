@@ -258,13 +258,13 @@ Stage 28 的设计重点是把当前“先跑 Planner/Builder/Reviewer，成功�
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
 - Stage 27 Real Chat Runtime and Skill Context v0 已实现：`assistant` 已是一等 model/runtime role；project-bound 普通聊天通过 `runAssistantChat()` 进入 assistant runtime；prompt assembly 使用 bounded skill、memory 和 project context；Web stream 会输出安全 `context.summary`，UI 展示 project、skill 和 runtime summary。默认仍是 deterministic runtime，真实模型 runtime 仍必须通过 `REAL_MODEL_RUNTIME=1` 显式 opt-in。
-- Stage 28 LP Agent Chain End-to-End v0 已完成设计和实施计划：下一步要把 LP 复杂任务改成 task-first fixed chain orchestration，让 Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 都绑定到同一个 task；Planner / Builder 先使用真实模型 structured output，Reviewer / Deployer 继续 deterministic / policy-driven。
-- Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
+- Stage 28 LP Agent Chain End-to-End v0 已完成设计和实施计划，并已先落地 task-first 成功链路：Web LP prompt 会先创建 `lp_generation` task，再让 Planner / Builder / Reviewer / Deployer 的 run 使用同一个 `taskId`；snapshot 会逐步保存 project / brief / page version，Reviewer 通过后创建 deployment handoff。Planner / Builder 先使用真实模型 structured output，Reviewer / Deployer 继续 deterministic / policy-driven。
+- Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
 
 - provider token streaming、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现；真实 fallback provider execution 仍未做。
-- LP chain 的完整 task-first runtime workflow 仍未实现：Stage 28 已完成设计和实施计划，Planner / Builder 虽已有 `REAL_MODEL_RUNTIME=1` 下的结构化输出、repair、retry 和 fallback metadata，但 Web 复杂任务还没把 Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 全部绑定到同一个 task。普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。
+- LP chain 的继续编辑、previous artifact context、普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置；Stage 28 当前只完成成功 LP 生成链路的同 task 编排和 deployment handoff 持久化。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。

@@ -1236,7 +1236,9 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.project.id).toBe(project.id);
     expect(pageState.snapshot.brief?.prompt).toBe("Create a spring ecommerce landing page.");
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
-    expect(pageState.snapshot.deployment).toBeUndefined();
+    expect(pageState.snapshot.deployment?.pageVersionId).toBe(
+      pageState.snapshot.currentPageVersion?.id
+    );
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 
@@ -1301,12 +1303,14 @@ describe("web workbench store", () => {
     expect([...new Set(firstTaskState.runEvents.map((event) => event.runId))]).toEqual([
       "run_planner_brief_1",
       "run_builder_version_1",
-      "run_reviewer_version_1"
+      "run_reviewer_version_1",
+      "run_deployer_version_1"
     ]);
     expect([...new Set(secondTaskState.runEvents.map((event) => event.runId))]).toEqual([
       "run_planner_brief_2",
       "run_builder_version_2",
-      "run_reviewer_version_2"
+      "run_reviewer_version_2",
+      "run_deployer_version_2"
     ]);
   });
 
@@ -2623,6 +2627,59 @@ describe("web workbench store", () => {
     });
   });
 
+  it("runs Planner Builder Reviewer and Deployer under the same LP task", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const plannerRuntime = new RecordingRuntime({ state: "completed" });
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const reviewerRuntime = new RecordingRuntime({ state: "completed", findings: [] });
+    const deployerRuntime = new RecordingRuntime({ state: "completed" });
+    const store = createWebWorkbenchStore({
+      repositories,
+      plannerRuntime,
+      builderRuntime,
+      reviewerRuntime,
+      deployerRuntime
+    });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+
+    await expect(repositories.runs.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({ id: "run_planner_brief_1", role: "planner", taskId: "task_1" }),
+      expect.objectContaining({ id: "run_builder_version_1", role: "builder", taskId: "task_1" }),
+      expect.objectContaining({ id: "run_reviewer_version_1", role: "reviewer", taskId: "task_1" }),
+      expect.objectContaining({ id: "run_deployer_version_1", role: "deployer", taskId: "task_1" })
+    ]);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1"
+    });
+    await expect(repositories.deployments.getByPageVersionId("version_1")).resolves.toMatchObject({
+      pageVersionId: "version_1"
+    });
+    await expect(repositories.messages.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "LP artifacts are ready for review."
+      })
+    ]);
+  });
+
   it("submits a project setup task without creating an implicit project", async () => {
     const store = createWebWorkbenchStore();
 
@@ -2748,7 +2805,9 @@ describe("web workbench store", () => {
     }
     expect(pageState.snapshot.brief?.prompt).toBe("生成一个电商春季促销 LP，输出单文件 HTML");
     expect(pageState.snapshot.currentPageVersion?.reviewStatus).toBe("passed");
-    expect(pageState.snapshot.deployment).toBeUndefined();
+    expect(pageState.snapshot.deployment?.pageVersionId).toBe(
+      pageState.snapshot.currentPageVersion?.id
+    );
     expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
   });
 

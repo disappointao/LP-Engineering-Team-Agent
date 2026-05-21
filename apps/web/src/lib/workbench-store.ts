@@ -997,100 +997,14 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       }
 
       if (taskType === "lp_generation") {
-        let projectId = requestedProjectId;
-        let task: TaskRecord | undefined;
-
-        try {
-          if (!projectId) {
-            const project = await service.createProject({
-              name: deriveImplicitProjectName(prompt.value, input.implicitProjectName)
-            });
-            projectId = project.id;
-          }
-
-          const created = await createTaskThread({
-            repositories,
-            title: deriveTaskTitle(prompt.value),
-            type: taskType,
-            projectId,
-            userMessage: prompt.value
-          });
-          task = created.task;
-          await saveTaskSnapshot({
-            repositories,
-            taskId: task.id,
-            projectId
-          });
-
-          const brief = await service.createBriefFromPrompt({
-            projectId,
-            prompt: prompt.value,
-            taskId: task.id
-          });
-          const pageVersion = await service.generatePageVersion({
-            projectId,
-            briefId: brief.id,
-            taskId: task.id
-          });
-          const reviewedPageVersion = await service.reviewPageVersion({
-            projectId,
-            pageVersionId: pageVersion.id,
-            taskId: task.id
-          });
-          const project = await repositories.projects.getById(projectId);
-          if (!project) {
-            return {
-              ok: false,
-              error: "project_not_found",
-              taskId: task.id,
-              taskType,
-              projectId
-            };
-          }
-          await appendTaskMessage({
-            repositories,
-            taskId: task.id,
-            role: "assistant",
-            content: "LP artifacts are ready for review."
-          });
-          await saveTaskSnapshot({
-            repositories,
-            taskId: task.id,
-            projectId: project.id,
-            briefId: brief.id,
-            pageVersionId: reviewedPageVersion.id
-          });
-
-          return {
-            ok: true,
-            taskId: task.id,
-            taskType,
-            projectId
-          };
-        } catch {
-          if (task) {
-            await appendTaskMessage({
-              repositories,
-              taskId: task.id,
-              role: "assistant",
-              content: "LP generation failed. Open recovery details for the failed run."
-            });
-          }
-          if (task && projectId) {
-            await saveTaskSnapshot({
-              repositories,
-              taskId: task.id,
-              projectId
-            });
-          }
-          return {
-            ok: false,
-            error: "generation_failed",
-            ...(task ? { taskId: task.id } : {}),
-            taskType,
-            ...(projectId ? { projectId } : {})
-          };
-        }
+        return runLpTaskPrompt({
+          repositories,
+          service,
+          currentUser,
+          requestedProjectId,
+          prompt: prompt.value,
+          implicitProjectName: input.implicitProjectName
+        });
       }
 
       try {
@@ -1797,6 +1711,132 @@ async function saveTaskSnapshot(input: {
     pageVersionId: input.pageVersionId ?? existing?.pageVersionId,
     createdAt: existing?.createdAt ?? (input.now ?? (() => new Date()))().toISOString()
   });
+}
+
+async function runLpAgentChainForTask(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  currentUser: WorkbenchUserIdentity;
+  taskId: string;
+  projectId: string;
+  prompt: string;
+  previousPageVersionId?: string;
+  now?: () => Date;
+}): Promise<{ briefId: string; pageVersionId: string }> {
+  const brief = await input.service.createBriefFromPrompt({
+    projectId: input.projectId,
+    taskId: input.taskId,
+    prompt: input.prompt
+  });
+  await saveTaskSnapshot({
+    repositories: input.repositories,
+    taskId: input.taskId,
+    projectId: input.projectId,
+    briefId: brief.id,
+    now: input.now
+  });
+
+  const pageVersion = await input.service.generatePageVersion({
+    projectId: input.projectId,
+    briefId: brief.id,
+    taskId: input.taskId
+  });
+  await saveTaskSnapshot({
+    repositories: input.repositories,
+    taskId: input.taskId,
+    projectId: input.projectId,
+    briefId: brief.id,
+    pageVersionId: pageVersion.id,
+    now: input.now
+  });
+
+  const reviewedPageVersion = await input.service.reviewPageVersion({
+    projectId: input.projectId,
+    pageVersionId: pageVersion.id,
+    taskId: input.taskId
+  });
+  if (reviewedPageVersion.reviewStatus === "passed") {
+    await input.service.approveAndCreateDeployment({
+      projectId: input.projectId,
+      pageVersionId: reviewedPageVersion.id,
+      taskId: input.taskId,
+      reviewerUserId: input.currentUser.id
+    });
+  }
+
+  return {
+    briefId: brief.id,
+    pageVersionId: reviewedPageVersion.id
+  };
+}
+
+async function runLpTaskPrompt(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  currentUser: WorkbenchUserIdentity;
+  requestedProjectId?: string;
+  prompt: string;
+  implicitProjectName: string;
+}): Promise<SubmitTaskResult> {
+  let projectId = input.requestedProjectId;
+  if (!projectId) {
+    const project = await input.service.createProject({
+      name: deriveImplicitProjectName(input.prompt, input.implicitProjectName)
+    });
+    projectId = project.id;
+  }
+
+  const { task } = await createTaskThread({
+    repositories: input.repositories,
+    title: deriveTaskTitle(input.prompt),
+    type: "lp_generation",
+    projectId,
+    userMessage: input.prompt
+  });
+  await saveTaskSnapshot({
+    repositories: input.repositories,
+    taskId: task.id,
+    projectId
+  });
+
+  try {
+    const chain = await runLpAgentChainForTask({
+      repositories: input.repositories,
+      service: input.service,
+      currentUser: input.currentUser,
+      taskId: task.id,
+      projectId,
+      prompt: input.prompt
+    });
+    await saveTaskSnapshot({
+      repositories: input.repositories,
+      taskId: task.id,
+      projectId,
+      briefId: chain.briefId,
+      pageVersionId: chain.pageVersionId
+    });
+    await appendTaskMessage({
+      repositories: input.repositories,
+      taskId: task.id,
+      role: "assistant",
+      content: "LP artifacts are ready for review."
+    });
+    return { ok: true, taskId: task.id, taskType: "lp_generation", projectId };
+  } catch {
+    await appendTaskMessage({
+      repositories: input.repositories,
+      taskId: task.id,
+      role: "assistant",
+      content: "LP generation failed. Open recovery details for the failed run."
+    });
+    return {
+      ok: false,
+      error: "generation_failed",
+      taskId: task.id,
+      taskType: "lp_generation",
+      projectId
+    };
+  }
 }
 
 async function saveTaskThread(input: {
