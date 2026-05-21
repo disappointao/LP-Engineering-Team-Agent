@@ -244,13 +244,13 @@ Stage 27 的设计决定新增独立 `assistant` role。这个 role 可以复用
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
-- Stage 27 Real Chat Runtime and Skill Context v0 已完成设计确认：后续实现会新增 `assistant` role，把 project-bound 普通聊天接入真实 model runtime 和 skill context；当前代码尚未实现这一运行路径。
+- Stage 27 Real Chat Runtime and Skill Context v0 已实现：`assistant` 已是一等 model/runtime role；project-bound 普通聊天通过 `runAssistantChat()` 进入 assistant runtime；prompt assembly 使用 bounded skill、memory 和 project context；Web stream 会输出安全 `context.summary`，UI 展示 project、skill 和 runtime summary。默认仍是 deterministic runtime，真实模型 runtime 仍必须通过 `REAL_MODEL_RUNTIME=1` 显式 opt-in。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
-- 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
-- 普通聊天真实模型 runtime、`assistant` model route、project skill context prompt 注入和 Chat UI context summary 还没实现；Stage 27 已有设计，待实施计划和代码落地。
+- provider token streaming、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现；真实 fallback provider execution 仍未做。
+- LP chain 的完整真实 runtime workflow 仍未做：Planner / Builder 虽已有 `REAL_MODEL_RUNTIME=1` 下的结构化输出、repair、retry 和 fallback metadata，但还没有把普通聊天式的 token streaming、tool-call conversion、MCP execution、usage/cost reporting 串成完整真实运行闭环。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。
@@ -456,7 +456,7 @@ Stage 27 的设计决定新增独立 `assistant` role。这个 role 可以复用
 - 客户端 streaming state 是暂态 UI 层，不是新的事实来源；收到 terminal event 或刷新页面后，仍以 repository 中的 message / task state 为准。
 - LP / project setup 没被塞进 streaming route，仍回退到既有 `submitPromptAction` server action，避免 project bootstrap、artifact workflow 和普通聊天运行语义互相污染。
 - 普通聊天入口会显式传递 null task routing，让新输入脱离 stale task cookie，避免用户退出旧任务后仍被错误路由到旧 task。
-- 学习重点：streaming 是 UI 反馈边界，不等于新的 Agent runtime、真实 provider token streaming 或 tool-call protocol。先让 route、store 和 refresh recovery 拥有一致语义，再把 Stage 27 的真实普通聊天 runtime 和 skill context 接入这条边界。
+- 学习重点：streaming 是 UI 反馈边界，不等于 provider token streaming 或 tool-call protocol。Stage 27 已把真实普通聊天 runtime 和 skill context 接入这条边界，但 stream 仍只输出安全事件，并在 terminal event 或刷新后回到 repository facts。
 
 已实现的 Stage 4 Skill Command MVP：
 
