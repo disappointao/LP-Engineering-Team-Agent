@@ -1267,6 +1267,69 @@ describe("web workbench store", () => {
     );
   });
 
+  it("globally sorts merged task-bound and snapshot-derived run events", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a simple HTML LP",
+      implicitProjectName: "Implicit project"
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected prompt submission to succeed.");
+    }
+    const projectId = result.projectId;
+    const initialState = await store.getPageState({
+      projectId,
+      taskId: result.taskId
+    });
+    expect(initialState.kind).toBe("task_ready");
+    if (initialState.kind !== "task_ready" || !initialState.snapshot?.currentPageVersion) {
+      throw new Error("Expected task-ready state with a page version.");
+    }
+
+    await repositories.runEvents.save({
+      id: "task_bound_later_event",
+      runId: "run_task_bound_later",
+      projectId,
+      taskId: result.taskId,
+      sequence: 1,
+      type: "run.started",
+      message: "Task-bound later event.",
+      payload: {},
+      createdAt: "2026-05-20T00:00:02.000Z"
+    });
+    await repositories.runEvents.save({
+      id: "snapshot_skill_command_earlier_event",
+      runId: "run_skill_command_earlier",
+      projectId,
+      sequence: 1,
+      type: "skill.command.started",
+      message: "Snapshot-derived earlier skill command event.",
+      payload: {
+        pageVersionId: initialState.snapshot.currentPageVersion.id
+      },
+      createdAt: "2026-05-20T00:00:01.000Z"
+    });
+
+    const state = await store.getPageState({
+      projectId,
+      taskId: result.taskId
+    });
+
+    expect(state.kind).toBe("task_ready");
+    if (state.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    const mergedEventIds = state.runEvents.map((event) => event.id);
+    expect(mergedEventIds.indexOf("snapshot_skill_command_earlier_event")).toBeLessThan(
+      mergedEventIds.indexOf("task_bound_later_event")
+    );
+    expect(state.runEvents.map((event) => event.createdAt)).toEqual(
+      [...state.runEvents.map((event) => event.createdAt)].sort()
+    );
+    expect(new Set(mergedEventIds).size).toBe(mergedEventIds.length);
+  });
+
   it("restores the LP snapshot that belongs to the requested task", async () => {
     const store = createWebWorkbenchStore();
     const project = await store.createProject({

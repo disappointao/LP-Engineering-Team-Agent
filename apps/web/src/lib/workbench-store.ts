@@ -826,14 +826,10 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             snapshotRef
           )
         : [];
-      const taskRunEventIds = new Set(taskRunEvents.map((event) => event.id));
-      const runEvents =
-        taskRunEvents.length > 0
-          ? [
-              ...taskRunEvents,
-              ...snapshotRunEvents.filter((event) => !taskRunEventIds.has(event.id))
-            ]
-          : snapshotRunEvents;
+      const runEvents = mergeRunEventsForTaskView({
+        taskRunEvents,
+        snapshotRunEvents
+      });
       const snapshot = snapshotRef
         ? await service.getSnapshotForRecords({
             projectId: snapshotRef.projectId,
@@ -1464,6 +1460,32 @@ function filterRunEventsForSnapshot(
 
   return runEvents.filter(
     (event) => runIds.has(event.runId) || isSkillCommandRunEventForSnapshot(event, snapshot)
+  );
+}
+
+function mergeRunEventsForTaskView(input: {
+  taskRunEvents: RunEventRecord[];
+  snapshotRunEvents: RunEventRecord[];
+}): RunEventRecord[] {
+  const eventsById = new Map<string, RunEventRecord>();
+  for (const event of input.taskRunEvents) {
+    eventsById.set(event.id, event);
+  }
+  for (const event of input.snapshotRunEvents) {
+    if (!eventsById.has(event.id)) {
+      eventsById.set(event.id, event);
+    }
+  }
+
+  return [...eventsById.values()].sort(compareRunEventsForTaskView);
+}
+
+function compareRunEventsForTaskView(a: RunEventRecord, b: RunEventRecord): number {
+  return (
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.runId.localeCompare(b.runId) ||
+    a.sequence - b.sequence ||
+    a.id.localeCompare(b.id)
   );
 }
 
