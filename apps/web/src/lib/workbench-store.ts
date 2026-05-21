@@ -27,6 +27,7 @@ import {
   type RunRecoveryExecutionAction,
   type RunRecoveryExecutionErrorCode,
   type RunRecoveryExecutionResult,
+  type RuntimeEnvironment,
   type SkillCommandExecutionResult,
   type SkillCommandQueueRuntime,
   type SkillBindingRecord,
@@ -57,7 +58,7 @@ import {
   type WorkbenchTaskStatus,
   type WorkbenchTaskType
 } from "@lp-agent/db";
-import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import { createDefaultModelPolicy, type ModelFetch } from "@lp-agent/model-gateway";
 import type {
   WorkerJobRepository,
   WorkerLogRepository
@@ -504,6 +505,8 @@ export interface WebWorkbenchStoreOptions {
   workerJobRepository?: WorkerJobRepository;
   workerLogRepository?: WorkerLogRepository;
   workerId?: string;
+  env?: RuntimeEnvironment;
+  modelFetch?: ModelFetch;
   currentUser?: WorkbenchUserIdentity;
 }
 
@@ -627,7 +630,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     reviewerRuntime: options.reviewerRuntime,
     deployerRuntime: options.deployerRuntime,
     toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner(),
-    workerQueueRuntime
+    workerQueueRuntime,
+    env: options.env,
+    modelFetch: options.modelFetch
   });
 
   const listProjects = async () =>

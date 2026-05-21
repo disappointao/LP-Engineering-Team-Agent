@@ -11,7 +11,8 @@ import {
   createStaticArtifactWorkspaceFiles,
   type StaticArtifacts
 } from "@lp-agent/artifacts";
-import { createDefaultModelPolicy } from "@lp-agent/model-gateway";
+import { sampleBrief } from "@lp-agent/lp-schema";
+import { createDefaultModelPolicy, type ModelFetch } from "@lp-agent/model-gateway";
 import {
   InMemoryWorkerJobPayloadRepository,
   InMemoryWorkerLogRepository,
@@ -272,6 +273,90 @@ function completeArtifacts() {
     stylesCss: "body { font-family: system-ui, sans-serif; }",
     scriptJs: "window.lpAgent = true;"
   };
+}
+
+function createStructuredLPModelFetch(): {
+  modelFetch: ModelFetch;
+  plannerBrief: typeof sampleBrief;
+  builderArtifacts: StaticArtifacts;
+  calls: Array<{
+    input: string | URL | Request;
+    init?: RequestInit;
+    prompt: string;
+    kind: "planner" | "builder" | "other";
+  }>;
+} {
+  const plannerBrief = {
+    ...sampleBrief,
+    title: "Model Built LP",
+    objective: "Validate that the Web store passes real runtime options through.",
+    sections: sampleBrief.sections.map((section, index) => ({
+      ...section,
+      id: `model_built_section_${index + 1}`,
+      ...(index === 0 ? { headline: "Model Built LP" } : {})
+    })),
+    seo: {
+      ...sampleBrief.seo,
+      title: "Model Built LP"
+    }
+  };
+  const builderArtifacts: StaticArtifacts = {
+    indexHtml:
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Model Built LP</title><link rel="stylesheet" href="styles.css"></head><body><main><section class="hero"><h1>Model Built LP</h1><p>Structured Builder output reached the Web store.</p><a href="#signup">Start now</a></section></main>  <script src="script.js"></script></body></html>',
+    stylesCss:
+      "body { margin: 0; font-family: system-ui, sans-serif; color: #172033; background: #f7fbff; } .hero { padding: 48px; }",
+    scriptJs: "window.lpAgentModelBuilt = true;"
+  };
+  const calls: Array<{
+    input: string | URL | Request;
+    init?: RequestInit;
+    prompt: string;
+    kind: "planner" | "builder" | "other";
+  }> = [];
+  const modelFetch: ModelFetch = async (input, init) => {
+    const requestBody = JSON.parse(String(init?.body)) as {
+      messages?: Array<{ content?: unknown }>;
+    };
+    const prompt = String(requestBody.messages?.[0]?.content ?? "");
+    const kind =
+      prompt.includes("LPBriefSchema")
+        ? "planner"
+        : prompt.includes("indexHtml") &&
+            prompt.includes("stylesCss") &&
+            prompt.includes("scriptJs")
+          ? "builder"
+          : "other";
+    calls.push({
+      input,
+      ...(init ? { init } : {}),
+      prompt,
+      kind
+    });
+    const content =
+      kind === "planner"
+        ? JSON.stringify(plannerBrief)
+        : kind === "builder"
+          ? JSON.stringify(builderArtifacts)
+          : "No launch blockers.";
+
+    return new Response(
+      JSON.stringify({
+        id: `chatcmpl_${kind}_${calls.length}`,
+        model: "lp-model",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 6, total_tokens: 16 }
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+
+  return { modelFetch, plannerBrief, builderArtifacts, calls };
 }
 
 describe("web workbench store", () => {
@@ -1932,6 +2017,88 @@ describe("web workbench store", () => {
         }
       }
     });
+  });
+
+  it("uses real Planner and Builder runtime through web store model routes", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { modelFetch, plannerBrief, builderArtifacts, calls } =
+      createStructuredLPModelFetch();
+    const store = createWebWorkbenchStore({
+      repositories,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "test-key"
+      },
+      modelFetch
+    });
+    const project = await store.createProject({ name: "Model LP" });
+    const provider = await store.createModelProvider({
+      projectId: project.id,
+      providerId: "openai_compatible",
+      name: "OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://models.example.test/v1",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "lp-model"
+    });
+    if (!provider.ok) {
+      throw new Error(`Expected provider creation to succeed, got ${provider.error}.`);
+    }
+    for (const role of ["planner", "builder", "reviewer", "deployer"] as const) {
+      const route = await store.upsertProjectModelRoute({
+        projectId: project.id,
+        role,
+        providerId: provider.value.id,
+        model: "lp-model"
+      });
+      if (!route.ok) {
+        throw new Error(`Expected ${role} route upsert to succeed, got ${route.error}.`);
+      }
+    }
+
+    const result = await store.submitTaskPrompt({
+      projectId: project.id,
+      prompt: "Create a landing page in HTML for a model-built LP.",
+      implicitProjectName: "Model LP"
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: project.id
+    });
+    const pageState = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready" || !pageState.snapshot) {
+      throw new Error("Expected task-ready page state with snapshot.");
+    }
+    expect(pageState.snapshot.brief?.brief.title).toBe(plannerBrief.title);
+    expect(pageState.snapshot.brief?.brief.sections[0]?.id).toBe("model_built_section_1");
+    expect(pageState.snapshot.currentPageVersion?.artifacts).toEqual(builderArtifacts);
+    expect(pageState.snapshot.currentPageVersion?.artifacts.indexHtml).toContain(
+      "Structured Builder output reached the Web store."
+    );
+    expect(calls.map((call) => call.kind)).toEqual([
+      "planner",
+      "builder",
+      "other",
+      "other"
+    ]);
+    expect(calls[0]?.prompt).toContain("LPBriefSchema");
+    expect(calls[1]?.prompt).toContain("indexHtml");
+
+    const runs = await repositories.runs.listForTask("task_1");
+    expect(runs.map((run) => run.role)).toEqual([
+      "planner",
+      "builder",
+      "reviewer",
+      "deployer"
+    ]);
   });
 
   it("recovers page model state when a persisted route points to a disabled provider", async () => {
