@@ -249,11 +249,13 @@ Stage 26 v0 已把普通聊天的 Web/API 实时反馈边界接入 workbench：A
 
 ### Stage 27：Real Chat Runtime and Skill Context v0
 
-**状态：** 当前推荐下一阶段；设计已确认，待实施计划。
+**状态：** 当前推荐下一阶段；设计和实施计划已确认，待实现。
 
 **为什么现在做：** Streaming UI 稳定后，普通问答要从 deterministic response 升级为真实模型 runtime。项目已经有 provider-neutral model gateway、真实 runtime opt-in、Context Pack 和 Skills 注入边界；下一步是把这些能力收敛成用户可用的普通聊天路径。
 
 **当前设计：** `docs/superpowers/specs/2026-05-21-real-chat-runtime-skill-context-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-21-real-chat-runtime-skill-context.md`。
 
 **建议范围：**
 
