@@ -34,6 +34,7 @@ const emptyMCPState = {
   connectors: [],
   approvals: [],
   visibleToolsByRole: {
+    assistant: [],
     planner: [],
     builder: [],
     reviewer: [],
@@ -2287,6 +2288,52 @@ describe("web workbench store", () => {
       expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(pageState.messages[0]?.content).toBe("Help me write a campaign plan.");
       expect(pageState.messages[1]?.content).toBe(started.assistantContent);
+    });
+
+    it("streams project-bound assistant runtime content with safe context summary", async () => {
+      const store = createWebWorkbenchStore();
+      const project = await store.createProject({ name: "Spring Campaign" });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: project.id,
+        taskId: null,
+        prompt: "How should this page sound?"
+      });
+
+      expect(started).toMatchObject({
+        ok: true,
+        projectId: project.id,
+        contextSummary: {
+          projectId: project.id,
+          projectName: "Spring Campaign",
+          runtimeMode: "deterministic",
+          skillCount: 0,
+          skills: []
+        }
+      });
+      if (!started.ok) {
+        throw new Error("Expected streaming chat start");
+      }
+      expect(started.assistantContent).toContain("assistant response");
+    });
+
+    it("keeps projectless streaming chat deterministic with no context summary skills", async () => {
+      const store = createWebWorkbenchStore();
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Hello"
+      });
+
+      expect(started).toMatchObject({
+        ok: true,
+        contextSummary: {
+          runtimeMode: "deterministic",
+          skillCount: 0,
+          skills: []
+        }
+      });
     });
 
     it("returns fallback_required for LP prompts without creating messages", async () => {

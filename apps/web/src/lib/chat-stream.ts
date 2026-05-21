@@ -19,8 +19,17 @@ export type ChatStreamEvent =
   | {
       type: "run.status";
       taskId: string;
-      state: "queued" | "running" | "completed" | "failed";
+      state: "queued" | "running" | "completed" | "failed" | "cancelled";
       label: string;
+    }
+  | {
+      type: "context.summary";
+      taskId: string;
+      projectId?: string;
+      projectName?: string;
+      runtimeMode: "deterministic" | "real";
+      skillCount: number;
+      skills: Array<{ id: string; name: string; version: string }>;
     }
   | {
       type: "fallback.required";
@@ -46,6 +55,10 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
 function isRunState(
   value: unknown
 ): value is Extract<ChatStreamEvent, { type: "run.status" }>["state"] {
@@ -53,7 +66,23 @@ function isRunState(
     value === "queued" ||
     value === "running" ||
     value === "completed" ||
-    value === "failed"
+    value === "failed" ||
+    value === "cancelled"
+  );
+}
+
+function isRuntimeMode(value: unknown): value is "deterministic" | "real" {
+  return value === "deterministic" || value === "real";
+}
+
+function isContextSummarySkill(
+  value: unknown
+): value is { id: string; name: string; version: string } {
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.version)
   );
 }
 
@@ -96,6 +125,16 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
       return isString(value.taskId) && isString(value.messageId) && isString(value.content);
     case "run.status":
       return isString(value.taskId) && isRunState(value.state) && isString(value.label);
+    case "context.summary":
+      return (
+        isString(value.taskId) &&
+        (value.projectId === undefined || isString(value.projectId)) &&
+        (value.projectName === undefined || isString(value.projectName)) &&
+        isRuntimeMode(value.runtimeMode) &&
+        isNonNegativeSafeInteger(value.skillCount) &&
+        Array.isArray(value.skills) &&
+        value.skills.every(isContextSummarySkill)
+      );
     case "fallback.required":
       return (
         isFallbackReason(value.reason) &&

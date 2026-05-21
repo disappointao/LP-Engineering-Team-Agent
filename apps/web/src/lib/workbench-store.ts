@@ -347,6 +347,14 @@ export type SubmitTaskResult =
     }
   | { ok: false; error: ProjectFlowErrorCode };
 
+export interface StreamingChatContextSummary {
+  projectId?: string;
+  projectName?: string;
+  runtimeMode: "deterministic" | "real";
+  skillCount: number;
+  skills: Array<{ id: string; name: string; version: string }>;
+}
+
 export type StreamingChatStartResult =
   | {
       ok: true;
@@ -356,6 +364,7 @@ export type StreamingChatStartResult =
       userMessageId: string;
       assistantMessageId: string;
       assistantContent: string;
+      contextSummary: StreamingChatContextSummary;
       chunks: string[];
     }
   | { ok: false; error: ProjectFlowErrorCode }
@@ -644,6 +653,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
   function createEmptyVisibleToolsByRole(): ProjectMCPState["visibleToolsByRole"] {
     return {
+      assistant: [],
       planner: [],
       builder: [],
       reviewer: [],
@@ -870,7 +880,25 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         }
       }
 
-      const assistantContent = "I created a task thread and can continue from here.";
+      let assistantContent = "I created a task thread and can continue from here.";
+      let contextSummary: StreamingChatContextSummary = {
+        runtimeMode: "deterministic",
+        skillCount: 0,
+        skills: []
+      };
+      if (requestedProjectId) {
+        const assistant = await service.runAssistantChat({
+          projectId: requestedProjectId,
+          ...(requestedTaskId ? { taskId: requestedTaskId } : {}),
+          prompt: prompt.value
+        });
+        if (!assistant.ok) {
+          return { ok: false, error: assistant.error };
+        }
+        assistantContent = assistant.content;
+        contextSummary = assistant.contextSummary;
+      }
+
       const started = await startStreamingChatThread({
         repositories,
         taskId: requestedTaskId,
@@ -888,6 +916,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         userMessageId: started.userMessage.id,
         assistantMessageId: started.assistantMessage.id,
         assistantContent,
+        contextSummary,
         chunks: chunkAssistantText(assistantContent, 12)
       };
     },

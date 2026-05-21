@@ -36,6 +36,35 @@ describe("chat stream contract", () => {
     expect(decoded.remainder).toBe('{"type"');
   });
 
+  it("decodes safe context summary events", () => {
+    const decoded = decodeChatStreamLines(
+      '{"type":"context.summary","taskId":"task_1","projectId":"project_1","projectName":"Spring Campaign","runtimeMode":"real","skillCount":1,"skills":[{"id":"skill_brand","name":"Brand Voice","version":"1.0.0"}]}\n'
+    );
+
+    expect(decoded.events).toEqual([
+      {
+        type: "context.summary",
+        taskId: "task_1",
+        projectId: "project_1",
+        projectName: "Spring Campaign",
+        runtimeMode: "real",
+        skillCount: 1,
+        skills: [{ id: "skill_brand", name: "Brand Voice", version: "1.0.0" }]
+      }
+    ]);
+  });
+
+  it("decodes cancelled run status events", () => {
+    const decoded = decodeChatStreamLines(
+      '{"type":"run.status","taskId":"task_1","state":"cancelled","label":"Cancelled"}\n'
+    );
+
+    expect(decoded.events[0]).toMatchObject({
+      type: "run.status",
+      state: "cancelled"
+    });
+  });
+
   it("rejects decoded events with unknown types", () => {
     expect(() => decodeChatStreamLines('{"type":"unknown"}\n')).toThrow(
       "chat_stream_event_invalid"
