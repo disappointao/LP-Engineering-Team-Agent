@@ -2479,6 +2479,18 @@ describe("demo workbench service", () => {
     expect(policy.builder).toEqual({ provider: "mock-anthropic", model: "code-model" });
   });
 
+  it("resolves default assistant model route for projects", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+
+    const policy = await service.resolveModelRoutingPolicyForProject(project.id);
+
+    expect(policy.assistant).toEqual({
+      provider: "mock-openai",
+      model: "assistant-model"
+    });
+  });
+
   it("creates provider-neutral model providers with explicit API protocol", async () => {
     const service = new DemoWorkbenchService({ now: fixedClock() });
     const project = await service.createProject({ name: "Project" });
@@ -4234,6 +4246,49 @@ describe("demo workbench service", () => {
     expect(reviewerRuntime.requests[0]?.context?.mcpTools.map((tool) => tool.name)).toEqual([
       "searchAssets"
     ]);
+  });
+
+  it("passes project skills and model routing to assistant runtime context without mcp tools", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Project" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest()),
+      content: "# Brand LP",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+    await service.createProjectMCPConnector({
+      projectId: project.id,
+      definitionJson: JSON.stringify({
+        id: "connector_assets",
+        name: "Assets",
+        tools: [
+          {
+            name: "searchAssets",
+            permission: "assets:read",
+            roles: ["builder", "reviewer"],
+            requiresApproval: false
+          }
+        ]
+      })
+    });
+
+    const context = await service.createRuntimeContextForRole({
+      projectId: project.id,
+      role: "assistant"
+    });
+
+    expect(context.skills).toHaveLength(1);
+    expect(context.mcpTools).toEqual([]);
+    expect(context.modelRoutingPolicy?.assistant).toEqual({
+      provider: "mock-openai",
+      model: "assistant-model"
+    });
   });
 
   it("assembles and validates a role-specific context pack", async () => {
@@ -6170,6 +6225,7 @@ describe("demo workbench service", () => {
         }
       ],
       visibleToolsByRole: {
+        assistant: [],
         builder: []
       }
     });

@@ -9,6 +9,7 @@ import type {
   RuntimeEvent,
   RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
+import type { AgentRole } from "@lp-agent/model-gateway";
 import { assembleContextPack, type ContextPack } from "./context-assembler";
 import type { DemoWorkbenchService } from "./index";
 
@@ -34,7 +35,7 @@ export interface RunAgentStepInput {
   projectId: string;
   taskId?: string;
   pageVersionId?: string;
-  role: "planner" | "builder" | "reviewer" | "deployer";
+  role: AgentRole;
   input: ContextPack["input"];
   now?: () => Date;
   finalizeResult?: RunAgentStepFinalizer;

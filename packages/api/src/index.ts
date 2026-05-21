@@ -43,6 +43,7 @@ import {
   normalizeMCPConnectorDefinition,
   summarizeMCPToolArguments,
   type ApprovalState,
+  type AgentRole as MCPAgentRole,
   type MCPToolDefinition,
   type MCPToolApprovalState,
   type MCPToolExecutionResult,
@@ -1920,18 +1921,20 @@ export class DemoWorkbenchService {
 
   async listProjectMCPState(projectId: string): Promise<ProjectMCPState> {
     await this.getProjectOrThrow(projectId);
-    const visibleEntries = await Promise.all(
-      agentRoles.map(
-        async (role) =>
-          [
-            role,
-            await this.listVisibleMCPToolsForProject({
-              projectId,
-              role
-            })
-          ] as const
-      )
-    );
+    const visibleEntries: Array<readonly [AgentRole, RuntimeRunContext["mcpTools"]]> =
+      await Promise.all(
+        mcpRuntimeAgentRoles.map(
+          async (role) =>
+            [
+              role,
+              await this.listVisibleMCPToolsForProject({
+                projectId,
+                role
+              })
+            ] as const
+        )
+      );
+    visibleEntries.push(["assistant", []]);
     return {
       connectors: (await this.repositories.mcpConnectors.listForProject(projectId)).map(
         copyMCPConnectorRecord
@@ -1950,6 +1953,9 @@ export class DemoWorkbenchService {
   ): Promise<RuntimeRunContext["mcpTools"]> {
     await this.getProjectOrThrow(input.projectId);
     const role = normalizeAgentRole(input.role);
+    if (!isMCPRuntimeAgentRole(role)) {
+      return [];
+    }
     const skillVersions = await this.listRuntimeSkillsForProject(input.projectId);
     return this.resolveVisibleMCPTools({
       projectId: input.projectId,
@@ -1963,6 +1969,9 @@ export class DemoWorkbenchService {
   ): Promise<MCPToolExecutionFlowResult> {
     await this.getProjectOrThrow(input.projectId);
     const role = normalizeAgentRole(input.role);
+    if (!isMCPRuntimeAgentRole(role)) {
+      throw new Error("mcp_tool_not_visible");
+    }
     const connectorRecord = await this.repositories.mcpConnectors.getById(input.connectorId);
     if (
       !connectorRecord ||
@@ -2301,6 +2310,7 @@ export class DemoWorkbenchService {
     const defaultPolicy = createDefaultModelPolicy();
     const projectRoutes = await this.repositories.modelRoutingPolicies.listForProject(projectId);
     const resolved: ModelRoutingPolicy = {
+      assistant: { ...defaultPolicy.assistant },
       planner: { ...defaultPolicy.planner },
       builder: { ...defaultPolicy.builder },
       reviewer: { ...defaultPolicy.reviewer },
@@ -2358,7 +2368,7 @@ export class DemoWorkbenchService {
 
   private async resolveVisibleMCPTools(input: {
     projectId: string;
-    role: AgentRole;
+    role: MCPRuntimeAgentRole;
     skillVersions: SkillVersionRecord[];
   }): Promise<RuntimeRunContext["mcpTools"]> {
     const grantedPermissions = [
@@ -2527,16 +2537,18 @@ export class DemoWorkbenchService {
 
   private async createRuntimeContext(
     projectId: string,
-    role: "planner" | "builder" | "reviewer" | "deployer",
+    role: AgentRole,
     pageVersionId?: string,
     approvalState: ApprovalState = "not_required"
   ): Promise<RuntimeRunContext> {
-    const skillVersions = await this.listRuntimeSkillsForProject(projectId);
-    const [mcpTools, modelRoutingPolicy, artifactWorkspace] = await Promise.all([
-      this.resolveVisibleMCPTools({ projectId, role, skillVersions }),
+    const [skillVersions, modelRoutingPolicy, artifactWorkspace] = await Promise.all([
+      this.listRuntimeSkillsForProject(projectId),
       this.resolveModelRoutingPolicyForProject(projectId),
       this.createRuntimeArtifactWorkspaceContext(projectId, pageVersionId)
     ]);
+    const mcpTools = isMCPRuntimeAgentRole(role)
+      ? await this.resolveVisibleMCPTools({ projectId, role, skillVersions })
+      : [];
     return createWorkbenchRuntimeContext({
       role,
       approvalState,
@@ -3534,6 +3546,19 @@ function normalizeAgentRole(role: unknown): AgentRole {
   throw new Error("model_role_unsupported");
 }
 
+type MCPRuntimeAgentRole = Exclude<AgentRole, "assistant">;
+
+const mcpRuntimeAgentRoles = Object.freeze([
+  "planner",
+  "builder",
+  "reviewer",
+  "deployer"
+] as const) satisfies readonly MCPAgentRole[];
+
+function isMCPRuntimeAgentRole(role: AgentRole): role is MCPRuntimeAgentRole {
+  return role !== "assistant";
+}
+
 function updateSkillVersionReviewState(
   version: SkillVersionRecord,
   reviewState: SkillManifest["reviewState"]
@@ -4066,8 +4091,8 @@ function copyMCPToolDefinition(tool: unknown): MCPToolDefinition | undefined {
   };
 }
 
-function isMCPAgentRole(role: unknown): role is AgentRole {
-  return agentRoles.includes(role as AgentRole);
+function isMCPAgentRole(role: unknown): role is MCPRuntimeAgentRole {
+  return mcpRuntimeAgentRoles.includes(role as MCPRuntimeAgentRole);
 }
 
 function normalizeOptionalString(value: unknown): string {

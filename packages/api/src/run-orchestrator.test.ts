@@ -9,6 +9,60 @@ import {
 import { runAgentStep } from "./run-orchestrator";
 
 describe("run agent step finalization", () => {
+  it("persists assistant cancelled runs and cancellation events", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Project",
+      createdAt: "2026-05-21T00:00:00.000Z"
+    });
+    const runtime: AgentRuntimeAdapter = {
+      async run(request) {
+        return {
+          runId: request.runId,
+          projectId: request.projectId,
+          role: request.role,
+          state: "cancelled",
+          events: [
+            {
+              type: "run.started",
+              message: "assistant run started",
+              runId: request.runId,
+              role: request.role
+            },
+            {
+              type: "run.cancelled",
+              message: "assistant run cancelled",
+              runId: request.runId,
+              role: request.role,
+              state: "cancelled"
+            }
+          ]
+        };
+      }
+    };
+    const service = {
+      async createRuntimeContextForRole() {
+        return createDefaultRuntimeContext();
+      }
+    };
+
+    const result = await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_assistant_task_1",
+      projectId: "project_1",
+      role: "assistant",
+      input: { prompt: "Explain this project" },
+      now: () => new Date("2026-05-21T00:00:00.000Z")
+    });
+
+    expect(result.run.state).toBe("cancelled");
+    const events = await repositories.runEvents.listForRun("run_assistant_task_1");
+    expect(events.map((event) => event.type)).toEqual(["run.started", "run.cancelled"]);
+  });
+
   it("lets API post-processing change terminal run state before events persist", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.projects.save({

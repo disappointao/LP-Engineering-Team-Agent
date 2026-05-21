@@ -108,6 +108,7 @@ const ModelRouteSchema = z.object({
 });
 
 const ModelRoutingPolicySchema = z.object({
+  assistant: ModelRouteSchema,
   planner: ModelRouteSchema,
   builder: ModelRouteSchema,
   reviewer: ModelRouteSchema,
