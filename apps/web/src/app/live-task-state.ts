@@ -63,6 +63,9 @@ export function getNextPollMs(
   if (!state.payload) {
     return fallbackMs;
   }
+  if (state.payload.isTerminal) {
+    return 0;
+  }
   return state.payload.nextPollMs > 0 ? state.payload.nextPollMs : fallbackMs;
 }
 

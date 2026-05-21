@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createInitialLiveTaskState,
+  getNextPollMs,
   reduceLiveTaskState,
   shouldPollLiveTask,
   shouldRefreshForLiveArtifact
@@ -63,6 +64,7 @@ describe("live task state helpers", () => {
     });
 
     expect(shouldPollLiveTask(state)).toBe(false);
+    expect(getNextPollMs(state)).toBe(0);
   });
 
   it("requests router refresh when artifact version key changes", () => {
@@ -72,5 +74,11 @@ describe("live task state helpers", () => {
         nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
       })
     ).toBe(true);
+    expect(
+      shouldRefreshForLiveArtifact({
+        previousPreviewVersionKey: "page_2|workspace_2|index.html:bbb",
+        nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
+      })
+    ).toBe(false);
   });
 });
