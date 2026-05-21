@@ -1026,6 +1026,24 @@ describe("submitPromptAction", () => {
     });
   });
 
+  it("upserts an assistant model route", async () => {
+    mocks.currentProjectId = undefined;
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("role", "assistant");
+    formData.set("providerId", "provider_openai");
+    formData.set("model", "gpt-5.4");
+
+    await expectRedirect(upsertProjectModelRouteAction(formData), "/?view=models");
+
+    expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
+      projectId: "project_1",
+      role: "assistant",
+      providerId: "provider_openai",
+      model: "gpt-5.4"
+    });
+  });
+
   it("upserts a model route from a hidden project id when no project cookie exists", async () => {
     mocks.currentProjectId = undefined;
     mocks.upsertProjectModelRoute.mockResolvedValue({

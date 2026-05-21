@@ -19,6 +19,7 @@ const pageMocks = vi.hoisted(() => ({
       providers: [],
       routes: [],
       resolvedPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: { provider: "mock-anthropic", model: "code-model" },
         reviewer: { provider: "mock-openai", model: "review-model" },
@@ -29,6 +30,7 @@ const pageMocks = vi.hoisted(() => ({
       connectors: [],
       approvals: [],
       visibleToolsByRole: {
+        assistant: [],
         planner: [],
         builder: [],
         reviewer: [],
@@ -322,6 +324,7 @@ function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
       providers: [],
       routes: [],
       resolvedPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: { provider: "mock-anthropic", model: "code-model" },
         reviewer: { provider: "mock-openai", model: "review-model" },
@@ -332,6 +335,7 @@ function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
       connectors: [],
       approvals: [],
       visibleToolsByRole: {
+        assistant: [],
         planner: [],
         builder: [],
         reviewer: [],
@@ -467,6 +471,7 @@ function setActiveEmptyProjectState() {
       providers: [],
       routes: [],
       resolvedPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: { provider: "mock-anthropic", model: "code-model" },
         reviewer: { provider: "mock-openai", model: "review-model" },
@@ -477,6 +482,7 @@ function setActiveEmptyProjectState() {
       connectors: [],
       approvals: [],
       visibleToolsByRole: {
+        assistant: [],
         planner: [],
         builder: [],
         reviewer: [],
@@ -506,6 +512,7 @@ beforeEach(() => {
       providers: [],
       routes: [],
       resolvedPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: { provider: "mock-anthropic", model: "code-model" },
         reviewer: { provider: "mock-openai", model: "review-model" },
@@ -516,6 +523,7 @@ beforeEach(() => {
       connectors: [],
       approvals: [],
       visibleToolsByRole: {
+        assistant: [],
         planner: [],
         builder: [],
         reviewer: [],
@@ -1177,6 +1185,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1198,6 +1207,7 @@ describe("HomePage project flow errors", () => {
 
     expect(text).toContain("Project models");
     expect(text).toContain("Spring Campaign");
+    expect(text).toContain("Assistant");
     expect(text).toContain("API protocol");
     expect(text).toContain("Anthropic Messages compatible");
     expect(text).toContain("Default model id");
@@ -1246,6 +1256,7 @@ describe("HomePage project flow errors", () => {
       connectors: [],
       approvals: [],
       visibleToolsByRole: {
+        assistant: [],
         planner: [],
         builder: [
           {
@@ -1308,6 +1319,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1339,6 +1351,7 @@ describe("HomePage project flow errors", () => {
         ],
         approvals: [],
         visibleToolsByRole: {
+          assistant: [],
           planner: [],
           builder: [],
           reviewer: [],
@@ -1378,6 +1391,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1405,6 +1419,7 @@ describe("HomePage project flow errors", () => {
         ],
         approvals: [],
         visibleToolsByRole: {
+          assistant: [],
           planner: [],
           builder: [],
           reviewer: [],
@@ -1442,6 +1457,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1463,6 +1479,7 @@ describe("HomePage project flow errors", () => {
         ],
         approvals: [],
         visibleToolsByRole: {
+          assistant: [],
           planner: [],
           builder: [],
           reviewer: [],
@@ -1578,6 +1595,7 @@ describe("HomePage project flow errors", () => {
           }
         ],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "provider_openai", model: "gpt-5.4" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1596,10 +1614,11 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Base URL configured");
     expect(text).toContain("API key env configured");
     expect(text).toContain("provider_openai/gpt-5.4");
+    expect(text).toContain("Assistant");
     expect(text).toContain("Builder");
   });
 
-  it("shows the builder model route signal in the workbench top bar", async () => {
+  it("shows the assistant model route signal in the workbench top bar", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {
       kind: "empty",
@@ -1619,6 +1638,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "provider_openai", model: "gpt-5.4" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "provider_openai", model: "gpt-5.4" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1630,7 +1650,7 @@ describe("HomePage project flow errors", () => {
     const page = await HomePage({ searchParams: Promise.resolve({}) });
     const text = collectText(page).join(" ");
 
-    expect(text).toContain("Builder model: provider_openai/gpt-5.4");
+    expect(text).toContain("Assistant model: provider_openai/gpt-5.4");
   });
 
   it("shows recoverable model resolution errors in the models view without the composer", async () => {
@@ -1664,6 +1684,7 @@ describe("HomePage project flow errors", () => {
           }
         ],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1737,6 +1758,7 @@ describe("HomePage project flow errors", () => {
         ],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1806,6 +1828,7 @@ describe("HomePage project flow errors", () => {
         ],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1827,11 +1850,11 @@ describe("HomePage project flow errors", () => {
       (button) => collectText(button.props?.children).join("") === "Save route"
     );
 
-    expect(routeProviderSelects).toHaveLength(4);
+    expect(routeProviderSelects).toHaveLength(5);
     expect(routeProviderSelects.every((select) => select.props?.required === true)).toBe(true);
-    expect(fallbackOptions).toHaveLength(4);
+    expect(fallbackOptions).toHaveLength(5);
     expect(fallbackOptions.every((option) => option.props?.disabled === true)).toBe(true);
-    expect(saveRouteButtons).toHaveLength(4);
+    expect(saveRouteButtons).toHaveLength(5);
     expect(saveRouteButtons.every((button) => button.props?.disabled === true)).toBe(true);
   });
 
@@ -2832,6 +2855,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -2842,6 +2866,7 @@ describe("HomePage project flow errors", () => {
         connectors: [],
         approvals: [],
         visibleToolsByRole: {
+          assistant: [],
           planner: [],
           builder: [],
           reviewer: [],
@@ -2875,6 +2900,7 @@ describe("HomePage project flow errors", () => {
         providers: [],
         routes: [],
         resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
           planner: { provider: "mock-openai", model: "planning-model" },
           builder: { provider: "mock-anthropic", model: "code-model" },
           reviewer: { provider: "mock-openai", model: "review-model" },
@@ -2885,6 +2911,7 @@ describe("HomePage project flow errors", () => {
         connectors: [],
         approvals: [],
         visibleToolsByRole: {
+          assistant: [],
           planner: [],
           builder: [],
           reviewer: [],

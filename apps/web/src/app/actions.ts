@@ -53,9 +53,15 @@ function redirectToMCPWithError(error: MCPFlowErrorCode): never {
 
 function parseAgentRole(
   rawValue: FormDataEntryValue | null
-): "planner" | "builder" | "reviewer" | "deployer" {
+): "assistant" | "planner" | "builder" | "reviewer" | "deployer" {
   const value = String(rawValue ?? "");
-  if (value === "planner" || value === "builder" || value === "reviewer" || value === "deployer") {
+  if (
+    value === "assistant" ||
+    value === "planner" ||
+    value === "builder" ||
+    value === "reviewer" ||
+    value === "deployer"
+  ) {
     return value;
   }
   redirectToModelsWithError("model_role_unsupported");

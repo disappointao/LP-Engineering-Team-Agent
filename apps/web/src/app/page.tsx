@@ -108,10 +108,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     ? copy.interruptFlow.errors[interruptError]
     : undefined;
   const recoveryErrorMessage = recoveryError ? copy.chat.recoveryErrorLabel : undefined;
-  const roleOrder = ["planner", "builder", "reviewer", "deployer"] as const;
-  const builderModelRoute = modelState.resolvedPolicy.builder;
-  const builderModelLabel = copy.chat.builderModelRoute(
-    `${builderModelRoute.provider}/${builderModelRoute.model}`
+  const roleOrder = ["assistant", "planner", "builder", "reviewer", "deployer"] as const;
+  const assistantModelRoute = modelState.resolvedPolicy.assistant;
+  const assistantModelLabel = copy.chat.assistantModelRoute(
+    `${assistantModelRoute.provider}/${assistantModelRoute.model}`
   );
   const activeSkillCount = pageState.skills.boundSkills.filter(
     (boundSkill) =>
@@ -298,7 +298,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <span className="skillRuntimeChip">{activeSkillLabel}</span>
             ) : null}
             {activeView === "workbench" ? (
-              <span className="modelRuntimeChip">{builderModelLabel}</span>
+              <span className="modelRuntimeChip">{assistantModelLabel}</span>
             ) : null}
           </div>
           <div className="topBarActions">
@@ -1143,6 +1143,7 @@ function getPageModelState(pageState: { models?: WebProjectModelState }): WebPro
     providers: [],
     routes: [],
     resolvedPolicy: {
+      assistant: { provider: "mock-openai", model: "assistant-model" },
       planner: { provider: "mock-openai", model: "planning-model" },
       builder: { provider: "mock-anthropic", model: "code-model" },
       reviewer: { provider: "mock-openai", model: "review-model" },
@@ -1156,6 +1157,7 @@ function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState 
     connectors: [],
     approvals: [],
     visibleToolsByRole: {
+      assistant: [],
       planner: [],
       builder: [],
       reviewer: [],

@@ -161,7 +161,7 @@ export interface WorkbenchCopy {
     rolesSummary: (roles: string[]) => string;
     emptyConnectors: string;
     emptyVisibleTools: string;
-    roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
+    roleLabels: Record<"assistant" | "planner" | "builder" | "reviewer" | "deployer", string>;
     errors: Record<MCPFlowErrorCode, string>;
   };
   modelsView: {
@@ -191,7 +191,7 @@ export interface WorkbenchCopy {
     modelLabel: string;
     saveRoute: string;
     fallbackLabel: string;
-    roleLabels: Record<"planner" | "builder" | "reviewer" | "deployer", string>;
+    roleLabels: Record<"assistant" | "planner" | "builder" | "reviewer" | "deployer", string>;
     providerTypes: Record<"mock" | "openai" | "anthropic" | "internal" | "custom", string>;
     providerApis: Record<"mock" | "openai-completions" | "anthropic-messages", string>;
     errors: Record<ModelFlowErrorCode, string>;
@@ -234,6 +234,7 @@ export interface WorkbenchCopy {
   chat: {
     topbarModel: string;
     builderModelRoute: (route: string) => string;
+    assistantModelRoute: (route: string) => string;
     topbarShare: string;
     topbarTrial: string;
     assistantName: string;
@@ -586,6 +587,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       emptyConnectors: "No project MCP connectors yet.",
       emptyVisibleTools: "No visible tools for this role.",
       roleLabels: {
+        assistant: "Assistant",
         planner: "Planner",
         builder: "Builder",
         reviewer: "Reviewer",
@@ -638,6 +640,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       saveRoute: "Save route",
       fallbackLabel: "Fallback",
       roleLabels: {
+        assistant: "Assistant",
         planner: "Planner",
         builder: "Builder",
         reviewer: "Reviewer",
@@ -716,6 +719,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     chat: {
       topbarModel: "LP Agent Lite",
       builderModelRoute: (route) => `Builder model: ${route}`,
+      assistantModelRoute: (route) => `Assistant model: ${route}`,
       topbarShare: "Share",
       topbarTrial: "Start trial",
       assistantName: "LP Agent",
@@ -1053,6 +1057,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       emptyConnectors: "暂无项目 MCP 连接器。",
       emptyVisibleTools: "该角色暂无可见工具。",
       roleLabels: {
+        assistant: "聊天助手",
         planner: "规划员",
         builder: "构建员",
         reviewer: "审核员",
@@ -1105,6 +1110,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       saveRoute: "保存路由",
       fallbackLabel: "回退",
       roleLabels: {
+        assistant: "聊天助手",
         planner: "规划员",
         builder: "构建员",
         reviewer: "审核员",
@@ -1183,6 +1189,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     chat: {
       topbarModel: "LP Agent Lite",
       builderModelRoute: (route) => `构建模型：${route}`,
+      assistantModelRoute: (route) => `聊天模型：${route}`,
       topbarShare: "分享",
       topbarTrial: "开始免费试用",
       assistantName: "LP Agent",

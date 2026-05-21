@@ -41,6 +41,9 @@ describe("web i18n", () => {
     expect(zh.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
       "构建模型：provider_openai/gpt-5.4"
     );
+    expect(zh.chat.assistantModelRoute("provider_openai/gpt-5.4")).toBe(
+      "聊天模型：provider_openai/gpt-5.4"
+    );
     expect(zh.projectFlow.createProject).toBe("创建项目");
     expect(zh.projectFlow.localPersistenceNote).toBe(
       "Web MVP 状态会保存在这台电脑的 .lp-agent/ 本地状态目录中。"
@@ -63,6 +66,9 @@ describe("web i18n", () => {
     expect(en.chat.streamingErrorLabel).toBe("The chat response could not be generated.");
     expect(en.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
       "Builder model: provider_openai/gpt-5.4"
+    );
+    expect(en.chat.assistantModelRoute("provider_openai/gpt-5.4")).toBe(
+      "Assistant model: provider_openai/gpt-5.4"
     );
     expect(en.projectFlow.createProject).toBe("Create project");
     expect(en.projectFlow.localPersistenceNote).toBe(
