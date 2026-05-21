@@ -15,6 +15,7 @@ import {
   listRunRecoveryViewsForTask
 } from "./run-recovery";
 import { DemoWorkbenchService } from "./index";
+import { createAgentHandoffRecord } from "./agent-handoffs";
 
 const timestamp = "2026-05-20T00:00:00.000Z";
 
@@ -306,6 +307,66 @@ describe("run recovery views", () => {
       recoveryActions: []
     });
     expect(views[0]?.diagnosticSummary).toBeUndefined();
+  });
+
+  it("derives a blocked recovery view from a task-scoped blocked handoff without a target run", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_reviewer_version_1",
+      role: "reviewer",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:05.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_reviewer_version_1",
+      type: "run.completed",
+      sequence: 1
+    });
+    await repositories.agentHandoffs.save(
+      createAgentHandoffRecord({
+        id: "handoff_blocked_reviewer_deployer",
+        projectId: "project_1",
+        taskId: "task_1",
+        fromRunId: "run_reviewer_version_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "blocked",
+        summary: "Reviewer blocked deployment",
+        blockingReason: "hero.cta: Missing CTA with OPENAI_API_KEY=sk-test-secret",
+        artifactRefs: {
+          pageVersionId: "version_1"
+        },
+        now: () => new Date("2026-05-20T00:00:06.000Z")
+      })
+    );
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views).toEqual([
+      expect.objectContaining({
+        runId: "run_reviewer_version_1",
+        role: "reviewer",
+        runRecordState: "completed",
+        state: "blocked",
+        blockedReason: "hero.cta: Missing CTA with OPENAI_API_KEY=[REDACTED]",
+        diagnosticSummary: {
+          code: "handoff_blocked",
+          message: "Reviewer blocked deployment.",
+          source: "handoff"
+        },
+        recoveryActions: ["resolve_blocker"]
+      })
+    ]);
+    expect(views.map((view) => view.runId)).not.toContain("run_deployer_version_1");
+    expect(JSON.stringify(views)).not.toContain("sk-test-secret");
   });
 });
 

@@ -852,12 +852,6 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         taskId: task.id,
         workerRuntime: workerQueueRuntime ?? workerRuntime
       });
-      const recoveryRuns = snapshot?.currentPageVersion
-        ? applyBlockedReviewRecoveryState({
-            recovery,
-            currentPageVersion: snapshot.currentPageVersion
-          })
-        : recovery;
       const skills = await loadSkillState(activeProjectId);
       return {
         kind: "task_ready",
@@ -879,7 +873,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           taskId: task.id
         }),
         recovery: {
-          runs: recoveryRuns
+          runs: recovery
         },
         snapshot,
         artifactDiff
@@ -1747,37 +1741,6 @@ async function saveTaskSnapshot(input: {
     briefId: input.briefId ?? existing?.briefId,
     pageVersionId: input.pageVersionId ?? existing?.pageVersionId,
     createdAt: existing?.createdAt ?? (input.now ?? (() => new Date()))().toISOString()
-  });
-}
-
-function applyBlockedReviewRecoveryState(input: {
-  recovery: RunLifecycleView[];
-  currentPageVersion: NonNullable<WorkbenchSnapshot["currentPageVersion"]>;
-}): RunLifecycleView[] {
-  if (input.currentPageVersion.reviewStatus !== "failed") {
-    return input.recovery;
-  }
-
-  const reviewerRunId = `run_reviewer_${input.currentPageVersion.id}`;
-  return input.recovery.map((view) => {
-    if (view.runId !== reviewerRunId || view.state === "blocked") {
-      return view;
-    }
-
-    return {
-      ...view,
-      state: "blocked",
-      blockedReason: input.currentPageVersion.findings
-        .filter((finding) => finding.blocksDeployment || finding.severity === "blocking")
-        .map((finding) => `${finding.target}: ${finding.explanation}`)
-        .join("; "),
-      diagnosticSummary: {
-        code: "review_blocked_deployment",
-        message: "Reviewer blocked deployment.",
-        source: "handoff"
-      },
-      recoveryActions: ["resolve_blocker"]
-    };
   });
 }
 

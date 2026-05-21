@@ -1,4 +1,5 @@
 import type {
+  AgentHandoffRecord,
   BriefRecord,
   PageVersionRecord,
   RunRecord,
@@ -14,6 +15,7 @@ import {
   type RunLifecycleView
 } from "./run-lifecycle";
 import { finalizeWorkerBackedSkillCommand } from "./skill-command-worker-queue";
+import { toRuntimeHandoffSummary } from "./agent-handoffs";
 
 export type RunRecoveryExecutionAction =
   | "resume_worker_finalization"
@@ -110,26 +112,110 @@ export async function listRunRecoveryViewsForTask(
   const viewsByRunId = new Map(directViews.map((view) => [view.runId, view]));
   const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
 
-  if (!snapshot || snapshot.projectId !== task.projectId) {
-    return [...viewsByRunId.values()].sort(compareRunLifecycleViews);
+  if (snapshot?.projectId === task.projectId) {
+    for (const runId of snapshotRunIds(snapshot)) {
+      if (viewsByRunId.has(runId)) {
+        continue;
+      }
+
+      const result = await deriveRunLifecycleView({
+        repositories: input.repositories,
+        workerRuntime: input.workerRuntime,
+        runId
+      });
+      if (result.ok && result.view.projectId === task.projectId) {
+        viewsByRunId.set(runId, result.view);
+      }
+    }
   }
 
-  for (const runId of snapshotRunIds(snapshot)) {
-    if (viewsByRunId.has(runId)) {
+  await applyBlockedHandoffRecoveryViews({
+    repositories: input.repositories,
+    workerRuntime: input.workerRuntime,
+    taskId: input.taskId,
+    projectId: task.projectId,
+    viewsByRunId
+  });
+
+  return [...viewsByRunId.values()].sort(compareRunLifecycleViews);
+}
+
+async function applyBlockedHandoffRecoveryViews(input: {
+  repositories: WorkbenchRepositories;
+  workerRuntime?: RunRecoveryWorkerRuntime;
+  taskId: string;
+  projectId: string;
+  viewsByRunId: Map<string, RunLifecycleView>;
+}): Promise<void> {
+  const blockedHandoffs = (await input.repositories.agentHandoffs.listForTask(input.taskId))
+    .filter(
+      (handoff) =>
+        handoff.projectId === input.projectId &&
+        handoff.taskId === input.taskId &&
+        handoff.state === "blocked"
+    );
+
+  for (const handoff of blockedHandoffs) {
+    if (hasTargetRunView(input.viewsByRunId, handoff)) {
       continue;
     }
 
-    const result = await deriveRunLifecycleView({
-      repositories: input.repositories,
-      workerRuntime: input.workerRuntime,
-      runId
-    });
-    if (result.ok && result.view.projectId === task.projectId) {
-      viewsByRunId.set(runId, result.view);
+    let sourceView = input.viewsByRunId.get(handoff.fromRunId);
+    if (!sourceView) {
+      const result = await deriveRunLifecycleView({
+        repositories: input.repositories,
+        workerRuntime: input.workerRuntime,
+        runId: handoff.fromRunId
+      });
+      if (!result.ok) {
+        continue;
+      }
+      sourceView = result.view;
     }
-  }
 
-  return [...viewsByRunId.values()].sort(compareRunLifecycleViews);
+    if (sourceView.projectId !== input.projectId || sourceView.taskId !== input.taskId) {
+      continue;
+    }
+
+    input.viewsByRunId.set(handoff.fromRunId, toBlockedHandoffRecoveryView(sourceView, handoff));
+  }
+}
+
+function hasTargetRunView(
+  viewsByRunId: Map<string, RunLifecycleView>,
+  handoff: AgentHandoffRecord
+): boolean {
+  return [...viewsByRunId.values()].some(
+    (view) =>
+      view.projectId === handoff.projectId &&
+      view.taskId === handoff.taskId &&
+      view.role === handoff.toRole
+  );
+}
+
+function toBlockedHandoffRecoveryView(
+  sourceView: RunLifecycleView,
+  handoff: AgentHandoffRecord
+): RunLifecycleView {
+  const sanitizedHandoff = toRuntimeHandoffSummary(handoff);
+  return {
+    ...sourceView,
+    state: "blocked",
+    blockedReason: sanitizedHandoff.blockingReason,
+    diagnosticSummary: {
+      code: "handoff_blocked",
+      message: blockedHandoffDiagnosticMessage(handoff),
+      source: "handoff"
+    },
+    recoveryActions: ["resolve_blocker"]
+  };
+}
+
+function blockedHandoffDiagnosticMessage(handoff: AgentHandoffRecord): string {
+  if (handoff.fromRole === "reviewer" && handoff.toRole === "deployer") {
+    return "Reviewer blocked deployment.";
+  }
+  return "Agent handoff blocked.";
 }
 
 export async function executeRunRecoveryAction(
