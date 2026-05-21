@@ -63,6 +63,33 @@ describe("run agent step finalization", () => {
     expect(events.map((event) => event.type)).toEqual(["run.started", "run.cancelled"]);
   });
 
+  it("passes task id to the runtime request", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({ state: "completed" });
+    const service = createTestService();
+
+    await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_builder_task_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "builder",
+      input: { prompt: "Build" },
+      now: () => new Date("2026-05-21T00:00:00.000Z")
+    });
+
+    expect(runtime.requests).toEqual([
+      expect.objectContaining({
+        runId: "run_builder_task_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        role: "builder"
+      })
+    ]);
+  });
+
   it("lets API post-processing change terminal run state before events persist", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.projects.save({

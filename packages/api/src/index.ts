@@ -68,7 +68,6 @@ import {
   type AgentRuntimeAdapter,
   type RuntimeEvent,
   type RuntimeRunContext,
-  type RuntimeRunRequest,
   type RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import {
@@ -2242,18 +2241,7 @@ export class DemoWorkbenchService {
       const { result } = await runAgentStep({
         repositories: this.repositories,
         service: this,
-        runtime: {
-          run: (request) => {
-            if (!input.taskId) {
-              return this.assistantRuntime.run(request);
-            }
-            const requestWithTaskId: RuntimeRunRequest & { taskId: string } = {
-              ...request,
-              taskId: input.taskId
-            };
-            return this.assistantRuntime.run(requestWithTaskId);
-          }
-        },
+        runtime: this.assistantRuntime,
         runId,
         projectId: project.id,
         taskId: input.taskId,

@@ -137,6 +137,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     result = await input.runtime.run({
       runId: input.runId,
       projectId: input.projectId,
+      taskId: input.taskId,
       role: input.role,
       input: contextPack.input,
       context: contextPack.runtimeContext

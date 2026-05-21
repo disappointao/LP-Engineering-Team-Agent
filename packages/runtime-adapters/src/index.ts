@@ -86,6 +86,7 @@ export interface RuntimeRunContext {
 export interface RuntimeRunRequest {
   runId: string;
   projectId: string;
+  taskId?: string;
   role: AgentRole;
   input: RuntimeRunInput;
   context?: RuntimeRunContext;
