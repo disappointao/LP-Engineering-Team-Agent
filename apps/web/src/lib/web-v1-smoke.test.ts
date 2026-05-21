@@ -88,6 +88,24 @@ describe("Web V1 smoke", () => {
     expect(artifactDiffJson).not.toContain(":root");
     expect(artifactDiffJson).not.toContain("window.lpAgent");
 
+    const liveState = await store.getLiveTaskState({
+      projectId: result.projectId,
+      taskId: result.taskId
+    });
+
+    expect(liveState.ok).toBe(true);
+    if (!liveState.ok) {
+      throw new Error("expected live smoke state");
+    }
+    expect(liveState.value.artifactProgress?.fileCount).toBe(3);
+    expect(liveState.value.runs.map((run) => run.role)).toEqual([
+      "planner",
+      "builder",
+      "reviewer",
+      "deployer"
+    ]);
+    expect(JSON.stringify(liveState.value)).not.toContain("<!doctype html");
+
     const snippetState = await store.getPageState({
       projectId: result.projectId,
       taskId: result.taskId,

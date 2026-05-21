@@ -352,7 +352,7 @@
 
 87. `plans/2026-05-21-live-run-timeline-artifact-progress.md`
    - Stage 29 Live Run Timeline and Artifact Progress v0 implementation plan（当前执行）。
-   - 在 Stage 29 design 后阅读，用于按 TDD 实现 safe task state refresh、live LP task submit route、client polling panel、artifact progress auto-refresh、smoke coverage 和文档收尾；本计划仍排除 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作和生产 observability stack。
+   - 在 Stage 29 design 后阅读，用于按 TDD 实现 safe task state refresh、live LP task submit route、client polling panel、artifact progress auto-refresh、smoke coverage / docs closeout；本计划仍排除 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作和生产 observability stack。
 
 ## 维护规则
 

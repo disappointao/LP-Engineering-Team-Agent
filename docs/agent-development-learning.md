@@ -241,7 +241,7 @@ Stage 29 v0 先用短轮询 task state refresh，而不是直接上 SSE。这里
 
 这两条边界不能混在一起。run timeline payload 只能包含 safe summary，不能把 raw model output、raw artifact content、secret、raw worker payload、raw tool output、本机路径或完整 stdout/stderr 送到浏览器。
 
-Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/api/chat/stream`；当服务端判断 prompt 是 LP 任务并返回 `fallback.required` 时，客户端调用 live task submit route 创建 task 并启动 in-process LP chain，然后通过 task state polling 观察 repository facts。这个边界保留了 Stage 26 的 text streaming，同时让 LP workflow 不再依赖阻塞式表单提交才能回到页面。
+Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/api/chat/stream`；当服务端判断 prompt 是 LP 任务并返回 `fallback.required` 时，客户端调用 `/api/tasks/submit` live task submit route 创建 task 并启动 in-process LP chain，然后通过 `/api/tasks/[taskId]/state` task state polling 观察 repository facts。这个边界保留了 Stage 26 的 text streaming，同时让 LP workflow 不再依赖阻塞式 form submit 才能回到页面。
 
 ## 3. 本项目当前怎么处理
 
@@ -281,13 +281,13 @@ Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/
 - Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
 - Stage 27 Real Chat Runtime and Skill Context v0 已实现：`assistant` 已是一等 model/runtime role；project-bound 普通聊天通过 `runAssistantChat()` 进入 assistant runtime；prompt assembly 使用 bounded skill、memory 和 project context；Web stream 会输出安全 `context.summary`，UI 展示 project、skill 和 runtime summary。默认仍是 deterministic runtime，真实模型 runtime 仍必须通过 `REAL_MODEL_RUNTIME=1` 显式 opt-in。
 - Stage 28 LP Agent Chain End-to-End v0 已实现：Web LP 复杂任务采用 task-first fixed chain orchestration；Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 都绑定到同一个 task。Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下继续走真实模型 structured output；Reviewer / Deployer 仍 deterministic / policy-driven。
-- Stage 29 Live Run Timeline and Artifact Progress v0 已完成设计：下一步会用短轮询 task state refresh，把 run lifecycle、worker state、recovery views 和 artifact progress 持续投影到 Web task panel；repository 仍是唯一事实来源，不新增 SSE 或 raw log streaming。
+- Stage 29 Live Run Timeline and Artifact Progress v0 当前实施中：短轮询 task state refresh、live task submit fallback、run timeline panel 和 artifact progress 已进入 smoke/docs 收尾验证；repository 仍是唯一事实来源，不新增 SSE 或 raw log streaming。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
 
 - provider token streaming、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现；真实 fallback provider execution 仍未做。
-- LP chain 的 no-refresh live timeline 和 artifact progress 已进入 Stage 29 设计准备实施；普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
+- LP chain 的 no-refresh live timeline 和 artifact progress 正在 Stage 29 收尾验证；普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。

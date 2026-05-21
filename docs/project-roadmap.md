@@ -33,6 +33,7 @@
 - Streaming chat transport / UI v0：普通聊天已有 Web/API NDJSON streaming route、client transient streaming state、terminal persistence / refresh recovery 和 server action fallback。
 - Real chat runtime / skill context v0：project-bound 普通聊天已有独立 `assistant` role、真实 model runtime opt-in、bounded skill prompt context、safe context summary stream 和 Models UI route configuration；projectless chat 继续保持 deterministic / no-context。
 - LP Agent Chain End-to-End v0：Web LP 复杂任务已采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff、继续修改上下文和 recovery facts；Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下走真实模型 structured output。
+- Live task state / artifact progress v0：Stage 29 当前实施中，已进入 live task submit、task state polling、run timeline panel 和 artifact progress smoke/docs 收尾验证。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 ## 第一版可用闭环目标
@@ -302,7 +303,7 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 ### Stage 29：Live Run Timeline and Artifact Progress v0
 
-**状态：** 当前实施中；设计和实施计划已创建。
+**状态：** 当前实施中；设计和实施计划已创建，核心实现进入收尾验证。
 
 **为什么现在做：** LP 链路端到端可跑后，用户还需要不刷新页面就能理解任务正在做什么。Stage 26 解决 assistant text streaming，本阶段把 run events、worker state、recovery view 和 artifact progress 统一成 live task panel。
 
@@ -345,6 +346,24 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 - 不做 production Postgres migrations。
 - 不做 MCP。
 - 不做真实部署编排。
+
+### Stage 31：Browser E2E Acceptance v0
+
+**状态：** Stage 30 后推荐。
+
+**为什么现在做：** Stage 29/30 收敛后，需要用可重复的浏览器验收覆盖第一版可用闭环，避免只靠 unit smoke 和手工检查判断 Web 工作台状态。
+
+**建议范围：**
+
+- 覆盖普通聊天 streaming、LP live submit fallback、run timeline polling、artifact preview/export 和基础 recovery display 的 deterministic browser E2E。
+- 增加本地 alpha acceptance command 或 checklist，明确依赖、启动方式、测试数据和失败排查入口。
+- 对关键 loading、empty、error 和 terminal states 做最小视觉/交互断言。
+
+**非目标：**
+
+- 不做生产监控或 observability stack。
+- 不引入远端浏览器 farm、跨浏览器矩阵或完整视觉回归平台。
+- 不做 auth/RBAC、MCP execution、真实 shell runner 或真实部署编排。
 
 ## Backlog 分组
 
