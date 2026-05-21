@@ -330,6 +330,10 @@
    - Stage 26 Streaming Chat Transport and UI v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 26 design 后阅读，用于理解已实现的 chat stream event contract、Web store streaming helper、NDJSON route、client streaming composer、fallback handling、tests 和文档收尾历史。
 
+82. `specs/2026-05-21-real-chat-runtime-skill-context-design.md`
+   - Stage 27 Real Chat Runtime and Skill Context v0 design（设计已确认，待实施计划）。
+   - 在 Stage 26 implementation plan 和当前 roadmap 后阅读，用于新增普通聊天专用 `assistant` role、project-bound real chat runtime、skill context prompt 注入、Chat UI context summary，以及继续排除 LP chain、MCP execution、真实 shell/deployment 和 provider token streaming。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

@@ -195,6 +195,19 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 当前采用的方向是：项目自己维护轻量 provider manifest，先做配置和 mock 链路验证，再按协议逐步接真实 adapter。
 
+### 2.12 普通聊天也需要明确 Agent role
+
+普通问答不是 LP `Planner`。如果把普通聊天临时复用 `planner` model route，短期可以少改类型，但长期会混淆两类完全不同的职责：`planner` 负责把 LP 需求转成结构化 brief，普通聊天则负责回答问题、解释项目状态和承接后续工作流入口。
+
+Stage 27 的设计决定新增独立 `assistant` role。这个 role 可以复用 model gateway、Context Pack、run events、recovery 和 Web streaming transport，但不会触发 `LPBriefSchema` / `StaticArtifactsSchema` parse，也不会声称自己执行了 MCP、shell、deployment 或 artifact 修改。
+
+普通聊天的 project skills 注入也要分两层看：
+
+- 给模型的 bounded prompt context 可以包含已发布、已绑定 skill 的必要内容片段和 metadata。
+- 给用户看的 UI context summary 只展示 project、skill 数量、skill 名称和版本，不展示 raw skill content、secret、raw provider response、raw tool output 或完整 artifact 内容。
+
+这让普通聊天既能成为第一版可用入口，又不破坏 LP agent chain 的结构化输出边界。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型
@@ -231,11 +244,13 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 - Stage 23 Web opt-in Postgres backend wiring 已实现：Web/API runtime 可通过显式 `WORKBENCH_REPOSITORY_BACKEND=postgres` 选择 Prisma-backed repository，并已补齐 Web-facing repository closure，避免 Postgres core state 和 JSON sidecar state 混用。
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
+- Stage 27 Real Chat Runtime and Skill Context v0 已完成设计确认：后续实现会新增 `assistant` role，把 project-bound 普通聊天接入真实 model runtime 和 skill context；当前代码尚未实现这一运行路径。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
 - 真实 fallback provider execution、模型 streaming output、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现。
+- 普通聊天真实模型 runtime、`assistant` model route、project skill context prompt 注入和 Chat UI context summary 还没实现；Stage 27 已有设计，待实施计划和代码落地。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。

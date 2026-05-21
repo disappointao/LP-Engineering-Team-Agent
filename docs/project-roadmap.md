@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-20
+最后更新：2026-05-21
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -249,16 +249,20 @@ Stage 26 v0 已把普通聊天的 Web/API 实时反馈边界接入 workbench：A
 
 ### Stage 27：Real Chat Runtime and Skill Context v0
 
-**状态：** 当前推荐下一阶段。
+**状态：** 当前推荐下一阶段；设计已确认，待实施计划。
 
 **为什么现在做：** Streaming UI 稳定后，普通问答要从 deterministic response 升级为真实模型 runtime。项目已经有 provider-neutral model gateway、真实 runtime opt-in、Context Pack 和 Skills 注入边界；下一步是把这些能力收敛成用户可用的普通聊天路径。
 
+**当前设计：** `docs/superpowers/specs/2026-05-21-real-chat-runtime-skill-context-design.md`。
+
 **建议范围：**
 
+- 新增普通聊天专用 `assistant` agent/model role，避免复用 `planner` route。
 - 普通聊天 task 通过 `REAL_MODEL_RUNTIME=1` 的 provider-backed runtime 生成 assistant answer，并通过 Stage 26 streaming 边界展示。
 - 已发布、已绑定 project skills 进入 normal chat Context Pack；UI 明确展示当前任务使用的 project / skill context 摘要。
 - 模型失败、parse 不适用、provider transient error 和 cancellation 都写入安全 run events，并能在 Web timeline/recovery block 中解释。
 - 保持 deterministic runtime 作为默认测试路径；真实 provider 冒烟仍显式 opt-in。
+- projectless 普通聊天保持 deterministic / no-context 路径；真实模型 v0 聚焦 project-bound chat。
 - 补齐普通聊天路径的 browser-level acceptance checklist。
 
 **非目标：**
@@ -460,6 +464,7 @@ Stage 26 v0 已把普通聊天的 Web/API 实时反馈边界接入 workbench：A
 - Stage 25 已完成 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。
 - Stage 25 的 `retry_run` 只做 safely reconstructable single-run retry，创建新 retry attempt，不覆盖原 failed run，也不自动重跑完整 agent chain。
 - Stage 26 已完成 Streaming Chat Transport and UI v0，优先补齐 Web/API 普通问答流式闭环；Stage 27 当前推荐接入真实普通聊天 runtime 和 skill context。
+- Stage 27 设计已选择新增独立 `assistant` route，而不是复用 `planner` route；普通聊天真实模型 v0 聚焦 project-bound chat，projectless chat 继续保持 deterministic / no-context。
 - MCP Worker Execution、真实 MCP SDK / remote MCP server adapter 和 MCP write tools 已后置到 backlog，等待 Web/API/Skill/LP 第一版可用闭环稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
