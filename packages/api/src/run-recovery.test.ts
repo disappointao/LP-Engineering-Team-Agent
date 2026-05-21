@@ -1203,7 +1203,7 @@ describe("execute run recovery retry", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses the next available retry run id when a prior retry exists", async () => {
+  it("fails closed when retrying an older planner failure with a newer failed retry", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveTask(repositories);
     await saveRun(repositories, {
@@ -1238,18 +1238,9 @@ describe("execute run recovery retry", () => {
       now: () => new Date("2026-05-20T00:10:00.000Z")
     });
 
-    expect(result).toEqual({
-      ok: true,
-      action: "retry_run",
-      runId: "run_planner_failed",
-      newRunId: "run_planner_failed_retry_2",
-      state: "completed"
-    });
-    await expect(repositories.runs.getById("run_planner_failed_retry_2")).resolves.toMatchObject({
-      role: "planner",
-      state: "completed",
-      taskId: "task_1"
-    });
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    await expect(repositories.runs.getById("run_planner_failed_retry_2")).resolves.toBeUndefined();
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toBeUndefined();
   });
 
   it("prevents concurrent planner retries from overwriting the task snapshot", async () => {

@@ -437,6 +437,16 @@ async function retryRun(
         if (promptMessage.id !== latestUserMessage?.id) {
           return { ok: false, error: "retry_target_conflict" };
         }
+        const latestFailedPlannerRun = await latestFailedPlannerRunForMessage({
+          repositories: input.repositories,
+          taskId: input.taskId,
+          projectId,
+          messages,
+          promptMessage
+        });
+        if (latestFailedPlannerRun?.id !== input.run.id) {
+          return { ok: false, error: "retry_target_conflict" };
+        }
         if (snapshot?.briefId || snapshot?.pageVersionId) {
           const snapshotOutputTimestamp = await resolveSnapshotOutputTimestamp({
             repositories: input.repositories,
@@ -638,6 +648,36 @@ function selectLatestUserMessage(
   return messages
     .filter((message) => message.role === "user" && message.content.trim().length > 0)
     .at(-1);
+}
+
+async function latestFailedPlannerRunForMessage(input: {
+  repositories: WorkbenchRepositories;
+  taskId: string;
+  projectId: string;
+  messages: WorkbenchMessageRecord[];
+  promptMessage: WorkbenchMessageRecord;
+}): Promise<RunRecord | undefined> {
+  const runs = await input.repositories.runs.listForTask(input.taskId);
+  return runs
+    .filter(
+      (run) =>
+        run.projectId === input.projectId &&
+        run.role === "planner" &&
+        run.state === "failed" &&
+        selectUserMessageForRun(input.messages, run)?.id === input.promptMessage.id
+    )
+    .sort(compareRunsByCompletion)
+    .at(-1);
+}
+
+function compareRunsByCompletion(left: RunRecord, right: RunRecord): number {
+  const leftCompletedAt = left.completedAt ?? left.startedAt;
+  const rightCompletedAt = right.completedAt ?? right.startedAt;
+  return (
+    leftCompletedAt.localeCompare(rightCompletedAt) ||
+    left.startedAt.localeCompare(right.startedAt) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 async function resolveSnapshotOutputTimestamp(input: {
