@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { decodeChatStreamLines } from "../lib/chat-stream";
 import {
   createInitialStreamingWorkbenchState,
+  reduceStreamingWorkbenchEvent,
   type StreamingWorkbenchState
 } from "./streaming-workbench-state";
 import {
@@ -8,8 +10,30 @@ import {
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
   shouldRequestFallbackSubmitAfterCommit,
-  getStreamingSubmitDecision
+  getStreamingSubmitDecision,
+  StreamingContextSummary
 } from "./streaming-workbench";
+
+function collectText(node: unknown): string[] {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return [];
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    return [String(node)];
+  }
+
+  if (Array.isArray(node)) {
+    return node.flatMap(collectText);
+  }
+
+  if (typeof node === "object" && "props" in node) {
+    const element = node as { props?: { children?: unknown } };
+    return collectText(element.props?.children);
+  }
+
+  return [];
+}
 
 function collectEnabledPromptPayload({
   visiblePromptDisabled,
@@ -189,5 +213,38 @@ describe("streaming workbench fallback submit handoff", () => {
         skipStreamingOnce: false
       })
     ).toBe(false);
+  });
+});
+
+describe("streaming workbench context summary", () => {
+  it("renders context summary from stream events inside the assistant turn", () => {
+    const streamFixture =
+      `${JSON.stringify({ type: "task.created", taskId: "task_1", projectId: "project_1" })}\n` +
+      `${JSON.stringify({
+        type: "context.summary",
+        taskId: "task_1",
+        projectId: "project_1",
+        projectName: "Spring Campaign",
+        runtimeMode: "real",
+        skillCount: 1,
+        skills: [{ id: "skill_brand", name: "Brand Voice", version: "1.0.0" }]
+      })}\n` +
+      `${JSON.stringify({
+        type: "assistant.delta",
+        taskId: "task_1",
+        messageId: "message_1",
+        delta: "Hello"
+      })}\n`;
+    const decoded = decodeChatStreamLines(streamFixture);
+    const state = decoded.events.reduce(
+      reduceStreamingWorkbenchEvent,
+      createInitialStreamingWorkbenchState()
+    );
+
+    const rendered = StreamingContextSummary({ state });
+    const text = collectText(rendered).join(" ");
+    expect(text).toContain("Project: Spring Campaign");
+    expect(text).toContain("Skills: 1");
+    expect(text).toContain("Runtime: real");
   });
 });

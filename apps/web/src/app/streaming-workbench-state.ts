@@ -7,6 +7,15 @@ export type StreamingWorkbenchStatus =
   | "error"
   | "fallback_required";
 
+export interface StreamingContextSummary {
+  taskId: string;
+  projectId?: string;
+  projectName?: string;
+  runtimeMode: "deterministic" | "real";
+  skillCount: number;
+  skills: Array<{ id: string; name: string; version: string }>;
+}
+
 export type StreamingWorkbenchState = {
   status: StreamingWorkbenchStatus;
   taskId: string | undefined;
@@ -14,6 +23,7 @@ export type StreamingWorkbenchState = {
   assistantContent: string;
   errorMessage: string | undefined;
   fallbackMessage: string | undefined;
+  contextSummary: StreamingContextSummary | undefined;
 };
 
 export function createInitialStreamingWorkbenchState(): StreamingWorkbenchState {
@@ -23,7 +33,8 @@ export function createInitialStreamingWorkbenchState(): StreamingWorkbenchState 
     assistantMessageId: undefined,
     assistantContent: "",
     errorMessage: undefined,
-    fallbackMessage: undefined
+    fallbackMessage: undefined,
+    contextSummary: undefined
   };
 }
 
@@ -39,7 +50,21 @@ export function reduceStreamingWorkbenchEvent(
         assistantMessageId: undefined,
         assistantContent: "",
         errorMessage: undefined,
-        fallbackMessage: undefined
+        fallbackMessage: undefined,
+        contextSummary: undefined
+      };
+    case "context.summary":
+      return {
+        ...state,
+        taskId: event.taskId,
+        contextSummary: {
+          taskId: event.taskId,
+          ...(event.projectId ? { projectId: event.projectId } : {}),
+          ...(event.projectName ? { projectName: event.projectName } : {}),
+          runtimeMode: event.runtimeMode,
+          skillCount: event.skillCount,
+          skills: event.skills.map((skill) => ({ ...skill }))
+        }
       };
     case "run.status":
       if (event.state === "queued" || event.state === "running") {

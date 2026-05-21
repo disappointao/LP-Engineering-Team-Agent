@@ -12,7 +12,8 @@ describe("streaming workbench state", () => {
       assistantMessageId: undefined,
       assistantContent: "",
       errorMessage: undefined,
-      fallbackMessage: undefined
+      fallbackMessage: undefined,
+      contextSummary: undefined
     });
   });
 
@@ -69,6 +70,27 @@ describe("streaming workbench state", () => {
       status: "fallback_required",
       errorMessage: undefined,
       fallbackMessage: "Streaming is not available for this task type."
+    });
+  });
+
+  it("stores safe context summary from stream events", () => {
+    const state = reduceStreamingWorkbenchEvent(createInitialStreamingWorkbenchState(), {
+      type: "context.summary",
+      taskId: "task_1",
+      projectId: "project_1",
+      projectName: "Spring Campaign",
+      runtimeMode: "real",
+      skillCount: 1,
+      skills: [{ id: "skill_brand", name: "Brand Voice", version: "1.0.0" }]
+    });
+
+    expect(state.contextSummary).toEqual({
+      taskId: "task_1",
+      projectId: "project_1",
+      projectName: "Spring Campaign",
+      runtimeMode: "real",
+      skillCount: 1,
+      skills: [{ id: "skill_brand", name: "Brand Voice", version: "1.0.0" }]
     });
   });
 

@@ -221,6 +221,11 @@ export async function POST(request: Request): Promise<Response> {
       ...(started.projectId ? { projectId: started.projectId } : {})
     });
     enqueue({
+      type: "context.summary",
+      taskId: started.taskId,
+      ...started.contextSummary
+    });
+    enqueue({
       type: "run.status",
       taskId: started.taskId,
       state: "running",

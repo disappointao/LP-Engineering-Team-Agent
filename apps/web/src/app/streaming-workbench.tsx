@@ -103,6 +103,24 @@ function getVisibleStreamingStatus(
   return undefined;
 }
 
+export function StreamingContextSummary({
+  state
+}: {
+  state: StreamingWorkbenchState;
+}) {
+  return state.contextSummary ? (
+    <p className="streamingContext">
+      {[
+        state.contextSummary.projectName
+          ? `Project: ${state.contextSummary.projectName}`
+          : "No project context",
+        `Skills: ${state.contextSummary.skillCount}`,
+        `Runtime: ${state.contextSummary.runtimeMode}`
+      ].join(" · ")}
+    </p>
+  ) : null;
+}
+
 export interface PromptSubmissionControlState {
   visiblePromptDisabled: boolean;
   hiddenPromptValue?: string;
@@ -402,6 +420,7 @@ export function StreamingWorkbench({
                 <strong>LP Agent</strong>
               </div>
               <div className="assistantMessage">
+                <StreamingContextSummary state={state} />
                 {state.assistantContent ? <p>{state.assistantContent}</p> : null}
                 {visibleStatus ? <p className="streamingStatus">{visibleStatus}</p> : null}
               </div>
