@@ -773,11 +773,12 @@ describe("execute run recovery retry", () => {
       state: "completed"
     });
     expect(receivedPrompt).toBe("Revise the hero for enterprise buyers.");
-    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+    const snapshot = await repositories.taskSnapshots.getByTaskId("task_1");
+    expect(snapshot).toMatchObject({
       projectId: "project_1",
-      briefId: "brief_2",
-      pageVersionId: undefined
+      briefId: "brief_2"
     });
+    expect(snapshot?.pageVersionId).toBeUndefined();
   });
 
   it("fails closed for an older failed planner run after a newer LP attempt succeeds", async () => {
@@ -1103,6 +1104,103 @@ describe("execute run recovery retry", () => {
 
     expect(result).toEqual({ ok: false, error: "retry_input_not_reconstructable" });
     expect(generatePageVersionCalls).toBe(0);
+  });
+
+  it("fails closed for a stale Builder retry after a newer LP attempt", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.briefs.save({
+      id: "brief_1",
+      projectId: "project_1",
+      prompt: "Build a recovery LP.",
+      brief: sampleBrief,
+      createdAt: "2026-05-20T00:01:00.000Z"
+    });
+    await repositories.briefs.save({
+      id: "brief_2",
+      projectId: "project_1",
+      prompt: "Use an enterprise style instead.",
+      brief: sampleBrief,
+      createdAt: "2026-05-20T00:06:30.000Z"
+    });
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_2",
+      createdAt: "2026-05-20T00:01:00.000Z"
+    });
+    await saveRun(repositories, {
+      id: "run_builder_failed",
+      role: "builder",
+      state: "failed",
+      startedAt: "2026-05-20T00:02:00.000Z",
+      completedAt: "2026-05-20T00:02:30.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_failed",
+      type: "handoff.consumed",
+      sequence: 1,
+      payload: {
+        artifactRefs: {
+          briefId: "brief_1"
+        }
+      }
+    });
+    await saveEvent(repositories, {
+      runId: "run_builder_failed",
+      type: "run.failed",
+      sequence: 2
+    });
+
+    let generatePageVersionCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async (): Promise<PageVersionRecord> => {
+          generatePageVersionCalls += 1;
+          const pageVersion: PageVersionRecord = {
+            id: "version_retry_should_not_be_saved",
+            projectId: "project_1",
+            briefId: "brief_2",
+            artifacts: {
+              indexHtml: "<!doctype html><html></html>",
+              stylesCss: ":root {}",
+              scriptJs: "window.lpAgent = true;"
+            },
+            reviewStatus: "pending",
+            findings: [],
+            createdAt: "2026-05-20T00:10:00.000Z"
+          };
+          await repositories.pageVersions.save(pageVersion);
+          return pageVersion;
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_builder_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    expect(generatePageVersionCalls).toBe(0);
+    const staleBuilderSnapshot = await repositories.taskSnapshots.getByTaskId("task_1");
+    expect(staleBuilderSnapshot).toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_2"
+    });
+    expect(staleBuilderSnapshot?.pageVersionId).toBeUndefined();
+    await expect(
+      repositories.pageVersions.getById("version_retry_should_not_be_saved")
+    ).resolves.toBeUndefined();
   });
 
   it("uses the next available retry run id when a prior retry exists", async () => {
@@ -1548,6 +1646,84 @@ describe("execute run recovery retry", () => {
     expect(receivedPageVersionId).toBe("version_1");
   });
 
+  it("fails closed for a stale Reviewer retry without a consumed handoff", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2",
+      createdAt: timestamp
+    });
+    for (const pageVersionId of ["version_1", "version_2"]) {
+      await repositories.pageVersions.save({
+        id: pageVersionId,
+        projectId: "project_1",
+        briefId: pageVersionId === "version_1" ? "brief_1" : "brief_2",
+        artifacts: {
+          indexHtml: "<!doctype html><html></html>",
+          stylesCss: ":root {}",
+          scriptJs: "window.lpAgent = true;"
+        },
+        reviewStatus: "pending",
+        findings: [],
+        createdAt:
+          pageVersionId === "version_1"
+            ? "2026-05-20T00:02:00.000Z"
+            : "2026-05-20T00:07:00.000Z"
+      });
+    }
+    await saveRun(repositories, {
+      id: "run_reviewer_failed",
+      role: "reviewer",
+      state: "failed",
+      startedAt: "2026-05-20T00:03:00.000Z",
+      completedAt: "2026-05-20T00:03:30.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_reviewer_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let reviewCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async (): Promise<PageVersionRecord> => {
+          reviewCalls += 1;
+          const pageVersion = await repositories.pageVersions.getById("version_2");
+          if (!pageVersion) {
+            throw new Error("missing page version");
+          }
+          return pageVersion;
+        },
+        approveAndCreateDeployment: async () => {
+          throw new Error("not used");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_reviewer_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    expect(reviewCalls).toBe(0);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2"
+    });
+  });
+
   it("passes fail-fast deployment creation into deployer retry failures", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveTask(repositories);
@@ -1555,6 +1731,19 @@ describe("execute run recovery retry", () => {
       taskId: "task_1",
       projectId: "project_1",
       pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await repositories.pageVersions.save({
+      id: "version_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      artifacts: {
+        indexHtml: "<!doctype html><html></html>",
+        stylesCss: ":root {}",
+        scriptJs: "window.lpAgent = true;"
+      },
+      reviewStatus: "passed",
+      findings: [],
       createdAt: timestamp
     });
     await saveRun(repositories, {
@@ -1685,5 +1874,79 @@ describe("execute run recovery retry", () => {
       state: "completed"
     });
     expect(receivedPageVersionId).toBe("version_1");
+  });
+
+  it("fails closed for a stale Deployer retry without a consumed handoff", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2",
+      createdAt: timestamp
+    });
+    for (const pageVersionId of ["version_1", "version_2"]) {
+      await repositories.pageVersions.save({
+        id: pageVersionId,
+        projectId: "project_1",
+        briefId: pageVersionId === "version_1" ? "brief_1" : "brief_2",
+        artifacts: {
+          indexHtml: "<!doctype html><html></html>",
+          stylesCss: ":root {}",
+          scriptJs: "window.lpAgent = true;"
+        },
+        reviewStatus: "passed",
+        findings: [],
+        createdAt:
+          pageVersionId === "version_1"
+            ? "2026-05-20T00:02:00.000Z"
+            : "2026-05-20T00:07:00.000Z"
+      });
+    }
+    await saveRun(repositories, {
+      id: "run_deployer_failed",
+      role: "deployer",
+      state: "failed",
+      startedAt: "2026-05-20T00:03:00.000Z",
+      completedAt: "2026-05-20T00:03:30.000Z"
+    });
+    await saveEvent(repositories, {
+      runId: "run_deployer_failed",
+      type: "run.failed",
+      sequence: 1
+    });
+
+    let deployCalls = 0;
+    const result = await executeRunRecoveryAction({
+      repositories,
+      service: {
+        createBriefFromPrompt: async () => {
+          throw new Error("not used");
+        },
+        generatePageVersion: async () => {
+          throw new Error("not used");
+        },
+        reviewPageVersion: async () => {
+          throw new Error("not used");
+        },
+        approveAndCreateDeployment: async () => {
+          deployCalls += 1;
+          throw new Error("deployment must not be retried");
+        }
+      },
+      currentUserId: "local-web-user",
+      taskId: "task_1",
+      runId: "run_deployer_failed",
+      action: "retry_run"
+    });
+
+    expect(result).toEqual({ ok: false, error: "retry_target_conflict" });
+    expect(deployCalls).toBe(0);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: "version_2"
+    });
   });
 });

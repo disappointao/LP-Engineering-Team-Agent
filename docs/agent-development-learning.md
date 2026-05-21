@@ -456,7 +456,7 @@ Stage 28 的设计重点是把当前“先跑 Planner/Builder/Reviewer，成功�
 - 用户可见层只展示 role、state、terminal summary、安全诊断和推荐动作；不读取 raw worker payload、raw run event、raw model output、raw tool output、secret、完整 artifact 内容或本机路径。
 - `resume_worker_finalization` 只处理 worker job 已 terminal 但 run/tool observation finalization 不完整的场景，并复用已有幂等 finalizer。
 - `retry_run` 只做 safely reconstructable single-run retry：创建新的 retry attempt / run id，不覆盖原 failed run，不自动重跑完整 `Planner -> Builder -> Reviewer -> Deployer` chain。
-- 同一 `lp_generation` task 允许多次 LP 尝试后，recovery 不能只依赖单一 task snapshot：Planner retry 应按失败 run 的 `startedAt` 回看本次最近 user message，但只有该 message 仍是当前最新 user message，且当前 snapshot 输出没有越过该 failed run 时才可执行；Reviewer / Deployer retry 应优先使用失败 run 自己的 `handoff.consumed` event 中的 `artifactRefs.pageVersionId`，再 fallback 到 snapshot 兼容旧数据。
+- 同一 `lp_generation` task 允许多次 LP 尝试后，recovery 不能只依赖单一 task snapshot：Planner retry 应按失败 run 的 `startedAt` 回看本次最近 user message，但只有该 message 仍是当前最新 user message，且当前 snapshot 输出没有越过该 failed run 时才可执行；Builder / Reviewer / Deployer retry 应优先使用失败 run 自己的 `handoff.consumed` event 中的 `artifactRefs.briefId` / `artifactRefs.pageVersionId`，再 fallback 到可证明仍对应当前 failed run 的 snapshot 兼容旧数据。
 - 输入无法从 repository 安全重建、目标输出会被覆盖、approval/blocker 语义不清或 side effect 不具备幂等性时，recovery action 必须 fail closed，并让 UI 展示 `inspect_manually` 或对应 guidance。
 - `retry_run` 已明确对 unsupported side-effect contexts fail closed：`skillCommand:` / deployment 和 `mcpTool:` 这类命令或工具 run 不进入 Stage 25 可执行 retry 范围，recovery view 只给 `inspect_manually` 等 guidance。
 - Web skill command forms 会携带当前 task scope；API 会校验 task 属于同一 project，并把 `taskId` 写入 run、run events 和 tool observation，让 worker finalization gaps 能从 task recovery UI 被发现和恢复。

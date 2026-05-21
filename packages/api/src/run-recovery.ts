@@ -471,34 +471,52 @@ async function retryRun(
       }
 
       if (input.run.role === "builder") {
-        if (!snapshot?.briefId) {
-          return { ok: false, error: "retry_input_not_reconstructable" };
-        }
-        if (snapshot.pageVersionId) {
-          return { ok: false, error: "retry_target_conflict" };
+        const briefIdResult = await builderRetryBriefIdForRun({
+          repositories: input.repositories,
+          run: input.run,
+          snapshot
+        });
+        if (!briefIdResult.ok) {
+          return { ok: false, error: briefIdResult.error };
         }
 
+        const brief = await input.repositories.briefs.getById(briefIdResult.briefId);
+        if (!brief || brief.projectId !== projectId) {
+          return { ok: false, error: "retry_input_not_reconstructable" };
+        }
         const retryRunId = await nextRetryRunId(input.repositories, input.runId);
         const pageVersion = await input.service.generatePageVersion({
           projectId,
-          briefId: snapshot.briefId,
+          briefId: briefIdResult.briefId,
           taskId: input.taskId,
           runId: retryRunId
         });
         await input.repositories.taskSnapshots.save({
           taskId: input.taskId,
           projectId,
-          briefId: snapshot.briefId,
+          briefId: briefIdResult.briefId,
           pageVersionId: pageVersion.id,
-          createdAt: snapshot.createdAt
+          createdAt: snapshot?.createdAt ?? retryTimestamp(input)
         });
         return retryRunCompleted(input.runId, retryRunId);
       }
 
       if (input.run.role === "reviewer") {
-        const pageVersionId =
-          (await consumedHandoffPageVersionIdForRun(input.repositories, input.run.id)) ??
-          snapshot?.pageVersionId;
+        const consumedPageVersionId = await consumedHandoffPageVersionIdForRun(
+          input.repositories,
+          input.run.id
+        );
+        const pageVersionIdResult = consumedPageVersionId
+          ? { ok: true as const, pageVersionId: consumedPageVersionId }
+          : await snapshotPageVersionIdForRun({
+              repositories: input.repositories,
+              run: input.run,
+              snapshot
+            });
+        if (!pageVersionIdResult.ok) {
+          return { ok: false, error: pageVersionIdResult.error };
+        }
+        const pageVersionId = pageVersionIdResult.pageVersionId;
         if (!pageVersionId) {
           return { ok: false, error: "retry_input_not_reconstructable" };
         }
@@ -526,7 +544,17 @@ async function retryRun(
           input.repositories,
           input.run.id
         );
-        const pageVersionId = consumedPageVersionId ?? snapshot?.pageVersionId;
+        const pageVersionIdResult = consumedPageVersionId
+          ? { ok: true as const, pageVersionId: consumedPageVersionId }
+          : await snapshotPageVersionIdForRun({
+              repositories: input.repositories,
+              run: input.run,
+              snapshot
+            });
+        if (!pageVersionIdResult.ok) {
+          return { ok: false, error: pageVersionIdResult.error };
+        }
+        const pageVersionId = pageVersionIdResult.pageVersionId;
         if (!pageVersionId) {
           return { ok: false, error: "retry_input_not_reconstructable" };
         }
@@ -637,6 +665,89 @@ async function resolveSnapshotOutputTimestamp(input: {
   return timestamp ? { ok: true, timestamp } : { ok: true };
 }
 
+async function builderRetryBriefIdForRun(input: {
+  repositories: WorkbenchRepositories;
+  run: RunRecord;
+  snapshot:
+    | {
+        briefId?: string;
+        pageVersionId?: string;
+        createdAt: string;
+      }
+    | undefined;
+}): Promise<
+  { ok: true; briefId: string } | { ok: false; error: RunRecoveryExecutionErrorCode }
+> {
+  const consumedBriefId = await consumedHandoffBriefIdForRun(input.repositories, input.run.id);
+  if (consumedBriefId) {
+    if (!input.snapshot?.briefId) {
+      return { ok: false, error: "retry_input_not_reconstructable" };
+    }
+    if (input.snapshot.briefId !== consumedBriefId || input.snapshot.pageVersionId) {
+      return { ok: false, error: "retry_target_conflict" };
+    }
+    return { ok: true, briefId: consumedBriefId };
+  }
+
+  if (!input.snapshot?.briefId) {
+    return { ok: false, error: "retry_input_not_reconstructable" };
+  }
+  if (input.snapshot.pageVersionId) {
+    return { ok: false, error: "retry_target_conflict" };
+  }
+  const snapshotOutputTimestamp = await resolveSnapshotOutputTimestamp({
+    repositories: input.repositories,
+    snapshot: input.snapshot
+  });
+  if (!snapshotOutputTimestamp.ok) {
+    return { ok: false, error: "retry_input_not_reconstructable" };
+  }
+  if (
+    snapshotOutputTimestamp.timestamp &&
+    snapshotOutputTimestamp.timestamp > input.run.startedAt
+  ) {
+    return { ok: false, error: "retry_target_conflict" };
+  }
+  return { ok: true, briefId: input.snapshot.briefId };
+}
+
+async function snapshotPageVersionIdForRun(input: {
+  repositories: WorkbenchRepositories;
+  run: RunRecord;
+  snapshot:
+    | {
+        pageVersionId?: string;
+      }
+    | undefined;
+}): Promise<
+  { ok: true; pageVersionId?: string } | { ok: false; error: RunRecoveryExecutionErrorCode }
+> {
+  if (!input.snapshot?.pageVersionId) {
+    return { ok: true };
+  }
+  const pageVersion = await input.repositories.pageVersions.getById(input.snapshot.pageVersionId);
+  if (!pageVersion) {
+    return { ok: false, error: "retry_input_not_reconstructable" };
+  }
+  if (pageVersion.createdAt > input.run.startedAt) {
+    return { ok: false, error: "retry_target_conflict" };
+  }
+  return { ok: true, pageVersionId: input.snapshot.pageVersionId };
+}
+
+async function consumedHandoffBriefIdForRun(
+  repositories: WorkbenchRepositories,
+  runId: string
+): Promise<string | undefined> {
+  const events = await repositories.runEvents.listForRun(runId);
+  return events
+    .filter((event) => event.type === "handoff.consumed")
+    .map(artifactRefsFromHandoffEvent)
+    .map((artifactRefs) => artifactRefs.briefId)
+    .filter((briefId): briefId is string => briefId !== undefined)
+    .at(-1);
+}
+
 async function consumedHandoffPageVersionIdForRun(
   repositories: WorkbenchRepositories,
   runId: string
@@ -644,23 +755,31 @@ async function consumedHandoffPageVersionIdForRun(
   const events = await repositories.runEvents.listForRun(runId);
   return events
     .filter((event) => event.type === "handoff.consumed")
-    .map(pageVersionIdFromHandoffEvent)
+    .map(artifactRefsFromHandoffEvent)
+    .map((artifactRefs) => artifactRefs.pageVersionId)
     .filter((pageVersionId): pageVersionId is string => pageVersionId !== undefined)
     .at(-1);
 }
 
-function pageVersionIdFromHandoffEvent(event: RunEventRecord): string | undefined {
+function artifactRefsFromHandoffEvent(event: RunEventRecord): {
+  briefId?: string;
+  pageVersionId?: string;
+} {
   const artifactRefs =
     typeof event.payload.artifactRefs === "object" && event.payload.artifactRefs !== null
-      ? (event.payload.artifactRefs as { pageVersionId?: unknown })
+      ? (event.payload.artifactRefs as { briefId?: unknown; pageVersionId?: unknown })
       : undefined;
-  if (!artifactRefs || !("pageVersionId" in artifactRefs)) {
-    return undefined;
+  if (!artifactRefs) {
+    return {};
   }
-  const pageVersionId = artifactRefs.pageVersionId;
-  return typeof pageVersionId === "string" && pageVersionId.trim().length > 0
-    ? pageVersionId
-    : undefined;
+  return {
+    briefId: nonEmptyStringArtifactRef(artifactRefs.briefId),
+    pageVersionId: nonEmptyStringArtifactRef(artifactRefs.pageVersionId)
+  };
+}
+
+function nonEmptyStringArtifactRef(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 async function withRepositoryRetryLock<T>(
