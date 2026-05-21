@@ -331,12 +331,12 @@
    - 在 Stage 26 design 后阅读，用于理解已实现的 chat stream event contract、Web store streaming helper、NDJSON route、client streaming composer、fallback handling、tests 和文档收尾历史。
 
 82. `specs/2026-05-21-real-chat-runtime-skill-context-design.md`
-   - Stage 27 Real Chat Runtime and Skill Context v0 design（设计已确认）。
-   - 在 Stage 26 implementation plan 和当前 roadmap 后阅读，用于新增普通聊天专用 `assistant` role、project-bound real chat runtime、skill context prompt 注入、Chat UI context summary，以及继续排除 LP chain、MCP execution、真实 shell/deployment 和 provider token streaming。
+   - Stage 27 Real Chat Runtime and Skill Context v0 design（已实现，当前已完成）。
+   - 在 Stage 26 implementation plan 和当前 roadmap 后阅读，用于理解已新增的普通聊天专用 `assistant` role、project-bound real chat runtime、skill context prompt 注入、Chat UI context summary，以及继续排除 LP chain、MCP execution、真实 shell/deployment 和 provider token streaming 的历史范围。
 
 83. `plans/2026-05-21-real-chat-runtime-skill-context.md`
-   - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan（当前待执行）。
-   - 在 Stage 27 design 后阅读，用于按 TDD 实现 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration 和 verification。
+   - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests 和文档收尾历史。
 
 ## 维护规则
 
