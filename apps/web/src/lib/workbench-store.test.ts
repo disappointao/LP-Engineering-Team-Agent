@@ -2889,6 +2889,65 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("clears the current page version when Builder fails during a continued LP task", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const builderRuntime = new (class extends StaticRuntime {
+      private calls = 0;
+
+      constructor() {
+        super({ state: "completed", artifacts: completeArtifacts() });
+      }
+
+      override async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+        this.calls += 1;
+        if (this.calls === 1) {
+          return new StaticRuntime({ state: "completed", artifacts: completeArtifacts() }).run(
+            request
+          );
+        }
+        return new StaticRuntime({ state: "failed" }).run(request);
+      }
+    })();
+    const store = createWebWorkbenchStore({ repositories, builderRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "Make the hero CTA more urgent and add a FAQ section",
+      implicitProjectName: "Spring Sale"
+    });
+
+    expect(second).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskId: "task_1",
+      projectId: "project_1"
+    });
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      projectId: "project_1",
+      briefId: "brief_2",
+      pageVersionId: undefined
+    });
+    const pageState = await store.getPageState({ projectId: first.projectId, taskId: first.taskId });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected task state");
+    }
+    expect(pageState.snapshot?.brief?.id).toBe("brief_2");
+    expect(pageState.snapshot?.currentPageVersion).toBeUndefined();
+    expect(pageState.artifactDiff).toBeUndefined();
+  });
+
   it("keeps the page version when Deployer fails", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const deployerRuntime = new StaticRuntime({ state: "failed" });

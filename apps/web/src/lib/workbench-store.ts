@@ -1736,15 +1736,18 @@ async function saveTaskSnapshot(input: {
   taskId: string;
   projectId: string;
   briefId?: string;
-  pageVersionId?: string;
+  pageVersionId?: string | null;
   now?: () => Date;
 }): Promise<void> {
   const existing = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
+  const hasPageVersionId = Object.prototype.hasOwnProperty.call(input, "pageVersionId");
   await input.repositories.taskSnapshots.save({
     taskId: input.taskId,
     projectId: input.projectId,
     briefId: input.briefId ?? existing?.briefId,
-    pageVersionId: input.pageVersionId ?? existing?.pageVersionId,
+    pageVersionId: hasPageVersionId
+      ? input.pageVersionId ?? undefined
+      : existing?.pageVersionId,
     createdAt: existing?.createdAt ?? (input.now ?? (() => new Date()))().toISOString()
   });
 }
@@ -1769,6 +1772,7 @@ async function runLpAgentChainForTask(input: {
     taskId: input.taskId,
     projectId: input.projectId,
     briefId: brief.id,
+    pageVersionId: null,
     now: input.now
   });
 
