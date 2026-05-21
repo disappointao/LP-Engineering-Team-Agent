@@ -338,6 +338,10 @@
    - Stage 27 Real Chat Runtime and Skill Context v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 27 design 后阅读，用于理解已实现的 `assistant` role、assistant prompt builder、project-bound real chat runtime、safe context summary stream、Models UI route configuration、tests、review gates、最终验证和文档收尾历史；该 plan 已归档为完成态，不再作为当前执行 checklist。
 
+84. `specs/2026-05-21-lp-agent-chain-end-to-end-design.md`
+   - Stage 28 LP Agent Chain End-to-End v0 design（当前推荐下一阶段设计）。
+   - 在 Stage 27 implementation plan 和当前 roadmap 后阅读，用于把 Web 提交 LP 复杂任务时的固定 `Planner -> Builder -> Reviewer -> Deployer` 链路改成 task-first orchestration，确保真实 Planner/Builder structured output、durable artifact workspace、Reviewer blocked、Deployer handoff、失败 recovery 和后续修改都绑定到同一个 task。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

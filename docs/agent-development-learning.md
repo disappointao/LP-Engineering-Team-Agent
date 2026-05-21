@@ -208,6 +208,19 @@ Stage 27 的设计决定新增独立 `assistant` role。这个 role 可以复用
 
 这让普通聊天既能成为第一版可用入口，又不破坏 LP agent chain 的结构化输出边界。
 
+### 2.13 固定链路要先有 task anchor
+
+LP agent chain 不是一组孤立函数调用。用户在 Web 提交“写 LP / 改 LP”后，系统必须先有稳定 task anchor，再把 Planner、Builder、Reviewer、Deployer 的 run、handoff、artifact workspace 和 recovery fact 绑定到这个 task。
+
+Stage 28 的设计重点是把当前“先跑 Planner/Builder/Reviewer，成功后再创建 task”的路径改成 task-first orchestration：
+
+- 先创建或复用 `lp_generation` task，并保存 user message。
+- 每个 agent run 都带同一个 `taskId`。
+- Planner 成功后补 brief id；Builder 成功后补 page version / artifact workspace；Reviewer / Deployer 后继续更新同一个 task 的事实。
+- 失败时不丢 task。Planner parse/retry exhausted、Builder artifact policy failure、Reviewer blocked 和 Deployer failure 都应该通过 run timeline / recovery view 解释。
+
+这个边界很重要：Agent 工作流的用户体验不能只展示最终成功产物。真正可用的 Agent 系统要让失败、阻塞、部分完成和后续修改都有同一个可观察上下文。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型
@@ -245,12 +258,13 @@ Stage 27 的设计决定新增独立 `assistant` role。这个 role 可以复用
 - Stage 25 Run Recovery UI v0 已实现：Web task state 现在包含 recovery views，task timeline 展示 inline recovery block，并通过 server action 执行第一批受控 resume/retry recovery actions。
 - Stage 26 Streaming Chat Transport and UI v0 已实现：普通聊天通过 Web/API NDJSON streaming route 和 client transient state 展示 assistant delta，terminal event 后回到 repository fact；LP / project setup 仍走 server action fallback。
 - Stage 27 Real Chat Runtime and Skill Context v0 已实现：`assistant` 已是一等 model/runtime role；project-bound 普通聊天通过 `runAssistantChat()` 进入 assistant runtime；prompt assembly 使用 bounded skill、memory 和 project context；Web stream 会输出安全 `context.summary`，UI 展示 project、skill 和 runtime summary。默认仍是 deterministic runtime，真实模型 runtime 仍必须通过 `REAL_MODEL_RUNTIME=1` 显式 opt-in。
+- Stage 28 LP Agent Chain End-to-End v0 已完成设计：下一步要把 LP 复杂任务改成 task-first fixed chain orchestration，让 Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 都绑定到同一个 task；Planner / Builder 先使用真实模型 structured output，Reviewer / Deployer 继续 deterministic / policy-driven。
 - Deployment adapter 边界存在，但当前 Web V1 按需求不做自动部署。
 
 ### 还没做
 
 - provider token streaming、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现；真实 fallback provider execution 仍未做。
-- LP chain 的完整真实 runtime workflow 仍未做：Planner / Builder 虽已有 `REAL_MODEL_RUNTIME=1` 下的结构化输出、repair、retry 和 fallback metadata，但还没有把普通聊天式的 token streaming、tool-call conversion、MCP execution、usage/cost reporting 串成完整真实运行闭环。
+- LP chain 的完整 task-first runtime workflow 仍未实现：Stage 28 已完成设计，Planner / Builder 虽已有 `REAL_MODEL_RUNTIME=1` 下的结构化输出、repair、retry 和 fallback metadata，但 Web 复杂任务还没把 Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 全部绑定到同一个 task。普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。
