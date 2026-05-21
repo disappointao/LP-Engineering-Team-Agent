@@ -27,8 +27,13 @@ import {
   getWebWorkbenchStore,
   deriveImplicitProjectName,
   validateProjectInput,
-  validatePromptInput
+  validatePromptInput,
+  type WebWorkbenchStoreOptions
 } from "./workbench-store";
+
+type AgentRuntimeAdapter = NonNullable<WebWorkbenchStoreOptions["plannerRuntime"]>;
+type RuntimeRunRequest = Parameters<AgentRuntimeAdapter["run"]>[0];
+type RuntimeRunResult = Awaited<ReturnType<AgentRuntimeAdapter["run"]>>;
 
 const emptyMCPState = {
   connectors: [],
@@ -208,6 +213,65 @@ async function saveManualPageVersion(input: {
     findings: [],
     createdAt
   });
+}
+
+class StaticRuntime implements AgentRuntimeAdapter {
+  constructor(private readonly result: Partial<RuntimeRunResult>) {}
+
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    const state = this.result.state ?? "completed";
+    const terminalEvent =
+      state === "completed"
+        ? {
+            type: "run.completed" as const,
+            message: `${request.role} run completed.`,
+            runId: request.runId,
+            state: "completed" as const
+          }
+        : {
+            type: "run.failed" as const,
+            message: `${request.role} run failed.`,
+            runId: request.runId,
+            role: request.role,
+            state: "failed" as const
+          };
+    return {
+      runId: request.runId,
+      projectId: request.projectId,
+      role: request.role,
+      state,
+      artifacts: this.result.artifacts,
+      findings: this.result.findings,
+      modelOutputText: this.result.modelOutputText,
+      events: [
+        {
+          type: "run.started",
+          message: `${request.role} run started.`,
+          runId: request.runId,
+          role: request.role
+        },
+        terminalEvent
+      ]
+    };
+  }
+}
+
+class RecordingRuntime extends StaticRuntime {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    this.requests.push(request);
+    return super.run(request);
+  }
+}
+
+function completeArtifacts() {
+  return {
+    indexHtml:
+      '<!doctype html><html><head><title>Spring Sale</title></head><body><main><h1>Spring Sale</h1><a href="#shop">Shop now</a></main></body></html>',
+    stylesCss: "body { font-family: system-ui, sans-serif; }",
+    scriptJs: "window.lpAgent = true;"
+  };
 }
 
 describe("web workbench store", () => {
@@ -2511,6 +2575,51 @@ describe("web workbench store", () => {
         (message) => message.id === started.assistantMessageId
       );
       expect(assistant?.content).toBe(started.assistantContent);
+    });
+  });
+
+  it("creates an LP task and user message before Planner runs", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const plannerRuntime = new StaticRuntime({ state: "failed" });
+    const store = createWebWorkbenchStore({ repositories, plannerRuntime });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskType: "lp_generation"
+    });
+    if (result.ok) {
+      throw new Error("expected generation failure");
+    }
+    expect(result.taskId).toBe("task_1");
+    expect(result.projectId).toBe("project_1");
+
+    await expect(repositories.tasks.getById("task_1")).resolves.toMatchObject({
+      id: "task_1",
+      type: "lp_generation",
+      projectId: "project_1"
+    });
+    await expect(repositories.messages.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "message_1",
+        role: "user",
+        content: "Create a landing page for a spring sale"
+      }),
+      expect.objectContaining({
+        id: "message_2",
+        role: "assistant",
+        content: "LP generation failed. Open recovery details for the failed run."
+      })
+    ]);
+    await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
+      taskId: "task_1",
+      projectId: "project_1"
     });
   });
 

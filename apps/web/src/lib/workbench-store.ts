@@ -8,6 +8,7 @@ import {
   listRunRecoveryViewsForTask,
   runLocalWorkerOnceAndFinalize,
   type AgentRole,
+  type DemoWorkbenchServiceOptions,
   type InterruptTaskResult,
   type MCPConnectorRecord,
   type MCPToolApprovalRecord,
@@ -295,6 +296,7 @@ export type TaskStatus = WorkbenchTaskStatus;
 export type ChatMessageRole = WorkbenchMessageRole;
 export type TaskRecord = WorkbenchTaskRecord;
 export type ChatMessageRecord = WorkbenchMessageRecord;
+type AgentRuntimeAdapter = NonNullable<DemoWorkbenchServiceOptions["assistantRuntime"]>;
 
 export type WebArtifactDiffFileState =
   | "initial"
@@ -345,7 +347,13 @@ export type SubmitTaskResult =
       taskType: TaskType;
       projectId?: string;
     }
-  | { ok: false; error: ProjectFlowErrorCode };
+  | {
+      ok: false;
+      error: ProjectFlowErrorCode;
+      taskId?: string;
+      taskType?: TaskType;
+      projectId?: string;
+    };
 
 export interface StreamingChatContextSummary {
   projectId?: string;
@@ -484,6 +492,11 @@ export interface WebWorkbenchStore {
 
 export interface WebWorkbenchStoreOptions {
   repositories?: WorkbenchRepositories;
+  assistantRuntime?: AgentRuntimeAdapter;
+  plannerRuntime?: AgentRuntimeAdapter;
+  builderRuntime?: AgentRuntimeAdapter;
+  reviewerRuntime?: AgentRuntimeAdapter;
+  deployerRuntime?: AgentRuntimeAdapter;
   toolCommandRunner?: ToolCommandRunner;
   workerRuntime?: TaskInterruptWorkerRuntime;
   workerQueueRuntime?: SkillCommandQueueRuntime;
@@ -607,6 +620,11 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
   const service = new DemoWorkbenchService({
     repositories,
     currentUser,
+    assistantRuntime: options.assistantRuntime,
+    plannerRuntime: options.plannerRuntime,
+    builderRuntime: options.builderRuntime,
+    reviewerRuntime: options.reviewerRuntime,
+    deployerRuntime: options.deployerRuntime,
     toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner(),
     workerQueueRuntime
   });
@@ -978,65 +996,118 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: "project_not_found" };
       }
 
-      try {
+      if (taskType === "lp_generation") {
         let projectId = requestedProjectId;
-        let taskSnapshot: WorkbenchSnapshot | undefined;
+        let task: TaskRecord | undefined;
 
-        if (!projectId && taskType === "lp_generation") {
-          const project = await service.createProject({
-            name: deriveImplicitProjectName(prompt.value, input.implicitProjectName)
+        try {
+          if (!projectId) {
+            const project = await service.createProject({
+              name: deriveImplicitProjectName(prompt.value, input.implicitProjectName)
+            });
+            projectId = project.id;
+          }
+
+          const created = await createTaskThread({
+            repositories,
+            title: deriveTaskTitle(prompt.value),
+            type: taskType,
+            projectId,
+            userMessage: prompt.value
           });
-          projectId = project.id;
-        }
+          task = created.task;
+          await saveTaskSnapshot({
+            repositories,
+            taskId: task.id,
+            projectId
+          });
 
-        if (taskType === "lp_generation" && projectId) {
           const brief = await service.createBriefFromPrompt({
             projectId,
-            prompt: prompt.value
+            prompt: prompt.value,
+            taskId: task.id
           });
           const pageVersion = await service.generatePageVersion({
             projectId,
-            briefId: brief.id
+            briefId: brief.id,
+            taskId: task.id
           });
           const reviewedPageVersion = await service.reviewPageVersion({
             projectId,
-            pageVersionId: pageVersion.id
+            pageVersionId: pageVersion.id,
+            taskId: task.id
           });
           const project = await repositories.projects.getById(projectId);
           if (!project) {
-            return { ok: false, error: "project_not_found" };
+            return {
+              ok: false,
+              error: "project_not_found",
+              taskId: task.id,
+              taskType,
+              projectId
+            };
           }
-          taskSnapshot = {
-            project: { ...project },
-            brief: { ...brief },
-            currentPageVersion: { ...reviewedPageVersion }
+          await appendTaskMessage({
+            repositories,
+            taskId: task.id,
+            role: "assistant",
+            content: "LP artifacts are ready for review."
+          });
+          await saveTaskSnapshot({
+            repositories,
+            taskId: task.id,
+            projectId: project.id,
+            briefId: brief.id,
+            pageVersionId: reviewedPageVersion.id
+          });
+
+          return {
+            ok: true,
+            taskId: task.id,
+            taskType,
+            projectId
+          };
+        } catch {
+          if (task) {
+            await appendTaskMessage({
+              repositories,
+              taskId: task.id,
+              role: "assistant",
+              content: "LP generation failed. Open recovery details for the failed run."
+            });
+          }
+          if (task && projectId) {
+            await saveTaskSnapshot({
+              repositories,
+              taskId: task.id,
+              projectId
+            });
+          }
+          return {
+            ok: false,
+            error: "generation_failed",
+            ...(task ? { taskId: task.id } : {}),
+            taskType,
+            ...(projectId ? { projectId } : {})
           };
         }
+      }
 
+      try {
         const task = await saveTaskThread({
           repositories,
           title: deriveTaskTitle(prompt.value),
           type: taskType,
-          projectId,
+          projectId: requestedProjectId,
           userMessage: prompt.value,
-          assistantMessage:
-            taskType === "lp_generation"
-              ? "LP artifacts are ready for review."
-              : "I created a task thread and can continue from here.",
-          snapshot: taskSnapshot
-            ? {
-                projectId: taskSnapshot.project.id,
-                briefId: taskSnapshot.brief?.id,
-                pageVersionId: taskSnapshot.currentPageVersion?.id
-              }
-            : undefined
+          assistantMessage: "I created a task thread and can continue from here."
         });
 
         return {
           ok: true,
           taskId: task.id,
           taskType,
-          projectId
+          projectId: requestedProjectId
         };
       } catch {
         return { ok: false, error: "generation_failed" };
@@ -1654,6 +1725,79 @@ function isRecoverableModelResolutionError(
 }
 
 const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
+
+async function createTaskThread(input: {
+  repositories: WorkbenchRepositories;
+  title: string;
+  type: TaskType;
+  projectId?: string;
+  userMessage: string;
+  now?: () => Date;
+}): Promise<{ task: TaskRecord; userMessage: ChatMessageRecord }> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const now = (input.now ?? (() => new Date()))().toISOString();
+    const existingTasks = await input.repositories.tasks.listAll();
+    const existingMessages = await input.repositories.messages.listAll();
+    const task: TaskRecord = {
+      id: nextSequentialId("task", existingTasks.map((record) => record.id)),
+      title: input.title,
+      type: input.type,
+      status: "complete",
+      projectId: input.projectId,
+      createdAt: now
+    };
+    const userMessage: ChatMessageRecord = {
+      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      taskId: task.id,
+      role: "user",
+      content: input.userMessage,
+      createdAt: now
+    };
+    await input.repositories.tasks.save(task);
+    await input.repositories.messages.save(userMessage);
+    return { task: { ...task }, userMessage: { ...userMessage } };
+  });
+}
+
+async function appendTaskMessage(input: {
+  repositories: WorkbenchRepositories;
+  taskId: string;
+  role: WorkbenchMessageRole;
+  content: string;
+  now?: () => Date;
+}): Promise<ChatMessageRecord> {
+  return withRepositoryTaskLock(input.repositories, async () => {
+    const now = (input.now ?? (() => new Date()))().toISOString();
+    const existingMessages = await input.repositories.messages.listAll();
+    const message: ChatMessageRecord = {
+      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      taskId: input.taskId,
+      role: input.role,
+      content: input.content,
+      createdAt: now
+    };
+    await input.repositories.messages.save(message);
+    return { ...message };
+  });
+}
+
+async function saveTaskSnapshot(input: {
+  repositories: WorkbenchRepositories;
+  taskId: string;
+  projectId: string;
+  briefId?: string;
+  pageVersionId?: string;
+  now?: () => Date;
+}): Promise<void> {
+  const existing = await input.repositories.taskSnapshots.getByTaskId(input.taskId);
+  await input.repositories.taskSnapshots.save({
+    taskId: input.taskId,
+    projectId: input.projectId,
+    briefId: input.briefId ?? existing?.briefId,
+    pageVersionId: input.pageVersionId ?? existing?.pageVersionId,
+    createdAt: existing?.createdAt ?? (input.now ?? (() => new Date()))().toISOString()
+  });
+}
 
 async function saveTaskThread(input: {
   repositories: WorkbenchRepositories;
