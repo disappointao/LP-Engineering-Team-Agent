@@ -68,6 +68,7 @@ import {
   type AgentRuntimeAdapter,
   type RuntimeEvent,
   type RuntimeRunContext,
+  type RuntimeRunRequest,
   type RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import {
@@ -129,6 +130,11 @@ import {
   type RunEventDraft
 } from "./agent-handoffs";
 import {
+  createAssistantChatPrompt,
+  createAssistantContextSummary,
+  type AssistantContextSummary
+} from "./assistant-chat";
+import {
   diffPageVersionArtifactWorkspaces,
   diffRepositoryArtifactWorkspaces,
   readRepositoryArtifactWorkspaceFile,
@@ -144,6 +150,7 @@ import {
   type ProjectMemberView,
   type WorkbenchUserIdentity
 } from "./collaboration";
+import { assembleContextPack } from "./context-assembler";
 
 export {
   ArtifactReaderError,
@@ -426,10 +433,32 @@ export interface ProjectModelState {
   resolvedPolicy: ModelRoutingPolicy;
 }
 
+export interface RunAssistantChatInput {
+  projectId: string;
+  taskId?: string;
+  prompt: string;
+  runId?: string;
+}
+
+export type RunAssistantChatResult =
+  | {
+      ok: true;
+      content: string;
+      runId: string;
+      contextSummary: AssistantContextSummary;
+    }
+  | {
+      ok: false;
+      error: "project_not_found" | "generation_failed";
+      runId?: string;
+      contextSummary?: AssistantContextSummary;
+    };
+
 export type RuntimeEnvironment = Record<string, string | undefined>;
 
 export interface DemoWorkbenchServiceOptions {
   repositories?: WorkbenchRepositories;
+  assistantRuntime?: AgentRuntimeAdapter;
   plannerRuntime?: AgentRuntimeAdapter;
   builderRuntime?: AgentRuntimeAdapter;
   reviewerRuntime?: AgentRuntimeAdapter;
@@ -446,6 +475,7 @@ export interface DemoWorkbenchServiceOptions {
 
 export class DemoWorkbenchService {
   private readonly repositories: WorkbenchRepositories;
+  private readonly assistantRuntime: AgentRuntimeAdapter;
   private readonly plannerRuntime: AgentRuntimeAdapter;
   private readonly builderRuntime: AgentRuntimeAdapter;
   private readonly reviewerRuntime: AgentRuntimeAdapter;
@@ -471,6 +501,7 @@ export class DemoWorkbenchService {
     };
     this.structuredPlannerOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
     this.structuredBuilderOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
+    this.assistantRuntime = options.assistantRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.reviewerRuntime = options.reviewerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
@@ -2176,6 +2207,85 @@ export class DemoWorkbenchService {
     await this.getProjectOrThrow(input.projectId);
     const role = normalizeAgentRole(input.role);
     return this.createRuntimeContext(input.projectId, role, input.pageVersionId);
+  }
+
+  async runAssistantChat(input: RunAssistantChatInput): Promise<RunAssistantChatResult> {
+    let project: ProjectRecord;
+    try {
+      project = await this.getProjectOrThrow(input.projectId);
+    } catch {
+      return { ok: false, error: "project_not_found" };
+    }
+
+    const contextPack = await assembleContextPack({
+      repositories: this.repositories,
+      service: this,
+      projectId: project.id,
+      taskId: input.taskId,
+      role: "assistant",
+      input: { prompt: input.prompt },
+      now: this.now
+    });
+    const contextSummary = createAssistantContextSummary({
+      project,
+      runtimeMode: this.env.REAL_MODEL_RUNTIME === "1" ? "real" : "deterministic",
+      skills: contextPack.runtimeContext.skills
+    });
+    const createdRunId = input.runId === undefined;
+    const runId =
+      input.runId ??
+      (await reserveRepositoryId(this.repositories, "run_assistant", async () =>
+        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+      ));
+
+    try {
+      const { result } = await runAgentStep({
+        repositories: this.repositories,
+        service: this,
+        runtime: {
+          run: (request) => {
+            if (!input.taskId) {
+              return this.assistantRuntime.run(request);
+            }
+            const requestWithTaskId: RuntimeRunRequest & { taskId: string } = {
+              ...request,
+              taskId: input.taskId
+            };
+            return this.assistantRuntime.run(requestWithTaskId);
+          }
+        },
+        runId,
+        projectId: project.id,
+        taskId: input.taskId,
+        role: "assistant",
+        input: {
+          prompt: createAssistantChatPrompt({
+            userPrompt: input.prompt,
+            project,
+            context: contextPack.runtimeContext,
+            trace: contextPack.trace
+          })
+        },
+        now: this.now
+      });
+
+      if (result.state !== "completed" || !result.modelOutputText?.trim()) {
+        return { ok: false, error: "generation_failed", runId, contextSummary };
+      }
+
+      return {
+        ok: true,
+        content: result.modelOutputText,
+        runId,
+        contextSummary
+      };
+    } catch {
+      return { ok: false, error: "generation_failed", runId, contextSummary };
+    } finally {
+      if (createdRunId) {
+        releaseRepositoryId(this.repositories, runId);
+      }
+    }
   }
 
   async createModelProvider(input: CreateModelProviderInput): Promise<ModelProviderRecord> {

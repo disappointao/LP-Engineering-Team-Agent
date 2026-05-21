@@ -4291,6 +4291,73 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("runs assistant chat with project-bound published skills", async () => {
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "Use a confident buyer-focused tone."
+    });
+    const service = new DemoWorkbenchService({
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    const draft = await service.createSkillDraft({
+      manifestJson: JSON.stringify(brandSkillManifest({ version: "0.1.0" })),
+      content: "# Brand Voice\nUse a confident buyer-focused tone.",
+      contentType: "text/markdown"
+    });
+    await service.validateSkillVersion({ skillVersionId: draft.version.id });
+    const published = await service.publishSkillVersion({ skillVersionId: draft.version.id });
+    await service.bindSkillVersionToProject({
+      projectId: project.id,
+      skillVersionId: published.id
+    });
+
+    const result = await service.runAssistantChat({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "How should we answer buyers?"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      content: "Use a confident buyer-focused tone.",
+      contextSummary: {
+        projectId: project.id,
+        projectName: "Spring Campaign",
+        runtimeMode: "deterministic",
+        skillCount: 1,
+        skills: [{ id: "skill_brand", name: "Brand LP", version: "0.1.0" }]
+      }
+    });
+    expect(assistantRuntime.requests[0]).toMatchObject({
+      role: "assistant",
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    expect(assistantRuntime.requests[0]?.input.prompt).toContain("# Brand Voice");
+  });
+
+  it("returns safe assistant chat failure without raw provider details", async () => {
+    const service = new DemoWorkbenchService({
+      env: { REAL_MODEL_RUNTIME: "1" },
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project" });
+
+    const result = await service.runAssistantChat({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed"
+    });
+    expect(JSON.stringify(result)).not.toContain("model_provider_mock_route_disabled");
+  });
+
   it("assembles and validates a role-specific context pack", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
@@ -6640,7 +6707,8 @@ class StaticRuntime implements AgentRuntimeAdapter {
       state: this.result.state ?? "completed",
       events: [],
       artifacts: this.result.artifacts,
-      findings: this.result.findings
+      findings: this.result.findings,
+      modelOutputText: this.result.modelOutputText
     };
   }
 }
@@ -6656,7 +6724,8 @@ class MutableRuntime implements AgentRuntimeAdapter {
       state: this.result.state ?? "completed",
       events: [],
       artifacts: this.result.artifacts,
-      findings: this.result.findings
+      findings: this.result.findings,
+      modelOutputText: this.result.modelOutputText
     };
   }
 }
