@@ -287,7 +287,7 @@ Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/
 ### 还没做
 
 - provider token streaming、tool-call protocol conversion、usage/cost reporting 和超过 one-shot repair 的更复杂自我修正还没实现；真实 fallback provider execution 仍未做。
-- LP chain 的 no-refresh live timeline 和 artifact progress 正在 Stage 29 收尾验证；普通聊天式 token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
+- LP chain 的 no-refresh live timeline 和 artifact progress 正在 Stage 29 收尾验证；真实 provider token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。

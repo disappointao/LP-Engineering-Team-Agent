@@ -15,9 +15,19 @@ const forbiddenFrameworkMarkers = [
   "svelte-"
 ];
 
+const deterministicSmokeEnv = {
+  REAL_MODEL_RUNTIME: "0"
+};
+
+const rawArtifactContentSentinels = [
+  "<!doctype html",
+  ":root",
+  "window.lpAgent"
+];
+
 describe("Web V1 smoke", () => {
   it("runs deterministic LP generation through artifact diff and bounded snippet flow", async () => {
-    const store = createWebWorkbenchStore();
+    const store = createWebWorkbenchStore({ env: deterministicSmokeEnv });
 
     const result = await store.submitTaskPrompt({
       prompt:
@@ -82,11 +92,13 @@ describe("Web V1 smoke", () => {
       true
     );
 
-    const artifactDiffJson = JSON.stringify(pageState.artifactDiff);
+    const artifactDiffJson = JSON.stringify(
+      pageState.artifactDiff
+    ).toLowerCase();
 
-    expect(artifactDiffJson).not.toContain("<!doctype html");
-    expect(artifactDiffJson).not.toContain(":root");
-    expect(artifactDiffJson).not.toContain("window.lpAgent");
+    for (const marker of rawArtifactContentSentinels) {
+      expect(artifactDiffJson).not.toContain(marker.toLowerCase());
+    }
 
     const liveState = await store.getLiveTaskState({
       projectId: result.projectId,
@@ -104,7 +116,11 @@ describe("Web V1 smoke", () => {
       "reviewer",
       "deployer"
     ]);
-    expect(JSON.stringify(liveState.value)).not.toContain("<!doctype html");
+    const liveStateJson = JSON.stringify(liveState.value).toLowerCase();
+
+    for (const marker of rawArtifactContentSentinels) {
+      expect(liveStateJson).not.toContain(marker.toLowerCase());
+    }
 
     const snippetState = await store.getPageState({
       projectId: result.projectId,
@@ -135,7 +151,7 @@ describe("Web V1 smoke", () => {
   });
 
   it("keeps ordinary tasks outside the LP artifact diff flow", async () => {
-    const store = createWebWorkbenchStore();
+    const store = createWebWorkbenchStore({ env: deterministicSmokeEnv });
 
     const result = await store.submitTaskPrompt({
       prompt: "Help me outline a homepage launch checklist.",

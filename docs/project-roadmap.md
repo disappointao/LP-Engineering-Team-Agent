@@ -309,11 +309,11 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 **建议范围：**
 
-- Web task detail 通过 polling 或 SSE 读取 task state delta，展示 run lifecycle、worker queue health、recovery actions 和 artifact workspace changes。
+- Web task detail 通过短轮询 task state refresh 读取 repository facts，展示 run lifecycle、worker queue health、recovery actions 和 artifact workspace changes。
 - 对 running / queued / cancelling / failed / blocked / completed 提供一致 UI 状态和空状态。
 - artifact preview/export 在新的 page version 或 workspace 可用时自动更新。
 - interrupt/cancel 后 timeline 能实时反映 optimistic state 与 repository fact 的差异。
-- 增加 browser E2E 覆盖普通聊天、LP chain、artifact 更新和失败恢复的核心路径。
+- 增加 unit / smoke / live-state 覆盖，确认 task state payload 不扩散 raw artifact content。
 
 **非目标：**
 
@@ -338,7 +338,7 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 - 补齐 skill authoring / binding / command execution 与 chat/LP task 的可见关联。
 - 做真实 provider 本地冒烟说明和 fail-closed 错误提示整理。
 - 做 UI copy、empty/error/loading state hardening。
-- 跑完整 `pnpm smoke`、`pnpm test`、`pnpm typecheck`，并执行 browser E2E / manual alpha checklist。
+- 跑完整 `pnpm smoke`、`pnpm test`、`pnpm typecheck`，并执行 manual alpha checklist。
 
 **非目标：**
 
