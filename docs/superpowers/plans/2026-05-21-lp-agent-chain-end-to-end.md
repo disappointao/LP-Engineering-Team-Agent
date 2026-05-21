@@ -1490,7 +1490,7 @@ git commit -m "document lp chain implementation"
 **Files:**
 - No source edits expected unless verification finds a regression.
 
-- [ ] **Step 1: Run focused Stage 28 regression**
+- [x] **Step 1: Run focused Stage 28 regression**
 
 Run:
 
@@ -1500,7 +1500,7 @@ pnpm exec vitest run packages/api/src/services.test.ts packages/api/src/run-life
 
 Expected: PASS.
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 Run:
 
@@ -1510,7 +1510,7 @@ pnpm test
 
 Expected: PASS with zero failed test files.
 
-- [ ] **Step 3: Run typecheck**
+- [x] **Step 3: Run typecheck**
 
 Run:
 
@@ -1520,7 +1520,7 @@ pnpm typecheck
 
 Expected: PASS across all workspace projects.
 
-- [ ] **Step 4: Check git status**
+- [x] **Step 4: Check git status**
 
 Run:
 
@@ -1530,7 +1530,7 @@ git status --short --branch
 
 Expected: clean branch or only intentional uncommitted changes that are explicitly documented.
 
-- [ ] **Step 5: Commit any verification fixes**
+- [x] **Step 5: Commit any verification fixes**
 
 If verification required source or test fixes, commit them:
 
