@@ -88,6 +88,13 @@ vi.mock("react-dom", () => ({
   }))
 }));
 
+vi.mock("./live-task-panel", () => ({
+  LiveTaskPanel: (props: unknown) => ({
+    type: "LiveTaskPanel",
+    props
+  })
+}));
+
 import HomePage from "./page";
 import {
   executeRunRecoveryAction,
@@ -154,26 +161,35 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
   return [];
 }
 
-function collectStreamingWorkbenchProps(node: unknown): Array<Record<string, unknown>> {
+function collectComponentProps(
+  node: unknown,
+  componentName: string
+): Array<Record<string, unknown>> {
   if (node === null || node === undefined || typeof node === "boolean") {
     return [];
   }
   if (Array.isArray(node)) {
-    return node.flatMap(collectStreamingWorkbenchProps);
+    return node.flatMap((child) => collectComponentProps(child, componentName));
   }
   if (typeof node === "object" && "type" in node && "props" in node) {
     const element = node as {
-      type?: { name?: string };
+      type?: string | { name?: string };
       props?: { children?: unknown } & Record<string, unknown>;
     };
+    const typeName =
+      typeof element.type === "string" ? element.type : element.type?.name;
     return [
-      ...(element.type?.name === "StreamingWorkbench"
+      ...(typeName === componentName
         ? [element.props as Record<string, unknown>]
         : []),
-      ...collectStreamingWorkbenchProps(element.props?.children)
+      ...collectComponentProps(element.props?.children, componentName)
     ];
   }
   return [];
+}
+
+function collectStreamingWorkbenchProps(node: unknown): Array<Record<string, unknown>> {
+  return collectComponentProps(node, "StreamingWorkbench");
 }
 
 type ReactTestElement = {
@@ -591,6 +607,109 @@ describe("HomePage project flow errors", () => {
     });
     expect(streamingWorkbenchProps?.taskId).toBeUndefined();
     expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
+  });
+
+  it("renders live task panel for task-ready pages without changing streaming task context", async () => {
+    const emptyPage = await HomePage({ searchParams: Promise.resolve({}) });
+
+    expect(collectComponentProps(emptyPage, "LiveTaskPanel")).toHaveLength(0);
+
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_live_1",
+        artifactWorkspaceId: "artifact_workspace_live_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "aaaaaaaaaaaa",
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "bbbbbbbbbbbb",
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ]
+      }
+    });
+
+    const lpPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const lpPanels = collectComponentProps(lpPage, "LiveTaskPanel");
+    const [lpStreamingWorkbenchProps] = collectStreamingWorkbenchProps(lpPage);
+
+    expect(lpPanels).toHaveLength(1);
+    expect(lpPanels[0]).toMatchObject({
+      taskId: "task_1",
+      initialProjectId: "project_1",
+      initialPreviewVersionKey: [
+        "version_live_1",
+        "artifact_workspace_live_1",
+        "index.html:aaaaaaaaaaaa",
+        "styles.css:bbbbbbbbbbbb"
+      ].join("|"),
+      copy: expect.objectContaining({
+        liveTaskTitle: "Live task progress"
+      })
+    });
+    expect(lpStreamingWorkbenchProps?.taskId).toBeUndefined();
+
+    pageMocks.currentTaskId = "task_general";
+    pageMocks.pageState = createCompletedLpPageState({
+      activeTaskId: "task_general",
+      tasks: [
+        {
+          id: "task_general",
+          title: "Help me write a campaign plan.",
+          type: "general_chat",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      task: {
+        id: "task_general",
+        title: "Help me write a campaign plan.",
+        type: "general_chat",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_general_user",
+          taskId: "task_general",
+          role: "user",
+          content: "Help me write a campaign plan.",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        },
+        {
+          id: "message_general_assistant",
+          taskId: "task_general",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:02:01.000Z"
+        }
+      ],
+      artifactDiff: undefined
+    });
+
+    const generalPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const [generalStreamingWorkbenchProps] = collectStreamingWorkbenchProps(generalPage);
+
+    expect(generalStreamingWorkbenchProps).toMatchObject({
+      taskId: "task_general"
+    });
   });
 
   it("wires active general chat task context into the streaming workbench shell", async () => {

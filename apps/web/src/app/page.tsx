@@ -44,6 +44,7 @@ import {
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 import { InterruptSubmitButton } from "./interrupt-submit-button";
+import { LiveTaskPanel } from "./live-task-panel";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -184,6 +185,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const streamingTaskId =
     pageState.kind === "task_ready" && pageState.task.type === "general_chat"
       ? pageState.task.id
+      : undefined;
+  const initialPreviewVersionKey =
+    pageState.kind === "task_ready" && pageState.artifactDiff
+      ? [
+          pageState.artifactDiff.pageVersionId,
+          pageState.artifactDiff.artifactWorkspaceId ?? "no-workspace",
+          ...pageState.artifactDiff.files.map(
+            (file) => `${file.path}:${file.shortSha256 ?? "no-hash"}`
+          )
+        ].join("|")
       : undefined;
 
   return (
@@ -1017,6 +1028,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 ))}
                               </div>
                             </section>
+
+                            {turnIndex === chat.turns.length - 1 &&
+                            pageState.kind === "task_ready" ? (
+                              <LiveTaskPanel
+                                taskId={pageState.task.id}
+                                initialProjectId={pageState.task.projectId}
+                                initialPreviewVersionKey={initialPreviewVersionKey}
+                                copy={copy.chat}
+                              />
+                            ) : null}
 
                             {turnIndex === chat.turns.length - 1 &&
                             pageState.kind === "task_ready" &&
