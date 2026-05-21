@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentRoleSchema,
   ArtifactSchema,
   LPBriefSchema,
   PageVersionSchema,
@@ -66,5 +67,10 @@ describe("LP brief schema", () => {
   it("limits run states to explicit lifecycle values", () => {
     expect(RunStateSchema.parse("needs_approval")).toBe("needs_approval");
     expect(() => RunStateSchema.parse("waiting")).toThrow();
+  });
+
+  it("accepts assistant as an agent role", () => {
+    expect(AgentRoleSchema.parse("assistant")).toBe("assistant");
+    expect(() => AgentRoleSchema.parse("chat")).toThrow();
   });
 });

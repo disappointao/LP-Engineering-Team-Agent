@@ -14,13 +14,14 @@ import {
 
 describe("model gateway", () => {
   it("exports a frozen agent role list", () => {
-    expect(agentRoles).toEqual(["planner", "builder", "reviewer", "deployer"]);
+    expect(agentRoles).toEqual(["assistant", "planner", "builder", "reviewer", "deployer"]);
     expect(Object.isFrozen(agentRoles)).toBe(true);
   });
 
   it("routes agent roles through configured providers", async () => {
     const gateway = new InMemoryModelGateway(createDefaultModelPolicy());
     const cases: Array<{ role: AgentRole; provider: string; model: string }> = [
+      { role: "assistant", provider: "mock-openai", model: "assistant-model" },
       { role: "planner", provider: "mock-openai", model: "planning-model" },
       { role: "builder", provider: "mock-anthropic", model: "code-model" },
       { role: "reviewer", provider: "mock-openai", model: "review-model" },
@@ -477,6 +478,7 @@ describe("model gateway", () => {
       prompt: "Generate HTML",
       projectId: "project_1",
       routingPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: { provider: "project-openai", model: "gpt-5.4" },
         reviewer: { provider: "mock-openai", model: "review-model" },
@@ -502,6 +504,7 @@ describe("model gateway", () => {
       prompt: "Generate HTML",
       projectId: "project_1",
       routingPolicy: {
+        assistant: { provider: "mock-openai", model: "assistant-model" },
         planner: { provider: "mock-openai", model: "planning-model" },
         builder: {
           provider: "zhipu",
@@ -638,8 +641,11 @@ describe("model gateway", () => {
 
   it("can reject provider-resolved mock APIs for real-runtime provider-backed gateways", async () => {
     const policy: ModelRoutingPolicy = {
-      ...createDefaultModelPolicy(),
-      planner: { provider: "project-provider", model: "planning-model" }
+      assistant: { provider: "mock-openai", model: "assistant-model" },
+      planner: { provider: "project-provider", model: "planning-model" },
+      builder: { provider: "mock-anthropic", model: "code-model" },
+      reviewer: { provider: "mock-openai", model: "review-model" },
+      deployer: { provider: "mock-local", model: "tool-model" }
     };
     const providers = {
       async getProvider(providerId: string) {

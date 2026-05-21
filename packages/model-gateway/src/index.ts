@@ -5,7 +5,7 @@ import {
 } from "./anthropic-messages";
 import { completeOpenAIChatCompletions } from "./openai-completions";
 
-export type AgentRole = "planner" | "builder" | "reviewer" | "deployer";
+export type AgentRole = "assistant" | "planner" | "builder" | "reviewer" | "deployer";
 
 export type ModelProviderApi = "mock" | "openai-completions" | "anthropic-messages";
 
@@ -270,6 +270,7 @@ export interface ModelGateway {
 }
 
 export const agentRoles = Object.freeze([
+  "assistant",
   "planner",
   "builder",
   "reviewer",
@@ -277,6 +278,7 @@ export const agentRoles = Object.freeze([
 ] as const) satisfies readonly AgentRole[];
 
 export const createDefaultModelPolicy = (): ModelRoutingPolicy => ({
+  assistant: { provider: "mock-openai", model: "assistant-model" },
   planner: { provider: "mock-openai", model: "planning-model" },
   builder: { provider: "mock-anthropic", model: "code-model" },
   reviewer: { provider: "mock-openai", model: "review-model" },

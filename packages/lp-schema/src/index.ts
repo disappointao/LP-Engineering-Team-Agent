@@ -3,7 +3,13 @@ import { z } from "zod";
 export const ProjectRoleSchema = z.enum(["owner", "admin", "member", "reviewer"]);
 export type ProjectRole = z.infer<typeof ProjectRoleSchema>;
 
-export const AgentRoleSchema = z.enum(["planner", "builder", "reviewer", "deployer"]);
+export const AgentRoleSchema = z.enum([
+  "assistant",
+  "planner",
+  "builder",
+  "reviewer",
+  "deployer"
+]);
 export type AgentRole = z.infer<typeof AgentRoleSchema>;
 
 export const RunStateSchema = z.enum([
