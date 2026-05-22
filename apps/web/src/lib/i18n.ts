@@ -1,3 +1,4 @@
+import type { ChatStreamErrorCode } from "./chat-stream";
 import type {
   InterruptFlowErrorCode,
   MCPFlowErrorCode,
@@ -266,6 +267,7 @@ export interface WorkbenchCopy {
     interruptUnavailableLabel: string;
     streamingStatusLabel: string;
     streamingErrorLabel: string;
+    streamingErrorMessages: Record<ChatStreamErrorCode, string>;
     liveTaskTitle: string;
     liveTaskIdle: string;
     liveTaskRunning: string;
@@ -759,6 +761,15 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptUnavailableLabel: "Nothing running",
       streamingStatusLabel: "Generating response",
       streamingErrorLabel: "The chat response could not be generated.",
+      streamingErrorMessages: {
+        prompt_required: "Enter a prompt before sending.",
+        project_not_found: "The selected project is unavailable.",
+        generation_failed: "The chat response could not be generated.",
+        provider_configuration_failed: "Check the project model provider configuration before retrying.",
+        stream_interrupted: "The provider stream stopped before the response completed.",
+        empty_response: "The provider completed without usable assistant text.",
+        persistence_failed: "The response was generated but could not be saved."
+      },
       liveTaskTitle: "Live task progress",
       liveTaskIdle: "Waiting for task activity",
       liveTaskRunning: "Task is running",
@@ -1237,6 +1248,15 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       interruptUnavailableLabel: "当前没有可打断任务",
       streamingStatusLabel: "正在生成回复",
       streamingErrorLabel: "聊天回复生成失败。",
+      streamingErrorMessages: {
+        prompt_required: "请先输入提示词。",
+        project_not_found: "当前项目不可用。",
+        generation_failed: "聊天回复生成失败。",
+        provider_configuration_failed: "请检查项目模型 provider 配置后重试。",
+        stream_interrupted: "Provider stream 在回复完成前中断。",
+        empty_response: "Provider 已结束，但没有返回可用的 assistant 文本。",
+        persistence_failed: "回复已生成，但无法保存。"
+      },
       liveTaskTitle: "实时任务进度",
       liveTaskIdle: "等待任务活动",
       liveTaskRunning: "任务正在运行",

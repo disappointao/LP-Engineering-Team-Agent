@@ -1,3 +1,12 @@
+export type ChatStreamErrorCode =
+  | "prompt_required"
+  | "project_not_found"
+  | "generation_failed"
+  | "provider_configuration_failed"
+  | "stream_interrupted"
+  | "empty_response"
+  | "persistence_failed";
+
 export type ChatStreamEvent =
   | {
       type: "task.created";
@@ -39,7 +48,7 @@ export type ChatStreamEvent =
     }
   | {
       type: "error";
-      code: "prompt_required" | "project_not_found" | "generation_failed";
+      code: ChatStreamErrorCode;
       message: string;
     };
 
@@ -103,13 +112,15 @@ function isFallbackTaskType(
   return value === "lp_generation" || value === "project_setup";
 }
 
-function isErrorCode(
-  value: unknown
-): value is Extract<ChatStreamEvent, { type: "error" }>["code"] {
+function isErrorCode(value: unknown): value is ChatStreamErrorCode {
   return (
     value === "prompt_required" ||
     value === "project_not_found" ||
-    value === "generation_failed"
+    value === "generation_failed" ||
+    value === "provider_configuration_failed" ||
+    value === "stream_interrupted" ||
+    value === "empty_response" ||
+    value === "persistence_failed"
   );
 }
 
