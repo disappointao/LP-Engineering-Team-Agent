@@ -347,12 +347,12 @@
    - 在 Stage 28 design 后阅读，用于审计 task-first LP chain orchestration、同 task run 绑定、durable artifact workspace、Reviewer blocked / Deployer failure 边界、继续修改、测试和文档收尾。
 
 86. `specs/2026-05-21-live-run-timeline-artifact-progress-design.md`
-   - Stage 29 Live Run Timeline and Artifact Progress v0 design（当前准备实施）。
+   - Stage 29 Live Run Timeline and Artifact Progress v0 design（已实现，当前已完成）。
    - 在 Stage 28 implementation plan 和当前 roadmap 后阅读，用于把 LP chain 的 run lifecycle、worker state、recovery views 和 artifact progress 变成 no-refresh Web task panel；v0 采用短轮询 task state refresh，不引入 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作或生产 observability stack。
 
 87. `plans/2026-05-21-live-run-timeline-artifact-progress.md`
-   - Stage 29 Live Run Timeline and Artifact Progress v0 implementation plan（当前执行）。
-   - 在 Stage 29 design 后阅读，用于按 TDD 实现 safe task state refresh、live LP task submit route、client polling panel、artifact progress auto-refresh、smoke coverage / docs closeout；本计划仍排除 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作和生产 observability stack。
+   - Stage 29 Live Run Timeline and Artifact Progress v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 29 design 后阅读，用于审计已实现的 safe task state refresh、live LP task submit route、client polling panel、artifact progress auto-refresh、smoke coverage / docs closeout；本计划仍排除 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作和生产 observability stack。
 
 ## 维护规则
 

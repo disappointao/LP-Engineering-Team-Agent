@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-21
+最后更新：2026-05-22
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -33,7 +33,7 @@
 - Streaming chat transport / UI v0：普通聊天已有 Web/API NDJSON streaming route、client transient streaming state、terminal persistence / refresh recovery 和 server action fallback。
 - Real chat runtime / skill context v0：project-bound 普通聊天已有独立 `assistant` role、真实 model runtime opt-in、bounded skill prompt context、safe context summary stream 和 Models UI route configuration；projectless chat 继续保持 deterministic / no-context。
 - LP Agent Chain End-to-End v0：Web LP 复杂任务已采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff、继续修改上下文和 recovery facts；Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下走真实模型 structured output。
-- Live task state / artifact progress v0：Stage 29 当前实施中，已进入 live task submit、task state polling、run timeline panel 和 artifact progress smoke/docs 收尾验证。
+- Live task state / artifact progress v0：Stage 29 已实现 live task submit、task state polling、compact run timeline panel、artifact progress auto-refresh 和 safe live payload smoke 覆盖。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
 
 ## 第一版可用闭环目标
@@ -47,13 +47,13 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **10-15 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 browser E2E、真实 provider 冒烟、文档和交互 hardening，粗略估算 **15-25 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **7-12 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 browser E2E、真实 provider 冒烟、文档和交互 hardening，粗略估算 **12-20 个有效开发日**。
 
 当前第一版可用闭环优先补齐：
 
 - Skill-only 上下文和 skill command 可观察工作流；MCP 暂不作为近期目标。
-- Live run timeline、artifact progress 和 no-refresh task state。
-- Browser E2E acceptance 和 alpha hardening。
+- Alpha hardening、manual acceptance、真实 provider 本地冒烟说明和错误提示整理。
+- Browser E2E acceptance，覆盖普通聊天 streaming、LP live submit fallback、run timeline polling、artifact preview/export 和基础 recovery display。
 
 当前仍明确后置：
 
@@ -299,36 +299,39 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-lp-agent-chain-end-to-end.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 29：Live Run Timeline and Artifact Progress v0
 
-**状态：** 当前实施中；设计和实施计划已创建，核心实现进入收尾验证。
+**状态：** 已实现。
 
-**为什么现在做：** LP 链路端到端可跑后，用户还需要不刷新页面就能理解任务正在做什么。Stage 26 解决 assistant text streaming，本阶段把 run events、worker state、recovery view 和 artifact progress 统一成 live task panel。
+Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 artifact progress 统一成 no-refresh live task panel。普通聊天仍先走 `/api/chat/stream`；当服务端返回 LP `fallback.required` 时，客户端调用 `/api/tasks/submit` 创建 live task 并启动 in-process LP chain，再通过 `/api/tasks/[taskId]/state` 短轮询 repository facts。
 
-**建议范围：**
+已实现范围：
 
-- Web task detail 通过短轮询 task state refresh 读取 repository facts，展示 run lifecycle、worker queue health、recovery actions 和 artifact workspace changes。
-- 对 running / queued / cancelling / failed / blocked / completed 提供一致 UI 状态和空状态。
-- artifact preview/export 在新的 page version 或 workspace 可用时自动更新。
-- interrupt/cancel 后 timeline 能实时反映 optimistic state 与 repository fact 的差异。
-- 增加 unit / smoke / live-state 覆盖，确认 task state payload 不扩散 raw artifact content。
+- Store 和 route 层提供 safe `LiveTaskStatePayload`，只暴露 sanitized task/run/recovery/worker/artifact progress facts，不扩散 raw artifact content。
+- `/api/tasks/submit` 支持 live LP task start，创建 task 后立即返回，由客户端轮询状态。
+- `LiveTaskPanel` 通过短轮询展示 compact progress，并在新的 `previewVersionKey` 可用时刷新 preview/export。
+- Streaming workbench 将 LP fallback 从阻塞式 native form submit 改为 live task submit；ordinary chat streaming 边界保持不变。
+- Web page 在 task-ready conversation stack 内渲染 live task panel，并把初始 artifact progress key 与 store 公式对齐。
+- smoke 覆盖 live state artifact progress、固定 run roles 和 raw HTML/CSS/JS 内容不泄漏。
 
-**非目标：**
+未实现范围：
 
+- 不做 SSE。
 - 不做 raw stdout/stderr streaming。
 - 不做实时多人协作。
 - 不引入生产 observability stack。
 - 不做 object storage migration。
+- 不做 browser E2E acceptance；该项进入 Stage 31。
 
 **设计：** `docs/superpowers/specs/2026-05-21-live-run-timeline-artifact-progress-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-live-run-timeline-artifact-progress.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 30：Skill-Only Alpha Hardening v0
 
-**状态：** Stage 29 后推荐。
+**状态：** 推荐下一阶段。
 
 **为什么现在做：** 第一版可用闭环完成后，需要把“只用 Skill、不用 MCP”的 alpha 体验收敛到可交付状态：启动、配置、技能绑定、真实 provider opt-in、失败提示和验收都要清晰。
 
@@ -364,6 +367,26 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 - 不做生产监控或 observability stack。
 - 不引入远端浏览器 farm、跨浏览器矩阵或完整视觉回归平台。
 - 不做 auth/RBAC、MCP execution、真实 shell runner 或真实部署编排。
+
+### Stage 32：Provider Streaming and Usage Metadata v0
+
+**状态：** Stage 31 后推荐。
+
+**为什么现在做：** 第一版 Web 闭环稳定后，真实 provider 体验还需要更细的响应反馈和成本/用量可见性；这应在 Browser E2E 和 Skill-only alpha hardening 之后做，避免把 provider 协议复杂度提前压到当前闭环。
+
+**建议范围：**
+
+- 在 model gateway / runtime 边界增加 provider token streaming 能力探测和安全事件映射，保持 deterministic 默认路径。
+- 为真实模型调用记录 provider/model、attempt、duration、token/usage metadata（如 provider 返回），并继续避免 secret 或 raw provider response 泄漏。
+- Web/API 只展示 bounded usage summary 和失败原因，不改变 LP structured output 的 parse / repair 安全边界。
+- 增加 fake-fetch unit tests 和 opt-in real provider smoke 指引。
+
+**非目标：**
+
+- 不做自动 fallback provider execution。
+- 不做 tool-call protocol conversion。
+- 不做 billing、quota enforcement 或 provider marketplace。
+- 不做 MCP、真实 shell runner、auth/RBAC 或生产 observability stack。
 
 ## Backlog 分组
 
@@ -431,8 +454,8 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 ### Web UI
 
-- No-refresh workbench interaction。
-- Streaming run timeline。
+- Stage 29 v0 之后的高级 no-refresh workbench interaction。
+- 更细粒度 streaming run timeline / animation / visual hierarchy hardening。
 - Browser E2E acceptance。
 - Dedicated artifact workspace page。
 - Stage 25 inline block 之后的高级 handoff/recovery UX。
@@ -488,7 +511,7 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 
 ## 决策记录
 
-- Web UI no-refresh 很重要，但当前暂缓到专门的 Web UI 阶段。
+- Stage 29 已完成 Web task state no-refresh v0；后续高级 streaming run timeline、browser E2E 和视觉/交互 hardening 分别进入 Stage 31 与 Web UI backlog。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
 - Stage 25 已完成 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。
@@ -496,6 +519,7 @@ Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 ta
 - Stage 26 已完成 Streaming Chat Transport and UI v0，提供普通问答的 Web/API NDJSON streaming 边界。
 - Stage 27 已完成 Real Chat Runtime and Skill Context v0：新增独立 `assistant` route，而不是复用 `planner` route；普通聊天真实模型 v0 聚焦 project-bound chat，projectless chat 继续保持 deterministic / no-context。
 - Stage 28 已完成 LP Agent Chain End-to-End v0：LP 复杂任务现在采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff 和 recovery facts。
+- Stage 29 已完成 Live Run Timeline and Artifact Progress v0：LP fallback 改走 live task submit，Web task panel 通过短轮询安全 repository facts 展示 run/recovery/worker/artifact progress，并在 artifact key 变化时刷新 preview/export。
 - MCP Worker Execution、真实 MCP SDK / remote MCP server adapter 和 MCP write tools 已后置到 backlog，等待 Web/API/Skill/LP 第一版可用闭环稳定后再接入。
 - 真实 shell execution 和 strong sandboxing 必须始终位于 explicit policy、approval 和 worker boundaries 后面。
 - Deployment 应与 LP generation 分开；在内置 deployment product flow 之前，skills 可以先提供 deployment commands。
