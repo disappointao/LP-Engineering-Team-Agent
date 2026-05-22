@@ -386,6 +386,14 @@
    - Stage 33 Manual Alpha UX Tightening v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 33 design 后阅读，用于实现 Web-only current project/task selection actions、sidebar form wiring、quick prompt form、空状态 copy、focused regression tests、manual alpha checklist 和 roadmap closeout。
 
+96. `specs/2026-05-22-browser-failure-visual-regression-design.md`
+   - Stage 34 Browser Failure Injection and Visual Regression v0 design（进行中）。
+   - 在 Stage 33 implementation plan 和当前 roadmap 后阅读，用于把 deterministic Playwright alpha gate 扩展到 bounded failure injection、artifact failure、provider fail-closed、worker queue error 和轻量 layout visual contract，同时继续排除远端 browser farm、跨浏览器矩阵、真实 provider/MCP/Postgres/部署依赖和大型 UI redesign。
+
+97. `plans/2026-05-22-browser-failure-visual-regression.md`
+   - Stage 34 Browser Failure Injection and Visual Regression v0 implementation plan（进行中）。
+   - 在 Stage 34 design 后阅读，用于实现 browser failure injection specs、layout geometry visual contract、diagnostic screenshots、README/manual checklist/roadmap closeout 和最终验证。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

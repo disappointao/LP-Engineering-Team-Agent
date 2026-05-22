@@ -52,9 +52,9 @@
 
 按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **3-6 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **7-13 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 正在扩展 browser failure injection 和轻量 visual layout contract。第一版可用闭环下一步优先补齐：
 
-- Browser failure injection 和轻量视觉回归扩展可在 Stage 34 单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
+- Browser failure injection 和轻量视觉回归扩展正在 Stage 34 中单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
 - Provider token delta streaming v0 可在 Stage 34 后评估，前提是 Stage 32 的 metadata 边界稳定且不会破坏 LP structured output parse / repair。
 - 真实 provider alpha smoke matrix 和 operator docs 可在 Stage 35 后整理，避免把默认 deterministic alpha gate 变成有 key 依赖的流程。
 
@@ -442,7 +442,7 @@ Stage 33 v0 已完成 manual alpha UX tightening：高频可见入口不再只�
 
 ### Stage 34：Browser Failure Injection and Visual Regression v0
 
-**状态：** 推荐下一阶段。
+**状态：** 当前进行中。
 
 **为什么现在做：** Stage 31 已建立 deterministic browser acceptance v0；在真实 provider 可见性和手动 alpha UX tightening 后，可以把 browser gate 扩展到更多稳定 failure injection 和轻量视觉回归，继续保护 browser-visible contract。
 
@@ -457,6 +457,10 @@ Stage 33 v0 已完成 manual alpha UX tightening：高频可见入口不再只�
 - 不引入远端 browser farm 或跨浏览器矩阵。
 - 不让默认 browser E2E 依赖真实 provider、MCP server、Postgres 或真实部署。
 - 不做大型 UI redesign、生产 observability stack、auth/RBAC 或真实 shell runner。
+
+**设计：** `docs/superpowers/specs/2026-05-22-browser-failure-visual-regression-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-22-browser-failure-visual-regression.md`。
 
 ### Stage 35：Provider Token Delta Streaming v0
 
