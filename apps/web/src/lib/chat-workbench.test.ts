@@ -164,6 +164,51 @@ describe("chat workbench view model", () => {
     expect(thread.toolEvents[1]?.meta).not.toContain("secret-token");
   });
 
+  it("renders model usage metadata in timeline meta", () => {
+    const thread = createChatWorkbenchThread({
+      copy: getWorkbenchCopy("en"),
+      prompt: "Create LP",
+      objective: "Convert shoppers",
+      pageVersion: pageVersionFixture(),
+      downloadLinks: [],
+      runEvents: [
+        {
+          id: "run_builder_1_event_1",
+          runId: "run_builder_1",
+          projectId: "project_1",
+          sequence: 1,
+          type: "model.completed",
+          message: "builder model call completed",
+          payload: {
+            role: "builder",
+            provider: "zhipu",
+            api: "openai-completions",
+            model: "glm-5.1",
+            usage: {
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+              source: "provider_reported"
+            },
+            attempt: 2,
+            durationMs: 1234,
+            supportsStreaming: true,
+            streamingEnabled: false,
+            baseUrlConfigured: true,
+            apiKeyEnvConfigured: true
+          },
+          createdAt: "2026-05-14T00:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(thread.toolEvents[0]?.meta).toBe(
+      "model.completed - zhipu/glm-5.1 - openai-completions - in 10 / out 20 / total 30 - provider reported - attempt 2 - 1234ms - streaming supported, disabled"
+    );
+    expect(thread.toolEvents[0]?.meta).not.toContain("baseUrl");
+    expect(thread.toolEvents[0]?.meta).not.toContain("apiKey");
+  });
+
   it("defaults tool events without a payload role to the deployer timeline lane", () => {
     const thread = createChatWorkbenchThread({
       copy: getWorkbenchCopy("en"),

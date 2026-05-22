@@ -78,7 +78,18 @@ describe("model gateway", () => {
       }
     });
 
-    expect(result.usage).toEqual({ inputTokens: 4, outputTokens: 32 });
+    expect(result.usage).toEqual({
+      inputTokens: 4,
+      outputTokens: 32,
+      totalTokens: 36,
+      source: "estimated"
+    });
+    expect(result.call).toEqual({
+      attempt: 1,
+      durationMs: 0,
+      supportsStreaming: false,
+      streamingEnabled: false
+    });
     expect(gateway.getAuditLog()).toHaveLength(1);
     expect(gateway.getAuditLog()[0]).toMatchObject({
       role: "builder",
@@ -400,7 +411,15 @@ describe("model gateway", () => {
           text: `${request.context?.mcpTools.map((tool) => tool.name).join(",") ?? "no-tools"}`,
           usage: {
             inputTokens: request.context?.skills.length ?? 0,
-            outputTokens: 1
+            outputTokens: 1,
+            totalTokens: (request.context?.skills.length ?? 0) + 1,
+            source: "estimated"
+          },
+          call: {
+            attempt: 1,
+            durationMs: 0,
+            supportsStreaming: false,
+            streamingEnabled: false
           }
         };
       }

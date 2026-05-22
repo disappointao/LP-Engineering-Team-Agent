@@ -4,6 +4,8 @@
 
 **Goal:** Add provider-neutral usage metadata and streaming capability visibility for real model provider calls without changing deterministic defaults or LP structured output safety.
 
+**Status:** Implemented.
+
 **Architecture:** Extend `packages/model-gateway` response metadata, parse provider usage in OpenAI-compatible and Anthropic-compatible adapters, propagate bounded metadata through `runtime-adapters` `model.completed` events and API run event persistence, and render compact usage summary in the Web timeline. Stage 32 v0 exposes streaming support/call mode metadata only; it does not implement provider token delta streaming in the UI.
 
 **Tech Stack:** pnpm workspace, TypeScript, Vitest, model-gateway provider adapters, runtime-adapters, API run events, Next.js Web formatter.

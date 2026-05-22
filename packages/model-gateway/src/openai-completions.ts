@@ -34,6 +34,7 @@ export function toOpenAIChatCompletionsUrl(baseUrl: string): string {
 export async function completeOpenAIChatCompletions(
   input: OpenAIChatCompletionsCompleteInput
 ): Promise<ModelResponse> {
+  const startedAtMs = Date.now();
   const baseUrl = trimNonEmpty(input.providerConfig.baseUrl);
   if (!baseUrl) {
     throw new ModelProviderConfigurationError(
@@ -89,7 +90,15 @@ export async function completeOpenAIChatCompletions(
     text: parsed.text,
     usage: {
       inputTokens: parsed.inputTokens,
-      outputTokens: parsed.outputTokens
+      outputTokens: parsed.outputTokens,
+      totalTokens: parsed.totalTokens,
+      source: "provider_reported"
+    },
+    call: {
+      attempt: 1,
+      durationMs: elapsedMs(startedAtMs),
+      supportsStreaming: input.route.modelCapabilities?.supportsStreaming === true,
+      streamingEnabled: false
     }
   };
 }
@@ -109,6 +118,7 @@ async function performOpenAIChatCompletionsRequest({
   model?: string;
   inputTokens: number;
   outputTokens: number;
+  totalTokens: number;
 }> {
   const controller = new AbortController();
   const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
@@ -220,6 +230,7 @@ function parseOpenAIChatCompletionsResponse(
   model?: string;
   inputTokens: number;
   outputTokens: number;
+  totalTokens: number;
 } {
   if (!payload || typeof payload !== "object") {
     throwInvalidShape(providerId);
@@ -228,7 +239,11 @@ function parseOpenAIChatCompletionsResponse(
   const candidate = payload as {
     model?: unknown;
     choices?: unknown;
-    usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+    usage?: {
+      prompt_tokens?: unknown;
+      completion_tokens?: unknown;
+      total_tokens?: unknown;
+    };
   };
 
   if (!Array.isArray(candidate.choices) || candidate.choices.length === 0) {
@@ -251,10 +266,15 @@ function parseOpenAIChatCompletionsResponse(
   if (
     !candidate.usage ||
     !isValidUsageTokenCount(candidate.usage.prompt_tokens) ||
-    !isValidUsageTokenCount(candidate.usage.completion_tokens)
+    !isValidUsageTokenCount(candidate.usage.completion_tokens) ||
+    (candidate.usage.total_tokens !== undefined &&
+      !isValidUsageTokenCount(candidate.usage.total_tokens))
   ) {
     throwInvalidShape(providerId);
   }
+
+  const totalTokens =
+    candidate.usage.total_tokens ?? candidate.usage.prompt_tokens + candidate.usage.completion_tokens;
 
   return {
     text,
@@ -262,7 +282,8 @@ function parseOpenAIChatCompletionsResponse(
       ? { model: candidate.model }
       : {}),
     inputTokens: candidate.usage.prompt_tokens,
-    outputTokens: candidate.usage.completion_tokens
+    outputTokens: candidate.usage.completion_tokens,
+    totalTokens
   };
 }
 
@@ -302,6 +323,10 @@ function isValidUsageTokenCount(value: unknown): value is number {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function elapsedMs(startedAtMs: number): number {
+  return Math.max(0, Math.round(Date.now() - startedAtMs));
 }
 
 function trimNonEmpty(value: string | undefined): string | undefined {

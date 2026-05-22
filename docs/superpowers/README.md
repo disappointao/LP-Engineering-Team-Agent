@@ -371,11 +371,11 @@
    - 在 Stage 31 design 后阅读，用于审计 Playwright browser gate、isolated JSON state、ordinary chat streaming E2E、LP live task artifact E2E、Skills / Models / MCP boundary E2E、README/manual checklist/roadmap/docs closeout 和最终验证。
 
 92. `specs/2026-05-22-provider-streaming-usage-design.md`
-   - Stage 32 Provider Streaming and Usage Metadata v0 design（当前执行阶段）。
+   - Stage 32 Provider Streaming and Usage Metadata v0 design（已实现，当前已完成）。
    - 在 Stage 31 implementation plan 和当前 roadmap 后阅读，用于给真实 provider 路径增加 provider-reported / estimated usage metadata、duration、attempt 和 streaming capability 可见性，同时继续排除真实 token delta UI、自动 fallback execution、tool-call protocol conversion、billing/quota、MCP 和生产 observability。
 
 93. `plans/2026-05-22-provider-streaming-usage.md`
-   - Stage 32 Provider Streaming and Usage Metadata v0 implementation plan（当前执行阶段）。
+   - Stage 32 Provider Streaming and Usage Metadata v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 32 design 后阅读，用于按 TDD 实现 model gateway usage/call metadata、OpenAI-compatible / Anthropic-compatible adapter metadata、runtime/API safe event propagation、Web compact timeline summary、文档和最终验证。
 
 ## 维护规则

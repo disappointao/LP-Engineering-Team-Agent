@@ -2647,9 +2647,19 @@ describe("demo workbench service", () => {
         baseUrlConfigured: true,
         apiKeyEnvConfigured: true,
         role: "planner",
-        usage: { inputTokens: 9, outputTokens: 4 }
+        usage: expect.objectContaining({
+          inputTokens: 9,
+          outputTokens: 4,
+          totalTokens: 13,
+          source: "provider_reported"
+        }),
+        attempt: 1,
+        durationMs: expect.any(Number),
+        supportsStreaming: false,
+        streamingEnabled: false
       })
     });
+    expect(modelEvent?.payload.durationMs).toBeGreaterThanOrEqual(0);
     expect(events.find((event) => event.type === "model.output.parsed")).toMatchObject({
       runId: "run_planner_brief_1",
       type: "model.output.parsed",
@@ -2767,9 +2777,19 @@ describe("demo workbench service", () => {
         baseUrlConfigured: true,
         apiKeyEnvConfigured: true,
         role: "planner",
-        usage: { inputTokens: 9, outputTokens: 4 }
+        usage: expect.objectContaining({
+          inputTokens: 9,
+          outputTokens: 4,
+          totalTokens: 13,
+          source: "provider_reported"
+        }),
+        attempt: 1,
+        durationMs: expect.any(Number),
+        supportsStreaming: false,
+        streamingEnabled: false
       })
     });
+    expect(modelEvent?.payload.durationMs).toBeGreaterThanOrEqual(0);
     expect(events.find((event) => event.type === "model.output.parsed")).toMatchObject({
       runId: "run_planner_brief_1",
       type: "model.output.parsed",

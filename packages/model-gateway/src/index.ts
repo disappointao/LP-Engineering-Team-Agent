@@ -243,6 +243,22 @@ export interface ModelRequest {
   routingPolicy?: ModelRoutingPolicy;
 }
 
+export type ModelUsageSource = "provider_reported" | "estimated";
+
+export interface ModelUsageMetadata {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens?: number;
+  source: ModelUsageSource;
+}
+
+export interface ModelCallMetadata {
+  attempt: number;
+  durationMs: number;
+  supportsStreaming: boolean;
+  streamingEnabled: boolean;
+}
+
 export interface ModelResponse {
   provider: string;
   providerName?: string;
@@ -252,10 +268,8 @@ export interface ModelResponse {
   apiKeyEnvConfigured?: boolean;
   modelCapabilities?: ModelRoute["modelCapabilities"];
   text: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-  };
+  usage: ModelUsageMetadata;
+  call: ModelCallMetadata;
 }
 
 export interface ModelAuditEntry extends ModelRoute {
@@ -405,6 +419,9 @@ export class ProviderBackedModelGateway implements ModelGateway {
       );
     }
 
+    const providerModelCapabilities = route.modelCapabilities
+      ? undefined
+      : toRouteModelCapabilities(provider.config.models, route.model);
     const resolvedRoute: ModelRoute = {
       ...route,
       ...(provider.name && !route.providerName ? { providerName: provider.name } : {}),
@@ -412,7 +429,12 @@ export class ProviderBackedModelGateway implements ModelGateway {
       baseUrlConfigured: isNonEmptyString(provider.config.baseUrl),
       apiKeyEnvConfigured:
         isNonEmptyString(provider.config.apiKeyEnv) ||
-        isNonEmptyString(provider.config.secretEnvName)
+        isNonEmptyString(provider.config.secretEnvName),
+      ...(route.modelCapabilities
+        ? { modelCapabilities: cloneModelCapabilities(route.modelCapabilities) }
+        : providerModelCapabilities
+          ? { modelCapabilities: providerModelCapabilities }
+          : {})
     };
 
     if (api === "anthropic-messages") {
@@ -455,6 +477,8 @@ export class ProviderBackedModelGateway implements ModelGateway {
 }
 
 function createMockModelResponse(request: ModelRequest, route: ModelRoute): ModelResponse {
+  const inputTokens = Math.ceil(request.prompt.length / 4);
+  const outputTokens = 32;
   return {
     provider: route.provider,
     ...(route.providerName ? { providerName: route.providerName } : {}),
@@ -471,8 +495,16 @@ function createMockModelResponse(request: ModelRequest, route: ModelRoute): Mode
       : {}),
     text: `${request.role} response from ${route.provider}/${route.model}`,
     usage: {
-      inputTokens: Math.ceil(request.prompt.length / 4),
-      outputTokens: 32
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      source: "estimated"
+    },
+    call: {
+      attempt: 1,
+      durationMs: 0,
+      supportsStreaming: route.modelCapabilities?.supportsStreaming === true,
+      streamingEnabled: false
     }
   };
 }
@@ -593,6 +625,28 @@ function cloneModelCapabilities(
   capabilities: NonNullable<ModelRoute["modelCapabilities"]>
 ): NonNullable<ModelRoute["modelCapabilities"]> {
   return { ...capabilities };
+}
+
+function toRouteModelCapabilities(
+  models: ModelProviderModelConfig[] | undefined,
+  modelId: string
+): ModelRoute["modelCapabilities"] | undefined {
+  const model = models?.find((candidate) => candidate.id === modelId);
+  if (!model) {
+    return undefined;
+  }
+
+  const capabilities: NonNullable<ModelRoute["modelCapabilities"]> = {
+    ...(model.name ? { name: model.name } : {}),
+    ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+    ...(model.maxTokens !== undefined ? { maxTokens: model.maxTokens } : {}),
+    ...(model.supportsTools !== undefined ? { supportsTools: model.supportsTools } : {}),
+    ...(model.supportsStreaming !== undefined
+      ? { supportsStreaming: model.supportsStreaming }
+      : {}),
+    ...(model.supportsImages !== undefined ? { supportsImages: model.supportsImages } : {})
+  };
+  return Object.keys(capabilities).length > 0 ? capabilities : undefined;
 }
 
 function isModelRoute(route: unknown): route is ModelRoute {

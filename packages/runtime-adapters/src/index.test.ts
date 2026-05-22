@@ -70,7 +70,18 @@ describe("local agent runtime adapter", () => {
           provider: "test-provider",
           model: "test-model",
           text: "RAW_MODEL_OUTPUT_SECRET",
-          usage: { inputTokens: 1, outputTokens: 2 }
+          usage: {
+            inputTokens: 1,
+            outputTokens: 2,
+            totalTokens: 3,
+            source: "estimated"
+          },
+          call: {
+            attempt: 1,
+            durationMs: 0,
+            supportsStreaming: false,
+            streamingEnabled: false
+          }
         };
       }
     };
@@ -99,7 +110,18 @@ describe("local agent runtime adapter", () => {
         provider: "provider_primary",
         model: "gpt-5.4",
         text: "recovered text",
-        usage: { inputTokens: 2, outputTokens: 3 }
+        usage: {
+          inputTokens: 2,
+          outputTokens: 3,
+          totalTokens: 5,
+          source: "provider_reported"
+        },
+        call: {
+          attempt: 1,
+          durationMs: 7,
+          supportsStreaming: true,
+          streamingEnabled: false
+        }
       }
     ]);
     const adapter = new LocalAgentRuntimeAdapter(gateway);
@@ -261,8 +283,14 @@ describe("local agent runtime adapter", () => {
         model: "code-model",
         usage: {
           inputTokens: 6,
-          outputTokens: 32
-        }
+          outputTokens: 32,
+          totalTokens: 38,
+          source: "estimated"
+        },
+        attempt: 1,
+        durationMs: 0,
+        supportsStreaming: false,
+        streamingEnabled: false
       },
       {
         type: "artifact.created",
@@ -849,8 +877,14 @@ describe("local agent runtime adapter", () => {
         model: "gpt-5.4",
         usage: {
           inputTokens: 2,
-          outputTokens: 32
-        }
+          outputTokens: 32,
+          totalTokens: 34,
+          source: "estimated"
+        },
+        attempt: 1,
+        durationMs: 0,
+        supportsStreaming: false,
+        streamingEnabled: false
       })
     );
   });
@@ -967,8 +1001,14 @@ describe("local agent runtime adapter", () => {
         apiKeyEnvConfigured: true,
         usage: {
           inputTokens: 2,
-          outputTokens: 32
-        }
+          outputTokens: 32,
+          totalTokens: 34,
+          source: "estimated"
+        },
+        attempt: 1,
+        durationMs: 0,
+        supportsStreaming: false,
+        streamingEnabled: false
       })
     );
     expect(JSON.stringify(result.events)).not.toContain("ANTHROPIC_API_KEY");
@@ -1082,7 +1122,15 @@ class RecordingPortableGateway implements ModelGateway {
       text: "ok",
       usage: {
         inputTokens: 1,
-        outputTokens: 1
+        outputTokens: 1,
+        totalTokens: 2,
+        source: "estimated"
+      },
+      call: {
+        attempt: 1,
+        durationMs: 0,
+        supportsStreaming: false,
+        streamingEnabled: false
       }
     };
   }

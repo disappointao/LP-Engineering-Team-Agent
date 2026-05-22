@@ -112,8 +112,20 @@ describe("openai compatible chat completions model gateway", () => {
       baseUrlConfigured: true,
       apiKeyEnvConfigured: true,
       text: "OpenAI-compatible planner response",
-      usage: { inputTokens: 12, outputTokens: 8 }
+      usage: {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        source: "provider_reported"
+      },
+      call: {
+        attempt: 1,
+        durationMs: expect.any(Number),
+        supportsStreaming: false,
+        streamingEnabled: false
+      }
     });
+    expect(result.call.durationMs).toBeGreaterThanOrEqual(0);
     expect(calls).toHaveLength(1);
     expect(String(calls[0]?.input)).toBe(
       "https://open.bigmodel.cn/api/paas/v4/chat/completions"
@@ -173,7 +185,12 @@ describe("openai compatible chat completions model gateway", () => {
     });
 
     expect(result.text).toBe("Line one\nLine two");
-    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2 });
+    expect(result.usage).toEqual({
+      inputTokens: 3,
+      outputTokens: 2,
+      totalTokens: 5,
+      source: "provider_reported"
+    });
   });
 
   it("fails on blank text content parts", async () => {

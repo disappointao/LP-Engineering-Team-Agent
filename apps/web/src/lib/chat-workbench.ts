@@ -233,6 +233,9 @@ function toChatToolRole(event: RunEventRecord): ChatToolRole {
 
 function formatRunEventMeta(event: RunEventRecord): string {
   const parts = [event.type];
+  if (event.type === "model.completed") {
+    appendModelCompletedMeta(parts, event);
+  }
   const commandId = toDisplayValue(event.payload.commandId);
   const workerJobId = toDisplayValue(event.payload.workerJobId);
   const exitCode = toDisplayValue(event.payload.exitCode);
@@ -257,6 +260,94 @@ function formatRunEventMeta(event: RunEventRecord): string {
   return parts.join(" - ");
 }
 
+function appendModelCompletedMeta(parts: string[], event: RunEventRecord): void {
+  const provider = toDisplayValue(event.payload.provider);
+  const model = toDisplayValue(event.payload.model);
+  const api = toDisplayValue(event.payload.api);
+  const usage = toUsagePayload(event.payload.usage);
+  const attempt = toPositiveInteger(event.payload.attempt);
+  const durationMs = toNonNegativeInteger(event.payload.durationMs);
+  const supportsStreaming = toBoolean(event.payload.supportsStreaming);
+  const streamingEnabled = toBoolean(event.payload.streamingEnabled);
+
+  if (provider && model) {
+    parts.push(`${provider}/${model}`);
+  } else if (provider) {
+    parts.push(provider);
+  } else if (model) {
+    parts.push(model);
+  }
+  if (api) {
+    parts.push(api);
+  }
+  if (usage) {
+    const tokenParts = [`in ${usage.inputTokens}`, `out ${usage.outputTokens}`];
+    if (usage.totalTokens !== undefined) {
+      tokenParts.push(`total ${usage.totalTokens}`);
+    }
+    parts.push(tokenParts.join(" / "));
+    if (usage.source) {
+      parts.push(formatUsageSource(usage.source));
+    }
+  }
+  if (attempt !== undefined) {
+    parts.push(`attempt ${attempt}`);
+  }
+  if (durationMs !== undefined) {
+    parts.push(`${durationMs}ms`);
+  }
+  if (supportsStreaming !== undefined || streamingEnabled !== undefined) {
+    parts.push(formatStreamingState({ supportsStreaming, streamingEnabled }));
+  }
+}
+
+function toUsagePayload(value: unknown):
+  | {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens?: number;
+      source?: string;
+    }
+  | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const usage = value as Record<string, unknown>;
+  const inputTokens = toNonNegativeInteger(usage.inputTokens);
+  const outputTokens = toNonNegativeInteger(usage.outputTokens);
+  const totalTokens = toNonNegativeInteger(usage.totalTokens);
+  const source = toDisplayValue(usage.source);
+  if (inputTokens === undefined || outputTokens === undefined) {
+    return undefined;
+  }
+  return {
+    inputTokens,
+    outputTokens,
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+    ...(source ? { source } : {})
+  };
+}
+
+function formatUsageSource(source: string): string {
+  return source === "provider_reported" ? "provider reported" : source;
+}
+
+function formatStreamingState({
+  supportsStreaming,
+  streamingEnabled
+}: {
+  supportsStreaming?: boolean;
+  streamingEnabled?: boolean;
+}): string {
+  if (streamingEnabled) {
+    return "streaming enabled";
+  }
+  if (supportsStreaming) {
+    return "streaming supported, disabled";
+  }
+  return "streaming off";
+}
+
 function toDisplayValue(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
@@ -265,6 +356,22 @@ function toDisplayValue(value: unknown): string {
     return String(value);
   }
   return "";
+}
+
+function toNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function toPositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function toBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 export function createGeneralTaskThread({

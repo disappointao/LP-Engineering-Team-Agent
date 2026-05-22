@@ -112,6 +112,10 @@ export type RuntimeEvent =
       apiKeyEnvConfigured?: boolean;
       modelCapabilities?: ModelResponse["modelCapabilities"];
       usage: ModelResponse["usage"];
+      attempt?: ModelResponse["call"]["attempt"];
+      durationMs?: ModelResponse["call"]["durationMs"];
+      supportsStreaming?: ModelResponse["call"]["supportsStreaming"];
+      streamingEnabled?: ModelResponse["call"]["streamingEnabled"];
     }
   | {
       type: "model.retry.scheduled";
@@ -447,7 +451,11 @@ function toModelCompletedEvent(request: RuntimeRunRequest, response: ModelRespon
     ...(response.modelCapabilities
       ? { modelCapabilities: { ...response.modelCapabilities } }
       : {}),
-    usage: { ...response.usage }
+    usage: { ...response.usage },
+    attempt: response.call.attempt,
+    durationMs: response.call.durationMs,
+    supportsStreaming: response.call.supportsStreaming,
+    streamingEnabled: response.call.streamingEnabled
   };
 }
 
@@ -462,7 +470,16 @@ async function completeModelWithRetry(input: {
   let attempt = 1;
   while (true) {
     try {
-      return await input.gateway.complete(input.request);
+      const response = await input.gateway.complete(input.request);
+      return {
+        ...response,
+        call: {
+          durationMs: response.call?.durationMs ?? 0,
+          supportsStreaming: response.call?.supportsStreaming ?? false,
+          streamingEnabled: response.call?.streamingEnabled ?? false,
+          attempt
+        }
+      };
     } catch (error) {
       const summary = summarizeProviderError(error);
       if (!summary.retryable || attempt >= maxModelProviderAttempts) {

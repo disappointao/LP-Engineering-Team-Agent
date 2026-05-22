@@ -108,7 +108,18 @@ describe("anthropic messages model gateway", () => {
       baseUrlConfigured: true,
       apiKeyEnvConfigured: true,
       text: "你好，LP 已准备生成。",
-      usage: { inputTokens: 12, outputTokens: 8 },
+      usage: {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        source: "provider_reported"
+      },
+      call: {
+        attempt: 1,
+        durationMs: expect.any(Number),
+        supportsStreaming: true,
+        streamingEnabled: false
+      },
       modelCapabilities: {
         contextWindow: 200000,
         maxTokens: 128000,
@@ -116,6 +127,7 @@ describe("anthropic messages model gateway", () => {
         supportsStreaming: true
       }
     });
+    expect(result.call.durationMs).toBeGreaterThanOrEqual(0);
 
     expect(calls).toHaveLength(1);
     expect(String(calls[0]?.input)).toBe(
@@ -161,7 +173,19 @@ describe("anthropic messages model gateway", () => {
     expect(result).toMatchObject({
       provider: "mock-openai",
       model: "planning-model",
-      text: "planner response from mock-openai/planning-model"
+      text: "planner response from mock-openai/planning-model",
+      usage: {
+        inputTokens: 1,
+        outputTokens: 32,
+        totalTokens: 33,
+        source: "estimated"
+      },
+      call: {
+        attempt: 1,
+        durationMs: 0,
+        supportsStreaming: false,
+        streamingEnabled: false
+      }
     });
   });
 

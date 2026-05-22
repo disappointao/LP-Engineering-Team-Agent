@@ -298,12 +298,12 @@ usage metadata 也必须遵守 Agent 安全边界：run event 可以保存 provi
 - Stage 29 Live Run Timeline and Artifact Progress v0 已实现：短轮询 task state refresh、live task submit fallback、compact run timeline panel、artifact progress auto-refresh 和 safe live payload smoke 覆盖已经落地；repository 仍是唯一事实来源，不新增 SSE 或 raw log streaming。
 - Stage 30 Skill-Only Alpha Hardening v0 已实现：它不是新增 Agent runtime 能力，而是把普通聊天 streaming、LP live task、artifact preview/export、项目 Skills、Skill command queue 和真实 provider opt-in 收敛成可交付的本地 alpha。学习重点是区分“第一版可用闭环的主路径”和“架构边界已存在但 alpha 不依赖的能力”：MCP 页面可以保留，但 MCP 新功能、usage/cost reporting 和真实部署仍后置；Browser E2E 已由 Stage 31 补齐。默认 alpha 检查通过 `pnpm alpha:check` 运行 deterministic readiness gate，不触发真实 provider、MCP server、Postgres、Browser E2E 或真实部署。
 - Stage 31 Browser E2E Acceptance v0 已实现：它仍不是新增 Agent runtime 能力，而是给已有 Skill-only alpha 加 browser-level acceptance gate。默认 browser E2E 仍是 deterministic acceptance，不触发真实 provider、MCP server、Postgres、远端 browser farm 或真实部署；它的价值是把 Agent workflow 的 browser-visible contract 固定下来，而不是扩大 Agent runtime。实现重点是让普通聊天 streaming、LP live task、artifact preview/export/snippet、Skills / Models / MCP 边界和基础 recovery display 在真实浏览器里可重复验收，同时用独立 `LP_AGENT_WORKBENCH_STATE_FILE`、deterministic runtime 和少量稳定 locator 避免污染本地状态或把内部实现细节写成产品 contract。
-- Stage 32 Provider Streaming and Usage Metadata v0 已启动：当前目标是给真实 provider 路径补 provider-reported / estimated usage、duration、attempt 和 streaming capability 可见性。它仍不做真实 token delta UI、billing/quota、自动 fallback execution 或 tool-call conversion；重点是把模型调用可观察性放在 `model-gateway -> runtime event -> API run event -> Web timeline` 的安全边界内。
+- Stage 32 Provider Streaming and Usage Metadata v0 已实现：真实 provider 路径现在会在 `model-gateway -> runtime event -> API run event -> Web timeline` 边界传递 provider-reported usage、duration、attempt 和 streaming capability summary；deterministic/mock 路径会标记 estimated usage。它仍不做真实 token delta UI、billing/quota、自动 fallback execution 或 tool-call conversion。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
 
-- 真实 provider token delta UI、tool-call protocol conversion、billing/quota/cost ledger 和超过 one-shot repair 的更复杂自我修正还没实现；Stage 32 只补 usage metadata 和 streaming capability 可见性，真实 fallback provider execution 仍未做。
+- 真实 provider token delta UI、tool-call protocol conversion、billing/quota/cost ledger 和超过 one-shot repair 的更复杂自我修正还没实现；Stage 32 已补 usage metadata 和 streaming capability 可见性，真实 fallback provider execution 仍未做。
 - LP chain 的 no-refresh live timeline 和 artifact progress v0 已完成；真实 provider token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
@@ -451,7 +451,7 @@ usage metadata 也必须遵守 Agent 安全边界：run event 可以保存 provi
 - lifecycle view 把已修复完成的 run 视为 completed，同时保留 parse failure history；fallback availability 只作为失败 run 的恢复提示，不把失败 run 标成成功。
 - 学习重点：模型可靠性增强不能削弱 fail-closed 和可审计性。parse failure、repair attempt、retry attempt 和 fallback availability 都应该作为 timeline 事实出现，而不是藏在 adapter 内部。
 
-当前执行的 Stage 32 Provider Streaming and Usage Metadata v0：
+已实现的 Stage 32 Provider Streaming and Usage Metadata v0：
 
 - [2026-05-22-provider-streaming-usage-design.md](./superpowers/specs/2026-05-22-provider-streaming-usage-design.md)
 - 当前实现计划：[2026-05-22-provider-streaming-usage.md](./superpowers/plans/2026-05-22-provider-streaming-usage.md)

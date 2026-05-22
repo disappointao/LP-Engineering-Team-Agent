@@ -71,6 +71,7 @@ export function toAnthropicMessagesUrl(baseUrl: string): string {
 export async function completeAnthropicMessages(
   input: AnthropicMessagesCompleteInput
 ): Promise<ModelResponse> {
+  const startedAtMs = Date.now();
   const baseUrl = trimNonEmpty(input.providerConfig.baseUrl);
   if (!baseUrl) {
     throw new ModelProviderConfigurationError(
@@ -126,7 +127,15 @@ export async function completeAnthropicMessages(
     text: parsed.text,
     usage: {
       inputTokens: parsed.inputTokens,
-      outputTokens: parsed.outputTokens
+      outputTokens: parsed.outputTokens,
+      totalTokens: parsed.inputTokens + parsed.outputTokens,
+      source: "provider_reported"
+    },
+    call: {
+      attempt: 1,
+      durationMs: elapsedMs(startedAtMs),
+      supportsStreaming: input.route.modelCapabilities?.supportsStreaming === true,
+      streamingEnabled: false
     }
   };
 }
@@ -302,6 +311,10 @@ function throwInvalidShape(providerId: string): never {
 
 function isValidUsageTokenCount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function elapsedMs(startedAtMs: number): number {
+  return Math.max(0, Math.round(Date.now() - startedAtMs));
 }
 
 function trimNonEmpty(value: string | undefined): string | undefined {
