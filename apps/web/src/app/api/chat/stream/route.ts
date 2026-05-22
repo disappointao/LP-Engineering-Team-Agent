@@ -1,5 +1,6 @@
 import {
   encodeChatStreamEvent,
+  type ChatStreamErrorCode,
   type ChatStreamEvent
 } from "../../../../lib/chat-stream";
 import {
@@ -21,7 +22,10 @@ type ChatStreamRequest = {
   prompt?: unknown;
 };
 
-type ChatStreamErrorCode = Extract<ChatStreamEvent, { type: "error" }>["code"];
+type ProjectFlowChatStreamErrorCode = Extract<
+  ChatStreamErrorCode,
+  "prompt_required" | "project_not_found" | "generation_failed"
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -114,7 +118,7 @@ function createExpiredCookie(name: string): string {
   return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-function getSafeErrorMessage(error: "prompt_required" | "project_not_found" | "generation_failed") {
+function getSafeErrorMessage(error: ProjectFlowChatStreamErrorCode) {
   switch (error) {
     case "prompt_required":
       return "Enter a prompt before sending.";
@@ -125,7 +129,7 @@ function getSafeErrorMessage(error: "prompt_required" | "project_not_found" | "g
   }
 }
 
-function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode {
+function toChatStreamErrorCode(error: ProjectFlowErrorCode): ProjectFlowChatStreamErrorCode {
   switch (error) {
     case "prompt_required":
     case "project_not_found":
