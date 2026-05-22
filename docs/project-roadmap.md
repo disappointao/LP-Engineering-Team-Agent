@@ -40,6 +40,7 @@
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
+- Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 
 ## 第一版可用闭环目标
 
@@ -52,17 +53,17 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **2-5 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **6-11 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **1-3 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 release candidate checklist、真实 provider 异常 UX hardening 和试用反馈闭环，粗略估算 **4-8 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。第一版可用闭环下一步优先补齐：
 
-- Provider token delta streaming v0 可在 Stage 35 评估，前提是 Stage 32 的 metadata 边界稳定且不会破坏 LP structured output parse / repair。
-- 真实 provider alpha smoke matrix 和 operator docs 可在 Stage 35 后整理，避免把默认 deterministic alpha gate 变成有 key 依赖的流程。
-- 第一版 alpha release candidate checklist 可在真实 provider 路径确认后整理，避免在当前阶段提前引入 production auth、部署或 MCP 依赖。
+- 第一版 alpha release candidate checklist，避免继续无边界扩功能。
+- Assistant streaming failure UX hardening，处理真实 provider streaming 中途失败、慢首 token、空 delta 和取消体验。
+- LP artifact quality evaluation / prompt hardening，让内部 alpha 更容易判断“复杂 LP 任务是否真的可用”。
 
 当前仍明确后置：
 
-- 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement、provider cost ledger，以及真实 provider token delta UI。
+- 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement、provider cost ledger，以及 LP structured output token-level UI。
 - 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
@@ -336,7 +337,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 **状态：** 已实现。
 
-Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认 deterministic、本地单用户、Web/API/Skill/LP 主路径清晰。Browser E2E 已由 Stage 31 补齐，MCP、provider usage/streaming 和真实部署继续后置。
+Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认 deterministic、本地单用户、Web/API/Skill/LP 主路径清晰。Browser E2E 已由 Stage 31 补齐，provider usage/streaming 已由 Stage 32/35 补齐，MCP 和真实部署继续后置。
 
 已实现范围：
 
@@ -353,7 +354,7 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 - 不做 MCP 新功能或把 MCP 设为 alpha 必需项。
 - 不做真实部署编排。
 - Stage 30 本身不做 Browser E2E；该项已由 Stage 31 补齐。
-- 不做 provider usage metadata、真实 token streaming 或 usage/cost metadata；provider usage metadata 已由 Stage 32 补齐，真实 token delta 和成本结算仍后置。
+- 不做 provider usage metadata、真实 token streaming 或 usage/cost metadata；provider usage metadata 已由 Stage 32 补齐，普通聊天 token delta 已由 Stage 35 补齐，成本结算仍后置。
 
 **设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
 
@@ -393,7 +394,7 @@ Stage 31 v0 added deterministic Playwright browser acceptance gate. `pnpm alpha:
 
 **状态：** 已实现。
 
-Stage 32 v0 已实现真实 provider 路径的 bounded usage/call metadata 和 Web timeline summary。它让 `model-gateway`、runtime event、API run event 和 Web timeline 都能表达 provider-reported / estimated usage、duration、attempt、supportsStreaming 和 streamingEnabled，同时继续保护 raw provider response、prompt、raw model output、base URL、secret 和 artifact content。
+Stage 32 v0 已实现真实 provider 路径的 bounded usage/call metadata 和 Web timeline summary。它让 `model-gateway`、runtime event、API run event 和 Web timeline 都能表达 provider-reported / estimated usage、duration、attempt、supportsStreaming 和 streamingEnabled，同时继续保护 raw provider response、prompt、raw model output、base URL、secret 和 artifact content。普通聊天 token delta 后续已由 Stage 35 补齐；LP structured output token-level UI 仍后置。
 
 已实现范围：
 
@@ -406,7 +407,7 @@ Stage 32 v0 已实现真实 provider 路径的 bounded usage/call metadata 和 W
 
 未实现范围：
 
-- 不做真实 token delta UI。
+- 不做普通聊天 token delta UI；该项后续已由 Stage 35 补齐。
 - 不做自动 fallback provider execution。
 - 不做 tool-call protocol conversion。
 - 不做 billing、quota enforcement、cost ledger 或 provider marketplace。
@@ -490,29 +491,37 @@ Stage 35 v0 已完成普通聊天 `assistant` role 的 provider token delta stre
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 36：Real Provider Alpha Smoke Matrix and Operator Docs v0
 
-**状态：** 推荐下一阶段，可按内部 alpha 准备情况提前。
+**状态：** 已实现。
 
-**为什么现在做：** 默认 alpha gate 必须继续 deterministic、无 key、可重复；但少数内部用户开始真实 provider 试用前，需要把 Anthropic-compatible / OpenAI-compatible 的手动 smoke matrix、环境变量、fail-closed 行为、usage metadata 解读和排错路径整理成 operator-facing 流程。
+Stage 36 v0 已把真实 provider alpha smoke 整理成 operator-facing 文档，并用 fake-provider regression 锁定 provider streaming usage metadata 和 missing-key fail-closed 的脱敏行为。默认 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和普通 `pnpm test` 仍保持 deterministic/no-key。
 
-**建议范围：**
+已实现范围：
 
-- 整理真实 provider opt-in smoke matrix：普通聊天、LP Planner/Builder、provider usage metadata、fail-closed route 和 missing key 场景。
-- 增加 operator docs，说明 `.env.local`、provider route、`REAL_MODEL_RUNTIME=1`、可选 integration tests 和安全排错步骤。
-- 补充少量 fake-provider regression，确保 docs 中的 bounded error 和 usage metadata 行为仍稳定。
+- 新增 `docs/real-provider-alpha-smoke.md`，覆盖 `.env.local`、provider route、`REAL_MODEL_RUNTIME=1`、OpenAI-compatible / Anthropic-compatible 配置、manual smoke matrix、可选 integration tests、排错和 reset deterministic。
+- README 和 `docs/web-v1-acceptance.md` 已指向真实 provider smoke 文档，并明确默认 gates 不触发真实 provider。
+- `packages/api/src/services.test.ts` 新增 OpenAI-compatible assistant fake SSE regression，覆盖 provider-reported usage、`streamingEnabled=true`、terminal `model.completed` 和 secret/base URL/env 名称不进 run events。
+- 新增 missing-key assistant streaming fail-closed regression，覆盖 bounded `model_provider_api_key_missing` run event 和 fake fetch 不执行。
+- Agent 学习笔记、Superpowers index 和 roadmap 已同步。
 
-**非目标：**
+未实现范围：
 
-- 不让默认 `pnpm alpha:check`、`pnpm smoke` 或 `pnpm alpha:e2e` 依赖真实 API key。
+- 不让默认 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 或普通 `pnpm test` 依赖真实 API key。
 - 不做生产 secret manager、billing/quota、fallback execution、provider marketplace 或 hosted observability。
 - 不改变 LP artifact policy、structured output parse / repair 或 deterministic fallback。
+- 不做真实 provider 自动化 E2E 或 hosted provider matrix。
+- 不做 assistant streaming failure UX hardening；该项进入 Stage 38。
+
+**设计：** `docs/superpowers/specs/2026-05-22-real-provider-alpha-smoke-operator-docs-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-22-real-provider-alpha-smoke-operator-docs.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 37：Skill-only Alpha Release Candidate Checklist v0
 
-**状态：** Stage 36 后推荐，可按用户试用节奏提前。
+**状态：** 推荐下一阶段，可按用户试用节奏提前。
 
 **为什么现在做：** Web/API/Skill/LP 主路径、browser gate、failure injection 和 provider 可见性稳定后，应把第一版本地/单用户 alpha 的交付清单、已知限制、回滚/排查入口和试用反馈模板整理出来，避免继续无边界扩功能。
 
@@ -546,6 +555,25 @@ Stage 35 v0 已完成普通聊天 `assistant` role 的 provider token delta stre
 - 不做 MCP/tool-call/raw stdout streaming。
 - 不做 provider fallback execution、billing/quota、production observability 或 hosted retry queue。
 - 不改变 LP Planner / Builder complete-buffer structured output 边界。
+
+### Stage 39：LP Artifact Quality Evaluation and Prompt Hardening v0
+
+**状态：** Stage 38 后推荐，可按内部 alpha 反馈提前。
+
+**为什么现在做：** Web/API/Skill/LP 主链路已经可跑通，下一步内部 alpha 需要判断复杂 LP 任务的实际输出质量，而不是只看是否生成三文件 artifact。需要一套轻量质量 rubric、prompt fixtures 和人工评审记录，让后续 prompt/runtime 改动有可比较基线。
+
+**建议范围：**
+
+- 整理 5-8 个代表性 LP prompt fixtures，覆盖电商活动、B2B SaaS、活动报名、本地服务、移动端优先和中英混合输入。
+- 定义静态 artifact 质量 rubric：结构完整、视觉层级、CTA、响应式、安全资源、framework-free、可读 copy 和基础可访问性。
+- 补充 deterministic / fake-provider artifact quality smoke 或文档化人工评审表，避免把质量判断完全留在聊天记录里。
+- 对 Planner / Builder prompt 做小范围 hardening，只基于现有 schema/policy，不改变 artifact contract。
+
+**非目标：**
+
+- 不做自动视觉评分、LLM-as-judge 生产 gate、设计系统重写或图片生成 pipeline。
+- 不改变三文件静态 artifact policy、preview/export contract 或 provider adapter。
+- 不把质量 rubric 变成 public SaaS onboarding 或客户验收 SLA。
 
 ## Backlog 分组
 
@@ -670,11 +698,13 @@ Stage 35 v0 已完成普通聊天 `assistant` role 的 provider token delta stre
 
 ## 决策记录
 
+- Stage 36 已完成 Real Provider Alpha Smoke Matrix and Operator Docs v0：真实 provider 手动 smoke 已集中到 `docs/real-provider-alpha-smoke.md`，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider streaming usage metadata 和 missing-key fail-closed 脱敏行为。
+- Stage 35 已完成 Provider Token Delta Streaming v0：真实 provider token delta 只进入普通聊天 `assistant` role 的 transient UI，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer structured output parse / repair。
 - Stage 34 已完成 Browser Failure Injection and Visual Regression v0：`pnpm alpha:e2e` 现在覆盖 8 个 Chromium browser tests，包括 happy path、bounded recovery、provider fail-closed、worker queue bounded error、artifact invalid path 和空首页 layout contract；visual v0 采用 geometry assertion 和 diagnostic screenshot artifact，不提交 brittle screenshot baseline。
 - Stage 33 已完成 Manual Alpha UX Tightening v0：sidebar new task / project / task 入口、entry chips、task suggestions 和空任务状态已收紧为真实可操作体验；本阶段没有改变 Agent runtime、model gateway、MCP、worker 或 run event 边界。
-- Stage 32 已完成 Provider Streaming and Usage Metadata v0：真实 provider 路径现在有 provider-reported / estimated usage metadata、duration、attempt 和 streaming capability 可见性；真实 token delta UI、自动 fallback execution、tool-call conversion、billing/quota、MCP 和生产 observability 继续后置。
+- Stage 32 已完成 Provider Streaming and Usage Metadata v0：真实 provider 路径现在有 provider-reported / estimated usage metadata、duration、attempt 和 streaming capability 可见性；普通聊天 token delta streaming 已由 Stage 35 补齐，自动 fallback execution、tool-call conversion、billing/quota、MCP 和生产 observability 继续后置。
 - Stage 31 已完成 Browser E2E Acceptance v0：`pnpm alpha:e2e` 以 deterministic Playwright Chromium gate 覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha boundary 和 bounded recovery error display。
-- Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha，MCP、provider usage/streaming 和真实部署继续后置；Browser E2E 已由 Stage 31 补齐。
+- Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha；provider usage/streaming 已由 Stage 32/35 补齐，MCP 和真实部署继续后置；Browser E2E 已由 Stage 31 补齐。
 - Stage 29 已完成 Web task state no-refresh v0；Browser E2E 已由 Stage 31 实现，后续高级 streaming run timeline 和视觉/交互 hardening 继续留在 Web UI backlog。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。

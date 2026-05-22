@@ -4432,6 +4432,216 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("streams OpenAI-compatible assistant deltas with provider usage metadata", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    let requestBody: unknown;
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(
+        [
+          'data: {"model":"glm-5.1","choices":[{"index":0,"delta":{"content":"Provider "}}]}',
+          "",
+          'data: {"choices":[{"index":0,"delta":{"content":"alpha"}}]}',
+          "",
+          'data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":3,"total_tokens":14}}',
+          "",
+          "data: [DONE]",
+          ""
+        ].join("\n"),
+        { status: 200, headers: { "content-type": "text/event-stream" } }
+      );
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Provider Alpha" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "assistant",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "How should we answer buyers?"
+    });
+
+    expect(started).toMatchObject({
+      ok: true,
+      runId: "run_assistant_1",
+      contextSummary: {
+        projectId: project.id,
+        projectName: "Provider Alpha",
+        runtimeMode: "real"
+      }
+    });
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    const deltas: string[] = [];
+    for await (const delta of started.stream) {
+      deltas.push(delta);
+    }
+    expect(deltas).toEqual(["Provider ", "alpha"]);
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0]?.input)).toBe(
+      "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    );
+    expect(fetchCalls[0]?.init?.method).toBe("POST");
+    expect(fetchCalls[0]?.init?.headers).toMatchObject({
+      "content-type": "application/json",
+      authorization: "Bearer sk-test-secret"
+    });
+    expect(requestBody).toMatchObject({
+      model: "glm-5.1",
+      stream: true,
+      stream_options: { include_usage: true }
+    });
+
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.find((event) => event.type === "model.completed")).toMatchObject({
+      runId: "run_assistant_1",
+      type: "model.completed",
+      message: "assistant model call completed",
+      payload: expect.objectContaining({
+        provider: "zhipu_openai",
+        providerName: "智谱 OpenAI Compatible",
+        api: "openai-completions",
+        model: "glm-5.1",
+        baseUrlConfigured: true,
+        apiKeyEnvConfigured: true,
+        role: "assistant",
+        usage: expect.objectContaining({
+          inputTokens: 11,
+          outputTokens: 3,
+          totalTokens: 14,
+          source: "provider_reported"
+        }),
+        supportsStreaming: false,
+        streamingEnabled: true
+      })
+    });
+    expect(events.some((event) => event.type === "run.completed")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("fails closed for provider-backed assistant streaming when the API key is missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      throw new Error("fetch_should_not_run_without_key");
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      env: { REAL_MODEL_RUNTIME: "1" },
+      modelFetch: fakeFetch,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Missing Key" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "assistant",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    expect(started).toMatchObject({
+      ok: true,
+      runId: "run_assistant_1",
+      contextSummary: {
+        projectId: project.id,
+        projectName: "Missing Key",
+        runtimeMode: "real"
+      }
+    });
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    const stream = started.stream;
+    const deltas: string[] = [];
+    await expect(async () => {
+      for await (const delta of stream) {
+        deltas.push(delta);
+      }
+    }).rejects.toThrow("assistant_stream_failed");
+
+    expect(deltas).toEqual([]);
+    expect(fetchCalls).toHaveLength(0);
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.find((event) => event.type === "model.fallback.not_configured")).toMatchObject({
+      runId: "run_assistant_1",
+      type: "model.fallback.not_configured",
+      message: "assistant model fallback not configured"
+    });
+    expect(events.find((event) => event.type === "run.failed")).toMatchObject({
+      runId: "run_assistant_1",
+      type: "run.failed",
+      message: "assistant model provider failed",
+      payload: expect.objectContaining({
+        errorName: "ModelProviderConfigurationError",
+        errorCode: "model_provider_api_key_missing"
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
   it("returns safe assistant chat failure without raw provider details", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({

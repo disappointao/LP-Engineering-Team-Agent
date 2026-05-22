@@ -13,14 +13,14 @@ LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能�
 - 项目 Skills：创建 draft、validate、publish、bind、enable/disable，并把已发布绑定的 Skill 作为聊天和 LP 任务的主要扩展路径。
 - Skill command queue：已发布 deployment skill command 经过 approval、本地 worker queue、`Run local worker once` 和 safe observation，不开放任意 shell 命令。
 - 模型网关配置入口：支持 deterministic、Anthropic Messages compatible 和 OpenAI Chat Completions compatible provider；真实 provider 只通过显式 opt-in 进入。
-- 模型调用可见性：真实 provider 路径会在 timeline 中展示 bounded usage、duration、attempt 和 streaming capability summary；deterministic 路径只展示 estimated usage。
+- 模型调用可见性：真实 provider 路径会在 timeline 中展示 bounded usage、duration、attempt 和 streaming summary；普通聊天 `assistant` route 支持 provider token delta streaming，deterministic 路径只展示 estimated usage。
 - Browser E2E acceptance：`pnpm alpha:e2e` 提供 deterministic Chromium 浏览器验收，覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha 边界、bounded failure injection 和轻量 layout visual contract。
 
 ## Alpha 暂不包含
 
 - MCP 不属于第一版必需路径；MCP 页面可以保留为架构边界，但普通聊天和 LP 生成不需要配置 MCP connector。
 - 远端 browser farm、跨浏览器矩阵、pixel-perfect 截图基线，或依赖真实 provider、MCP、Postgres、真实部署的 E2E。
-- 真实 provider token delta UI、billing/quota/cost accounting 或自动 fallback provider execution。
+- LP structured output token-level UI、billing/quota/cost accounting 或自动 fallback provider execution。
 - 生产 auth/RBAC、邀请流程、团队审批队列或 hosted deployment。
 - production Postgres migrations、object storage migration 或默认 backend 切换。
 - 真实 shell runner、真实部署编排、真实 MCP SDK 或 write tools。
@@ -65,15 +65,15 @@ OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 
 提交到仓库的模板中保持 secret 为空，只在本地 `.env.local` 填写真实值。
 
-真实 provider 本地 smoke 的最小路径：
+真实 provider 本地 smoke 的最小路径见 [docs/real-provider-alpha-smoke.md](docs/real-provider-alpha-smoke.md)。简要流程：
 
 1. 在 `.env.local` 设置 `REAL_MODEL_RUNTIME=1`。
 2. 在 Web 的 Models view 创建 provider，选择 `anthropic-messages` 或 `openai-completions`。
 3. 使用 `apiKeyEnv` 引用本地环境变量名，不在 UI 或文档中填写真实 key。
 4. 为 `assistant`、`planner` 和 `builder` 保存 route。
-5. 手动提交一个普通聊天 prompt 和一个 LP prompt；成功的 `model.completed` timeline entry 应显示 bounded usage/duration/streaming summary，失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
+5. 手动提交一个普通聊天 prompt 和一个 LP prompt；成功的普通聊天应流式显示，成功的 `model.completed` timeline entry 应显示 bounded usage/duration/streaming summary，失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
 
-默认 `pnpm alpha:check`、`pnpm smoke` 和 `pnpm test` 不会触发真实 provider 调用。
+默认 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和 `pnpm test` 不会触发真实 provider 调用。
 
 ## 本地启动
 

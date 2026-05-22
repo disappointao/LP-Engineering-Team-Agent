@@ -402,6 +402,14 @@
    - Stage 35 Provider Token Delta Streaming v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 35 design 后阅读，用于按 TDD 实现 model gateway streaming contract、OpenAI-compatible / Anthropic-compatible fake-stream adapters、assistant chat streaming wiring、Agent 学习笔记和 roadmap closeout。
 
+100. `specs/2026-05-22-real-provider-alpha-smoke-operator-docs-design.md`
+   - Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 design（已实现，当前已完成）。
+   - 在 Stage 35 implementation plan 和当前 roadmap 后阅读，用于理解真实 provider alpha smoke 的 operator-facing 边界：默认 gates 继续 deterministic/no-key，真实 provider 只通过 `REAL_MODEL_RUNTIME=1`、provider route 和本地 key 手动 opt in。
+
+101. `plans/2026-05-22-real-provider-alpha-smoke-operator-docs.md`
+   - Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 36 design 后阅读，用于审计 operator smoke 文档、fake-provider usage/fail-closed regression、README/manual checklist/Agent 学习笔记/roadmap closeout 和最终验证。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

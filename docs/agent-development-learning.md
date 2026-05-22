@@ -261,6 +261,8 @@ Stage 35 在这个边界上补了 provider token delta streaming，但只用于�
 
 这也解释了为什么 LP Planner / Builder 仍继续走 `ModelGateway.complete()`：结构化输出不能边收 token 边相信局部 JSON。Planner / Builder 必须等完整 buffer 后再做 schema parse、policy validation 和 one-shot repair；如果把 token delta 当成可恢复事实，会破坏失败诊断、repair timeline 和 artifact 安全边界。
 
+Stage 36 的学习点是把真实 provider alpha smoke 当成 operator opt-in 流程，而不是默认 readiness gate。`REAL_MODEL_RUNTIME=1`、provider route 和本地 key 可以用于少数内部手动 smoke；`pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和普通 `pnpm test` 仍必须保持 deterministic/no-key。真实 provider operator 文档应该说明 missing key、disabled provider、protocol mismatch、structured output parse failure 和 usage metadata 解读，但不能要求默认开发流程触网或泄漏 key/base URL/raw provider response。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型
@@ -302,13 +304,15 @@ Stage 35 在这个边界上补了 provider token delta streaming，但只用于�
 - Stage 29 Live Run Timeline and Artifact Progress v0 已实现：短轮询 task state refresh、live task submit fallback、compact run timeline panel、artifact progress auto-refresh 和 safe live payload smoke 覆盖已经落地；repository 仍是唯一事实来源，不新增 SSE 或 raw log streaming。
 - Stage 30 Skill-Only Alpha Hardening v0 已实现：它不是新增 Agent runtime 能力，而是把普通聊天 streaming、LP live task、artifact preview/export、项目 Skills、Skill command queue 和真实 provider opt-in 收敛成可交付的本地 alpha。学习重点是区分“第一版可用闭环的主路径”和“架构边界已存在但 alpha 不依赖的能力”：MCP 页面可以保留，但 MCP 新功能、usage/cost reporting 和真实部署仍后置；Browser E2E 已由 Stage 31 补齐。默认 alpha 检查通过 `pnpm alpha:check` 运行 deterministic readiness gate，不触发真实 provider、MCP server、Postgres、Browser E2E 或真实部署。
 - Stage 31 Browser E2E Acceptance v0 已实现：它仍不是新增 Agent runtime 能力，而是给已有 Skill-only alpha 加 browser-level acceptance gate。默认 browser E2E 仍是 deterministic acceptance，不触发真实 provider、MCP server、Postgres、远端 browser farm 或真实部署；它的价值是把 Agent workflow 的 browser-visible contract 固定下来，而不是扩大 Agent runtime。实现重点是让普通聊天 streaming、LP live task、artifact preview/export/snippet、Skills / Models / MCP 边界和基础 recovery display 在真实浏览器里可重复验收，同时用独立 `LP_AGENT_WORKBENCH_STATE_FILE`、deterministic runtime 和少量稳定 locator 避免污染本地状态或把内部实现细节写成产品 contract。
-- Stage 32 Provider Streaming and Usage Metadata v0 已实现：真实 provider 路径现在会在 `model-gateway -> runtime event -> API run event -> Web timeline` 边界传递 provider-reported usage、duration、attempt 和 streaming capability summary；deterministic/mock 路径会标记 estimated usage。它仍不做真实 token delta UI、billing/quota、自动 fallback execution 或 tool-call conversion。
+- Stage 32 Provider Streaming and Usage Metadata v0 已实现：真实 provider 路径现在会在 `model-gateway -> runtime event -> API run event -> Web timeline` 边界传递 provider-reported usage、duration、attempt 和 streaming capability summary；deterministic/mock 路径会标记 estimated usage。Stage 32 当时不做 token delta UI，后续 Stage 35 已补普通聊天 provider token delta streaming；billing/quota、自动 fallback execution 和 tool-call conversion 仍未做。
+- Stage 35 Provider Token Delta Streaming v0 已实现：普通聊天 `assistant` role 在真实 provider route 支持时会通过 `ModelGateway.stream()` 消费 provider SSE delta，Web/API 只展示 transient `assistant.delta`，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer parse / repair。
+- Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 已实现：真实 provider 手动 smoke 已整理到 operator 文档，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider usage metadata 和 missing-key fail-closed 脱敏边界。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
 
-- 真实 provider token delta UI、tool-call protocol conversion、billing/quota/cost ledger 和超过 one-shot repair 的更复杂自我修正还没实现；Stage 32 已补 usage metadata 和 streaming capability 可见性，真实 fallback provider execution 仍未做。
-- LP chain 的 no-refresh live timeline 和 artifact progress v0 已完成；真实 provider token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
+- LP structured output token-level UI、tool-call protocol conversion、billing/quota/cost ledger 和超过 one-shot repair 的更复杂自我修正还没实现；Stage 32 已补 usage metadata 和 streaming capability 可见性，Stage 35 已补普通聊天 provider token delta streaming，真实 fallback provider execution 仍未做。
+- LP chain 的 no-refresh live timeline 和 artifact progress v0 已完成；LP structured output token streaming、tool-call conversion、MCP execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。
@@ -316,7 +320,7 @@ Stage 35 在这个边界上补了 provider token delta streaming，但只用于�
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已实现恢复 UI 和第一批 retry/resume server actions，但团队审批和通用 DAG 仍未做。
 - 真实登录、邀请、复杂 RBAC、团队审批队列和实时协作仍未做；当前 membership 是产品状态和审计上下文，不是完整安全边界。
-- 真实 provider token delta UI、Stage 29 v0 之外的高级 run timeline 交互，以及真正的 interrupt/cancel。
+- LP structured output token-level UI、Stage 29 v0 之外的高级 run timeline 交互，以及真正的 interrupt/cancel。
 
 ## 4. 循序渐进路线
 
