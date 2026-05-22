@@ -39,6 +39,7 @@
 - Provider usage metadata v0：Stage 32 已实现 provider-reported / estimated usage metadata、duration、attempt、streaming capability summary，并把安全摘要从 model gateway 传到 runtime/API run event 和 Web timeline。
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
+- Provider token delta streaming v0：Stage 35 正在把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 
 ## 第一版可用闭环目标
 
@@ -467,7 +468,7 @@ Stage 34 v0 已完成 browser failure injection 和轻量 visual layout contract
 
 ### Stage 35：Provider Token Delta Streaming v0
 
-**状态：** 推荐下一阶段，可按真实 provider alpha 反馈后移。
+**状态：** 进行中。
 
 **为什么现在做：** Stage 32 已把 usage/call metadata 和 streaming capability 边界稳定下来。只有在手动 alpha 反馈确认真实 provider 等待体感仍是核心问题后，才应把 provider SSE/token delta 接入模型网关和 Web，不应提前扰动 LP structured output 解析。
 
@@ -477,6 +478,10 @@ Stage 34 v0 已完成 browser failure injection 和轻量 visual layout contract
 - OpenAI-compatible / Anthropic-compatible streaming adapter 只输出 bounded text delta 和 terminal usage summary，不把 raw provider event body 暴露给 runtime/UI。
 - LP Planner / Builder 继续等完整 buffer 后做 schema parse / repair；token delta 只作为 transient UX，不成为 persisted business fact。
 - 增加 fake-stream tests 和 opt-in real provider smoke 指引。
+
+**当前设计：** `docs/superpowers/specs/2026-05-22-provider-token-delta-streaming-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`。
 
 **非目标：**
 
