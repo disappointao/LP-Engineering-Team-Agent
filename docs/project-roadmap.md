@@ -38,6 +38,7 @@
 - Browser E2E acceptance v0：Stage 31 已新增 deterministic Playwright browser acceptance gate，`pnpm alpha:e2e` 以 Chromium、本地 Next.js dev server 和隔离 JSON state 覆盖第一版 browser-visible contract。
 - Provider usage metadata v0：Stage 32 已实现 provider-reported / estimated usage metadata、duration、attempt、streaming capability summary，并把安全摘要从 model gateway 传到 runtime/API run event 和 Web timeline。
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
+- Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
 
 ## 第一版可用闭环目标
 
@@ -50,13 +51,13 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **3-6 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **7-13 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **2-5 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **6-11 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 正在扩展 browser failure injection 和轻量 visual layout contract。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。第一版可用闭环下一步优先补齐：
 
-- Browser failure injection 和轻量视觉回归扩展正在 Stage 34 中单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
-- Provider token delta streaming v0 可在 Stage 34 后评估，前提是 Stage 32 的 metadata 边界稳定且不会破坏 LP structured output parse / repair。
+- Provider token delta streaming v0 可在 Stage 35 评估，前提是 Stage 32 的 metadata 边界稳定且不会破坏 LP structured output parse / repair。
 - 真实 provider alpha smoke matrix 和 operator docs 可在 Stage 35 后整理，避免把默认 deterministic alpha gate 变成有 key 依赖的流程。
+- 第一版 alpha release candidate checklist 可在真实 provider 路径确认后整理，避免在当前阶段提前引入 production auth、部署或 MCP 依赖。
 
 当前仍明确后置：
 
@@ -438,33 +439,35 @@ Stage 33 v0 已完成 manual alpha UX tightening：高频可见入口不再只�
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-manual-alpha-ux-tightening.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 34：Browser Failure Injection and Visual Regression v0
 
-**状态：** 当前进行中。
+**状态：** 已实现。
 
-**为什么现在做：** Stage 31 已建立 deterministic browser acceptance v0；在真实 provider 可见性和手动 alpha UX tightening 后，可以把 browser gate 扩展到更多稳定 failure injection 和轻量视觉回归，继续保护 browser-visible contract。
+Stage 34 v0 已完成 browser failure injection 和轻量 visual layout contract。默认 `pnpm alpha:e2e` 仍是 deterministic Chromium、本地 Next.js dev server 和隔离 JSON state，但覆盖范围从 happy path 扩展到更多 browser-visible failure states。
 
-**建议范围：**
+已实现范围：
 
-- 为已有 browser acceptance 增加更多 deterministic failure injection，覆盖 bounded recovery、provider fail-closed、artifact 读取失败和 worker queue 异常显示。
-- 评估轻量 screenshot 或视觉断言，只覆盖稳定布局和关键状态，不把临时视觉细节固化为产品 contract。
-- 更新 failure artifact 排查说明，保持 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/` 为主要入口。
+- 新增 `alpha-failures.spec.ts`，覆盖 Models provider fail-closed 和 Skills worker queue bounded error，且不泄漏 query 中的 secret-like values。
+- 扩展 recovery / artifact browser coverage，覆盖 `recoveryError` 查询参数、unknown artifact path 和 invalid/path-traversal artifact query 的 graceful failure。
+- 新增 `alpha-visual.spec.ts`，用 geometry/layout contract 校验 sidebar、workspace、composer 和 prompt/send controls 的关键位置。
+- Visual v0 不提交 screenshot baseline；只在 Playwright output 中保存 diagnostic screenshot artifact。
+- README、AGENTS、manual checklist、Superpowers index 和 roadmap 已同步。
 
-**非目标：**
+未实现范围：
 
 - 不引入远端 browser farm 或跨浏览器矩阵。
 - 不让默认 browser E2E 依赖真实 provider、MCP server、Postgres 或真实部署。
-- 不做大型 UI redesign、生产 observability stack、auth/RBAC 或真实 shell runner。
+- 不做 pixel-perfect screenshot baseline、大型 UI redesign、生产 observability stack、auth/RBAC 或真实 shell runner。
 
 **设计：** `docs/superpowers/specs/2026-05-22-browser-failure-visual-regression-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-browser-failure-visual-regression.md`。
 
+## 推荐下一阶段队列
+
 ### Stage 35：Provider Token Delta Streaming v0
 
-**状态：** Stage 34 后推荐，可按真实 provider alpha 反馈提前或后移。
+**状态：** 推荐下一阶段，可按真实 provider alpha 反馈后移。
 
 **为什么现在做：** Stage 32 已把 usage/call metadata 和 streaming capability 边界稳定下来。只有在手动 alpha 反馈确认真实 provider 等待体感仍是核心问题后，才应把 provider SSE/token delta 接入模型网关和 Web，不应提前扰动 LP structured output 解析。
 
@@ -499,6 +502,24 @@ Stage 33 v0 已完成 manual alpha UX tightening：高频可见入口不再只�
 - 不让默认 `pnpm alpha:check`、`pnpm smoke` 或 `pnpm alpha:e2e` 依赖真实 API key。
 - 不做生产 secret manager、billing/quota、fallback execution、provider marketplace 或 hosted observability。
 - 不改变 LP artifact policy、structured output parse / repair 或 deterministic fallback。
+
+### Stage 37：Skill-only Alpha Release Candidate Checklist v0
+
+**状态：** Stage 36 后推荐，可按用户试用节奏提前。
+
+**为什么现在做：** Web/API/Skill/LP 主路径、browser gate、failure injection 和 provider 可见性稳定后，应把第一版本地/单用户 alpha 的交付清单、已知限制、回滚/排查入口和试用反馈模板整理出来，避免继续无边界扩功能。
+
+**建议范围：**
+
+- 生成第一版 alpha release candidate checklist，覆盖本地启动、普通聊天、LP 复杂任务、Skills、Models opt-in、artifact preview/export/snippet、failure artifacts 和已知后置项。
+- 整理用户试用反馈模板和 triage 分类：blocking bug、UX friction、provider config issue、artifact quality issue、future feature。
+- 对 README/manual checklist 做最后一致性审计，确保默认路径仍是 deterministic / Skill-only / local-first。
+
+**非目标：**
+
+- 不做 production auth/RBAC、真实部署编排、MCP 新功能、真实 shell runner、object storage 或 hosted observability。
+- 不把内部试用 checklist 变成 public SaaS onboarding。
+- 不改变 runtime、model gateway、worker queue 或 artifact workspace contract。
 
 ## Backlog 分组
 
@@ -623,6 +644,7 @@ Stage 33 v0 已完成 manual alpha UX tightening：高频可见入口不再只�
 
 ## 决策记录
 
+- Stage 34 已完成 Browser Failure Injection and Visual Regression v0：`pnpm alpha:e2e` 现在覆盖 8 个 Chromium browser tests，包括 happy path、bounded recovery、provider fail-closed、worker queue bounded error、artifact invalid path 和空首页 layout contract；visual v0 采用 geometry assertion 和 diagnostic screenshot artifact，不提交 brittle screenshot baseline。
 - Stage 33 已完成 Manual Alpha UX Tightening v0：sidebar new task / project / task 入口、entry chips、task suggestions 和空任务状态已收紧为真实可操作体验；本阶段没有改变 Agent runtime、model gateway、MCP、worker 或 run event 边界。
 - Stage 32 已完成 Provider Streaming and Usage Metadata v0：真实 provider 路径现在有 provider-reported / estimated usage metadata、duration、attempt 和 streaming capability 可见性；真实 token delta UI、自动 fallback execution、tool-call conversion、billing/quota、MCP 和生产 observability 继续后置。
 - Stage 31 已完成 Browser E2E Acceptance v0：`pnpm alpha:e2e` 以 deterministic Playwright Chromium gate 覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha boundary 和 bounded recovery error display。

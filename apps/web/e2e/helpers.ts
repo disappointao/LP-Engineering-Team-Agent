@@ -1,4 +1,11 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
+
+export async function createProject(page: Page, projectName: string) {
+  await page.goto("/");
+  await page.getByLabel("Project name").fill(projectName);
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByText(projectName, { exact: true }).first()).toBeVisible();
+}
 
 export async function submitPrompt(page: Page, prompt: string) {
   await page.getByLabel("LP request").fill(prompt);
@@ -59,6 +66,61 @@ export async function expectSnippetFor(page: Page, filePath: string) {
   await expect(snippetHeader.getByText(filePath, { exact: true })).toBeVisible();
 }
 
+export async function expectWorkbenchLayoutContract(page: Page) {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const safeViewport = viewport ?? { height: 0, width: 0 };
+
+  const sidebarBox = await getRequiredBox(page.locator("aside.sidebar"), "sidebar");
+  const workspaceBox = await getRequiredBox(
+    page.locator("section.chatWorkspace"),
+    "workspace"
+  );
+  const composerBox = await getRequiredBox(page.locator("form.composerDock"), "composer");
+  const promptBox = await getRequiredBox(page.getByLabel("LP request"), "prompt input");
+  const sendBox = await getRequiredBox(page.getByRole("button", { name: "Send" }), "send button");
+
+  expect(Math.round(sidebarBox.x)).toBe(0);
+  expect(sidebarBox.width).toBeGreaterThanOrEqual(250);
+  expect(sidebarBox.width).toBeLessThanOrEqual(270);
+  expect(sidebarBox.height).toBeGreaterThanOrEqual(safeViewport.height - 1);
+
+  expect(workspaceBox.x).toBeGreaterThanOrEqual(sidebarBox.x + sidebarBox.width - 1);
+  expect(workspaceBox.width).toBeGreaterThan(600);
+  expect(workspaceBox.height).toBeGreaterThanOrEqual(safeViewport.height - 1);
+
+  expect(composerBox.x).toBeGreaterThanOrEqual(workspaceBox.x);
+  expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(safeViewport.height + 1);
+  expect(composerBox.y).toBeGreaterThan(safeViewport.height * 0.75);
+
+  for (const childBox of [promptBox, sendBox]) {
+    expect(childBox.x).toBeGreaterThanOrEqual(composerBox.x);
+    expect(childBox.x + childBox.width).toBeLessThanOrEqual(
+      composerBox.x + composerBox.width + 1
+    );
+    expect(childBox.y).toBeGreaterThanOrEqual(composerBox.y);
+    expect(childBox.y + childBox.height).toBeLessThanOrEqual(
+      composerBox.y + composerBox.height + 1
+    );
+  }
+
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth
+  }));
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function getRequiredBox(
+  locator: Locator,
+  label: string
+): Promise<NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>> {
+  await expect(locator, `${label} should be visible`).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${label} should have a bounding box`).not.toBeNull();
+  return box!;
 }

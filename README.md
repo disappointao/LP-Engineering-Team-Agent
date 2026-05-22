@@ -14,12 +14,12 @@ LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能�
 - Skill command queue：已发布 deployment skill command 经过 approval、本地 worker queue、`Run local worker once` 和 safe observation，不开放任意 shell 命令。
 - 模型网关配置入口：支持 deterministic、Anthropic Messages compatible 和 OpenAI Chat Completions compatible provider；真实 provider 只通过显式 opt-in 进入。
 - 模型调用可见性：真实 provider 路径会在 timeline 中展示 bounded usage、duration、attempt 和 streaming capability summary；deterministic 路径只展示 estimated usage。
-- Browser E2E acceptance：`pnpm alpha:e2e` 提供 deterministic Chromium 浏览器验收，覆盖普通聊天、LP live task、artifact preview/export/snippet 和 Skills / Models / MCP alpha 边界。
+- Browser E2E acceptance：`pnpm alpha:e2e` 提供 deterministic Chromium 浏览器验收，覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha 边界、bounded failure injection 和轻量 layout visual contract。
 
 ## Alpha 暂不包含
 
 - MCP 不属于第一版必需路径；MCP 页面可以保留为架构边界，但普通聊天和 LP 生成不需要配置 MCP connector。
-- 远端 browser farm、跨浏览器矩阵、视觉回归，或依赖真实 provider、MCP、Postgres、真实部署的 E2E。
+- 远端 browser farm、跨浏览器矩阵、pixel-perfect 截图基线，或依赖真实 provider、MCP、Postgres、真实部署的 E2E。
 - 真实 provider token delta UI、billing/quota/cost accounting 或自动 fallback provider execution。
 - 生产 auth/RBAC、邀请流程、团队审批队列或 hosted deployment。
 - production Postgres migrations、object storage migration 或默认 backend 切换。
@@ -125,7 +125,7 @@ pnpm alpha:e2e:install
 pnpm alpha:e2e
 ```
 
-`pnpm alpha:e2e` 会启动本地 Next.js dev server，使用隔离的 `LP_AGENT_WORKBENCH_STATE_FILE`，默认运行 Chromium + deterministic runtime。它不需要真实 provider key、MCP server、Postgres、远端 browser farm 或真实部署。失败时排查 artifact 位于 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/`。
+`pnpm alpha:e2e` 会启动本地 Next.js dev server，使用隔离的 `LP_AGENT_WORKBENCH_STATE_FILE`，默认运行 Chromium + deterministic runtime。它不需要真实 provider key、MCP server、Postgres、远端 browser farm 或真实部署。当前 browser gate 覆盖 happy path、bounded failure injection 和轻量 layout visual contract；不会做跨平台 pixel-perfect 截图基线。失败时排查 artifact 位于 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/`，layout contract 会额外留下诊断截图。
 
 运行快速 Skill-only alpha smoke gate：
 

@@ -19,6 +19,8 @@
 - [ ] 自动验收覆盖 artifact preview/export/snippet。
 - [ ] 自动验收覆盖 Skills / Models / MCP alpha boundary。
 - [ ] 自动验收覆盖 bounded recovery error display。
+- [ ] 自动验收覆盖 provider fail-closed、artifact invalid path 和 worker queue bounded error display。
+- [ ] 自动验收覆盖空首页 sidebar / workspace / composer 的轻量 layout visual contract，并在失败 artifact 中保留诊断截图。
 - [ ] 真实 provider smoke 仍是可选手动验收，不进入默认 `pnpm alpha:e2e`。
 
 ## 首屏
@@ -94,7 +96,7 @@
 
 ## 已知后续工作
 
-- [ ] Stage 31 Browser automation acceptance v0 已完成；后续可扩展到更多 failure injection 和视觉回归。
+- [ ] Stage 34 Browser failure injection 和轻量 visual layout contract 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
 - [ ] Stage 32 Provider usage metadata 和 streaming capability 可见性已完成；真实 provider token delta streaming、billing/cost ledger 仍是后续工作。
 - [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。

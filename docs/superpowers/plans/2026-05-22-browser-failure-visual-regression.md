@@ -4,7 +4,7 @@
 
 **Goal:** Extend the deterministic Playwright alpha gate with bounded failure injection and lightweight layout visual regression without changing runtime behavior.
 
-**Status:** In progress.
+**Status:** Implemented.
 
 **Architecture:** Reuse the existing Playwright config and isolated JSON state. Add failure specs that drive safe query/UI inputs and a visual spec that checks stable layout geometry plus diagnostic screenshots. Keep Vitest `alpha:check` unchanged.
 
@@ -45,11 +45,11 @@
 - Modify `apps/web/e2e/helpers.ts`
 - Add `apps/web/e2e/alpha-failures.spec.ts`
 
-- [ ] Add a `createProject` browser helper using real UI form submission.
-- [ ] Add bounded recovery error injection coverage.
-- [ ] Add Models provider fail-closed error coverage.
-- [ ] Add artifact invalid path / unknown path graceful failure coverage.
-- [ ] Add Skills worker queue bounded error coverage.
+- [x] Add a `createProject` browser helper using real UI form submission.
+- [x] Add bounded recovery error injection coverage.
+- [x] Add Models provider fail-closed error coverage.
+- [x] Add artifact invalid path / unknown path graceful failure coverage.
+- [x] Add Skills worker queue bounded error coverage.
 
 ## Task 3: Lightweight Visual Contract
 
@@ -57,10 +57,10 @@
 - Modify `apps/web/e2e/helpers.ts`
 - Add `apps/web/e2e/alpha-visual.spec.ts`
 
-- [ ] Add layout geometry helper for sidebar/workspace/composer.
-- [ ] Add a desktop empty-workbench visual contract test.
-- [ ] Save diagnostic screenshot artifact through `testInfo.outputPath`.
-- [ ] Avoid committed screenshot baselines in v0.
+- [x] Add layout geometry helper for sidebar/workspace/composer.
+- [x] Add a desktop empty-workbench visual contract test.
+- [x] Save diagnostic screenshot artifact through `testInfo.outputPath`.
+- [x] Avoid committed screenshot baselines in v0.
 
 ## Task 4: Docs And Validation
 
@@ -70,10 +70,10 @@
 - Modify `docs/project-roadmap.md`
 - Modify `docs/superpowers/plans/2026-05-22-browser-failure-visual-regression.md`
 
-- [ ] Update alpha E2E docs for failure injection, layout contract, and artifacts.
-- [ ] Mark plan steps complete.
-- [ ] Run focused Playwright tests while implementing.
-- [ ] Run final validation:
+- [x] Update alpha E2E docs for failure injection, layout contract, and artifacts.
+- [x] Mark plan steps complete.
+- [x] Run focused Playwright tests while implementing.
+- [x] Run final validation:
 
 ```bash
 pnpm alpha:check
@@ -85,6 +85,16 @@ pnpm alpha:e2e
 git diff --check
 ```
 
+Completed validation:
+
+- `pnpm alpha:check`: 127 passed.
+- `pnpm smoke`: 2 passed.
+- `pnpm test`: 1102 passed, 2 skipped.
+- `pnpm typecheck`: passed.
+- `pnpm build`: passed.
+- `pnpm alpha:e2e`: 8 passed after rerunning with approved local server permissions; the sandboxed first run failed with `listen EPERM 127.0.0.1:31031`.
+- `git diff --check`: passed.
+
 ## Task 5: Closeout
 
 **Files:**
@@ -92,7 +102,7 @@ git diff --check
 - Modify `docs/superpowers/specs/2026-05-22-browser-failure-visual-regression-design.md`
 - Modify `docs/superpowers/plans/2026-05-22-browser-failure-visual-regression.md`
 
-- [ ] Mark Stage 34 implemented and summarize completed scope.
-- [ ] Keep recommended next-stage queue at 3-5 items.
-- [ ] Confirm no `docs/agent-development-learning.md` update is needed because this stage does not alter Agent runtime concepts.
-- [ ] Commit, merge back to `main`, and clean up the worktree if verification passes.
+- [x] Mark Stage 34 implemented and summarize completed scope.
+- [x] Keep recommended next-stage queue at 3-5 items.
+- [x] Confirm no `docs/agent-development-learning.md` update is needed because this stage does not alter Agent runtime concepts.
+- [x] Commit, merge back to `main`, and clean up the worktree if verification passes.

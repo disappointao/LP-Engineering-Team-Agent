@@ -34,4 +34,10 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
   await page.goto("/?artifactPath=unknown.txt");
   await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();
   await expectStaticLpArtifacts(page);
+
+  await page.goto("/?artifactPath=..%2Fsecret.css%3Ftoken%3DARTIFACT_QUERY_SECRET");
+  await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();
+  await expect(page.getByText("ARTIFACT_QUERY_SECRET")).toHaveCount(0);
+  await expect(page.getByText("../secret.css")).toHaveCount(0);
+  await expectStaticLpArtifacts(page);
 });

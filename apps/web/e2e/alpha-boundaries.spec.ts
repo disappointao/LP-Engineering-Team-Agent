@@ -55,7 +55,7 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
 });
 
 test("shows bounded recovery error display", async ({ page }) => {
-  await page.goto("/?recoveryError=retry_failed");
+  await page.goto("/?recoveryError=retry_failed&debug=OPENAI_API_KEY");
   await expect(
     page.getByRole("alert").filter({ hasText: "Recovery action could not be completed." })
   ).toBeVisible();
