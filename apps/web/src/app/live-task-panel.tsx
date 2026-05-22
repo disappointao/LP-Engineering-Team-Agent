@@ -25,12 +25,22 @@ export interface LiveTaskPanelProps {
   taskId?: string;
   initialProjectId?: string;
   initialPreviewVersionKey?: string;
-  copy: WorkbenchCopy["chat"];
+  copy: LiveTaskCopy;
 }
+
+export type LiveTaskCopy = Pick<
+  WorkbenchCopy["chat"],
+  | "liveTaskArtifactReady"
+  | "liveTaskCompleted"
+  | "liveTaskIdle"
+  | "liveTaskRefreshError"
+  | "liveTaskRunning"
+  | "liveTaskTitle"
+>;
 
 export interface LiveTaskStatusSummaryProps {
   payload?: LiveTaskStatePayload;
-  copy: WorkbenchCopy["chat"];
+  copy: LiveTaskCopy;
 }
 
 type LiveTaskStateRouteResponse =
@@ -179,7 +189,7 @@ function getActiveRun(payload?: LiveTaskStatePayload) {
 
 function getLiveTaskStatusText(
   payload: LiveTaskStatePayload | undefined,
-  copy: WorkbenchCopy["chat"]
+  copy: LiveTaskCopy
 ): string {
   if (payload?.isTerminal) {
     return copy.liveTaskCompleted;

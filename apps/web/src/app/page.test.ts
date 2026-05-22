@@ -662,6 +662,13 @@ describe("HomePage project flow errors", () => {
         liveTaskTitle: "Live task progress"
       })
     });
+    expect(
+      Object.values(lpPanels[0]?.copy as Record<string, unknown>).every(
+        (value) => typeof value !== "function"
+      )
+    ).toBe(true);
+    expect(lpPanels[0]?.copy).not.toHaveProperty("builderModelRoute");
+    expect(lpPanels[0]?.copy).not.toHaveProperty("bytesLabel");
     expect(lpStreamingWorkbenchProps?.taskId).toBeUndefined();
 
     pageMocks.currentTaskId = "task_general";

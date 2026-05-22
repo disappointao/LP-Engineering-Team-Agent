@@ -196,6 +196,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           )
         ].join("|")
       : undefined;
+  const liveTaskCopy = {
+    liveTaskArtifactReady: copy.chat.liveTaskArtifactReady,
+    liveTaskCompleted: copy.chat.liveTaskCompleted,
+    liveTaskIdle: copy.chat.liveTaskIdle,
+    liveTaskRefreshError: copy.chat.liveTaskRefreshError,
+    liveTaskRunning: copy.chat.liveTaskRunning,
+    liveTaskTitle: copy.chat.liveTaskTitle
+  };
 
   return (
     <main className="appShell">
@@ -1042,7 +1050,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 taskId={pageState.task.id}
                                 initialProjectId={pageState.task.projectId}
                                 initialPreviewVersionKey={initialPreviewVersionKey}
-                                copy={copy.chat}
+                                copy={liveTaskCopy}
                               />
                             ) : null}
 
