@@ -4,6 +4,7 @@ import React, { useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   decodeChatStreamLines,
+  type ChatStreamErrorCode,
   type ChatStreamEvent
 } from "../lib/chat-stream";
 import {
@@ -25,6 +26,7 @@ export interface StreamingWorkbenchProps {
   sendLabel: string;
   streamingStatusLabel: string;
   streamingErrorLabel: string;
+  streamingErrorMessages: Record<ChatStreamErrorCode, string>;
   interruptControl?: React.ReactNode;
 }
 
@@ -50,6 +52,7 @@ function streamingWorkbenchReducer(
       return {
         ...state,
         status: "error",
+        errorCode: undefined,
         errorMessage: action.message
       };
     case "clear_transient_after_refresh":
@@ -90,16 +93,19 @@ export function getTerminalStreamingStateAfterRefresh(
   return state;
 }
 
-function getVisibleStreamingStatus(
+export function getVisibleStreamingStatus(
   state: StreamingWorkbenchState,
   streamingStatusLabel: string,
-  streamingErrorLabel: string
+  streamingErrorLabel: string,
+  streamingErrorMessages: Record<ChatStreamErrorCode, string>
 ): string | undefined {
   if (state.status === "streaming") {
-    return streamingStatusLabel;
+    return state.statusMessage ?? streamingStatusLabel;
   }
   if (state.status === "error") {
-    return streamingErrorLabel;
+    return state.errorCode
+      ? streamingErrorMessages[state.errorCode]
+      : state.errorMessage ?? streamingErrorLabel;
   }
   if (state.status === "fallback_required") {
     return state.fallbackMessage ?? streamingErrorLabel;
@@ -386,6 +392,7 @@ export function StreamingWorkbench({
   sendLabel,
   streamingStatusLabel,
   streamingErrorLabel,
+  streamingErrorMessages,
   interruptControl
 }: StreamingWorkbenchProps) {
   const router = useRouter();
@@ -412,7 +419,8 @@ export function StreamingWorkbench({
   const visibleStatus = getVisibleStreamingStatus(
     state,
     streamingStatusLabel,
-    streamingErrorLabel
+    streamingErrorLabel,
+    streamingErrorMessages
   );
 
   useEffect(() => {
@@ -445,6 +453,7 @@ export function StreamingWorkbench({
     const nextState: StreamingWorkbenchState = {
       ...stateRef.current,
       status: "error",
+      errorCode: undefined,
       errorMessage: streamingErrorLabel
     };
     applyState(nextState);

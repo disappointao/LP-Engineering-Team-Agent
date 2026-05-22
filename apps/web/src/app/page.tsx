@@ -992,6 +992,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             sendLabel={composer.sendLabel}
             streamingStatusLabel={copy.chat.streamingStatusLabel}
             streamingErrorLabel={copy.chat.streamingErrorLabel}
+            streamingErrorMessages={copy.chat.streamingErrorMessages}
             interruptControl={
               <InterruptSubmitButton
                 action={interruptCurrentTaskAction}
