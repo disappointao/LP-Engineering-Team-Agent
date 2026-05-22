@@ -471,6 +471,22 @@ export type RunAssistantChatStreamResult =
       contextSummary?: AssistantContextSummary;
     };
 
+export type AssistantChatStreamFailureCode =
+  | "provider_configuration_failed"
+  | "stream_interrupted"
+  | "empty_response"
+  | "generation_failed";
+
+export class AssistantChatStreamError extends Error {
+  readonly code: AssistantChatStreamFailureCode;
+
+  constructor(code: AssistantChatStreamFailureCode, message = "assistant stream failed") {
+    super(message);
+    this.name = "AssistantChatStreamError";
+    this.code = code;
+  }
+}
+
 export type RuntimeEnvironment = Record<string, string | undefined>;
 
 export interface DemoWorkbenchServiceOptions {
@@ -2444,24 +2460,36 @@ export class DemoWorkbenchService {
         }
       }
       if (!terminalResult) {
-        terminalResult = createAssistantStreamFailedResult(input.runtimeRequest);
+        terminalResult = createAssistantStreamFailedResult(
+          input.runtimeRequest,
+          "assistant_stream_interrupted"
+        );
       }
+      terminalResult = normalizeAssistantStreamingTerminalResult(terminalResult);
       await this.persistStreamingAssistantRun({
         startedRun,
         result: terminalResult
       });
       persistedTerminal = true;
-      if (terminalResult.state !== "completed" || !terminalResult.modelOutputText?.trim()) {
-        throw new Error("assistant_stream_failed");
+      if (terminalResult.state !== "completed") {
+        throw new AssistantChatStreamError(classifyAssistantStreamFailure(terminalResult));
       }
-    } catch {
+    } catch (error) {
+      const failedResult = createAssistantStreamFailedResult(
+        input.runtimeRequest,
+        error instanceof AssistantChatStreamError
+          ? `assistant_${error.code}`
+          : "assistant_stream_interrupted"
+      );
       if (!persistedTerminal) {
         await this.persistStreamingAssistantRun({
           startedRun,
-          result: createAssistantStreamFailedResult(input.runtimeRequest)
+          result: failedResult
         });
       }
-      throw new Error("assistant_stream_failed");
+      throw error instanceof AssistantChatStreamError
+        ? error
+        : new AssistantChatStreamError("stream_interrupted");
     } finally {
       input.releaseRunId?.();
     }
@@ -4573,7 +4601,10 @@ function createAssistantChatGenerationFailure(
   };
 }
 
-function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeRunResult {
+function createAssistantStreamFailedResult(
+  request: RuntimeRunRequest,
+  errorCode = "assistant_stream_failed"
+): RuntimeRunResult {
   return {
     runId: request.runId,
     projectId: request.projectId,
@@ -4586,10 +4617,59 @@ function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeR
         runId: request.runId,
         role: request.role,
         state: "failed",
-        errorCode: "assistant_stream_failed"
+        errorCode
       }
     ]
   };
+}
+
+function normalizeAssistantStreamingTerminalResult(result: RuntimeRunResult): RuntimeRunResult {
+  if (result.state !== "completed" || result.modelOutputText?.trim()) {
+    return result;
+  }
+
+  return {
+    ...result,
+    state: "failed",
+    events: [
+      ...result.events.filter((event) => event.type !== "run.completed"),
+      {
+        type: "run.failed",
+        message: "assistant stream completed without usable text",
+        runId: result.runId,
+        role: result.role ?? "assistant",
+        state: "failed",
+        errorCode: "assistant_empty_response"
+      }
+    ],
+    modelOutputText: undefined
+  };
+}
+
+function classifyAssistantStreamFailure(
+  result: RuntimeRunResult
+): AssistantChatStreamFailureCode {
+  const errorCode = [...result.events]
+    .reverse()
+    .map((event) => event.errorCode)
+    .find((code): code is string => typeof code === "string" && code.length > 0);
+
+  if (errorCode === "assistant_empty_response") {
+    return "empty_response";
+  }
+  if (
+    errorCode === "model_provider_api_key_missing" ||
+    errorCode === "model_provider_api_key_env_missing" ||
+    errorCode === "model_provider_base_url_missing" ||
+    errorCode === "model_provider_fetch_unavailable" ||
+    errorCode === "model_route_not_configured"
+  ) {
+    return "provider_configuration_failed";
+  }
+  if (result.state === "failed") {
+    return "stream_interrupted";
+  }
+  return "generation_failed";
 }
 
 function canStreamAssistantRoute(route: ModelRoute | undefined): boolean {

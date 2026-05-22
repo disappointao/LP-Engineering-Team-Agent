@@ -4432,6 +4432,108 @@ describe("demo workbench service", () => {
     });
   });
 
+  it("classifies interrupted assistant streams without persisting token chunks as facts", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new FailingStreamingRuntime(["Partial "], {
+      runId: "placeholder",
+      projectId: "placeholder",
+      role: "assistant",
+      state: "failed",
+      modelOutputText: undefined,
+      events: [
+        {
+          type: "run.started",
+          message: "assistant run started",
+          runId: "placeholder",
+          role: "assistant"
+        },
+        {
+          type: "run.failed",
+          message: "assistant model provider failed",
+          runId: "placeholder",
+          role: "assistant",
+          state: "failed",
+          errorCode: "model_provider_response_shape_invalid"
+        }
+      ]
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    await saveStreamingAssistantRoute(repositories, project.id);
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    const deltas: string[] = [];
+    await expect(async () => {
+      for await (const delta of started.stream) {
+        deltas.push(delta);
+      }
+    }).rejects.toMatchObject({ code: "stream_interrupted" });
+
+    expect(deltas).toEqual(["Partial "]);
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.map((event) => event.type)).toContain("run.failed");
+    expect(JSON.stringify(events)).not.toContain("Partial ");
+  });
+
+  it("classifies completed assistant streams with empty terminal text as empty_response", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new StreamingRuntime([], "   ");
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Empty Provider" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    await saveStreamingAssistantRoute(repositories, project.id);
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    await expect(async () => {
+      for await (const delta of started.stream) {
+        expect(delta).toBe("");
+      }
+    }).rejects.toMatchObject({ code: "empty_response" });
+
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.some((event) => event.type === "run.failed")).toBe(true);
+    expect(events.some((event) => event.type === "run.completed")).toBe(false);
+  });
+
   it("streams OpenAI-compatible assistant deltas with provider usage metadata", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
@@ -4618,7 +4720,7 @@ describe("demo workbench service", () => {
       for await (const delta of stream) {
         deltas.push(delta);
       }
-    }).rejects.toThrow("assistant_stream_failed");
+    }).rejects.toMatchObject({ code: "provider_configuration_failed" });
 
     expect(deltas).toEqual([]);
     expect(fetchCalls).toHaveLength(0);
@@ -7227,6 +7329,35 @@ class StreamingRuntime implements AgentRuntimeAdapter {
             state: "completed"
           }
         ]
+      }
+    };
+  }
+}
+
+class FailingStreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(
+    private readonly deltas: string[],
+    private readonly result: RuntimeRunResult
+  ) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(request);
+    for (const delta of this.deltas) {
+      yield { type: "model.delta", text: delta };
+    }
+    yield {
+      type: "completed",
+      result: {
+        ...this.result,
+        runId: request.runId,
+        projectId: request.projectId,
+        role: request.role
       }
     };
   }
