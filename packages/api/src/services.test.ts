@@ -4482,16 +4482,19 @@ describe("demo workbench service", () => {
     if (!started.ok || !started.stream) {
       throw new Error("Expected streaming assistant result");
     }
+    const stream = started.stream;
     const deltas: string[] = [];
     await expect(async () => {
-      for await (const delta of started.stream) {
+      for await (const delta of stream) {
         deltas.push(delta);
       }
     }).rejects.toMatchObject({ code: "stream_interrupted" });
 
     expect(deltas).toEqual(["Partial "]);
     const events = await repositories.runEvents.listForTask("task_1");
-    expect(events.map((event) => event.type)).toContain("run.failed");
+    expect(events.find((event) => event.type === "run.failed")?.payload).toMatchObject({
+      errorCode: "model_provider_response_shape_invalid"
+    });
     expect(JSON.stringify(events)).not.toContain("Partial ");
   });
 
@@ -4523,8 +4526,9 @@ describe("demo workbench service", () => {
     if (!started.ok || !started.stream) {
       throw new Error("Expected streaming assistant result");
     }
+    const stream = started.stream;
     await expect(async () => {
-      for await (const delta of started.stream) {
+      for await (const delta of stream) {
         expect(delta).toBe("");
       }
     }).rejects.toMatchObject({ code: "empty_response" });

@@ -4651,7 +4651,7 @@ function classifyAssistantStreamFailure(
 ): AssistantChatStreamFailureCode {
   const errorCode = [...result.events]
     .reverse()
-    .map((event) => event.errorCode)
+    .map((event) => getRuntimeEventErrorCode(event))
     .find((code): code is string => typeof code === "string" && code.length > 0);
 
   if (errorCode === "assistant_empty_response") {
@@ -4670,6 +4670,13 @@ function classifyAssistantStreamFailure(
     return "stream_interrupted";
   }
   return "generation_failed";
+}
+
+function getRuntimeEventErrorCode(event: RuntimeEvent): string | undefined {
+  if (!("errorCode" in event) || typeof event.errorCode !== "string") {
+    return undefined;
+  }
+  return event.errorCode;
 }
 
 function canStreamAssistantRoute(route: ModelRoute | undefined): boolean {
