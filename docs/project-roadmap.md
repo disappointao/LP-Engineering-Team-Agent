@@ -358,7 +358,7 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 
 ### Stage 31：Browser E2E Acceptance v0
 
-**状态：** 设计已创建，待实施计划。
+**状态：** 实施计划已创建，待执行。
 
 **为什么现在做：** Stage 29/30 收敛后，需要用可重复的浏览器验收覆盖第一版可用闭环，避免只靠 unit smoke 和手工检查判断 Web 工作台状态。
 
@@ -375,6 +375,8 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 - 不做 auth/RBAC、MCP execution、真实 shell runner 或真实部署编排。
 
 **当前设计：** `docs/superpowers/specs/2026-05-22-browser-e2e-acceptance-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-22-browser-e2e-acceptance.md`。
 
 ### Stage 32：Provider Streaming and Usage Metadata v0
 
