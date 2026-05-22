@@ -8,12 +8,15 @@
     "dev": "pnpm --filter @lp-agent/web dev",
     "smoke": "vitest run apps/web/src/lib/web-v1-smoke.test.ts",
     "alpha:check": "vitest run apps/web/src/lib/web-v1-smoke.test.ts apps/web/src/lib/i18n.test.ts apps/web/src/app/page.test.ts apps/web/src/app/streaming-workbench.test.ts apps/web/src/app/live-task-panel.test.ts apps/web/src/app/api/chat/stream/route.test.ts apps/web/src/app/api/tasks/submit/route.test.ts \"apps/web/src/app/api/tasks/[taskId]/state/route.test.ts\"",
+    "alpha:e2e": "playwright test --config playwright.config.ts",
+    "alpha:e2e:install": "playwright install chromium",
     "worker:dev": "pnpm --filter @lp-agent/agent-worker dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"

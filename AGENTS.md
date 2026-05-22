@@ -11,13 +11,15 @@
 - `packages/db/prisma/schema.prisma` 定义 Postgres 数据模型。
 - `docs/` 包含设计说明、实施计划和贡献者文档。
 
-不要提交机器本地编辑器状态或生成构建输出。仓库根目录已忽略 `.DS_Store`、`.idea`、`node_modules/`、`.next/`、`.superpowers/` 和本地 worktrees。
+不要提交机器本地编辑器状态或生成构建输出。仓库根目录已忽略 `.DS_Store`、`.idea`、`node_modules/`、`.next/`、`.superpowers/`、`test-results/`、`playwright-report/` 和本地 worktrees。
 
 ## 构建、测试和开发命令
 
 - `pnpm install` - 安装 workspace 依赖。
 - `pnpm dev` - 启动 Next.js Web workbench。
 - `pnpm worker:dev` - 运行 demo agent-worker job。
+- `pnpm alpha:e2e:install` - 安装本地 Chromium browser，用于 Stage 31 browser E2E。
+- `pnpm alpha:e2e` - 运行 deterministic Playwright browser acceptance；默认使用隔离 JSON state，不依赖真实 provider、MCP、Postgres 或真实部署。
 - `pnpm test` - 运行全部 Vitest 测试。
 - `pnpm typecheck` - 对所有 workspace packages/apps 做 TypeScript 检查。
 - `pnpm build` - 构建所有提供 build script 的 packages/apps。

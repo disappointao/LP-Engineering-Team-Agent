@@ -5,6 +5,8 @@ node_modules/
 .lp-agent/
 .worktrees/
 .next/
+test-results/
+playwright-report/
 tsconfig.tsbuildinfo
 .env
 .env.*
