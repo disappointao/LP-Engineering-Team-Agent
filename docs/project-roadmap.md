@@ -547,7 +547,7 @@ Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go�
 
 ### Stage 38：Assistant Streaming Failure UX Hardening v0
 
-**状态：** 推荐下一阶段，可按真实 provider alpha 反馈提前。
+**状态：** 当前阶段，设计已确认，待实施计划。
 
 **为什么现在做：** Stage 35 已把 provider token delta 接入普通聊天，但真实 provider streaming 的中途失败、空 delta、慢首 token 和用户取消体验仍只走 bounded error 基线。内部 alpha 前后需要把这些异常路径整理成更清晰的 UI 和 recovery contract。
 
@@ -563,6 +563,8 @@ Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go�
 - 不做 MCP/tool-call/raw stdout streaming。
 - 不做 provider fallback execution、billing/quota、production observability 或 hosted retry queue。
 - 不改变 LP Planner / Builder complete-buffer structured output 边界。
+
+**当前设计：** `docs/superpowers/specs/2026-05-23-assistant-streaming-failure-ux-design.md`。
 
 ### Stage 39：LP Artifact Quality Evaluation and Prompt Hardening v0
 
