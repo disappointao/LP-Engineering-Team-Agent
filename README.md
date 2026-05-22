@@ -195,19 +195,27 @@ Postgres worker backend 只影响 worker queue storage，不改变 Web workbench
 
 ## 手动验收
 
-本地检查 Skill-only alpha 时使用：
+准备内部 Skill-only alpha RC 时先使用：
+
+```text
+docs/alpha-release-candidate.md
+```
+
+本地详细人工验收使用：
 
 ```text
 docs/web-v1-acceptance.md
 ```
 
-`pnpm smoke` 用于快速验证 deterministic 核心链路。手动验收清单用于检查可见 UX、语言行为和当前能力边界，这些内容不会全部由单元测试覆盖。
+`docs/alpha-release-candidate.md` 负责 go/no-go、试用脚本、反馈模板和 triage 分类；`docs/web-v1-acceptance.md` 负责可见 UX、语言行为和当前能力边界的详细检查，这些内容不会全部由单元测试覆盖。`pnpm smoke` 用于快速验证 deterministic 核心链路。
 
 ## 文档地图
 
 - `docs/project-roadmap.md` - 当前路线图、下一阶段队列和 backlog 维护规则。
 - `docs/development.md` - 本地开发说明。
+- `docs/alpha-release-candidate.md` - Skill-only local alpha RC go/no-go、试用脚本、反馈模板和 triage 分类。
 - `docs/web-v1-acceptance.md` - Skill-only alpha 手动验收清单。
+- `docs/real-provider-alpha-smoke.md` - 真实 provider opt-in smoke matrix 和 operator 排错流程。
 - `docs/agent-development-learning.md` - 中文 Agent 开发学习笔记，记录 Agent 概念、难点和本项目取舍。
 - `docs/superpowers/README.md` - Superpowers specs/plans 的时间顺序索引。
 - `docs/superpowers/specs/` - 需求和设计 specs。

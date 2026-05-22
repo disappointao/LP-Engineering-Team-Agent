@@ -410,6 +410,14 @@
    - Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 36 design 后阅读，用于审计 operator smoke 文档、fake-provider usage/fail-closed regression、README/manual checklist/Agent 学习笔记/roadmap closeout 和最终验证。
 
+102. `specs/2026-05-23-skill-only-alpha-release-candidate-checklist-design.md`
+   - Stage 37 Skill-only Alpha Release Candidate Checklist v0 design（已实现，当前已完成）。
+   - 在 Stage 36 implementation plan 和当前 roadmap 后阅读，用于理解内部 alpha RC 的 go/no-go、试用脚本、反馈模板、triage 分类和已知限制边界；本阶段不改变 runtime 或 provider contract。
+
+103. `plans/2026-05-23-skill-only-alpha-release-candidate-checklist.md`
+   - Stage 37 Skill-only Alpha Release Candidate Checklist v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 37 design 后阅读，用于审计 RC checklist 文档、README/manual/provider smoke links、roadmap closeout 和最终验证。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

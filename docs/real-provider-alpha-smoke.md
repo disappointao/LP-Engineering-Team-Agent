@@ -152,3 +152,5 @@ pnpm alpha:check
 pnpm smoke
 pnpm alpha:e2e
 ```
+
+如果真实 provider smoke 发现问题，按 `docs/alpha-release-candidate.md` 中的 feedback template 记录，只提交 bounded error、UI message、safe timeline summary 和脱敏环境信息。

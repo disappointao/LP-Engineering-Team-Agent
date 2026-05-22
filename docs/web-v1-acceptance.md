@@ -1,6 +1,8 @@
 # Skill-Only Alpha 验收清单
 
-在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 应通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次详细人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 应通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+
+准备内部 release candidate 时，go/no-go、试用脚本、反馈模板和 triage 分类以 `docs/alpha-release-candidate.md` 为入口；本文件只负责详细 UX 和能力边界检查。
 
 ## 准备
 

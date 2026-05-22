@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-22
+最后更新：2026-05-23
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -41,6 +41,7 @@
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
+- Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 
 ## 第一版可用闭环目标
 
@@ -53,13 +54,13 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **1-3 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 release candidate checklist、真实 provider 异常 UX hardening 和试用反馈闭环，粗略估算 **4-8 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 异常 UX hardening、artifact quality baseline 和试用反馈闭环，粗略估算 **3-6 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。第一版可用闭环下一步优先补齐：
 
-- 第一版 alpha release candidate checklist，避免继续无边界扩功能。
 - Assistant streaming failure UX hardening，处理真实 provider streaming 中途失败、慢首 token、空 delta 和取消体验。
 - LP artifact quality evaluation / prompt hardening，让内部 alpha 更容易判断“复杂 LP 任务是否真的可用”。
+- Alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。
 
 当前仍明确后置：
 
@@ -378,7 +379,7 @@ Stage 31 v0 added deterministic Playwright browser acceptance gate. `pnpm alpha:
 - 不做 remote browser farm。
 - 不做 cross-browser matrix。
 - 不做 visual regression。
-- 不做 real provider token delta streaming 或 usage metadata；usage metadata 已由 Stage 32 补齐。
+- 不做 real provider token delta streaming 或 usage metadata；usage metadata 已由 Stage 32 补齐，普通聊天 token delta 已由 Stage 35 补齐。
 - 不做 MCP 新功能。
 - 不做 real shell runner。
 - 不做 auth/RBAC。
@@ -517,29 +518,36 @@ Stage 36 v0 已把真实 provider alpha smoke 整理成 operator-facing 文档�
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-real-provider-alpha-smoke-operator-docs.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 37：Skill-only Alpha Release Candidate Checklist v0
 
-**状态：** 推荐下一阶段，可按用户试用节奏提前。
+**状态：** 已实现。
 
-**为什么现在做：** Web/API/Skill/LP 主路径、browser gate、failure injection 和 provider 可见性稳定后，应把第一版本地/单用户 alpha 的交付清单、已知限制、回滚/排查入口和试用反馈模板整理出来，避免继续无边界扩功能。
+Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go、operator trial script、feedback template、triage 分类和已知限制整理成单独入口。详细人工验收继续在 `docs/web-v1-acceptance.md`，真实 provider smoke 继续在 `docs/real-provider-alpha-smoke.md`。
 
-**建议范围：**
+已实现范围：
 
-- 生成第一版 alpha release candidate checklist，覆盖本地启动、普通聊天、LP 复杂任务、Skills、Models opt-in、artifact preview/export/snippet、failure artifacts 和已知后置项。
-- 整理用户试用反馈模板和 triage 分类：blocking bug、UX friction、provider config issue、artifact quality issue、future feature。
-- 对 README/manual checklist 做最后一致性审计，确保默认路径仍是 deterministic / Skill-only / local-first。
+- 新增 `docs/alpha-release-candidate.md`，覆盖 RC 定义、go/no-go gates、60-90 分钟 operator trial script、feedback template、triage 分类、known limitations、follow-up routing 和 RC decision record。
+- README 已把 RC 文档加入手动验收入口和文档地图。
+- `docs/web-v1-acceptance.md` 已明确自身是详细人工验收清单，RC 决策和反馈分类以 RC 文档为准。
+- `docs/real-provider-alpha-smoke.md` 已把真实 provider smoke 问题路由到 RC feedback template。
+- Superpowers index 和 roadmap 已同步。
 
-**非目标：**
+未实现范围：
 
 - 不做 production auth/RBAC、真实部署编排、MCP 新功能、真实 shell runner、object storage 或 hosted observability。
 - 不把内部试用 checklist 变成 public SaaS onboarding。
 - 不改变 runtime、model gateway、worker queue 或 artifact workspace contract。
+- 不做 issue tracker 集成、反馈数据库、遥测、自动截图上传或 hosted triage board。
+
+**设计：** `docs/superpowers/specs/2026-05-23-skill-only-alpha-release-candidate-checklist-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-23-skill-only-alpha-release-candidate-checklist.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 38：Assistant Streaming Failure UX Hardening v0
 
-**状态：** Stage 37 后推荐，可按真实 provider alpha 反馈提前。
+**状态：** 推荐下一阶段，可按真实 provider alpha 反馈提前。
 
 **为什么现在做：** Stage 35 已把 provider token delta 接入普通聊天，但真实 provider streaming 的中途失败、空 delta、慢首 token 和用户取消体验仍只走 bounded error 基线。内部 alpha 前后需要把这些异常路径整理成更清晰的 UI 和 recovery contract。
 
@@ -575,6 +583,25 @@ Stage 36 v0 已把真实 provider alpha smoke 整理成 operator-facing 文档�
 - 不改变三文件静态 artifact policy、preview/export contract 或 provider adapter。
 - 不把质量 rubric 变成 public SaaS onboarding 或客户验收 SLA。
 
+### Stage 40：Alpha Feedback Intake and Triage Loop v0
+
+**状态：** Stage 39 后推荐，可按内部 RC 试用启动时间提前。
+
+**为什么现在做：** Stage 37 已给出反馈模板和 triage 分类，但真实内部试用开始后需要把反馈批次化，形成 known issues、修复优先级和阶段切分，避免把所有反馈都直接变成无边界开发任务。
+
+**建议范围：**
+
+- 新增轻量反馈 intake runbook，说明如何收集 RC feedback template、如何脱敏、如何标记 category/severity/status。
+- 维护一个本地 `docs/alpha-feedback-log.md` 或等价文档，记录批次、blocking items、accepted follow-ups 和 rejected/out-of-scope items。
+- 把 Stage 38/39/backlog 的分流规则落到实际反馈样例，形成下一批修复计划。
+- 保持反馈记录只含 safe evidence，不保存 secret、raw provider response、完整 artifact 内容、本机路径或 raw worker/tool payload。
+
+**非目标：**
+
+- 不引入 hosted issue tracker、数据库、遥测、自动截图上传、用户账号或团队审批系统。
+- 不承诺 public roadmap、SLA 或客户发布节奏。
+- 不在同一阶段直接修复所有反馈；只做 intake、triage 和下一批计划。
+
 ## Backlog 分组
 
 ### Agent Runtime / Run Lifecycle
@@ -594,7 +621,7 @@ Stage 36 v0 已把真实 provider alpha smoke 整理成 operator-facing 文档�
 
 - 真实 fallback provider execution 和 cost/timeout policy。
 - Billing / quota / cost reporting。
-- Provider token delta streaming support。
+- LP structured output token-level UI。
 - Tool-call protocol conversion。
 - Additional provider manifests。
 
@@ -698,6 +725,7 @@ Stage 36 v0 已把真实 provider alpha smoke 整理成 operator-facing 文档�
 
 ## 决策记录
 
+- Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，后续 Stage 38/39/40 分别处理 streaming failure UX、artifact quality 和反馈 intake。
 - Stage 36 已完成 Real Provider Alpha Smoke Matrix and Operator Docs v0：真实 provider 手动 smoke 已集中到 `docs/real-provider-alpha-smoke.md`，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider streaming usage metadata 和 missing-key fail-closed 脱敏行为。
 - Stage 35 已完成 Provider Token Delta Streaming v0：真实 provider token delta 只进入普通聊天 `assistant` role 的 transient UI，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer structured output parse / repair。
 - Stage 34 已完成 Browser Failure Injection and Visual Regression v0：`pnpm alpha:e2e` 现在覆盖 8 个 Chromium browser tests，包括 happy path、bounded recovery、provider fail-closed、worker queue bounded error、artifact invalid path 和空首页 layout contract；visual v0 采用 geometry assertion 和 diagnostic screenshot artifact，不提交 brittle screenshot baseline。
