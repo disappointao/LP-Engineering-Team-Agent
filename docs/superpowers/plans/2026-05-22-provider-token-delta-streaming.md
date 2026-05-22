@@ -4,7 +4,7 @@
 
 **Goal:** Add provider-neutral token delta streaming for ordinary assistant chat while preserving buffered structured output for LP Planner / Builder.
 
-**Status:** In progress.
+**Status:** Implemented.
 
 **Architecture:** Keep `ModelGateway.complete()` as the stable full-buffer API. Add a streaming contract and provider adapter implementations that yield safe text deltas plus terminal metadata. Wire only project-bound ordinary chat to this stream path; keep LP chain and deterministic default behavior unchanged.
 
@@ -50,10 +50,10 @@
 - Modify `packages/model-gateway/src/index.ts`
 - Modify model-gateway tests
 
-- [ ] Add `ModelStreamEvent` / terminal response types with bounded delta and safe usage/call metadata.
-- [ ] Add `ModelGateway.stream()` while preserving `complete()`.
-- [ ] Add in-memory/mock streaming tests and implementation.
-- [ ] Confirm existing complete-path tests still pass.
+- [x] Add `ModelStreamEvent` / terminal response types with bounded delta and safe usage/call metadata.
+- [x] Add `ModelGateway.stream()` while preserving `complete()`.
+- [x] Add in-memory/mock streaming tests and implementation.
+- [x] Confirm existing complete-path tests still pass.
 
 ## Task 3: Provider Adapter Fake Streams
 
@@ -62,11 +62,11 @@
 - Modify `packages/model-gateway/src/anthropic-messages.ts`
 - Modify adapter tests
 
-- [ ] Add OpenAI-compatible streaming fake-fetch tests before implementation.
-- [ ] Implement OpenAI-compatible SSE parsing and terminal metadata.
-- [ ] Add Anthropic-compatible streaming fake-fetch tests before implementation.
-- [ ] Implement Anthropic-compatible SSE parsing and terminal metadata.
-- [ ] Cover malformed frame and missing usage fallback behavior.
+- [x] Add OpenAI-compatible streaming fake-fetch tests before implementation.
+- [x] Implement OpenAI-compatible SSE parsing and terminal metadata.
+- [x] Add Anthropic-compatible streaming fake-fetch tests before implementation.
+- [x] Implement Anthropic-compatible SSE parsing and terminal metadata.
+- [x] Cover malformed frame and missing usage fallback behavior.
 
 ## Task 4: Assistant Chat Streaming Wiring
 
@@ -77,11 +77,11 @@
 - Modify `apps/web/src/app/api/chat/stream/route.ts`
 - Modify affected tests
 
-- [ ] Add assistant-only streaming seam in runtime/API without changing LP chain `run()` semantics.
-- [ ] Make `startStreamingChatPrompt` return provider stream when available and existing buffered chunks otherwise.
-- [ ] Make `/api/chat/stream` accumulate provider deltas, emit `assistant.delta`, then persist one terminal assistant message.
-- [ ] Ensure provider streaming failure uses bounded safe error and does not leak raw provider event bodies.
-- [ ] Confirm LP Planner / Builder tests still prove `complete()` path remains buffered.
+- [x] Add assistant-only streaming seam in runtime/API without changing LP chain `run()` semantics.
+- [x] Make `startStreamingChatPrompt` return provider stream when available and existing buffered chunks otherwise.
+- [x] Make `/api/chat/stream` accumulate provider deltas, emit `assistant.delta`, then persist one terminal assistant message.
+- [x] Ensure provider streaming failure uses bounded safe error and does not leak raw provider event bodies.
+- [x] Confirm LP Planner / Builder tests still prove `complete()` path remains buffered.
 
 ## Task 5: Docs And Validation
 
@@ -90,10 +90,10 @@
 - Modify `docs/project-roadmap.md`
 - Modify `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`
 
-- [ ] Update Agent learning notes for provider token delta vs terminal facts.
-- [ ] Mark plan steps complete with validation evidence.
-- [ ] Mark Stage 35 implemented in roadmap and keep recommended next-stage queue at 3-5 items.
-- [ ] Run final validation:
+- [x] Update Agent learning notes for provider token delta vs terminal facts.
+- [x] Mark plan steps complete with validation evidence.
+- [x] Mark Stage 35 implemented in roadmap and keep recommended next-stage queue at 3-5 items.
+- [x] Run final validation:
 
 ```bash
 pnpm alpha:check
@@ -105,6 +105,16 @@ pnpm alpha:e2e
 git diff --check
 ```
 
+Completed validation:
+
+- `pnpm alpha:check`: 128 passed.
+- `pnpm smoke`: 2 passed.
+- `pnpm test`: 1113 passed, 2 skipped.
+- `pnpm typecheck`: passed after fixing TypeScript import style and preserving the Web package boundary.
+- `pnpm build`: passed.
+- `pnpm alpha:e2e`: first sandboxed run failed with `listen EPERM 127.0.0.1:31031`; approved rerun passed with 8 tests.
+- `git diff --check`: passed.
+
 ## Task 6: Closeout
 
 **Files:**
@@ -112,6 +122,6 @@ git diff --check
 - Modify `docs/superpowers/specs/2026-05-22-provider-token-delta-streaming-design.md`
 - Modify `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`
 
-- [ ] Confirm no unrelated generated artifacts are staged.
-- [ ] Commit, merge back to `main`, and clean up the worktree if verification passes.
-- [ ] Final response includes scope, validation commands, merge/cleanup status, and recommended next queue.
+- [x] Confirm no unrelated generated artifacts are staged.
+- [x] Commit, merge back to `main`, and clean up the worktree if verification passes.
+- [x] Final response includes scope, validation commands, merge/cleanup status, and recommended next queue.

@@ -293,8 +293,19 @@ export interface RuntimeRunResult {
   modelOutputText?: string;
 }
 
+export type RuntimeStreamEvent =
+  | {
+      type: "model.delta";
+      text: string;
+    }
+  | {
+      type: "completed";
+      result: RuntimeRunResult;
+    };
+
 export interface AgentRuntimeAdapter {
   run(request: RuntimeRunRequest): Promise<RuntimeRunResult>;
+  stream?(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent>;
 }
 
 export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
@@ -400,12 +411,108 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
       };
     }
   }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    const streamModel = this.modelGateway.stream?.bind(this.modelGateway);
+    if (!streamModel) {
+      const result = await this.run(request);
+      for (const delta of chunkText(result.modelOutputText ?? "", 12)) {
+        yield { type: "model.delta", text: delta };
+      }
+      yield { type: "completed", result };
+      return;
+    }
+
+    const context = request.context
+      ? cloneRuntimeContext(request.context)
+      : createDefaultRuntimeContext();
+    const events: RuntimeEvent[] = [
+      {
+        type: "run.started",
+        message: `${request.role} run started`,
+        runId: request.runId,
+        role: request.role
+      }
+    ];
+    if (request.context) {
+      events.push(toRuntimeContextLoadedEvent(request, context));
+    }
+
+    try {
+      const modelRequest: ModelRequest = {
+        role: request.role,
+        projectId: request.projectId,
+        prompt: toModelPrompt(request),
+        context: toModelRequestContext(context),
+        ...(context.modelRoutingPolicy ? { routingPolicy: context.modelRoutingPolicy } : {})
+      };
+      let modelResponse: ModelResponse | undefined;
+      for await (const event of streamModel(modelRequest)) {
+        if (event.type === "model.delta") {
+          yield { type: "model.delta", text: event.text };
+        } else {
+          modelResponse = event.response;
+        }
+      }
+      if (!modelResponse) {
+        throw new ModelProviderResponseError(
+          "model_provider_response_shape_invalid",
+          `Model provider for ${request.role} returned an incomplete stream`
+        );
+      }
+      events.push(toModelCompletedEvent(request, modelResponse));
+      const state = "completed";
+      events.push({
+        type: "run.completed",
+        message: `${request.role} run completed`,
+        runId: request.runId,
+        state
+      });
+      yield {
+        type: "completed",
+        result: {
+          runId: request.runId,
+          projectId: request.projectId,
+          role: request.role,
+          state,
+          events,
+          modelOutputText: modelResponse.text
+        }
+      };
+    } catch (error) {
+      if (isModelProviderError(error)) {
+        const fallback = context.modelRoutingPolicy?.[request.role]?.fallback;
+        events.push(
+          fallback
+            ? toFallbackAvailableEvent(request, fallback)
+            : {
+                type: "model.fallback.not_configured",
+                message: `${request.role} model fallback not configured`,
+                runId: request.runId,
+                role: request.role
+              }
+        );
+      }
+      events.push(toRunFailedEvent(request, error));
+      yield {
+        type: "completed",
+        result: {
+          runId: request.runId,
+          projectId: request.projectId,
+          role: request.role,
+          state: "failed",
+          events
+        }
+      };
+    }
+  }
 }
 
 export type AgentRunInput = RuntimeRunInput;
 export type AgentRunRequest = RuntimeRunRequest;
 export type AgentRunEvent = RuntimeEvent;
 export type AgentRunResult = RuntimeRunResult;
+export type AgentStreamEvent = RuntimeStreamEvent;
 
 export function createDefaultRuntimeContext(): RuntimeRunContext {
   return {
@@ -720,4 +827,15 @@ function cloneModelRoutingPolicy(policy: ModelRoutingPolicy): ModelRoutingPolicy
     reviewer: { ...policy.reviewer },
     deployer: { ...policy.deployer }
   };
+}
+
+function chunkText(text: string, size: number): string[] {
+  if (text.length === 0) {
+    return [];
+  }
+  const chunks: string[] = [];
+  for (let index = 0; index < text.length; index += size) {
+    chunks.push(text.slice(index, index + size));
+  }
+  return chunks;
 }

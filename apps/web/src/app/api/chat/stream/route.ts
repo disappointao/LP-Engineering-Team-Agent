@@ -251,19 +251,32 @@ export async function POST(request: Request): Promise<Response> {
       state: "running",
       label: "Generating response"
     });
-    for (const delta of started.chunks) {
-      enqueue({
-        type: "assistant.delta",
-        taskId: started.taskId,
-        messageId: started.assistantMessageId,
-        delta
-      });
+    let assistantContent = started.assistantStream ? "" : started.assistantContent;
+    if (started.assistantStream) {
+      for await (const delta of started.assistantStream) {
+        assistantContent += delta;
+        enqueue({
+          type: "assistant.delta",
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          delta
+        });
+      }
+    } else {
+      for (const delta of started.chunks) {
+        enqueue({
+          type: "assistant.delta",
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          delta
+        });
+      }
     }
 
     const completed = await store.completeStreamingChatPrompt({
       taskId: started.taskId,
       messageId: started.assistantMessageId,
-      content: started.assistantContent
+      content: assistantContent
     });
 
     if (completed.ok) {
@@ -271,7 +284,7 @@ export async function POST(request: Request): Promise<Response> {
         type: "assistant.completed",
         taskId: started.taskId,
         messageId: started.assistantMessageId,
-        content: started.assistantContent
+        content: assistantContent
       });
       enqueue({
         type: "run.status",

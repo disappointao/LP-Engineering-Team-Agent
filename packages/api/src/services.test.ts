@@ -10,7 +10,8 @@ import {
   createInMemoryWorkbenchRepositories,
   createJsonFileWorkbenchRepositories,
   type RunEventRecord,
-  type RunRecord
+  type RunRecord,
+  type WorkbenchRepositories
 } from "@lp-agent/db";
 import type { DeploymentHandoff, GitDeploymentAdapter } from "@lp-agent/git-deployment";
 import { sampleBrief, type ReviewFinding } from "@lp-agent/lp-schema";
@@ -19,7 +20,8 @@ import type { ModelFetch } from "@lp-agent/model-gateway";
 import type {
   AgentRuntimeAdapter,
   RuntimeRunRequest,
-  RuntimeRunResult
+  RuntimeRunResult,
+  RuntimeStreamEvent
 } from "@lp-agent/runtime-adapters";
 import type { SkillManifest } from "@lp-agent/skills";
 import {
@@ -4368,6 +4370,68 @@ describe("demo workbench service", () => {
     expect(assistantRuntime.requests[0]?.input.prompt).toContain("# Brand Voice");
   });
 
+  it("streams assistant chat deltas without persisting token chunks as run events", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new StreamingRuntime(["Use ", "streaming."], "Use streaming.");
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Buyer answer",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    await saveStreamingAssistantRoute(repositories, project.id);
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "How should we answer buyers?"
+    });
+
+    expect(started).toMatchObject({
+      ok: true,
+      runId: "run_assistant_1",
+      contextSummary: {
+        projectId: project.id,
+        projectName: "Spring Campaign",
+        runtimeMode: "deterministic"
+      }
+    });
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    const deltas: string[] = [];
+    for await (const delta of started.stream) {
+      deltas.push(delta);
+    }
+    expect(deltas).toEqual(["Use ", "streaming."]);
+    expect(assistantRuntime.requests[0]).toMatchObject({
+      role: "assistant",
+      projectId: project.id,
+      taskId: "task_1"
+    });
+
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "model.completed",
+      "run.completed"
+    ]);
+    expect(JSON.stringify(events)).not.toContain("Use streaming.");
+    expect(events.some((event) => event.type === "model.delta")).toBe(false);
+    expect(events.find((event) => event.type === "model.completed")?.payload).toMatchObject({
+      provider: "stream-provider",
+      streamingEnabled: true
+    });
+  });
+
   it("returns safe assistant chat failure without raw provider details", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({
@@ -6895,6 +6959,69 @@ class RecordingRuntime extends StaticRuntime {
   }
 }
 
+class StreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(
+    private readonly deltas: string[],
+    private readonly content: string
+  ) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(request);
+    for (const delta of this.deltas) {
+      yield { type: "model.delta", text: delta };
+    }
+    yield {
+      type: "completed",
+      result: {
+        runId: request.runId,
+        projectId: request.projectId,
+        role: request.role,
+        state: "completed",
+        modelOutputText: this.content,
+        events: [
+          {
+            type: "run.started",
+            message: "assistant run started",
+            runId: request.runId,
+            role: request.role
+          },
+          {
+            type: "model.completed",
+            message: "assistant model call completed",
+            runId: request.runId,
+            role: request.role,
+            provider: "stream-provider",
+            api: "openai-completions",
+            model: "stream-model",
+            usage: {
+              inputTokens: 2,
+              outputTokens: 3,
+              totalTokens: 5,
+              source: "provider_reported"
+            },
+            attempt: 1,
+            durationMs: 9,
+            supportsStreaming: true,
+            streamingEnabled: true
+          },
+          {
+            type: "run.completed",
+            message: "assistant run completed",
+            runId: request.runId,
+            state: "completed"
+          }
+        ]
+      }
+    };
+  }
+}
+
 class RecordingToolCommandRunner implements ToolCommandRunner {
   readonly inputs: ToolCommandRunInput[] = [];
 
@@ -7085,6 +7212,37 @@ async function executeMCPFailureWithSummary(input: {
   });
   const events = await repositories.runEvents.listForRun(result.run.id);
   return { result, events };
+}
+
+async function saveStreamingAssistantRoute(
+  repositories: WorkbenchRepositories,
+  projectId: string
+): Promise<void> {
+  const timestamp = "2026-05-12T00:00:00.000Z";
+  await repositories.modelProviders.save({
+    id: "stream_provider",
+    scope: "project",
+    targetKey: projectId,
+    name: "Stream Provider",
+    provider: "custom",
+    config: {
+      api: "openai-completions",
+      models: [{ id: "stream-model" }]
+    },
+    enabled: true,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+  await repositories.modelRoutingPolicies.save({
+    id: "model_route_stream_assistant",
+    scope: "project",
+    targetKey: projectId,
+    role: "assistant",
+    providerId: "stream_provider",
+    model: "stream-model",
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
 }
 
 function fixedClock(): () => Date {

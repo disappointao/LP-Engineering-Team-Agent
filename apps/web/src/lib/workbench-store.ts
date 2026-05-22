@@ -383,6 +383,7 @@ export type StreamingChatStartResult =
       userMessageId: string;
       assistantMessageId: string;
       assistantContent: string;
+      assistantStream?: AsyncIterable<string>;
       contextSummary: StreamingChatContextSummary;
       chunks: string[];
     }
@@ -1421,6 +1422,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const title = deriveTaskTitle(prompt.value);
       let streamTaskId = requestedTaskId;
       let assistantContent = "I created a task thread and can continue from here.";
+      let assistantStream: AsyncIterable<string> | undefined;
       let contextSummary: StreamingChatContextSummary = {
         runtimeMode: "deterministic",
         skillCount: 0,
@@ -1434,7 +1436,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           projectId: requestedProjectId
         });
         streamTaskId = chatTask.id;
-        const assistant = await service.runAssistantChat({
+        const assistant = await service.runAssistantChatStream({
           projectId: requestedProjectId,
           taskId: streamTaskId,
           prompt: prompt.value
@@ -1452,7 +1454,12 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             projectId: requestedProjectId
           };
         }
-        assistantContent = assistant.content;
+        if (assistant.stream) {
+          assistantContent = "";
+          assistantStream = assistant.stream;
+        } else {
+          assistantContent = assistant.content ?? "";
+        }
         contextSummary = assistant.contextSummary;
       }
 
@@ -1473,8 +1480,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         userMessageId: started.userMessage.id,
         assistantMessageId: started.assistantMessage.id,
         assistantContent,
+        ...(assistantStream ? { assistantStream } : {}),
         contextSummary,
-        chunks: chunkAssistantText(assistantContent, 12)
+        chunks: assistantStream ? [] : chunkAssistantText(assistantContent, 12)
       };
     },
 

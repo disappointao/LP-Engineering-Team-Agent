@@ -9,7 +9,8 @@ import {
   type ModelGateway,
   type ModelAuditEntry,
   type ModelRequestContext,
-  type ModelRoutingPolicy
+  type ModelRoutingPolicy,
+  type ModelStreamEvent
 } from "./index";
 
 describe("model gateway", () => {
@@ -122,6 +123,52 @@ describe("model gateway", () => {
         }
       }
     });
+  });
+
+  it("streams deterministic mock deltas with one terminal model response", async () => {
+    const gateway = new InMemoryModelGateway({
+      ...createDefaultModelPolicy(),
+      assistant: {
+        provider: "mock-openai",
+        model: "assistant-model",
+        modelCapabilities: {
+          supportsStreaming: true
+        }
+      }
+    });
+
+    const events = await collectStream(
+      gateway.stream({
+        role: "assistant",
+        prompt: "Hello",
+        projectId: "project_1"
+      })
+    );
+
+    const deltas = events.filter((event) => event.type === "model.delta");
+    const completed = events.find((event) => event.type === "model.completed");
+    expect(deltas.length).toBeGreaterThan(0);
+    expect(completed).toMatchObject({
+      type: "model.completed",
+      response: {
+        provider: "mock-openai",
+        model: "assistant-model",
+        text: deltas.map((event) => event.text).join(""),
+        usage: {
+          inputTokens: 2,
+          outputTokens: 32,
+          totalTokens: 34,
+          source: "estimated"
+        },
+        call: {
+          attempt: 1,
+          durationMs: 0,
+          supportsStreaming: true,
+          streamingEnabled: true
+        }
+      }
+    });
+    expect(gateway.getAuditLog()).toHaveLength(1);
   });
 
   it("clones artifact workspace file metadata in audit contexts defensively", async () => {
@@ -704,6 +751,14 @@ describe("model gateway", () => {
     } satisfies Partial<ModelProviderConfigurationError>);
   });
 });
+
+async function collectStream(stream: AsyncIterable<ModelStreamEvent>): Promise<ModelStreamEvent[]> {
+  const events: ModelStreamEvent[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
+}
 
 function baseModelContext(overrides: Partial<ModelRequestContext> = {}): ModelRequestContext {
   return {

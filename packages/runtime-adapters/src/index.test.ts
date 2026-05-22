@@ -7,14 +7,16 @@ import {
   createDefaultModelPolicy,
   type ModelGateway,
   type ModelRequest,
-  type ModelResponse
+  type ModelResponse,
+  type ModelStreamEvent
 } from "@lp-agent/model-gateway";
 import { createDefaultRuntimeContext, LocalAgentRuntimeAdapter } from "./index";
 import type {
   RuntimeEvent,
   RuntimeRunContext,
   RuntimeRunRequest,
-  RuntimeRunResult
+  RuntimeRunResult,
+  RuntimeStreamEvent
 } from "./index";
 
 describe("local agent runtime adapter", () => {
@@ -97,6 +99,87 @@ describe("local agent runtime adapter", () => {
     expect(result.state).toBe("completed");
     expect(result.modelOutputText).toBe("RAW_MODEL_OUTPUT_SECRET");
     expect(JSON.stringify(result.events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
+  it("streams assistant model deltas and returns one terminal runtime result", async () => {
+    const gateway: ModelGateway = {
+      async complete(): Promise<ModelResponse> {
+        throw new Error("complete_should_not_be_called_for_streaming");
+      },
+      async *stream(_request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+        yield { type: "model.delta", text: "Hello" };
+        yield { type: "model.delta", text: " streaming" };
+        yield {
+          type: "model.completed",
+          response: {
+            provider: "stream-provider",
+            api: "openai-completions",
+            model: "stream-model",
+            text: "Hello streaming",
+            usage: {
+              inputTokens: 2,
+              outputTokens: 3,
+              totalTokens: 5,
+              source: "provider_reported"
+            },
+            call: {
+              attempt: 1,
+              durationMs: 9,
+              supportsStreaming: true,
+              streamingEnabled: true
+            }
+          }
+        };
+      }
+    };
+    const adapter = new LocalAgentRuntimeAdapter(gateway);
+
+    const events = await collectRuntimeStream(
+      adapter.stream!({
+        runId: "run_assistant_stream_1",
+        projectId: "project_1",
+        taskId: "task_1",
+        role: "assistant",
+        input: { prompt: "Hello" }
+      })
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      "model.delta",
+      "model.delta",
+      "completed"
+    ]);
+    expect(events[0]).toEqual({ type: "model.delta", text: "Hello" });
+    expect(events[1]).toEqual({ type: "model.delta", text: " streaming" });
+    expect(events[2]).toMatchObject({
+      type: "completed",
+      result: {
+        runId: "run_assistant_stream_1",
+        state: "completed",
+        modelOutputText: "Hello streaming",
+        events: [
+          { type: "run.started" },
+          {
+            type: "model.completed",
+            provider: "stream-provider",
+            api: "openai-completions",
+            model: "stream-model",
+            usage: {
+              inputTokens: 2,
+              outputTokens: 3,
+              totalTokens: 5,
+              source: "provider_reported"
+            },
+            supportsStreaming: true,
+            streamingEnabled: true
+          },
+          { type: "run.completed" }
+        ]
+      }
+    });
+    expect(JSON.stringify((events[2] as Extract<RuntimeStreamEvent, { type: "completed" }>).result.events)).not.toContain(
+      "Hello streaming"
+    );
   });
 
   it("retries retryable provider request failures once before succeeding", async () => {
@@ -1097,6 +1180,16 @@ describe("local agent runtime adapter", () => {
     expect(completedState).toBe("completed");
   });
 });
+
+async function collectRuntimeStream(
+  stream: AsyncIterable<RuntimeStreamEvent>
+): Promise<RuntimeStreamEvent[]> {
+  const events: RuntimeStreamEvent[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
+}
 
 class RecordingModelGateway extends InMemoryModelGateway {
   readonly requests: ModelRequest[] = [];

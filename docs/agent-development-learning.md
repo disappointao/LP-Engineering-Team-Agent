@@ -257,6 +257,10 @@ Stage 32 的学习点是先把 provider usage metadata、duration、attempt 和 
 
 usage metadata 也必须遵守 Agent 安全边界：run event 可以保存 provider id、protocol、model、duration、attempt、token counts 和 usage source，但不能保存 raw provider response、prompt 正文、raw model output、base URL、API key env value、secret 或完整 artifact 内容。
 
+Stage 35 在这个边界上补了 provider token delta streaming，但只用于普通聊天 `assistant` role 的 transient UX。`ModelGateway.stream()` 输出 provider-neutral `model.delta` 和 terminal `model.completed`，OpenAI-compatible / Anthropic-compatible adapter 会解析 SSE frame、只暴露 bounded text delta，并在 terminal response 中给出 provider-reported 或 estimated usage。runtime/API/Web 只把 delta 转成浏览器里的临时 `assistant.delta`，最终仍只持久化一条完整 assistant message 和 terminal `model.completed` / `run.completed` events；每个 token chunk 不会成为 run event、message、artifact 或业务事实。
+
+这也解释了为什么 LP Planner / Builder 仍继续走 `ModelGateway.complete()`：结构化输出不能边收 token 边相信局部 JSON。Planner / Builder 必须等完整 buffer 后再做 schema parse、policy validation 和 one-shot repair；如果把 token delta 当成可恢复事实，会破坏失败诊断、repair timeline 和 artifact 安全边界。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型

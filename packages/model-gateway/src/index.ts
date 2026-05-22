@@ -1,9 +1,13 @@
 import {
   ModelProviderConfigurationError,
   completeAnthropicMessages,
+  streamAnthropicMessages,
   type ModelFetch
 } from "./anthropic-messages";
-import { completeOpenAIChatCompletions } from "./openai-completions";
+import {
+  completeOpenAIChatCompletions,
+  streamOpenAIChatCompletions
+} from "./openai-completions";
 
 export type AgentRole = "assistant" | "planner" | "builder" | "reviewer" | "deployer";
 
@@ -38,14 +42,18 @@ export {
   ModelProviderRequestError,
   ModelProviderResponseError,
   completeAnthropicMessages,
+  streamAnthropicMessages,
   toAnthropicMessagesUrl,
   type AnthropicMessagesCompleteInput,
+  type AnthropicMessagesStreamInput,
   type ModelFetch
 } from "./anthropic-messages";
 export {
   completeOpenAIChatCompletions,
+  streamOpenAIChatCompletions,
   toOpenAIChatCompletionsUrl,
-  type OpenAIChatCompletionsCompleteInput
+  type OpenAIChatCompletionsCompleteInput,
+  type OpenAIChatCompletionsStreamInput
 } from "./openai-completions";
 
 export interface ModelProviderRuntimeRecord {
@@ -272,6 +280,16 @@ export interface ModelResponse {
   call: ModelCallMetadata;
 }
 
+export type ModelStreamEvent =
+  | {
+      type: "model.delta";
+      text: string;
+    }
+  | {
+      type: "model.completed";
+      response: ModelResponse;
+    };
+
 export interface ModelAuditEntry extends ModelRoute {
   role: AgentRole;
   projectId: string;
@@ -281,6 +299,7 @@ export interface ModelAuditEntry extends ModelRoute {
 
 export interface ModelGateway {
   complete(request: ModelRequest): Promise<ModelResponse>;
+  stream?(request: ModelRequest): AsyncIterable<ModelStreamEvent>;
 }
 
 export const agentRoles = Object.freeze([
@@ -315,6 +334,26 @@ export class InMemoryModelGateway implements ModelGateway {
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
+    const route = this.selectRouteAndRecordAudit(request);
+    return createMockModelResponse(request, route);
+  }
+
+  async *stream(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+    const route = this.selectRouteAndRecordAudit(request);
+    yield* createMockModelStream(request, route);
+  }
+
+  getAuditLog(): readonly ModelAuditEntry[] {
+    return this.auditEntries.map((entry) => ({
+      ...cloneRoute(entry),
+      role: entry.role,
+      projectId: entry.projectId,
+      promptLength: entry.promptLength,
+      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
+    }));
+  }
+
+  private selectRouteAndRecordAudit(request: ModelRequest): ModelRoute {
     const policy = request.routingPolicy ? clonePolicy(request.routingPolicy) : this.policy;
     const route = policy[request.role];
     if (!route) {
@@ -329,17 +368,7 @@ export class InMemoryModelGateway implements ModelGateway {
       context: request.context ? cloneModelRequestContext(request.context) : undefined
     });
 
-    return createMockModelResponse(request, route);
-  }
-
-  getAuditLog(): readonly ModelAuditEntry[] {
-    return this.auditEntries.map((entry) => ({
-      ...cloneRoute(entry),
-      role: entry.role,
-      projectId: entry.projectId,
-      promptLength: entry.promptLength,
-      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
-    }));
+    return route;
   }
 }
 
@@ -366,6 +395,82 @@ export class ProviderBackedModelGateway implements ModelGateway {
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
+    const route = this.selectRouteAndRecordAudit(request);
+    const { resolvedRoute, providerConfig } = await this.resolveProviderRoute(route);
+
+    if (resolvedRoute.api === "anthropic-messages" && providerConfig) {
+      return completeAnthropicMessages({
+        request,
+        route: resolvedRoute,
+        providerConfig,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        anthropicVersion: this.anthropicVersion,
+        maxTokens: this.maxTokens
+      });
+    }
+
+    if (resolvedRoute.api === "openai-completions" && providerConfig) {
+      return completeOpenAIChatCompletions({
+        request,
+        route: resolvedRoute,
+        providerConfig,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        maxTokens: this.maxTokens
+      });
+    }
+
+    return createMockModelResponse(request, resolvedRoute);
+  }
+
+  async *stream(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+    const route = this.selectRouteAndRecordAudit(request);
+    const { resolvedRoute, providerConfig } = await this.resolveProviderRoute(route);
+
+    if (resolvedRoute.api === "anthropic-messages" && providerConfig) {
+      yield* streamAnthropicMessages({
+        request,
+        route: resolvedRoute,
+        providerConfig,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        anthropicVersion: this.anthropicVersion,
+        maxTokens: this.maxTokens
+      });
+      return;
+    }
+
+    if (resolvedRoute.api === "openai-completions" && providerConfig) {
+      yield* streamOpenAIChatCompletions({
+        request,
+        route: resolvedRoute,
+        providerConfig,
+        fetch: this.fetch,
+        env: this.env,
+        timeoutMs: this.timeoutMs,
+        maxTokens: this.maxTokens
+      });
+      return;
+    }
+
+    yield* createMockModelStream(request, resolvedRoute);
+  }
+
+  getAuditLog(): readonly ModelAuditEntry[] {
+    return this.auditEntries.map((entry) => ({
+      ...cloneRoute(entry),
+      role: entry.role,
+      projectId: entry.projectId,
+      promptLength: entry.promptLength,
+      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
+    }));
+  }
+
+  private selectRouteAndRecordAudit(request: ModelRequest): ModelRoute {
     const policy = request.routingPolicy ? clonePolicy(request.routingPolicy) : this.policy;
     const route = policy[request.role];
     if (!route) {
@@ -380,6 +485,13 @@ export class ProviderBackedModelGateway implements ModelGateway {
       context: request.context ? cloneModelRequestContext(request.context) : undefined
     });
 
+    return route;
+  }
+
+  private async resolveProviderRoute(route: ModelRoute): Promise<{
+    resolvedRoute: ModelRoute;
+    providerConfig?: ModelProviderRuntimeConfig;
+  }> {
     if (isMockRoute(route)) {
       if (!this.allowMockRoutes) {
         throw new ModelProviderConfigurationError(
@@ -387,7 +499,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
           `Mock model route ${route.provider} cannot be used when real model runtime is enabled`
         );
       }
-      return createMockModelResponse(request, route);
+      return { resolvedRoute: route };
     }
 
     const provider = await this.providers.getProvider(route.provider);
@@ -437,42 +549,10 @@ export class ProviderBackedModelGateway implements ModelGateway {
           : {})
     };
 
-    if (api === "anthropic-messages") {
-      return completeAnthropicMessages({
-        request,
-        route: resolvedRoute,
-        providerConfig: provider.config,
-        fetch: this.fetch,
-        env: this.env,
-        timeoutMs: this.timeoutMs,
-        anthropicVersion: this.anthropicVersion,
-        maxTokens: this.maxTokens
-      });
-    }
-
-    if (api === "openai-completions") {
-      return completeOpenAIChatCompletions({
-        request,
-        route: resolvedRoute,
-        providerConfig: provider.config,
-        fetch: this.fetch,
-        env: this.env,
-        timeoutMs: this.timeoutMs,
-        maxTokens: this.maxTokens
-      });
-    }
-
-    return createMockModelResponse(request, resolvedRoute);
-  }
-
-  getAuditLog(): readonly ModelAuditEntry[] {
-    return this.auditEntries.map((entry) => ({
-      ...cloneRoute(entry),
-      role: entry.role,
-      projectId: entry.projectId,
-      promptLength: entry.promptLength,
-      context: entry.context ? cloneModelRequestContext(entry.context) : undefined
-    }));
+    return {
+      resolvedRoute,
+      providerConfig: provider.config
+    };
   }
 }
 
@@ -507,6 +587,41 @@ function createMockModelResponse(request: ModelRequest, route: ModelRoute): Mode
       streamingEnabled: false
     }
   };
+}
+
+async function* createMockModelStream(
+  request: ModelRequest,
+  route: ModelRoute
+): AsyncIterable<ModelStreamEvent> {
+  const response = createMockModelResponse(request, route);
+  const streamingResponse: ModelResponse = {
+    ...response,
+    call: {
+      ...response.call,
+      streamingEnabled: true
+    }
+  };
+  for (const text of chunkText(streamingResponse.text, 12)) {
+    yield {
+      type: "model.delta",
+      text
+    };
+  }
+  yield {
+    type: "model.completed",
+    response: streamingResponse
+  };
+}
+
+function chunkText(text: string, size: number): string[] {
+  if (text.length === 0) {
+    return [];
+  }
+  const chunks: string[] = [];
+  for (let index = 0; index < text.length; index += size) {
+    chunks.push(text.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function cloneModelRequestContext(context: ModelRequestContext): ModelRequestContext {

@@ -39,7 +39,7 @@
 - Provider usage metadata v0：Stage 32 已实现 provider-reported / estimated usage metadata、duration、attempt、streaming capability summary，并把安全摘要从 model gateway 传到 runtime/API run event 和 Web timeline。
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
-- Provider token delta streaming v0：Stage 35 正在把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
+- Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 
 ## 第一版可用闭环目标
 
@@ -464,35 +464,37 @@ Stage 34 v0 已完成 browser failure injection 和轻量 visual layout contract
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-browser-failure-visual-regression.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 35：Provider Token Delta Streaming v0
 
-**状态：** 进行中。
+**状态：** 已实现。
 
-**为什么现在做：** Stage 32 已把 usage/call metadata 和 streaming capability 边界稳定下来。只有在手动 alpha 反馈确认真实 provider 等待体感仍是核心问题后，才应把 provider SSE/token delta 接入模型网关和 Web，不应提前扰动 LP structured output 解析。
+Stage 35 v0 已完成普通聊天 `assistant` role 的 provider token delta streaming。Web/API 仍沿用 Stage 26 NDJSON contract，但 project-bound assistant 在 route/model 支持 streaming 时会直接消费 provider SSE token delta；最终只持久化完整 assistant message 和 terminal run/model events。
 
-**建议范围：**
+已实现范围：
 
-- 在 model gateway 增加 provider-neutral streaming result/event contract，先覆盖普通聊天 `assistant` role。
-- OpenAI-compatible / Anthropic-compatible streaming adapter 只输出 bounded text delta 和 terminal usage summary，不把 raw provider event body 暴露给 runtime/UI。
-- LP Planner / Builder 继续等完整 buffer 后做 schema parse / repair；token delta 只作为 transient UX，不成为 persisted business fact。
-- 增加 fake-stream tests 和 opt-in real provider smoke 指引。
+- `packages/model-gateway` 新增 provider-neutral `ModelStreamEvent` contract 和 `ModelGateway.stream()`，同时保留 `complete()` 作为 LP structured output 的完整 buffer API。
+- OpenAI-compatible Chat Completions streaming adapter 支持 `stream: true`、`stream_options.include_usage`、SSE `choices[].delta.content` parsing、terminal usage summary 和 missing usage estimated fallback。
+- Anthropic-compatible Messages streaming adapter 支持 `stream: true`、`content_block_delta` text delta parsing、`message_start` / `message_delta` usage summary 和 missing usage estimated fallback。
+- `LocalAgentRuntimeAdapter.stream()`、`DemoWorkbenchService.runAssistantChatStream()`、Web store 和 `/api/chat/stream` 已接入 assistant-only stream path；token chunks 只作为 transient `assistant.delta`，不写入 run event 或业务输出。
+- LP Planner / Builder 仍走 `ModelGateway.complete()`，继续完整 buffer 后做 schema parse / repair 和 artifact policy validation。
+- Agent 学习笔记、Superpowers index 和 roadmap 已同步。
 
-**当前设计：** `docs/superpowers/specs/2026-05-22-provider-token-delta-streaming-design.md`。
+未实现范围：
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`。
-
-**非目标：**
-
-- 不把 streaming chunk 直接写成最终 run event 或业务输出。
+- 不做 LP structured output token-level UI。
 - 不做 tool-call streaming、MCP streaming、raw stdout/stderr streaming 或 worker log streaming。
-- 不做 billing/quota、fallback provider execution、provider marketplace 或 production observability。
-- 不改变 deterministic default 或 `pnpm alpha:check` / `pnpm alpha:e2e` 的无 key 验收边界。
+- 不做 fallback provider execution、billing/quota、provider marketplace 或 production observability。
+- 不改变 deterministic default 或无 key alpha gate。
+
+**设计：** `docs/superpowers/specs/2026-05-22-provider-token-delta-streaming-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-22-provider-token-delta-streaming.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 36：Real Provider Alpha Smoke Matrix and Operator Docs v0
 
-**状态：** Stage 35 后推荐，可按内部 alpha 准备情况提前。
+**状态：** 推荐下一阶段，可按内部 alpha 准备情况提前。
 
 **为什么现在做：** 默认 alpha gate 必须继续 deterministic、无 key、可重复；但少数内部用户开始真实 provider 试用前，需要把 Anthropic-compatible / OpenAI-compatible 的手动 smoke matrix、环境变量、fail-closed 行为、usage metadata 解读和排错路径整理成 operator-facing 流程。
 
@@ -525,6 +527,25 @@ Stage 34 v0 已完成 browser failure injection 和轻量 visual layout contract
 - 不做 production auth/RBAC、真实部署编排、MCP 新功能、真实 shell runner、object storage 或 hosted observability。
 - 不把内部试用 checklist 变成 public SaaS onboarding。
 - 不改变 runtime、model gateway、worker queue 或 artifact workspace contract。
+
+### Stage 38：Assistant Streaming Failure UX Hardening v0
+
+**状态：** Stage 37 后推荐，可按真实 provider alpha 反馈提前。
+
+**为什么现在做：** Stage 35 已把 provider token delta 接入普通聊天，但真实 provider streaming 的中途失败、空 delta、慢首 token 和用户取消体验仍只走 bounded error 基线。内部 alpha 前后需要把这些异常路径整理成更清晰的 UI 和 recovery contract。
+
+**建议范围：**
+
+- 补充 assistant streaming 中途失败、空 terminal content、慢首 token 和 client cancel 的 deterministic regression。
+- 改进 Web 文案和 task/message 状态，让用户能区分 provider 配置失败、stream 中断和持久化失败。
+- 保持 refresh 后以 repository terminal message / run event 为准，不把 transient chunks 当作事实。
+- 梳理 operator docs 中的 streaming failure 排查入口。
+
+**非目标：**
+
+- 不做 MCP/tool-call/raw stdout streaming。
+- 不做 provider fallback execution、billing/quota、production observability 或 hosted retry queue。
+- 不改变 LP Planner / Builder complete-buffer structured output 边界。
 
 ## Backlog 分组
 

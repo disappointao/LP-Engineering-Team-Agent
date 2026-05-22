@@ -217,6 +217,66 @@ describe("POST /api/chat/stream", () => {
     });
   });
 
+  it("streams provider assistant deltas and persists the accumulated terminal content", async () => {
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_stream",
+      taskType: "general_chat",
+      projectId: "project_1",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "",
+      chunks: [],
+      assistantStream: (async function* () {
+        yield "Provider ";
+        yield "stream";
+      })(),
+      contextSummary: {
+        projectId: "project_1",
+        projectName: "Spring Campaign",
+        runtimeMode: "real",
+        skillCount: 0,
+        skills: []
+      }
+    });
+    mocks.completeStreamingChatPrompt.mockResolvedValue({ ok: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ projectId: "project_1", prompt: "Hello" })
+      })
+    );
+
+    const decoded = decodeChatStreamLines(await response.text());
+    expect(decoded.events.filter((event) => event.type === "assistant.delta")).toEqual([
+      {
+        type: "assistant.delta",
+        taskId: "task_stream",
+        messageId: "message_2",
+        delta: "Provider "
+      },
+      {
+        type: "assistant.delta",
+        taskId: "task_stream",
+        messageId: "message_2",
+        delta: "stream"
+      }
+    ]);
+    expect(decoded.events).toContainEqual({
+      type: "assistant.completed",
+      taskId: "task_stream",
+      messageId: "message_2",
+      content: "Provider stream"
+    });
+    expect(mocks.completeStreamingChatPrompt).toHaveBeenCalledWith({
+      taskId: "task_stream",
+      messageId: "message_2",
+      content: "Provider stream"
+    });
+  });
+
   it("streams fallback_required without completing the assistant message", async () => {
     mocks.startStreamingChatPrompt.mockResolvedValue({
       ok: false,

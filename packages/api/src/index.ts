@@ -68,6 +68,7 @@ import {
   type AgentRuntimeAdapter,
   type RuntimeEvent,
   type RuntimeRunContext,
+  type RuntimeRunRequest,
   type RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import {
@@ -82,6 +83,7 @@ import {
   type SandboxPolicy
 } from "@lp-agent/worker-runtime";
 import {
+  RunEventRecordSchema,
   nextRepositoryTimestamp,
   runAgentStep
 } from "./run-orchestrator";
@@ -445,6 +447,21 @@ export type RunAssistantChatResult =
       ok: true;
       content: string;
       runId: string;
+      contextSummary: AssistantContextSummary;
+    }
+  | {
+      ok: false;
+      error: "project_not_found" | "generation_failed";
+      runId?: string;
+      contextSummary?: AssistantContextSummary;
+    };
+
+export type RunAssistantChatStreamResult =
+  | {
+      ok: true;
+      runId: string;
+      content?: string;
+      stream?: AsyncIterable<string>;
       contextSummary: AssistantContextSummary;
     }
   | {
@@ -2292,6 +2309,194 @@ export class DemoWorkbenchService {
       if (createdRunId && runId) {
         releaseRepositoryId(this.repositories, runId);
       }
+    }
+  }
+
+  async runAssistantChatStream(
+    input: RunAssistantChatInput
+  ): Promise<RunAssistantChatStreamResult> {
+    let project: ProjectRecord;
+    try {
+      project = await this.getProjectOrThrow(input.projectId);
+    } catch {
+      return { ok: false, error: "project_not_found" };
+    }
+
+    let taskId: string | undefined;
+    try {
+      taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
+    } catch {
+      return { ok: false, error: "project_not_found" };
+    }
+
+    let runId: string | undefined;
+    let releaseRunId: (() => void) | undefined;
+    let contextSummary: AssistantContextSummary | undefined;
+
+    try {
+      const contextPack = await assembleContextPack({
+        repositories: this.repositories,
+        service: this,
+        projectId: project.id,
+        taskId,
+        role: "assistant",
+        input: { prompt: input.prompt },
+        now: this.now
+      });
+      contextSummary = createAssistantContextSummary({
+        project,
+        runtimeMode: this.env.REAL_MODEL_RUNTIME === "1" ? "real" : "deterministic",
+        skills: contextPack.runtimeContext.skills
+      });
+      if (input.runId !== undefined) {
+        runId = input.runId;
+      } else {
+        runId = await reserveRepositoryId(this.repositories, "run_assistant", async () =>
+          (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+        );
+        releaseRunId = () => releaseRepositoryId(this.repositories, runId!);
+      }
+
+      const assistantRoute = contextPack.runtimeContext.modelRoutingPolicy?.assistant;
+      const canUseProviderStreaming =
+        canStreamAssistantRoute(assistantRoute) &&
+        typeof this.assistantRuntime.stream === "function";
+      if (!canUseProviderStreaming) {
+        const result = await this.runAssistantChat({
+          ...input,
+          taskId,
+          runId
+        });
+        releaseRunId?.();
+        releaseRunId = undefined;
+        if (!result.ok) {
+          return result;
+        }
+        return {
+          ok: true,
+          runId: result.runId,
+          content: result.content,
+          contextSummary: result.contextSummary
+        };
+      }
+
+      const runtimeRequest: RuntimeRunRequest = {
+        runId,
+        projectId: project.id,
+        ...(taskId ? { taskId } : {}),
+        role: "assistant",
+        input: {
+          prompt: createAssistantChatPrompt({
+            userPrompt: input.prompt,
+            project,
+            context: contextPack.runtimeContext,
+            trace: contextPack.trace
+          })
+        },
+        context: contextPack.runtimeContext
+      };
+      const stream = this.streamAssistantChatDeltas({
+        runtimeRequest,
+        contextTrace: contextPack.trace,
+        releaseRunId
+      });
+      releaseRunId = undefined;
+      return {
+        ok: true,
+        runId,
+        stream,
+        contextSummary
+      };
+    } catch {
+      releaseRunId?.();
+      return createAssistantChatGenerationFailure(runId, contextSummary);
+    }
+  }
+
+  private async *streamAssistantChatDeltas(input: {
+    runtimeRequest: RuntimeRunRequest;
+    contextTrace: { injected: string[]; omitted: string[] };
+    releaseRunId?: () => void;
+  }): AsyncIterable<string> {
+    const startedAt = nextRepositoryTimestamp(this.repositories, this.now);
+    const startedRun: RunRecord = {
+      id: input.runtimeRequest.runId,
+      projectId: input.runtimeRequest.projectId,
+      taskId: input.runtimeRequest.taskId,
+      role: "assistant",
+      state: "running",
+      startedAt,
+      contextSummary: {
+        injected: [...input.contextTrace.injected],
+        omitted: [...input.contextTrace.omitted]
+      }
+    };
+    let terminalResult: RuntimeRunResult | undefined;
+    let persistedTerminal = false;
+
+    try {
+      await this.repositories.runs.save(startedRun);
+      for await (const event of this.assistantRuntime.stream!(input.runtimeRequest)) {
+        if (event.type === "model.delta") {
+          yield event.text;
+        } else {
+          terminalResult = event.result;
+        }
+      }
+      if (!terminalResult) {
+        terminalResult = createAssistantStreamFailedResult(input.runtimeRequest);
+      }
+      await this.persistStreamingAssistantRun({
+        startedRun,
+        result: terminalResult
+      });
+      persistedTerminal = true;
+      if (terminalResult.state !== "completed" || !terminalResult.modelOutputText?.trim()) {
+        throw new Error("assistant_stream_failed");
+      }
+    } catch {
+      if (!persistedTerminal) {
+        await this.persistStreamingAssistantRun({
+          startedRun,
+          result: createAssistantStreamFailedResult(input.runtimeRequest)
+        });
+      }
+      throw new Error("assistant_stream_failed");
+    } finally {
+      input.releaseRunId?.();
+    }
+  }
+
+  private async persistStreamingAssistantRun(input: {
+    startedRun: RunRecord;
+    result: RuntimeRunResult;
+  }): Promise<void> {
+    const completedAt = nextRepositoryTimestamp(this.repositories, this.now);
+    const state = toRunRecordState(input.result.state);
+    const run: RunRecord = {
+      ...input.startedRun,
+      state,
+      ...(state === "running" ? {} : { completedAt })
+    };
+    await this.repositories.runs.save(run);
+
+    const runtimeEvents = normalizeStreamingRuntimeEvents({
+      events: input.result.events,
+      runId: input.startedRun.id,
+      role: "assistant",
+      state: input.result.state
+    });
+    for (const [index, event] of runtimeEvents.entries()) {
+      await this.repositories.runEvents.save(
+        toStreamingRunEventRecord({
+          event,
+          runId: input.startedRun.id,
+          projectId: input.startedRun.projectId,
+          taskId: input.startedRun.taskId,
+          sequence: index + 1,
+          createdAt: completedAt
+        })
+      );
     }
   }
 
@@ -4366,6 +4571,88 @@ function createAssistantChatGenerationFailure(
     ...(runId !== undefined ? { runId } : {}),
     ...(contextSummary !== undefined ? { contextSummary } : {})
   };
+}
+
+function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeRunResult {
+  return {
+    runId: request.runId,
+    projectId: request.projectId,
+    role: request.role,
+    state: "failed",
+    events: [
+      {
+        type: "run.failed",
+        message: "assistant stream failed",
+        runId: request.runId,
+        role: request.role,
+        state: "failed",
+        errorCode: "assistant_stream_failed"
+      }
+    ]
+  };
+}
+
+function canStreamAssistantRoute(route: ModelRoute | undefined): boolean {
+  if (!route) {
+    return false;
+  }
+  if (route.modelCapabilities?.supportsStreaming === false) {
+    return false;
+  }
+  return (
+    route.modelCapabilities?.supportsStreaming === true ||
+    route.api === "openai-completions" ||
+    route.api === "anthropic-messages"
+  );
+}
+
+function toRunRecordState(state: RuntimeRunResult["state"]): RunRecord["state"] {
+  return state === "queued" ? "running" : state;
+}
+
+function normalizeStreamingRuntimeEvents(input: {
+  events: RuntimeEvent[];
+  runId: string;
+  role: AgentRole;
+  state: RuntimeRunResult["state"];
+}): RuntimeEvent[] {
+  if (input.state !== "failed" || input.events.some((event) => event.type === "run.failed")) {
+    return input.events;
+  }
+
+  return [
+    ...input.events,
+    {
+      type: "run.failed",
+      message: `${input.role} run failed`,
+      runId: input.runId,
+      role: input.role,
+      state: "failed"
+    }
+  ];
+}
+
+function toStreamingRunEventRecord(input: {
+  event: RuntimeEvent;
+  runId: string;
+  projectId: string;
+  taskId?: string;
+  sequence: number;
+  createdAt: string;
+}): RunEventRecord {
+  const payload = { ...input.event };
+  delete (payload as { message?: string }).message;
+  return RunEventRecordSchema.parse({
+    id: `${input.runId}_event_${input.sequence}`,
+    runId: input.runId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    sequence: input.sequence,
+    type: input.event.type,
+    message: input.event.message,
+    payload,
+    createdAt: input.createdAt
+  });
 }
 
 function releaseRepositoryId(repositories: WorkbenchRepositories, id: string): void {

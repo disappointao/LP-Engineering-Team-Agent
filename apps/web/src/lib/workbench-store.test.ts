@@ -35,6 +35,11 @@ import {
 type AgentRuntimeAdapter = NonNullable<WebWorkbenchStoreOptions["plannerRuntime"]>;
 type RuntimeRunRequest = Parameters<AgentRuntimeAdapter["run"]>[0];
 type RuntimeRunResult = Awaited<ReturnType<AgentRuntimeAdapter["run"]>>;
+type RuntimeStreamEvent = NonNullable<
+  ReturnType<NonNullable<AgentRuntimeAdapter["stream"]>>
+> extends AsyncIterable<infer Event>
+  ? Event
+  : never;
 
 const emptyMCPState = {
   connectors: [],
@@ -264,6 +269,100 @@ class RecordingRuntime extends StaticRuntime {
     this.requests.push(request);
     return super.run(request);
   }
+}
+
+class StreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(
+    private readonly deltas: string[],
+    private readonly content: string
+  ) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(request);
+    for (const delta of this.deltas) {
+      yield { type: "model.delta", text: delta };
+    }
+    yield {
+      type: "completed",
+      result: {
+        runId: request.runId,
+        projectId: request.projectId,
+        role: request.role,
+        state: "completed",
+        modelOutputText: this.content,
+        events: [
+          {
+            type: "run.started",
+            message: "assistant run started",
+            runId: request.runId,
+            role: request.role
+          },
+          {
+            type: "model.completed",
+            message: "assistant model call completed",
+            runId: request.runId,
+            role: request.role,
+            provider: "stream-provider",
+            api: "openai-completions",
+            model: "stream-model",
+            usage: {
+              inputTokens: 2,
+              outputTokens: 3,
+              totalTokens: 5,
+              source: "provider_reported"
+            },
+            attempt: 1,
+            durationMs: 9,
+            supportsStreaming: true,
+            streamingEnabled: true
+          },
+          {
+            type: "run.completed",
+            message: "assistant run completed",
+            runId: request.runId,
+            state: "completed"
+          }
+        ]
+      }
+    };
+  }
+}
+
+async function saveStreamingAssistantRoute(
+  repositories: WorkbenchRepositories,
+  projectId: string
+): Promise<void> {
+  const timestamp = "2026-05-12T00:00:00.000Z";
+  await repositories.modelProviders.save({
+    id: "stream_provider",
+    scope: "project",
+    targetKey: projectId,
+    name: "Stream Provider",
+    provider: "custom",
+    config: {
+      api: "openai-completions",
+      models: [{ id: "stream-model" }]
+    },
+    enabled: true,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+  await repositories.modelRoutingPolicies.save({
+    id: "model_route_stream_assistant",
+    scope: "project",
+    targetKey: projectId,
+    role: "assistant",
+    providerId: "stream_provider",
+    model: "stream-model",
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
 }
 
 function completeArtifacts() {
@@ -2845,6 +2944,56 @@ describe("web workbench store", () => {
         runs[0]?.id,
         runs[0]?.id
       ]);
+    });
+
+    it("returns provider assistant streams without persisting token chunks", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const runtime = new StreamingRuntime(["Use ", "streaming."], "Use streaming.");
+      const store = createWebWorkbenchStore({ repositories, assistantRuntime: runtime });
+      const project = await store.createProject({ name: "Spring Campaign" });
+      await saveStreamingAssistantRoute(repositories, project.id);
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: project.id,
+        taskId: null,
+        prompt: "How should this page sound?"
+      });
+
+      expect(started).toMatchObject({
+        ok: true,
+        projectId: project.id,
+        assistantContent: "",
+        chunks: []
+      });
+      if (!started.ok || !started.assistantStream) {
+        throw new Error("Expected provider assistant stream");
+      }
+
+      const deltas: string[] = [];
+      for await (const delta of started.assistantStream) {
+        deltas.push(delta);
+      }
+      expect(deltas).toEqual(["Use ", "streaming."]);
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          content: deltas.join("")
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages.map((message) => message.content)).toEqual([
+        "How should this page sound?",
+        "Use streaming."
+      ]);
+      const events = await repositories.runEvents.listForTask(started.taskId);
+      expect(events.map((event) => event.type)).toEqual([
+        "run.started",
+        "model.completed",
+        "run.completed"
+      ]);
+      expect(events.some((event) => event.type === "model.delta")).toBe(false);
     });
 
     it("announces failed project-bound assistant starts without leaving empty tasks", async () => {

@@ -5,7 +5,8 @@ import {
   toOpenAIChatCompletionsUrl,
   type ModelFetch,
   type ModelProviderRuntimeRecord,
-  type ModelRoutingPolicy
+  type ModelRoutingPolicy,
+  type ModelStreamEvent
 } from "./index";
 
 function createOpenAICompatibleProvider(
@@ -145,6 +146,167 @@ describe("openai compatible chat completions model gateway", () => {
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-test-secret");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("OPENAI_COMPATIBLE_API_KEY");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("streams bounded text deltas and terminal provider usage from SSE frames", async () => {
+    let requestBody: unknown;
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider({
+            models: [{ id: "glm-5.1", supportsStreaming: true }]
+          });
+        }
+      },
+      fetch: async (_input, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(
+          [
+            'data: {"model":"glm-5.1","choices":[{"index":0,"delta":{"content":"Hello"}}]}',
+            "",
+            'data: {"choices":[{"index":0,"delta":{"content":" there"}}]}',
+            "",
+            'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        );
+      },
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    const events = await collectStream(
+      gateway.stream({
+        role: "planner",
+        projectId: "project_1",
+        prompt: "Plan",
+        routingPolicy: {
+          ...createPolicy(),
+          planner: {
+            ...createPolicy().planner,
+            modelCapabilities: {
+              supportsStreaming: true
+            }
+          }
+        }
+      })
+    );
+
+    expect(requestBody).toEqual({
+      model: "glm-5.1",
+      messages: [{ role: "user", content: "Plan" }],
+      stream: true,
+      stream_options: { include_usage: true }
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "model.delta",
+      "model.delta",
+      "model.completed"
+    ]);
+    expect(events[0]).toEqual({ type: "model.delta", text: "Hello" });
+    expect(events[1]).toEqual({ type: "model.delta", text: " there" });
+    expect(events[2]).toMatchObject({
+      type: "model.completed",
+      response: {
+        provider: "zhipu-openai",
+        api: "openai-completions",
+        model: "glm-5.1",
+        text: "Hello there",
+        usage: {
+          inputTokens: 9,
+          outputTokens: 4,
+          totalTokens: 13,
+          source: "provider_reported"
+        },
+        call: {
+          supportsStreaming: true,
+          streamingEnabled: true
+        }
+      }
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("data:");
+  });
+
+  it("falls back to estimated usage when OpenAI-compatible streams omit usage", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider({
+            models: [{ id: "glm-5.1", supportsStreaming: true }]
+          });
+        }
+      },
+      fetch: async () =>
+        new Response(
+          [
+            'data: {"model":"glm-5.1","choices":[{"index":0,"delta":{"content":"Estimated usage"}}]}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ),
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    const events = await collectStream(
+      gateway.stream({
+        role: "planner",
+        projectId: "project_1",
+        prompt: "Plan with no usage",
+        routingPolicy: createPolicy()
+      })
+    );
+    const completed = events.find((event) => event.type === "model.completed");
+
+    expect(completed).toMatchObject({
+      type: "model.completed",
+      response: {
+        text: "Estimated usage",
+        usage: {
+          inputTokens: 5,
+          outputTokens: 4,
+          totalTokens: 9,
+          source: "estimated"
+        }
+      }
+    });
+  });
+
+  it("fails closed on malformed OpenAI-compatible stream frames", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider();
+        }
+      },
+      fetch: async () =>
+        new Response("data: {not-json}\n\n", {
+          status: 200,
+          headers: { "content-type": "text/event-stream" }
+        }),
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      collectStream(
+        gateway.stream({
+          role: "planner",
+          projectId: "project_1",
+          prompt: "Plan",
+          routingPolicy: createPolicy()
+        })
+      )
+    ).rejects.toMatchObject({
+      name: "ModelProviderResponseError",
+      code: "model_provider_response_shape_invalid"
+    });
   });
 
   it("concatenates text content parts from OpenAI-compatible responses", async () => {
@@ -534,3 +696,11 @@ describe("openai compatible chat completions model gateway", () => {
     expect(abortObserved).toBe(true);
   });
 });
+
+async function collectStream(stream: AsyncIterable<ModelStreamEvent>): Promise<ModelStreamEvent[]> {
+  const events: ModelStreamEvent[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
+}

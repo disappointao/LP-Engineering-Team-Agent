@@ -5,7 +5,8 @@ import {
   toAnthropicMessagesUrl,
   type ModelFetch,
   type ModelProviderRuntimeRecord,
-  type ModelRoutingPolicy
+  type ModelRoutingPolicy,
+  type ModelStreamEvent
 } from "./index";
 
 function createZhipuProvider(config: Partial<ModelProviderRuntimeRecord["config"]> = {}) {
@@ -152,6 +153,158 @@ describe("anthropic messages model gateway", () => {
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("https://open.bigmodel.cn");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("ANTHROPIC_API_KEY");
     expect(JSON.stringify(gateway.getAuditLog())).not.toContain("sk-test-secret");
+  });
+
+  it("streams bounded text deltas and terminal provider usage from Anthropic SSE frames", async () => {
+    let requestBody: unknown;
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async (_input, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(
+          [
+            'event: message_start\ndata: {"type":"message_start","message":{"model":"glm-5.1","usage":{"input_tokens":7,"output_tokens":0}}}',
+            "",
+            'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"你好"}}',
+            "",
+            'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"，LP"}}',
+            "",
+            'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":5}}',
+            "",
+            'event: message_stop\ndata: {"type":"message_stop"}',
+            ""
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        );
+      },
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    const events = await collectStream(
+      gateway.stream({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "生成一个电商 LP",
+        routingPolicy: createPolicy()
+      })
+    );
+
+    expect(requestBody).toEqual({
+      model: "glm-5.1",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: "生成一个电商 LP" }],
+      stream: true
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "model.delta",
+      "model.delta",
+      "model.completed"
+    ]);
+    expect(events[0]).toEqual({ type: "model.delta", text: "你好" });
+    expect(events[1]).toEqual({ type: "model.delta", text: "，LP" });
+    expect(events[2]).toMatchObject({
+      type: "model.completed",
+      response: {
+        provider: "zhipu",
+        providerName: "智谱 GLM",
+        api: "anthropic-messages",
+        model: "glm-5.1",
+        text: "你好，LP",
+        usage: {
+          inputTokens: 7,
+          outputTokens: 5,
+          totalTokens: 12,
+          source: "provider_reported"
+        },
+        call: {
+          supportsStreaming: true,
+          streamingEnabled: true
+        }
+      }
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+    expect(JSON.stringify(events)).not.toContain("event:");
+  });
+
+  it("falls back to estimated usage when Anthropic-compatible streams omit usage", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () =>
+        new Response(
+          [
+            'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Estimated usage"}}',
+            "",
+            'event: message_stop\ndata: {"type":"message_stop"}',
+            ""
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ),
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    const events = await collectStream(
+      gateway.stream({
+        role: "builder",
+        projectId: "project_1",
+        prompt: "Generate",
+        routingPolicy: createPolicy()
+      })
+    );
+    const completed = events.find((event) => event.type === "model.completed");
+
+    expect(completed).toMatchObject({
+      type: "model.completed",
+      response: {
+        text: "Estimated usage",
+        usage: {
+          inputTokens: 2,
+          outputTokens: 4,
+          totalTokens: 6,
+          source: "estimated"
+        }
+      }
+    });
+  });
+
+  it("fails closed on malformed Anthropic-compatible stream frames", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createZhipuProvider();
+        }
+      },
+      fetch: async () =>
+        new Response("event: content_block_delta\ndata: {not-json}\n\n", {
+          status: 200,
+          headers: { "content-type": "text/event-stream" }
+        }),
+      env: { ANTHROPIC_API_KEY: "sk-test-secret" }
+    });
+
+    await expect(
+      collectStream(
+        gateway.stream({
+          role: "builder",
+          projectId: "project_1",
+          prompt: "Generate",
+          routingPolicy: createPolicy()
+        })
+      )
+    ).rejects.toMatchObject({
+      name: "ModelProviderResponseError",
+      code: "model_provider_response_shape_invalid"
+    });
   });
 
   it("keeps mock routes deterministic without provider config", async () => {
@@ -516,3 +669,11 @@ describe("anthropic messages model gateway", () => {
     expect(abortObserved).toBe(true);
   });
 });
+
+async function collectStream(stream: AsyncIterable<ModelStreamEvent>): Promise<ModelStreamEvent[]> {
+  const events: ModelStreamEvent[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
+}
