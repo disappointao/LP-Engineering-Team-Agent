@@ -362,6 +362,10 @@
    - Stage 30 Skill-Only Alpha Hardening v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 30 design 后阅读，用于审计已实现的 alpha boundary copy、页面提示、deterministic `pnpm alpha:check`、README onboarding、manual alpha checklist、文档 closeout 和最终验证。
 
+90. `specs/2026-05-22-browser-e2e-acceptance-design.md`
+   - Stage 31 Browser E2E Acceptance v0 design（设计已确认，待实施计划）。
+   - 在 Stage 30 implementation plan 和当前 roadmap 后阅读，用于把 Skill-only local alpha 的普通聊天 streaming、LP live task、artifact preview/export/snippet、Skills / Models / MCP 边界和基础 recovery display 转成可重复的 deterministic browser acceptance；本阶段继续排除远端浏览器 farm、跨浏览器矩阵、真实 provider streaming/usage、MCP 新功能、真实 shell runner、auth/RBAC、生产 observability 和真实部署编排。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
