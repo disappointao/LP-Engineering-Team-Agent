@@ -167,6 +167,43 @@ describe("web i18n", () => {
     expect(zh.skillsView.workerErrors.worker_runtime_not_configured).toContain("Worker");
   });
 
+  it("exposes localized skill-only alpha boundary copy", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    expect(en.skillsView.alphaNotice).toBe(
+      "Skill-only alpha: published and bound skills are the primary extension path for chat and LP tasks."
+    );
+    expect(en.skillsView.commandQueueNotice).toBe(
+      "Commands use approval, the local worker queue, and safe observations; they do not run arbitrary shell commands or real deployment."
+    );
+    expect(en.modelsView.optInNotice).toBe(
+      "Real providers are opt-in. Default alpha checks use deterministic routes and do not require API keys."
+    );
+    expect(en.modelsView.failClosedNotice).toBe(
+      "If a provider or route is missing, the runtime fails closed instead of silently treating a real call as successful."
+    );
+    expect(en.mcpView.deferredNotice).toBe(
+      "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors."
+    );
+
+    expect(zh.skillsView.alphaNotice).toBe(
+      "Skill-only alpha：已发布并绑定的 Skill 是聊天和 LP 任务的主要扩展路径。"
+    );
+    expect(zh.skillsView.commandQueueNotice).toBe(
+      "命令会经过批准、本地 Worker 队列和安全 observation；不会运行任意 shell 命令或真实部署。"
+    );
+    expect(zh.modelsView.optInNotice).toBe(
+      "真实 provider 需要显式 opt-in；默认 alpha 检查使用 deterministic 路由，不需要 API key。"
+    );
+    expect(zh.modelsView.failClosedNotice).toBe(
+      "provider 或路由缺失时，runtime 会 fail closed，不会把真实调用静默当作成功。"
+    );
+    expect(zh.mcpView.deferredNotice).toBe(
+      "MCP 在本 alpha 中后置；不配置连接器也可以完成聊天和 LP 生成。"
+    );
+  });
+
   it("exposes localized run recovery copy for both locales", () => {
     const zh = getWorkbenchCopy("zh-CN");
     const en = getWorkbenchCopy("en");

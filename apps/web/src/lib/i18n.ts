@@ -82,6 +82,7 @@ export interface WorkbenchCopy {
   skillsView: {
     title: string;
     subtitle: string;
+    alphaNotice: string;
     activeProjectLabel: string;
     noProject: string;
     activeCount: (count: number) => string;
@@ -110,6 +111,7 @@ export interface WorkbenchCopy {
     commandApprovalRequired: string;
     commandApprovalNotRequired: string;
     commandSimulationLabel: string;
+    commandQueueNotice: string;
     approveAndSimulate: string;
     approveAndQueue: string;
     commandQueueLabel: string;
@@ -133,6 +135,7 @@ export interface WorkbenchCopy {
   mcpView: {
     title: string;
     subtitle: string;
+    deferredNotice: string;
     activeProjectLabel: string;
     noProject: string;
     createTitle: string;
@@ -167,6 +170,8 @@ export interface WorkbenchCopy {
   modelsView: {
     title: string;
     subtitle: string;
+    optInNotice: string;
+    failClosedNotice: string;
     activeProjectLabel: string;
     noProject: string;
     providerCreateTitle: string;
@@ -435,6 +440,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     skillsView: {
       title: "Project skills",
       subtitle: "Create, validate, publish, and bind data-only skills for the active project.",
+      alphaNotice: "Skill-only alpha: published and bound skills are the primary extension path for chat and LP tasks.",
       activeProjectLabel: "Active project",
       noProject: "No active project",
       activeCount: (count) => `${count} active ${count === 1 ? "skill" : "skills"}`,
@@ -478,6 +484,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       commandApprovalRequired: "One-shot approval required",
       commandApprovalNotRequired: "Approval still required in this Web version",
       commandSimulationLabel: "Simulation only",
+      commandQueueNotice: "Commands use approval, the local worker queue, and safe observations; they do not run arbitrary shell commands or real deployment.",
       approveAndSimulate: "Approve and simulate",
       approveAndQueue: "Approve and queue",
       commandQueueLabel: "Local worker queue",
@@ -547,6 +554,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     mcpView: {
       title: "Project MCP",
       subtitle: "Register project connectors and expose only approved, permission-scoped tools to the runtime.",
+      deferredNotice: "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors.",
       activeProjectLabel: "Active project",
       noProject: "No active project",
       createTitle: "Create connector",
@@ -621,6 +629,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     modelsView: {
       title: "Project models",
       subtitle: "Configure project-scoped model providers and role routes without storing raw secrets.",
+      optInNotice: "Real providers are opt-in. Default alpha checks use deterministic routes and do not require API keys.",
+      failClosedNotice: "If a provider or route is missing, the runtime fails closed instead of silently treating a real call as successful.",
       activeProjectLabel: "Active project",
       noProject: "No active project",
       providerCreateTitle: "Create model provider",
@@ -911,6 +921,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     skillsView: {
       title: "项目技能",
       subtitle: "为当前项目创建、校验、发布并绑定仅包含数据的技能。",
+      alphaNotice: "Skill-only alpha：已发布并绑定的 Skill 是聊天和 LP 任务的主要扩展路径。",
       activeProjectLabel: "当前项目",
       noProject: "暂无当前项目",
       activeCount: (count) => `${count} 个启用技能`,
@@ -954,6 +965,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       commandApprovalRequired: "需要一次性批准",
       commandApprovalNotRequired: "当前 Web 版本仍需要批准",
       commandSimulationLabel: "仅模拟执行",
+      commandQueueNotice: "命令会经过批准、本地 Worker 队列和安全 observation；不会运行任意 shell 命令或真实部署。",
       approveAndSimulate: "批准并模拟执行",
       approveAndQueue: "批准并入队",
       commandQueueLabel: "本地 Worker 队列",
@@ -1023,6 +1035,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     mcpView: {
       title: "项目 MCP",
       subtitle: "注册项目连接器，并仅向运行时暴露已批准且权限受限的工具。",
+      deferredNotice: "MCP 在本 alpha 中后置；不配置连接器也可以完成聊天和 LP 生成。",
       activeProjectLabel: "当前项目",
       noProject: "暂无当前项目",
       createTitle: "创建连接器",
@@ -1097,6 +1110,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     modelsView: {
       title: "项目模型",
       subtitle: "配置项目范围的模型供应商和角色路由，不保存原始密钥。",
+      optInNotice: "真实 provider 需要显式 opt-in；默认 alpha 检查使用 deterministic 路由，不需要 API key。",
+      failClosedNotice: "provider 或路由缺失时，runtime 会 fail closed，不会把真实调用静默当作成功。",
       activeProjectLabel: "当前项目",
       noProject: "暂无当前项目",
       providerCreateTitle: "创建模型供应商",
