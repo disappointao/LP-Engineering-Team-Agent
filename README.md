@@ -1,27 +1,29 @@
 # LP Engineering Team Agent
 
-LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能体式对话创建和管理落地页任务。第一版聚焦本地 Web MVP：用户可以从大对话入口开始，创建或继续项目，执行普通聊天任务，并生成框架无关的静态 LP 产物。
+LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能体式对话创建和管理落地页任务。当前第一版交付目标是 **Skill-only local alpha**：用户可以从大对话入口开始普通问答，发起 LP 复杂任务，看到流式聊天和 live task progress，生成框架无关静态 LP 产物，并通过项目 Skills 扩展上下文和安全命令流程。
 
 生成的落地页产物必须是静态 HTML/CSS/JS。工作台本身是 Next.js 应用，但生成的 LP 输出不应该依赖 React、Vue、Angular、Vite、Next.js 或任何构建步骤。
 
-## 当前范围
+## Skill-only local alpha 当前范围
 
 - 类 Manus 的 Web 工作台：侧边栏、任务列表、对话优先入口和任务详情布局。
-- 普通任务和 LP 生成任务的确定性本地流程。
-- `index.html`、`styles.css`、`script.js` 三文件静态产物工作区。
-- Artifact preview 和选中文件的 bounded source snippet 读取。
-- 模型网关配置入口，支持 deterministic、Anthropic-style 和 OpenAI-compatible provider。
-- Skills、MCP、模型路由、项目记忆和 Agent runtime 已作为架构边界存在，并按阶段逐步实现。
+- 普通聊天：默认 deterministic，本地 Web/API 可流式回答；`REAL_MODEL_RUNTIME=1` 时可显式 opt in 真实 provider。
+- LP 复杂任务：task-first `Planner -> Builder -> Reviewer -> Deployer` 固定链路，页面通过 live task panel 展示进度和恢复状态。
+- `index.html`、`styles.css`、`script.js` 三文件静态产物工作区，支持 artifact preview、export 和 bounded source snippet 读取。
+- 项目 Skills：创建 draft、validate、publish、bind、enable/disable，并把已发布绑定的 Skill 作为聊天和 LP 任务的主要扩展路径。
+- Skill command queue：已发布 deployment skill command 经过 approval、本地 worker queue、`Run local worker once` 和 safe observation，不开放任意 shell 命令。
+- 模型网关配置入口：支持 deterministic、Anthropic Messages compatible 和 OpenAI Chat Completions compatible provider；真实 provider 只通过显式 opt-in 进入。
 
-## 第一版 Web MVP 暂不包含
+## Alpha 暂不包含
 
-- 内置生产部署流程。
-- Web UI 中的真实 MCP tool execution。
-- 长时间运行的 sandboxed shell execution。
-- 带持久上下文压缩的完整 multi-agent runtime。
-- 桌面应用打包。
+- MCP 不属于第一版必需路径；MCP 页面可以保留为架构边界，但普通聊天和 LP 生成不需要配置 MCP connector。
+- Browser E2E acceptance；该项进入 Stage 31。
+- provider token streaming、usage/cost reporting 或自动 fallback provider execution。
+- 生产 auth/RBAC、邀请流程、团队审批队列或 hosted deployment。
+- production Postgres migrations、object storage migration 或默认 backend 切换。
+- 真实 shell runner、真实部署编排、真实 MCP SDK 或 write tools。
 
-这些能力会在后续阶段单独实现，当前代码优先保持小而可测试。
+这些能力会在后续阶段单独实现，当前 alpha 优先保持本地、单用户、Skill-only、可测试。
 
 ## 环境要求
 
@@ -61,6 +63,16 @@ OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 
 提交到仓库的模板中保持 secret 为空，只在本地 `.env.local` 填写真实值。
 
+真实 provider 本地 smoke 的最小路径：
+
+1. 在 `.env.local` 设置 `REAL_MODEL_RUNTIME=1`。
+2. 在 Web 的 Models view 创建 provider，选择 `anthropic-messages` 或 `openai-completions`。
+3. 使用 `apiKeyEnv` 引用本地环境变量名，不在 UI 或文档中填写真实 key。
+4. 为 `assistant`、`planner` 和 `builder` 保存 route。
+5. 手动提交一个普通聊天 prompt 和一个 LP prompt；失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
+
+默认 `pnpm alpha:check`、`pnpm smoke` 和 `pnpm test` 不会触发真实 provider 调用。
+
 ## 本地启动
 
 启动 Web 工作台：
@@ -89,7 +101,15 @@ AGENT_WORKER_MODE=demo pnpm worker:dev
 
 ## 验证
 
-运行快速 Web V1 smoke gate：
+运行 Skill-only alpha 快速检查：
+
+```bash
+pnpm alpha:check
+```
+
+`pnpm alpha:check` 是 deterministic readiness gate，不需要浏览器、网络、真实 provider key、MCP server、Postgres 或真实部署。
+
+运行快速 Skill-only alpha smoke gate：
 
 ```bash
 pnpm smoke
@@ -157,7 +177,7 @@ Postgres worker backend 只影响 worker queue storage，不改变 Web workbench
 
 ## 手动验收
 
-本地检查 Web V1 时使用：
+本地检查 Skill-only alpha 时使用：
 
 ```text
 docs/web-v1-acceptance.md
@@ -169,7 +189,7 @@ docs/web-v1-acceptance.md
 
 - `docs/project-roadmap.md` - 当前路线图、下一阶段队列和 backlog 维护规则。
 - `docs/development.md` - 本地开发说明。
-- `docs/web-v1-acceptance.md` - Web V1 手动验收清单。
+- `docs/web-v1-acceptance.md` - Skill-only alpha 手动验收清单。
 - `docs/agent-development-learning.md` - 中文 Agent 开发学习笔记，记录 Agent 概念、难点和本项目取舍。
 - `docs/superpowers/README.md` - Superpowers specs/plans 的时间顺序索引。
 - `docs/superpowers/specs/` - 需求和设计 specs。
