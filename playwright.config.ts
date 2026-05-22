@@ -5,9 +5,12 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = "http://127.0.0.1:31031";
 const stateDir = join("test-results", "alpha-e2e-state");
 const stateFile = join(stateDir, "workbench-state.json");
+const workerJobsFile = join(stateDir, "worker-jobs.json");
+const workerPayloadsFile = join(stateDir, "worker-payloads.json");
+const workerLogsFile = join(stateDir, "worker-logs.json");
 
+rmSync(stateDir, { recursive: true, force: true });
 mkdirSync(stateDir, { recursive: true });
-rmSync(stateFile, { force: true });
 
 export default defineConfig({
   testDir: "apps/web/e2e",
@@ -39,6 +42,10 @@ export default defineConfig({
       REAL_MODEL_PROVIDER_TEST: "0",
       WORKBENCH_REPOSITORY_BACKEND: "json",
       LP_AGENT_WORKBENCH_STATE_FILE: stateFile,
+      WORKER_REPOSITORY_BACKEND: "json",
+      WORKER_JOBS_FILE: workerJobsFile,
+      WORKER_PAYLOADS_FILE: workerPayloadsFile,
+      WORKER_LOGS_FILE: workerLogsFile,
       NEXT_TELEMETRY_DISABLED: "1"
     }
   },
