@@ -1,20 +1,20 @@
 import { mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:31031";
-const stateDir = join("test-results", "alpha-e2e-state");
-const stateFile = join(stateDir, "workbench-state.json");
-const workerJobsFile = join(stateDir, "worker-jobs.json");
-const workerPayloadsFile = join(stateDir, "worker-payloads.json");
-const workerLogsFile = join(stateDir, "worker-logs.json");
+const stateDir = resolve("test-results", "alpha-e2e-state");
+const stateFile = resolve(stateDir, "workbench-state.json");
+const workerJobsFile = resolve(stateDir, "worker-jobs.json");
+const workerPayloadsFile = resolve(stateDir, "worker-payloads.json");
+const workerLogsFile = resolve(stateDir, "worker-logs.json");
 
 rmSync(stateDir, { recursive: true, force: true });
 mkdirSync(stateDir, { recursive: true });
 
 export default defineConfig({
   testDir: "apps/web/e2e",
-  outputDir: join("test-results", "alpha-e2e-artifacts"),
+  outputDir: resolve("test-results", "alpha-e2e-artifacts"),
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

@@ -18,6 +18,7 @@ test("streams ordinary chat and preserves the completed thread", async ({ page }
   const streamResponse = await streamResponsePromise;
 
   expect(streamResponse.headers()["content-type"]).toContain("application/x-ndjson");
+  await streamResponse.finished();
   await expectOrdinaryChatThread(page, prompt);
   await expectNoStaticArtifactPreview(page);
 
