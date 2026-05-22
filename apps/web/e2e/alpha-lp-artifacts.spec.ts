@@ -1,0 +1,37 @@
+import { expect, test } from "@playwright/test";
+import {
+  expectSnippetFor,
+  expectStaticLpArtifacts,
+  submitPrompt
+} from "./helpers";
+
+test("runs an LP live task and exposes static artifacts", async ({ page }) => {
+  const prompt = "Generate a spring ecommerce static HTML landing page";
+
+  await page.goto("/");
+  const submitResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/tasks/submit") &&
+      response.request().method() === "POST"
+  );
+  await submitPrompt(page, prompt);
+  const submitResponse = await submitResponsePromise;
+
+  expect(submitResponse.ok()).toBe(true);
+  await expect(page.getByLabel("You").getByText(prompt, { exact: true })).toBeVisible();
+
+  const agentProcess = page.getByLabel("Agent process");
+  await expect(agentProcess).toBeVisible();
+  for (const role of ["Planner", "Builder", "Reviewer", "Deployer"]) {
+    await expect(page.getByText(role, { exact: true }).first()).toBeVisible();
+  }
+
+  await expectStaticLpArtifacts(page);
+  await expectSnippetFor(page, "index.html");
+  await expectSnippetFor(page, "styles.css");
+  await expectSnippetFor(page, "script.js");
+
+  await page.goto("/?artifactPath=unknown.txt");
+  await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();
+  await expectStaticLpArtifacts(page);
+});
