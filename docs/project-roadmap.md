@@ -50,9 +50,9 @@
 
 按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **5-10 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **10-18 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。当前第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已启动，当前聚焦 provider usage metadata 和 streaming capability 可见性。第一版可用闭环下一步优先补齐：
 
-- Provider token streaming 和 bounded usage metadata，让真实 provider 路径具备更细的响应反馈和可见性；Stage 32 是推荐下一阶段。
+- Provider streaming capability 和 bounded usage metadata，让真实 provider 路径具备更细的响应反馈和可见性；Stage 32 是当前执行阶段。
 - Manual alpha UX tightening，根据 checklist 和 Browser E2E 结果收紧空状态、错误状态、恢复提示和日常文案；Stage 33 排在 Stage 32 之后。
 - Browser failure injection 和轻量视觉回归扩展可在 Stage 33 之后单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
 
@@ -389,16 +389,20 @@ Stage 31 v0 added deterministic Playwright browser acceptance gate. `pnpm alpha:
 
 ### Stage 32：Provider Streaming and Usage Metadata v0
 
-**状态：** 推荐下一阶段。
+**状态：** 当前执行阶段，设计和实施计划已创建，待实现。
 
 **为什么现在做：** 第一版 Web 闭环已经具备 Skill-only alpha hardening 和 Browser E2E gate，真实 provider 体验还需要更细的响应反馈和成本/用量可见性；这应在 deterministic 默认路径稳定后做，避免把 provider 协议复杂度提前压到当前闭环。
 
 **建议范围：**
 
-- 在 model gateway / runtime 边界增加 provider token streaming 能力探测和安全事件映射，保持 deterministic 默认路径。
+- 在 model gateway / runtime 边界增加 provider streaming capability 探测和安全事件映射，保持 deterministic 默认路径。
 - 为真实模型调用记录 provider/model、attempt、duration、token/usage metadata（如 provider 返回），并继续避免 secret 或 raw provider response 泄漏。
 - Web/API 只展示 bounded usage summary 和失败原因，不改变 LP structured output 的 parse / repair 安全边界。
 - 增加 fake-fetch unit tests 和 opt-in real provider smoke 指引。
+
+**当前设计：** `docs/superpowers/specs/2026-05-22-provider-streaming-usage-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-22-provider-streaming-usage.md`。
 
 **非目标：**
 
@@ -566,6 +570,7 @@ Stage 31 v0 added deterministic Playwright browser acceptance gate. `pnpm alpha:
 
 ## 决策记录
 
+- Stage 32 已启动 Provider Streaming and Usage Metadata v0：本阶段先实现 provider-reported / estimated usage metadata、duration、attempt 和 streaming capability 可见性，不实现真实 token delta UI、自动 fallback execution、tool-call conversion、billing/quota、MCP 或生产 observability。
 - Stage 31 已完成 Browser E2E Acceptance v0：`pnpm alpha:e2e` 以 deterministic Playwright Chromium gate 覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha boundary 和 bounded recovery error display。
 - Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha，MCP、provider usage/streaming 和真实部署继续后置；Browser E2E 已由 Stage 31 补齐。
 - Stage 29 已完成 Web task state no-refresh v0；Browser E2E 已由 Stage 31 实现，后续高级 streaming run timeline 和视觉/交互 hardening 继续留在 Web UI backlog。
