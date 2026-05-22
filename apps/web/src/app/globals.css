@@ -524,6 +524,18 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mcpHeader .alphaBoundaryNote,
+.skillsHeader .alphaBoundaryNote,
+.modelsHeader .alphaBoundaryNote,
+.skillsView > .alphaBoundaryNote,
+.skillCommandsHeader .alphaBoundaryNote {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+
 .skillsHeader span,
 .skillRuntimeChip,
 .modelRuntimeChip {

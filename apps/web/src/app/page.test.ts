@@ -1337,6 +1337,22 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("mock-anthropic/code-model");
   });
 
+  it("renders real provider opt-in and fail-closed guidance in the models view", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "models" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain(
+      "Real providers are opt-in. Default alpha checks use deterministic routes and do not require API keys."
+    );
+    expect(html).toContain(
+      "If a provider or route is missing, the runtime fails closed instead of silently treating a real call as successful."
+    );
+  });
+
   it("renders the MCP view with localized project context", async () => {
     setActiveEmptyProjectState();
 
@@ -1348,6 +1364,19 @@ describe("HomePage project flow errors", () => {
     expect(html).toContain("Project MCP");
     expect(html).toContain("Connector JSON");
     expect(html).toContain("Visible tools");
+  });
+
+  it("renders MCP deferred guidance in the MCP view", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain(
+      "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors."
+    );
   });
 
   it("renders the MCP view in Chinese", async () => {
@@ -2117,6 +2146,22 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Acme Brand Landing Page Sections");
     expect(text).toContain("Published");
     expect(text).toContain("1 active skill");
+  });
+
+  it("renders Skill-only alpha guidance in the skills view", async () => {
+    setActiveEmptyProjectState();
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "skills" }),
+      acceptLanguage: "en"
+    });
+
+    expect(html).toContain(
+      "Skill-only alpha: published and bound skills are the primary extension path for chat and LP tasks."
+    );
+    expect(html).toContain(
+      "Commands use approval, the local worker queue, and safe observations; they do not run arbitrary shell commands or real deployment."
+    );
   });
 
   it("renders project skill command cards with simulated approval forms", async () => {

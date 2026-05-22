@@ -339,6 +339,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <span>{copy.skillsView.activeProjectLabel}</span>
                   <strong>{activeProject?.name ?? copy.skillsView.noProject}</strong>
                 </div>
+                <p className="alphaBoundaryNote">{copy.skillsView.alphaNotice}</p>
 
                 {activeProject ? (
                   <>
@@ -451,6 +452,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         <div>
                           <h2 id="skill-commands-title">{copy.skillsView.commandsTitle}</h2>
                           <p>{copy.skillsView.commandsSubtitle}</p>
+                          <p className="alphaBoundaryNote">
+                            {copy.skillsView.commandQueueNotice}
+                          </p>
                         </div>
                         <span>{copy.skillsView.commandQueueLabel}</span>
                       </div>
@@ -579,6 +583,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <div>
                     <h1 id="mcp-title">{copy.mcpView.title}</h1>
                     <p>{copy.mcpView.subtitle}</p>
+                    <p className="alphaBoundaryNote">{copy.mcpView.deferredNotice}</p>
                   </div>
                 </header>
 
@@ -748,6 +753,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <div>
                     <h1 id="models-title">{copy.modelsView.title}</h1>
                     <p>{copy.modelsView.subtitle}</p>
+                    <p className="alphaBoundaryNote">{copy.modelsView.optInNotice}</p>
+                    <p className="alphaBoundaryNote">{copy.modelsView.failClosedNotice}</p>
                   </div>
                 </header>
 
