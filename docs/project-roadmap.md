@@ -51,9 +51,9 @@
 
 按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **4-8 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **8-15 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 正在进行 Manual alpha UX tightening，优先处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。第一版可用闭环下一步优先补齐：
 
-- Manual alpha UX tightening，根据 checklist、Browser E2E 和 provider usage timeline 结果收紧空状态、错误状态、恢复提示和日常文案；Stage 33 是推荐下一阶段。
+- Manual alpha UX tightening 正在 Stage 33 中执行；本阶段只做 Web alpha 日常交互收紧，不改变 runtime protocol。
 - Browser failure injection 和轻量视觉回归扩展可在 Stage 33 之后单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
 - Provider token delta streaming v0 可在 Stage 33/34 后评估，前提是 Stage 32 的 metadata 边界稳定且不会破坏 LP structured output parse / repair。
 
@@ -417,7 +417,7 @@ Stage 32 v0 已实现真实 provider 路径的 bounded usage/call metadata 和 W
 
 ### Stage 33：Manual Alpha UX Tightening v0
 
-**状态：** 推荐下一阶段。
+**状态：** 当前进行中。
 
 **为什么现在做：** Stage 30 已明确 alpha 边界，Stage 31 已补自动化浏览器验收，Stage 32 将补真实 provider 可见性；之后应根据手动 alpha 使用反馈收紧日常体验的小摩擦，而不是立刻扩大到 MCP、真实部署或多用户生产能力。
 
@@ -432,6 +432,10 @@ Stage 32 v0 已实现真实 provider 路径的 bounded usage/call metadata 和 W
 - 不做大型 UI 重构或新信息架构。
 - 不做 MCP 新功能、真实 shell runner、真实部署编排或 production auth/RBAC。
 - 不做 provider streaming/usage 之外的模型网关大改。
+
+**设计：** `docs/superpowers/specs/2026-05-22-manual-alpha-ux-tightening-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-22-manual-alpha-ux-tightening.md`。
 
 ### Stage 34：Browser Failure Injection and Visual Regression v0
 

@@ -378,6 +378,14 @@
    - Stage 32 Provider Streaming and Usage Metadata v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 32 design 后阅读，用于按 TDD 实现 model gateway usage/call metadata、OpenAI-compatible / Anthropic-compatible adapter metadata、runtime/API safe event propagation、Web compact timeline summary、文档和最终验证。
 
+94. `specs/2026-05-22-manual-alpha-ux-tightening-design.md`
+   - Stage 33 Manual Alpha UX Tightening v0 design（进行中）。
+   - 在 Stage 32 implementation plan 和当前 roadmap 后阅读，用于把手动 alpha 中最常见的 sidebar navigation、quick prompt、空状态和文案摩擦收紧成可操作的 Web 体验，同时继续排除 runtime protocol、MCP、真实 shell、真实部署、auth/RBAC 和 provider token delta streaming。
+
+95. `plans/2026-05-22-manual-alpha-ux-tightening.md`
+   - Stage 33 Manual Alpha UX Tightening v0 implementation plan（进行中）。
+   - 在 Stage 33 design 后阅读，用于实现 Web-only current project/task selection actions、sidebar form wiring、quick prompt form、空状态 copy、focused regression tests、manual alpha checklist 和 roadmap closeout。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
