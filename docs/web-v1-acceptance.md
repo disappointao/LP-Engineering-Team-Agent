@@ -1,6 +1,6 @@
 # Skill-Only Alpha 验收清单
 
-在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 已通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 应通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
 
 ## 准备
 
@@ -89,7 +89,7 @@
 
 ## 已知后续工作
 
-- [ ] Browser automation acceptance tests 已进入 Stage 31；后续可扩展到更多 failure injection 和视觉回归。
+- [ ] Stage 31 Browser automation acceptance v0 已完成；后续可扩展到更多 failure injection 和视觉回归。
 - [ ] Provider streaming、usage/cost metadata 进入 Stage 32。
 - [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。
