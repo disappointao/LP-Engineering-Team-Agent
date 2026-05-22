@@ -208,6 +208,26 @@ describe("streaming workbench visible status", () => {
       )
     ).toBe("The provider stream stopped before the response completed.");
   });
+
+  it("falls back to safe error text when typed error copy is unavailable", () => {
+    const state: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "error",
+      errorCode: "stream_interrupted",
+      errorMessage: "server safe fallback"
+    };
+
+    expect(
+      getVisibleStreamingStatus(
+        state,
+        "Generating response",
+        "The chat response could not be generated.",
+        {
+          generation_failed: "The chat response could not be generated."
+        } as Record<keyof typeof errorMessages, string>
+      )
+    ).toBe("server safe fallback");
+  });
 });
 
 describe("streaming workbench chat stream request body", () => {

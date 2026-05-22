@@ -104,7 +104,7 @@ export function getVisibleStreamingStatus(
   }
   if (state.status === "error") {
     return state.errorCode
-      ? streamingErrorMessages[state.errorCode]
+      ? streamingErrorMessages[state.errorCode] ?? state.errorMessage ?? streamingErrorLabel
       : state.errorMessage ?? streamingErrorLabel;
   }
   if (state.status === "fallback_required") {
