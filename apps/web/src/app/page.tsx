@@ -1351,7 +1351,10 @@ function ArtifactDiffBlock({
             ) : null}
             {file.summary ? <p>{file.summary}</p> : null}
             {file.canPreview ? (
-              <a href={createArtifactPreviewHref(previewSearchParams, file.path)}>
+              <a
+                aria-label={`${copy.previewSnippetLabel}: ${file.path}`}
+                href={createArtifactPreviewHref(previewSearchParams, file.path)}
+              >
                 {copy.previewSnippetLabel}
               </a>
             ) : null}

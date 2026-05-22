@@ -3274,6 +3274,68 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("body { color: #111827; }");
   });
 
+  it("labels artifact snippet preview links by file path", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          },
+          {
+            path: "script.js",
+            state: "unchanged",
+            sizeBytes: 24,
+            sha256: "c".repeat(64),
+            shortSha256: "c".repeat(12),
+            summary: "script.js static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ artifactPath: "styles.css" })
+    });
+    const links = collectElements(page, "a").filter(
+      (link) => collectText(link.props?.children).join("") === "Preview snippet"
+    );
+
+    expect(links.map((link) => link.props?.["aria-label"])).toEqual([
+      "Preview snippet: index.html",
+      "Preview snippet: styles.css",
+      "Preview snippet: script.js"
+    ]);
+  });
+
   it("does not render full preview artifact source in visible diff cards by default", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
