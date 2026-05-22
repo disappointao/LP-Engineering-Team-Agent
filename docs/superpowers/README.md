@@ -358,6 +358,10 @@
    - Stage 30 Skill-Only Alpha Hardening v0 design（设计已确认，待实施计划）。
    - 在 Stage 29 implementation plan 和当前 roadmap 后阅读，用于把已跑通的 Web/API 第一版闭环收敛成 Skill-only local alpha：普通聊天 streaming、LP live task、artifact preview/export、Skill 创建/绑定/命令、真实 provider opt-in、fail-closed 提示和 alpha 验收；本阶段继续排除 MCP 新功能、Browser E2E、usage/cost reporting、production auth/RBAC、Postgres production rollout 和真实部署编排。
 
+89. `plans/2026-05-22-skill-only-alpha-hardening.md`
+   - Stage 30 Skill-Only Alpha Hardening v0 implementation plan（待执行）。
+   - 在 Stage 30 design 后阅读，用于按 TDD 收口 Skill-only local alpha：新增 alpha boundary copy、页面提示、deterministic `pnpm alpha:check`、README onboarding、manual alpha checklist、文档 closeout 和最终验证。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

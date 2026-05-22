@@ -331,7 +331,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 ### Stage 30：Skill-Only Alpha Hardening v0
 
-**状态：** 设计已确认，待实施计划。
+**状态：** 实施计划已创建，待执行。
 
 **为什么现在做：** 第一版可用闭环完成后，需要把“只用 Skill、不用 MCP”的 alpha 体验收敛到可交付状态：启动、配置、技能绑定、真实 provider opt-in、失败提示和验收都要清晰。
 
@@ -351,6 +351,8 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 - 不做真实部署编排。
 
 **当前设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-22-skill-only-alpha-hardening.md`。
 
 ### Stage 31：Browser E2E Acceptance v0
 
