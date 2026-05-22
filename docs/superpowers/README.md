@@ -355,12 +355,12 @@
    - 在 Stage 29 design 后阅读，用于审计已实现的 safe task state refresh、live LP task submit route、client polling panel、artifact progress auto-refresh、smoke coverage / docs closeout；本计划仍排除 SSE、raw stdout/stderr streaming、MCP streaming、实时多人协作和生产 observability stack。
 
 88. `specs/2026-05-22-skill-only-alpha-hardening-design.md`
-   - Stage 30 Skill-Only Alpha Hardening v0 design（设计已确认，待实施计划）。
+   - Stage 30 Skill-Only Alpha Hardening v0 design（已实现，当前已完成）。
    - 在 Stage 29 implementation plan 和当前 roadmap 后阅读，用于把已跑通的 Web/API 第一版闭环收敛成 Skill-only local alpha：普通聊天 streaming、LP live task、artifact preview/export、Skill 创建/绑定/命令、真实 provider opt-in、fail-closed 提示和 alpha 验收；本阶段继续排除 MCP 新功能、Browser E2E、usage/cost reporting、production auth/RBAC、Postgres production rollout 和真实部署编排。
 
 89. `plans/2026-05-22-skill-only-alpha-hardening.md`
-   - Stage 30 Skill-Only Alpha Hardening v0 implementation plan（待执行）。
-   - 在 Stage 30 design 后阅读，用于按 TDD 收口 Skill-only local alpha：新增 alpha boundary copy、页面提示、deterministic `pnpm alpha:check`、README onboarding、manual alpha checklist、文档 closeout 和最终验证。
+   - Stage 30 Skill-Only Alpha Hardening v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 30 design 后阅读，用于审计已实现的 alpha boundary copy、页面提示、deterministic `pnpm alpha:check`、README onboarding、manual alpha checklist、文档 closeout 和最终验证。
 
 ## 维护规则
 

@@ -282,7 +282,7 @@ Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/
 - Stage 27 Real Chat Runtime and Skill Context v0 已实现：`assistant` 已是一等 model/runtime role；project-bound 普通聊天通过 `runAssistantChat()` 进入 assistant runtime；prompt assembly 使用 bounded skill、memory 和 project context；Web stream 会输出安全 `context.summary`，UI 展示 project、skill 和 runtime summary。默认仍是 deterministic runtime，真实模型 runtime 仍必须通过 `REAL_MODEL_RUNTIME=1` 显式 opt-in。
 - Stage 28 LP Agent Chain End-to-End v0 已实现：Web LP 复杂任务采用 task-first fixed chain orchestration；Planner / Builder / Reviewer / Deployer 的 run、handoff、artifact workspace、deployment handoff 和 recovery facts 都绑定到同一个 task。Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下继续走真实模型 structured output；Reviewer / Deployer 仍 deterministic / policy-driven。
 - Stage 29 Live Run Timeline and Artifact Progress v0 已实现：短轮询 task state refresh、live task submit fallback、compact run timeline panel、artifact progress auto-refresh 和 safe live payload smoke 覆盖已经落地；repository 仍是唯一事实来源，不新增 SSE 或 raw log streaming。
-- Stage 30 Skill-Only Alpha Hardening v0 已确认设计并完成实施计划：它不是新增 Agent runtime 能力，而是把普通聊天 streaming、LP live task、artifact preview/export、项目 Skills、Skill command queue 和真实 provider opt-in 收敛成可交付的本地 alpha。学习重点是区分“第一版可用闭环的主路径”和“架构边界已存在但 alpha 不依赖的能力”：MCP 页面可以保留，但 MCP 新功能、Browser E2E、usage/cost reporting 和真实部署仍后置。
+- Stage 30 Skill-Only Alpha Hardening v0 已实现：它不是新增 Agent runtime 能力，而是把普通聊天 streaming、LP live task、artifact preview/export、项目 Skills、Skill command queue 和真实 provider opt-in 收敛成可交付的本地 alpha。学习重点是区分“第一版可用闭环的主路径”和“架构边界已存在但 alpha 不依赖的能力”：MCP 页面可以保留，但 MCP 新功能、Browser E2E、usage/cost reporting 和真实部署仍后置。默认 alpha 检查通过 `pnpm alpha:check` 运行 deterministic readiness gate，不触发真实 provider、MCP server、Postgres、Browser E2E 或真实部署。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
@@ -292,7 +292,6 @@ Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，当前只允许 deterministic local executor 和安全摘要 observation。由于第一版可用闭环暂不依赖 MCP，后续优先级应先放在 Web/API/Skill/LP workflow 和 streaming 体验上。
-- Skill-only alpha 仍待执行实施计划：README、alpha checklist、alpha check command、UI fail-closed 文案和相关测试需要按 `docs/superpowers/plans/2026-05-22-skill-only-alpha-hardening.md` 落地。
 - Artifact reader、metadata-only diff 和安全 snippet preview 已实现为 Agent 上下文读取边界；行级 textual diff、artifact patch workflow、桌面文件系统 workspace 和 diff 注入仍未做。
 - 真实本地命令 runner、强 sandbox adapter、真实部署 runner、MCP worker execution、raw stdout/stderr streaming 仍未做；Stage 19 daemon / heartbeat / stale recovery 已实现为 safe simulated worker lifecycle 能力。
 - 多 agent handoff 已有 LP 固定链路 v0；Stage 25 已实现恢复 UI 和第一批 retry/resume server actions，但团队审批和通用 DAG 仍未做。

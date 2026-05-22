@@ -49,15 +49,15 @@
 
 按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **7-12 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 browser E2E、真实 provider 冒烟、文档和交互 hardening，粗略估算 **12-20 个有效开发日**。
 
-当前第一版可用闭环优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。当前第一版可用闭环下一步优先补齐：
 
-- Skill-only 上下文和 skill command 可观察工作流；MCP 暂不作为近期目标。
-- Alpha hardening、manual acceptance、真实 provider 本地冒烟说明和错误提示整理。
 - Browser E2E acceptance，覆盖普通聊天 streaming、LP live submit fallback、run timeline polling、artifact preview/export 和基础 recovery display。
+- Provider token streaming 和 bounded usage metadata，让真实 provider 路径具备更细的响应反馈和可见性。
+- Manual alpha UX tightening，根据 checklist 和 Browser E2E 结果收紧空状态、错误状态、恢复提示和日常文案。
 
 当前仍明确后置：
 
-- 真实 fallback provider execution、模型 usage/cost reporting 和 tool-call protocol conversion。
+- 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement，以及 provider usage 的成本结算类能力；Stage 32 只计划 bounded usage metadata。
 - 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
@@ -327,36 +327,38 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 **实施计划：** `docs/superpowers/plans/2026-05-21-live-run-timeline-artifact-progress.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 30：Skill-Only Alpha Hardening v0
 
-**状态：** 实施计划已创建，待执行。
+**状态：** 已实现。
 
-**为什么现在做：** 第一版可用闭环完成后，需要把“只用 Skill、不用 MCP”的 alpha 体验收敛到可交付状态：启动、配置、技能绑定、真实 provider opt-in、失败提示和验收都要清晰。
+Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认 deterministic、本地单用户、Web/API/Skill/LP 主路径清晰，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
 
-**建议范围：**
+已实现范围：
 
-- 调整 README、manual acceptance 和 smoke/alpha scripts，明确第一版可用闭环、Skill-only 范围和 MCP 后置。
-- 补齐 skill authoring / binding / command execution 与 chat/LP task 的可见关联。
-- 做真实 provider 本地冒烟说明和 fail-closed 错误提示整理。
-- 做 UI copy、empty/error/loading state hardening。
-- 跑完整 `pnpm smoke`、`pnpm test`、`pnpm typecheck`，并执行 manual alpha checklist。
+- README 已把 **Skill-only local alpha** 作为第一入口，说明普通聊天 streaming、LP live task、静态 artifact、项目 Skills、Skill command queue 和真实 provider opt-in。
+- 新增 `pnpm alpha:check` deterministic readiness gate，覆盖 smoke、i18n、page、streaming、live task 和 task route，不依赖浏览器、网络、真实 provider key、MCP、Postgres 或真实部署。
+- Web Skills / Models / MCP views 增加 alpha boundary copy：Skills 是主扩展路径，真实 provider 是显式 opt-in 且 fail closed，MCP 在 alpha 中后置。
+- `docs/web-v1-acceptance.md` 已升级为 Skill-only alpha 手动验收清单，覆盖普通聊天、LP live task、artifact、Skills、Models opt-in、MCP deferred 和回归命令。
+- i18n/page tests 覆盖新增 alpha 文案和页面提示。
 
-**非目标：**
+未实现范围：
 
 - 不做 production auth/RBAC。
 - 不做 production Postgres migrations。
-- 不做 MCP。
+- 不做 MCP 新功能或把 MCP 设为 alpha 必需项。
 - 不做真实部署编排。
+- 不做 Browser E2E，该项进入 Stage 31。
+- 不做 provider token streaming 或 usage/cost metadata，该项进入 Stage 32。
 
-**当前设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-22-skill-only-alpha-hardening.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-22-skill-only-alpha-hardening.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 31：Browser E2E Acceptance v0
 
-**状态：** Stage 30 后推荐。
+**状态：** 推荐下一阶段。
 
 **为什么现在做：** Stage 29/30 收敛后，需要用可重复的浏览器验收覆盖第一版可用闭环，避免只靠 unit smoke 和手工检查判断 Web 工作台状态。
 
@@ -391,6 +393,24 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 - 不做 tool-call protocol conversion。
 - 不做 billing、quota enforcement 或 provider marketplace。
 - 不做 MCP、真实 shell runner、auth/RBAC 或生产 observability stack。
+
+### Stage 33：Manual Alpha UX Tightening v0
+
+**状态：** Stage 32 后推荐。
+
+**为什么现在做：** Stage 30 已明确 alpha 边界，Stage 31/32 会补自动化浏览器验收和真实 provider 可见性；之后应根据手动 alpha 使用反馈收紧日常体验的小摩擦，而不是立刻扩大到 MCP、真实部署或多用户生产能力。
+
+**建议范围：**
+
+- 根据 alpha checklist 和 Browser E2E 结果整理最常见的空状态、错误状态、恢复提示和文案问题。
+- 优化 Skills / Models / task detail 中高频路径的可扫读性和错误定位，不改变 runtime 协议。
+- 补小范围回归测试，覆盖实际反馈中的高风险状态。
+
+**非目标：**
+
+- 不做大型 UI 重构或新信息架构。
+- 不做 MCP 新功能、真实 shell runner、真实部署编排或 production auth/RBAC。
+- 不做 provider streaming/usage 之外的模型网关大改。
 
 ## Backlog 分组
 
@@ -515,7 +535,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 ## 决策记录
 
-- Stage 30 已选择 “Alpha 收口优先” 路径：先把现有 Web/API 第一版闭环整理成 Skill-only local alpha，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
+- Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
 - Stage 29 已完成 Web task state no-refresh v0；后续高级 streaming run timeline、browser E2E 和视觉/交互 hardening 分别进入 Stage 31 与 Web UI backlog。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
