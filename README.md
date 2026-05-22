@@ -13,11 +13,12 @@ LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能�
 - 项目 Skills：创建 draft、validate、publish、bind、enable/disable，并把已发布绑定的 Skill 作为聊天和 LP 任务的主要扩展路径。
 - Skill command queue：已发布 deployment skill command 经过 approval、本地 worker queue、`Run local worker once` 和 safe observation，不开放任意 shell 命令。
 - 模型网关配置入口：支持 deterministic、Anthropic Messages compatible 和 OpenAI Chat Completions compatible provider；真实 provider 只通过显式 opt-in 进入。
+- Browser E2E acceptance：`pnpm alpha:e2e` 提供 deterministic Chromium 浏览器验收，覆盖普通聊天、LP live task、artifact preview/export/snippet 和 Skills / Models / MCP alpha 边界。
 
 ## Alpha 暂不包含
 
 - MCP 不属于第一版必需路径；MCP 页面可以保留为架构边界，但普通聊天和 LP 生成不需要配置 MCP connector。
-- Browser E2E acceptance；该项进入 Stage 31。
+- 远端 browser farm、跨浏览器矩阵、视觉回归，或依赖真实 provider、MCP、Postgres、真实部署的 E2E。
 - provider token streaming、usage/cost reporting 或自动 fallback provider execution。
 - 生产 auth/RBAC、邀请流程、团队审批队列或 hosted deployment。
 - production Postgres migrations、object storage migration 或默认 backend 切换。
@@ -108,6 +109,22 @@ pnpm alpha:check
 ```
 
 `pnpm alpha:check` 是 deterministic readiness gate，不需要浏览器、网络、真实 provider key、MCP server、Postgres 或真实部署。
+
+安装本地 Chromium browser：
+
+```bash
+pnpm alpha:e2e:install
+```
+
+`pnpm alpha:e2e:install` 会安装本地 Playwright Chromium browser。
+
+运行 browser-level alpha acceptance：
+
+```bash
+pnpm alpha:e2e
+```
+
+`pnpm alpha:e2e` 会启动本地 Next.js dev server，使用隔离的 `LP_AGENT_WORKBENCH_STATE_FILE`，默认运行 Chromium + deterministic runtime。它不需要真实 provider key、MCP server、Postgres、远端 browser farm 或真实部署。失败时排查 artifact 位于 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/`。
 
 运行快速 Skill-only alpha smoke gate：
 

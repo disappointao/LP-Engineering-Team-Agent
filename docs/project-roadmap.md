@@ -35,6 +35,7 @@
 - LP Agent Chain End-to-End v0：Web LP 复杂任务已采用 task-first orchestration，同一个 task 绑定 Planner / Builder / Reviewer / Deployer runs、handoff、artifact workspace、deployment handoff、继续修改上下文和 recovery facts；Planner / Builder 在 `REAL_MODEL_RUNTIME=1` 下走真实模型 structured output。
 - Live task state / artifact progress v0：Stage 29 已实现 live task submit、task state polling、compact run timeline panel、artifact progress auto-refresh 和 safe live payload smoke 覆盖。
 - Web V1 readiness：root README、manual acceptance checklist、`pnpm smoke` deterministic smoke test。
+- Browser E2E acceptance v0：Stage 31 已新增 deterministic Playwright browser acceptance gate，`pnpm alpha:e2e` 以 Chromium、本地 Next.js dev server 和隔离 JSON state 覆盖第一版 browser-visible contract。
 
 ## 第一版可用闭环目标
 
@@ -47,13 +48,13 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **7-12 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含 browser E2E、真实 provider 冒烟、文档和交互 hardening，粗略估算 **12-20 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **5-10 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 冒烟、文档和交互 hardening，粗略估算 **10-18 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。当前第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。当前第一版可用闭环下一步优先补齐：
 
-- Browser E2E acceptance，覆盖普通聊天 streaming、LP live submit fallback、run timeline polling、artifact preview/export 和基础 recovery display。
-- Provider token streaming 和 bounded usage metadata，让真实 provider 路径具备更细的响应反馈和可见性。
-- Manual alpha UX tightening，根据 checklist 和 Browser E2E 结果收紧空状态、错误状态、恢复提示和日常文案。
+- Provider token streaming 和 bounded usage metadata，让真实 provider 路径具备更细的响应反馈和可见性；Stage 32 是推荐下一阶段。
+- Manual alpha UX tightening，根据 checklist 和 Browser E2E 结果收紧空状态、错误状态、恢复提示和日常文案；Stage 33 排在 Stage 32 之后。
+- Browser failure injection 和轻量视觉回归扩展可在 Stage 33 之后单独拆分，避免把 Stage 31 v0 扩大成远端浏览器或跨浏览器平台。
 
 当前仍明确后置：
 
@@ -321,7 +322,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 - 不做实时多人协作。
 - 不引入生产 observability stack。
 - 不做 object storage migration。
-- 不做 browser E2E acceptance；该项进入 Stage 31。
+- Stage 29 本身不做 browser E2E acceptance；该项已由 Stage 31 补齐。
 
 **设计：** `docs/superpowers/specs/2026-05-21-live-run-timeline-artifact-progress-design.md`。
 
@@ -331,7 +332,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 **状态：** 已实现。
 
-Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认 deterministic、本地单用户、Web/API/Skill/LP 主路径清晰，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
+Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认 deterministic、本地单用户、Web/API/Skill/LP 主路径清晰。Browser E2E 已由 Stage 31 补齐，MCP、provider usage/streaming 和真实部署继续后置。
 
 已实现范围：
 
@@ -347,42 +348,50 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 - 不做 production Postgres migrations。
 - 不做 MCP 新功能或把 MCP 设为 alpha 必需项。
 - 不做真实部署编排。
-- 不做 Browser E2E，该项进入 Stage 31。
+- Stage 30 本身不做 Browser E2E；该项已由 Stage 31 补齐。
 - 不做 provider token streaming 或 usage/cost metadata，该项进入 Stage 32。
 
 **设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-22-skill-only-alpha-hardening.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 31：Browser E2E Acceptance v0
 
-**状态：** 实施计划已创建，待执行。
+**状态：** 已实现。
 
-**为什么现在做：** Stage 29/30 收敛后，需要用可重复的浏览器验收覆盖第一版可用闭环，避免只靠 unit smoke 和手工检查判断 Web 工作台状态。
+Stage 31 v0 added deterministic Playwright browser acceptance gate. `pnpm alpha:e2e` starts local Next.js dev server, uses isolated JSON state, Chromium-only, covers ordinary chat streaming, LP live task, artifact preview/export/snippet, Skills / Models / MCP alpha boundary and bounded recovery error display.
 
-**建议范围：**
+已实现范围：
 
-- 覆盖普通聊天 streaming、LP live submit fallback、run timeline polling、artifact preview/export 和基础 recovery display 的 deterministic browser E2E。
-- 增加本地 alpha acceptance command 或 checklist，明确依赖、启动方式、测试数据和失败排查入口。
-- 对关键 loading、empty、error 和 terminal states 做最小视觉/交互断言。
+- Playwright config/specs/scripts。
+- Isolated `LP_AGENT_WORKBENCH_STATE_FILE` and worker queue JSON state。
+- Ordinary chat / LP / artifact / boundary browser acceptance。
+- Ignored `test-results/` and `playwright-report/`。
 
-**非目标：**
+未实现范围：
 
-- 不做生产监控或 observability stack。
-- 不引入远端浏览器 farm、跨浏览器矩阵或完整视觉回归平台。
-- 不做 auth/RBAC、MCP execution、真实 shell runner 或真实部署编排。
+- 不做 remote browser farm。
+- 不做 cross-browser matrix。
+- 不做 visual regression。
+- 不做 real provider streaming/usage。
+- 不做 MCP 新功能。
+- 不做 real shell runner。
+- 不做 auth/RBAC。
+- 不做 production observability。
+- 不做 real deployment orchestration。
+- 不把 `alpha:e2e` 合并进 `alpha:check`。
 
-**当前设计：** `docs/superpowers/specs/2026-05-22-browser-e2e-acceptance-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-22-browser-e2e-acceptance-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-22-browser-e2e-acceptance.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-22-browser-e2e-acceptance.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 32：Provider Streaming and Usage Metadata v0
 
-**状态：** Stage 31 后推荐。
+**状态：** 推荐下一阶段。
 
-**为什么现在做：** 第一版 Web 闭环稳定后，真实 provider 体验还需要更细的响应反馈和成本/用量可见性；这应在 Browser E2E 和 Skill-only alpha hardening 之后做，避免把 provider 协议复杂度提前压到当前闭环。
+**为什么现在做：** 第一版 Web 闭环已经具备 Skill-only alpha hardening 和 Browser E2E gate，真实 provider 体验还需要更细的响应反馈和成本/用量可见性；这应在 deterministic 默认路径稳定后做，避免把 provider 协议复杂度提前压到当前闭环。
 
 **建议范围：**
 
@@ -402,7 +411,7 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 
 **状态：** Stage 32 后推荐。
 
-**为什么现在做：** Stage 30 已明确 alpha 边界，Stage 31/32 会补自动化浏览器验收和真实 provider 可见性；之后应根据手动 alpha 使用反馈收紧日常体验的小摩擦，而不是立刻扩大到 MCP、真实部署或多用户生产能力。
+**为什么现在做：** Stage 30 已明确 alpha 边界，Stage 31 已补自动化浏览器验收，Stage 32 将补真实 provider 可见性；之后应根据手动 alpha 使用反馈收紧日常体验的小摩擦，而不是立刻扩大到 MCP、真实部署或多用户生产能力。
 
 **建议范围：**
 
@@ -415,6 +424,24 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 - 不做大型 UI 重构或新信息架构。
 - 不做 MCP 新功能、真实 shell runner、真实部署编排或 production auth/RBAC。
 - 不做 provider streaming/usage 之外的模型网关大改。
+
+### Stage 34：Browser Failure Injection and Visual Regression v0
+
+**状态：** Stage 33 后推荐。
+
+**为什么现在做：** Stage 31 已建立 deterministic browser acceptance v0；在真实 provider 可见性和手动 alpha UX tightening 后，可以把 browser gate 扩展到更多稳定 failure injection 和轻量视觉回归，继续保护 browser-visible contract。
+
+**建议范围：**
+
+- 为已有 browser acceptance 增加更多 deterministic failure injection，覆盖 bounded recovery、provider fail-closed、artifact 读取失败和 worker queue 异常显示。
+- 评估轻量 screenshot 或视觉断言，只覆盖稳定布局和关键状态，不把临时视觉细节固化为产品 contract。
+- 更新 failure artifact 排查说明，保持 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/` 为主要入口。
+
+**非目标：**
+
+- 不引入远端 browser farm 或跨浏览器矩阵。
+- 不让默认 browser E2E 依赖真实 provider、MCP server、Postgres 或真实部署。
+- 不做大型 UI redesign、生产 observability stack、auth/RBAC 或真实 shell runner。
 
 ## Backlog 分组
 
@@ -484,7 +511,7 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 
 - Stage 29 v0 之后的高级 no-refresh workbench interaction。
 - 更细粒度 streaming run timeline / animation / visual hierarchy hardening。
-- Browser E2E acceptance。
+- Browser failure injection 和轻量视觉回归扩展。
 - Dedicated artifact workspace page。
 - Stage 25 inline block 之后的高级 handoff/recovery UX。
 - Core flow 稳定后再做 Skills/Models/MCP client-side management。
@@ -539,8 +566,9 @@ Stage 30 v0 已把第一版可用闭环收敛成 Skill-only local alpha：默认
 
 ## 决策记录
 
-- Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
-- Stage 29 已完成 Web task state no-refresh v0；后续高级 streaming run timeline、browser E2E 和视觉/交互 hardening 分别进入 Stage 31 与 Web UI backlog。
+- Stage 31 已完成 Browser E2E Acceptance v0：`pnpm alpha:e2e` 以 deterministic Playwright Chromium gate 覆盖普通聊天、LP live task、artifact preview/export/snippet、Skills / Models / MCP alpha boundary 和 bounded recovery error display。
+- Stage 30 已完成 “Alpha 收口优先” 路径：现有 Web/API 第一版闭环已经整理成 Skill-only local alpha，MCP、provider usage/streaming 和真实部署继续后置；Browser E2E 已由 Stage 31 补齐。
+- Stage 29 已完成 Web task state no-refresh v0；Browser E2E 已由 Stage 31 实现，后续高级 streaming run timeline 和视觉/交互 hardening 继续留在 Web UI backlog。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
 - Stage 25 已完成 Run Recovery UI v0，把已有 lifecycle/recovery contract 变成用户可见、可执行的恢复流程；UI 采用 task timeline inline recovery block。

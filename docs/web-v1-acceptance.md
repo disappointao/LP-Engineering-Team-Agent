@@ -1,6 +1,6 @@
 # Skill-Only Alpha 验收清单
 
-在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次人工验收。默认验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres、Browser E2E 或真实部署。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 已通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
 
 ## 准备
 
@@ -9,6 +9,17 @@
 - [ ] `pnpm alpha:check` 通过。
 - [ ] `pnpm smoke` 通过。
 - [ ] `pnpm dev` 能启动 Web app，并输出本地 URL。
+
+## Browser E2E 自动验收
+
+- [ ] 首次运行 Playwright browser gate 前，执行 `pnpm alpha:e2e:install` 安装本地 Chromium browser。
+- [ ] 执行 `pnpm alpha:e2e`，确认 browser-level alpha acceptance 通过。
+- [ ] 自动验收覆盖普通聊天 streaming。
+- [ ] 自动验收覆盖 LP live task。
+- [ ] 自动验收覆盖 artifact preview/export/snippet。
+- [ ] 自动验收覆盖 Skills / Models / MCP alpha boundary。
+- [ ] 自动验收覆盖 bounded recovery error display。
+- [ ] 真实 provider smoke 仍是可选手动验收，不进入默认 `pnpm alpha:e2e`。
 
 ## 首屏
 
@@ -78,7 +89,7 @@
 
 ## 已知后续工作
 
-- [ ] Browser automation acceptance tests 进入 Stage 31。
+- [ ] Browser automation acceptance tests 已进入 Stage 31；后续可扩展到更多 failure injection 和视觉回归。
 - [ ] Provider streaming、usage/cost metadata 进入 Stage 32。
 - [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。
