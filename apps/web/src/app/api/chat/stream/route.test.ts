@@ -277,6 +277,91 @@ describe("POST /api/chat/stream", () => {
     });
   });
 
+  it("emits stream_interrupted after partial provider deltas without completing the assistant message", async () => {
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_stream",
+      taskType: "general_chat",
+      projectId: "project_1",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "",
+      chunks: [],
+      assistantStream: (async function* () {
+        yield "Partial ";
+        throw Object.assign(new Error("assistant_stream_failed"), {
+          code: "stream_interrupted"
+        });
+      })(),
+      contextSummary: {
+        projectId: "project_1",
+        projectName: "Spring Campaign",
+        runtimeMode: "real",
+        skillCount: 0,
+        skills: []
+      }
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ projectId: "project_1", prompt: "Hello" })
+      })
+    );
+
+    const decoded = decodeChatStreamLines(await response.text());
+    expect(decoded.events).toContainEqual({
+      type: "assistant.delta",
+      taskId: "task_stream",
+      messageId: "message_2",
+      delta: "Partial "
+    });
+    expect(decoded.events).toContainEqual({
+      type: "run.status",
+      taskId: "task_stream",
+      state: "failed",
+      label: "Provider stream interrupted"
+    });
+    expect(decoded.events).toContainEqual({
+      type: "error",
+      code: "stream_interrupted",
+      message: "The provider stream stopped before the response completed."
+    });
+    expect(decoded.events.some((event) => event.type === "assistant.completed")).toBe(false);
+    expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+  });
+
+  it("emits empty_response without persisting blank assistant content", async () => {
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "   ",
+      chunks: ["   "],
+      contextSummary: deterministicContextSummary
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+
+    const decoded = decodeChatStreamLines(await response.text());
+    expect(decoded.events).toContainEqual({
+      type: "error",
+      code: "empty_response",
+      message: "The provider completed without usable assistant text."
+    });
+    expect(decoded.events.some((event) => event.type === "assistant.completed")).toBe(false);
+    expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+  });
+
   it("streams fallback_required without completing the assistant message", async () => {
     mocks.startStreamingChatPrompt.mockResolvedValue({
       ok: false,
@@ -592,13 +677,65 @@ describe("POST /api/chat/stream", () => {
     expect(decodeChatStreamLines(remainingText)).toEqual({
       events: [
         {
+          type: "run.status",
+          taskId: "task_1",
+          state: "failed",
+          label: "Response persistence failed"
+        },
+        {
           type: "error",
-          code: "generation_failed",
-          message: "The chat response could not be generated."
+          code: "persistence_failed",
+          message: "The response was generated but could not be saved."
         }
       ],
       remainder: ""
     });
+  });
+
+  it("does not persist provider content after the client cancels the response stream", async () => {
+    const continueStream = deferred<void>();
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "",
+      chunks: [],
+      assistantStream: (async function* () {
+        yield "Partial ";
+        await continueStream.promise;
+        yield "content";
+      })(),
+      contextSummary: deterministicContextSummary
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    if (!reader) {
+      return;
+    }
+
+    const initialText = await readEventTextUntil(reader, 4);
+    expect(decodeChatStreamLines(initialText).events.map((event) => event.type)).toEqual([
+      "task.created",
+      "context.summary",
+      "run.status",
+      "assistant.delta"
+    ]);
+
+    await reader.cancel();
+    continueStream.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
   });
 
   it.each([

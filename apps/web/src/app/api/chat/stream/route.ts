@@ -42,8 +42,15 @@ async function readChatStreamRequest(request: Request): Promise<ChatStreamReques
 
 type ChatStreamEnqueue = (event: ChatStreamEvent) => void;
 
+type ChatStreamProducerState = {
+  isClosed: () => boolean;
+};
+
 function createEventStream(
-  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void
+  produceEvents: (
+    enqueue: ChatStreamEnqueue,
+    state: ChatStreamProducerState
+  ) => Promise<void> | void
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let closed = false;
@@ -72,7 +79,7 @@ function createEventStream(
         }
       };
       void Promise.resolve()
-        .then(() => produceEvents(enqueue))
+        .then(() => produceEvents(enqueue, { isClosed: () => closed }))
         .catch(() => {
           enqueue({
             type: "error",
@@ -91,7 +98,10 @@ function createEventStream(
 }
 
 function createStreamResponse(
-  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void,
+  produceEvents: (
+    enqueue: ChatStreamEnqueue,
+    state: ChatStreamProducerState
+  ) => Promise<void> | void,
   cookies: string[] = []
 ): Response {
   const headers = new Headers({
@@ -118,12 +128,20 @@ function createExpiredCookie(name: string): string {
   return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-function getSafeErrorMessage(error: ProjectFlowChatStreamErrorCode) {
+function getSafeErrorMessage(error: ChatStreamErrorCode) {
   switch (error) {
     case "prompt_required":
       return "Enter a prompt before sending.";
     case "project_not_found":
       return "The selected project is unavailable.";
+    case "provider_configuration_failed":
+      return "Check the project model provider configuration before retrying.";
+    case "stream_interrupted":
+      return "The provider stream stopped before the response completed.";
+    case "empty_response":
+      return "The provider completed without usable assistant text.";
+    case "persistence_failed":
+      return "The response was generated but could not be saved.";
     case "generation_failed":
       return "The chat response could not be generated.";
   }
@@ -138,6 +156,53 @@ function toChatStreamErrorCode(error: ProjectFlowErrorCode): ProjectFlowChatStre
     default:
       return "generation_failed";
   }
+}
+
+function toChatStreamErrorCodeFromUnknown(error: unknown): ChatStreamErrorCode {
+  const code = (error as { code?: unknown })?.code;
+  if (
+    code === "provider_configuration_failed" ||
+    code === "stream_interrupted" ||
+    code === "empty_response"
+  ) {
+    return code;
+  }
+  return "generation_failed";
+}
+
+function getTerminalErrorLabel(code: ChatStreamErrorCode): string {
+  switch (code) {
+    case "provider_configuration_failed":
+      return "Provider configuration failed";
+    case "stream_interrupted":
+      return "Provider stream interrupted";
+    case "empty_response":
+      return "Provider returned empty response";
+    case "persistence_failed":
+      return "Response persistence failed";
+    default:
+      return "Response generation failed";
+  }
+}
+
+function enqueueTerminalError(
+  enqueue: ChatStreamEnqueue,
+  taskId: string | undefined,
+  code: ChatStreamErrorCode
+): void {
+  if (taskId) {
+    enqueue({
+      type: "run.status",
+      taskId,
+      state: "failed",
+      label: getTerminalErrorLabel(code)
+    });
+  }
+  enqueue({
+    type: "error",
+    code,
+    message: getSafeErrorMessage(code)
+  });
 }
 
 function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {
@@ -238,7 +303,7 @@ export async function POST(request: Request): Promise<Response> {
   } else if (hasOwnField(payload, "projectId") && payload.projectId === null) {
     cookies.push(createExpiredCookie(CURRENT_PROJECT_COOKIE));
   }
-  return createStreamResponse(async (enqueue) => {
+  return createStreamResponse(async (enqueue, streamState) => {
     enqueue({
       type: "task.created",
       taskId: started.taskId,
@@ -256,32 +321,57 @@ export async function POST(request: Request): Promise<Response> {
       label: "Generating response"
     });
     let assistantContent = started.assistantStream ? "" : started.assistantContent;
-    if (started.assistantStream) {
-      for await (const delta of started.assistantStream) {
-        assistantContent += delta;
-        enqueue({
-          type: "assistant.delta",
-          taskId: started.taskId,
-          messageId: started.assistantMessageId,
-          delta
-        });
+    try {
+      if (started.assistantStream) {
+        for await (const delta of started.assistantStream) {
+          assistantContent += delta;
+          enqueue({
+            type: "assistant.delta",
+            taskId: started.taskId,
+            messageId: started.assistantMessageId,
+            delta
+          });
+          if (streamState.isClosed()) {
+            return;
+          }
+        }
+      } else {
+        for (const delta of started.chunks) {
+          enqueue({
+            type: "assistant.delta",
+            taskId: started.taskId,
+            messageId: started.assistantMessageId,
+            delta
+          });
+          if (streamState.isClosed()) {
+            return;
+          }
+        }
       }
-    } else {
-      for (const delta of started.chunks) {
-        enqueue({
-          type: "assistant.delta",
-          taskId: started.taskId,
-          messageId: started.assistantMessageId,
-          delta
-        });
-      }
+    } catch (error) {
+      enqueueTerminalError(enqueue, started.taskId, toChatStreamErrorCodeFromUnknown(error));
+      return;
     }
 
-    const completed = await store.completeStreamingChatPrompt({
-      taskId: started.taskId,
-      messageId: started.assistantMessageId,
-      content: assistantContent
-    });
+    if (streamState.isClosed()) {
+      return;
+    }
+    if (!assistantContent.trim()) {
+      enqueueTerminalError(enqueue, started.taskId, "empty_response");
+      return;
+    }
+
+    let completed: Awaited<ReturnType<typeof store.completeStreamingChatPrompt>>;
+    try {
+      completed = await store.completeStreamingChatPrompt({
+        taskId: started.taskId,
+        messageId: started.assistantMessageId,
+        content: assistantContent
+      });
+    } catch {
+      enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
+      return;
+    }
 
     if (completed.ok) {
       enqueue({
@@ -299,11 +389,6 @@ export async function POST(request: Request): Promise<Response> {
       return;
     }
 
-    const errorCode = toChatStreamErrorCode(completed.error);
-    enqueue({
-      type: "error",
-      code: errorCode,
-      message: getSafeErrorMessage(errorCode)
-    });
+    enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
   }, cookies);
 }
