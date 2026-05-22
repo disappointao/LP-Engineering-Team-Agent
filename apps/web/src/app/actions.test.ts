@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   }),
   getWebWorkbenchStore: vi.fn(),
   createProject: vi.fn(),
+  getPageState: vi.fn(),
+  clearCurrentTaskId: vi.fn(),
   setCurrentProjectId: vi.fn(),
   setCurrentTaskId: vi.fn(),
   submitTaskPrompt: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../lib/workbench-session", () => ({
   getCurrentProjectId: vi.fn(async () => mocks.currentProjectId),
   getCurrentTaskId: vi.fn(async () => mocks.currentTaskId),
+  clearCurrentTaskId: mocks.clearCurrentTaskId,
   setCurrentProjectId: mocks.setCurrentProjectId,
   setCurrentTaskId: mocks.setCurrentTaskId
 }));
@@ -61,10 +64,13 @@ import {
   interruptCurrentTaskAction,
   publishSkillVersionAction,
   runLocalWorkerOnceAction,
+  selectProjectAction,
+  selectTaskAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
+  startNewTaskAction,
   submitPromptAction,
   upsertProjectModelRouteAction,
   validateSkillVersionAction
@@ -102,6 +108,14 @@ function buildPromptForm(input: {
   }
   formData.set("prompt", input.prompt ?? "Build a spring landing page.");
   formData.set("implicitProjectName", input.implicitProjectName ?? "Untitled LP Project");
+  return formData;
+}
+
+function buildSelectionForm(input: Record<string, string> = {}): FormData {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(input)) {
+    formData.set(key, value);
+  }
   return formData;
 }
 
@@ -151,6 +165,7 @@ describe("submitPromptAction", () => {
     mocks.getWebWorkbenchStore.mockReset();
     mocks.getWebWorkbenchStore.mockResolvedValue({
       createProject: mocks.createProject,
+      getPageState: mocks.getPageState,
       submitTaskPrompt: mocks.submitTaskPrompt,
       interruptCurrentTask: mocks.interruptCurrentTask,
       createSkillDraft: mocks.createSkillDraft,
@@ -171,6 +186,13 @@ describe("submitPromptAction", () => {
     });
     mocks.createProject.mockReset();
     mocks.createProject.mockResolvedValue({ id: "project_3", name: "Spring LP", createdAt: "now" });
+    mocks.getPageState.mockReset();
+    mocks.getPageState.mockResolvedValue({
+      kind: "empty",
+      projects: [],
+      tasks: []
+    });
+    mocks.clearCurrentTaskId.mockClear();
     mocks.setCurrentProjectId.mockClear();
     mocks.setCurrentTaskId.mockClear();
     mocks.submitTaskPrompt.mockReset();
@@ -272,6 +294,91 @@ describe("submitPromptAction", () => {
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_3");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("starts a new task by clearing the current task cookie", async () => {
+    await expectRedirect(startNewTaskAction(), "/");
+
+    expect(mocks.clearCurrentTaskId).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("selects a project after validating it against page state", async () => {
+    mocks.getPageState.mockResolvedValue({
+      kind: "empty",
+      projects: [
+        {
+          id: "project_2",
+          name: "Spring LP",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: []
+    });
+
+    await expectRedirect(selectProjectAction(buildSelectionForm({ projectId: "project_2" })), "/");
+
+    expect(mocks.getPageState).toHaveBeenCalledWith({ projectId: "project_2" });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_2");
+    expect(mocks.clearCurrentTaskId).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("fails closed when selecting an unavailable project", async () => {
+    mocks.getPageState.mockResolvedValue({
+      kind: "empty",
+      projects: [],
+      tasks: []
+    });
+
+    await expectRedirect(
+      selectProjectAction(buildSelectionForm({ projectId: "missing_project" })),
+      "/?error=project_not_found"
+    );
+
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.clearCurrentTaskId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("selects a task and syncs the task project context", async () => {
+    mocks.getPageState.mockResolvedValue({
+      kind: "task_ready",
+      task: {
+        id: "task_2",
+        title: "Write a launch page",
+        type: "lp_generation",
+        status: "complete",
+        projectId: "project_2",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      projects: [],
+      tasks: []
+    });
+
+    await expectRedirect(selectTaskAction(buildSelectionForm({ taskId: "task_2" })), "/");
+
+    expect(mocks.getPageState).toHaveBeenCalledWith({ taskId: "task_2" });
+    expect(mocks.setCurrentTaskId).toHaveBeenCalledWith("task_2");
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_2");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("fails closed when selecting an unavailable task", async () => {
+    mocks.getPageState.mockResolvedValue({
+      kind: "empty",
+      projects: [],
+      tasks: []
+    });
+
+    await expectRedirect(
+      selectTaskAction(buildSelectionForm({ taskId: "missing_task" })),
+      "/?error=project_not_found"
+    );
+
+    expect(mocks.setCurrentTaskId).not.toHaveBeenCalled();
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("uses the cookie project id when the hidden project id is mismatched", async () => {

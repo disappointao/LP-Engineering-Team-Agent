@@ -15,6 +15,7 @@ import {
   type WorkerQueueFlowErrorCode
 } from "../lib/workbench-store";
 import {
+  clearCurrentTaskId,
   getCurrentTaskId,
   getCurrentProjectId,
   setCurrentProjectId,
@@ -204,6 +205,51 @@ export async function createProjectAction(formData: FormData): Promise<void> {
     redirectWithError("generation_failed");
   }
 
+  redirect("/");
+}
+
+export async function startNewTaskAction(_formData?: FormData): Promise<void> {
+  await clearCurrentTaskId();
+  revalidatePath("/");
+  redirect("/");
+}
+
+export async function selectProjectAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  if (projectId.length === 0) {
+    redirectWithError("project_not_found");
+  }
+
+  const store = await getWebWorkbenchStore();
+  const pageState = await store.getPageState({ projectId });
+  const selectedProject = pageState.projects.find((project) => project.id === projectId);
+  if (!selectedProject) {
+    redirectWithError("project_not_found");
+  }
+
+  await setCurrentProjectId(selectedProject.id);
+  await clearCurrentTaskId();
+  revalidatePath("/");
+  redirect("/");
+}
+
+export async function selectTaskAction(formData: FormData): Promise<void> {
+  const taskId = String(formData.get("taskId") ?? "").trim();
+  if (taskId.length === 0) {
+    redirectWithError("project_not_found");
+  }
+
+  const store = await getWebWorkbenchStore();
+  const pageState = await store.getPageState({ taskId });
+  if (pageState.kind !== "task_ready" || pageState.task.id !== taskId) {
+    redirectWithError("project_not_found");
+  }
+
+  await setCurrentTaskId(pageState.task.id);
+  if (pageState.task.projectId) {
+    await setCurrentProjectId(pageState.task.projectId);
+  }
+  revalidatePath("/");
   redirect("/");
 }
 

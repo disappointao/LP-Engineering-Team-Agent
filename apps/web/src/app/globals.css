@@ -135,6 +135,26 @@ button {
   font-weight: 780;
 }
 
+.sidebarActionForm,
+.projectSelectForm,
+.taskSelectForm,
+.entryChipForm,
+.suggestionPromptForm {
+  margin: 0;
+}
+
+.sidebarAction:hover,
+.sidebarAction:focus-visible,
+.projectSelectButton:hover,
+.projectSelectButton:focus-visible,
+.taskItem:hover,
+.taskItem:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  outline: 0;
+}
+
 .navList {
   display: grid;
   gap: 4px;
@@ -183,6 +203,10 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
+}
+
+.projectSelectButton {
+  width: 100%;
 }
 
 .projectItemActive {
@@ -300,6 +324,17 @@ button {
   background: #d9d9d6;
   color: var(--text);
   font-weight: 750;
+}
+
+.sidebarEmptyState {
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--muted);
+  padding: 9px 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .sidebarMeta {
@@ -1153,6 +1188,13 @@ button {
   background: var(--accent-soft);
 }
 
+.entryChipRow button:focus-visible,
+.suggestionBlock button:focus-visible {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: 0;
+}
+
 .userTurn {
   display: flex;
   justify-content: flex-end;
@@ -1689,6 +1731,7 @@ button {
 }
 
 .suggestionBlock button {
+  width: 100%;
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1697,6 +1740,12 @@ button {
   padding: 0 12px;
   text-align: left;
   font-size: 0.88rem;
+}
+
+.suggestionBlock button:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .composerDock {

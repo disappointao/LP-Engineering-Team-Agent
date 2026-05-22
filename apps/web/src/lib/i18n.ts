@@ -41,7 +41,7 @@ export interface WorkbenchCopy {
     newTask: string;
     projectsLabel: string;
     tasksLabel: string;
-    taskTitles: string[];
+    emptyTasks: string;
   };
   hero: {
     eyebrow: string;
@@ -381,10 +381,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       newTask: "New task",
       projectsLabel: "Project",
       tasksLabel: "All tasks",
-      taskTitles: [
-        "Generate a simple static HTML LP",
-        "Create a personal blog landing page"
-      ]
+      emptyTasks: "No tasks yet. Start from the composer or a quick prompt."
     },
     hero: {
       eyebrow: "Ecommerce LP agent",
@@ -862,10 +859,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       newTask: "新建任务",
       projectsLabel: "项目",
       tasksLabel: "所有任务",
-      taskTitles: [
-        "生成一个简单静态 HTML 落地页",
-        "生成个人博客落地页"
-      ]
+      emptyTasks: "还没有任务。可以从输入框或快捷提示开始。"
     },
     hero: {
       eyebrow: "电商 LP 智能体",

@@ -100,6 +100,9 @@ import {
   executeRunRecoveryAction,
   executeSkillCommandAction,
   runLocalWorkerOnceAction,
+  selectProjectAction,
+  selectTaskAction,
+  startNewTaskAction,
   submitPromptAction
 } from "./actions";
 
@@ -225,7 +228,11 @@ function hasClass(element: ReactTestElement | undefined, className: string): boo
     .includes(className);
 }
 
-function collectFormPayload(form: { props?: Record<string, unknown> }): Record<string, unknown> {
+function collectFormPayload(form: { props?: Record<string, unknown> } | undefined): Record<string, unknown> {
+  if (!form) {
+    return {};
+  }
+
   return Object.fromEntries(
     collectElements(form.props?.children, "input").map((input) => [
       input.props?.name,
@@ -583,6 +590,76 @@ describe("HomePage project flow errors", () => {
       streamingStatusLabel: "Generating response",
       streamingErrorLabel: "The chat response could not be generated."
     });
+  });
+
+  it("wires sidebar task controls to real navigation actions", async () => {
+    setActiveEmptyProjectState();
+
+    const emptyProjectPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const emptyProjectText = collectText(emptyProjectPage);
+    const emptyProjectForms = collectElements(emptyProjectPage, "form");
+    const [newTaskForm] = emptyProjectForms.filter(
+      (form) => form.props?.className === "sidebarActionForm"
+    );
+    const [projectSelectForm] = emptyProjectForms.filter(
+      (form) => form.props?.className === "projectSelectForm"
+    );
+    const taskSelectForms = emptyProjectForms.filter(
+      (form) => form.props?.className === "taskSelectForm"
+    );
+
+    expect(newTaskForm?.props?.action).toBe(startNewTaskAction);
+    expect(projectSelectForm?.props?.action).toBe(selectProjectAction);
+    expect(collectFormPayload(projectSelectForm)).toMatchObject({
+      projectId: "project_1"
+    });
+    expect(taskSelectForms).toHaveLength(0);
+    expect(emptyProjectText).toContain(
+      "No tasks yet. Start from the composer or a quick prompt."
+    );
+    expect(emptyProjectText).not.toContain("Generate a simple static HTML LP");
+
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const taskReadyPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const [taskSelectForm] = collectElements(taskReadyPage, "form").filter(
+      (form) => form.props?.className === "taskSelectForm"
+    );
+
+    expect(taskSelectForm?.props?.action).toBe(selectTaskAction);
+    expect(collectFormPayload(taskSelectForm)).toMatchObject({
+      taskId: "task_1"
+    });
+  });
+
+  it("renders quick prompts as submit forms instead of inert buttons", async () => {
+    const emptyPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const [entryChipForm] = collectElements(emptyPage, "form").filter(
+      (form) => form.props?.className === "entryChipForm"
+    );
+
+    expect(entryChipForm?.props?.action).toBe(submitPromptAction);
+    expect(collectFormPayload(entryChipForm)).toMatchObject({
+      prompt: "Create static LP",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const taskReadyPage = await HomePage({ searchParams: Promise.resolve({}) });
+    const [suggestionForm] = collectElements(taskReadyPage, "form").filter(
+      (form) => form.props?.className === "suggestionPromptForm"
+    );
+    const suggestionPayload = collectFormPayload(suggestionForm);
+
+    expect(suggestionForm?.props?.action).toBe(submitPromptAction);
+    expect(typeof suggestionPayload.prompt).toBe("string");
+    expect(String(suggestionPayload.prompt).length).toBeGreaterThan(0);
+    expect(suggestionPayload.implicitProjectName).toBe("Untitled LP Project");
   });
 
   it("wires active LP project context into the streaming workbench shell without task context", async () => {

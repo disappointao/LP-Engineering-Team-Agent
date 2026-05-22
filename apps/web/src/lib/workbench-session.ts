@@ -32,3 +32,13 @@ export async function setCurrentTaskId(taskId: string): Promise<void> {
     path: "/"
   });
 }
+
+export async function clearCurrentTaskId(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(CURRENT_TASK_COOKIE, "", {
+    httpOnly: true,
+    maxAge: 0,
+    sameSite: "lax",
+    path: "/"
+  });
+}

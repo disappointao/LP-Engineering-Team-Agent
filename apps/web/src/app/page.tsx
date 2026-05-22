@@ -11,12 +11,15 @@ import {
   runLocalWorkerOnceAction,
   createModelProviderAction,
   createSkillDraftAction,
+  selectProjectAction,
+  selectTaskAction,
   publishSkillVersionAction,
   interruptCurrentTaskAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
+  startNewTaskAction,
   submitPromptAction,
   upsertProjectModelRouteAction,
   validateSkillVersionAction
@@ -52,6 +55,24 @@ type PageSearchParams = Record<string, PageSearchParamValue>;
 
 interface HomePageProps {
   searchParams?: Promise<PageSearchParams>;
+}
+
+function QuickPromptForm({
+  className,
+  implicitProjectName,
+  prompt
+}: {
+  className: string;
+  implicitProjectName: string;
+  prompt: string;
+}) {
+  return (
+    <form action={submitPromptAction} className={className}>
+      <input name="prompt" type="hidden" value={prompt} />
+      <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
+      <button type="submit">{prompt}</button>
+    </form>
+  );
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -216,7 +237,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <p>{copy.sidebar.mode}</p>
             </div>
           </div>
-          <button className="sidebarAction" type="button">{copy.sidebar.newTask}</button>
+          <form action={startNewTaskAction} className="sidebarActionForm">
+            <button className="sidebarAction" type="submit">{copy.sidebar.newTask}</button>
+          </form>
         </div>
 
         <nav className="navList" aria-label={copy.nav.label}>
@@ -238,12 +261,24 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
           {pageState.projects.length > 0
             ? pageState.projects.map((project) => (
-                <div
-                  className={project.id === activeProject?.id ? "projectItem projectItemActive" : "projectItem"}
+                <form
+                  action={selectProjectAction}
+                  className="projectSelectForm"
                   key={project.id}
                 >
-                  <strong>{project.name}</strong>
-                </div>
+                  <input name="projectId" type="hidden" value={project.id} />
+                  <button
+                    aria-current={project.id === activeProject?.id ? "page" : undefined}
+                    className={
+                      project.id === activeProject?.id
+                        ? "projectItem projectItemActive projectSelectButton"
+                        : "projectItem projectSelectButton"
+                    }
+                    type="submit"
+                  >
+                    <strong>{project.name}</strong>
+                  </button>
+                </form>
               ))
             : null}
           <div className="projectItem">
@@ -270,23 +305,22 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
           {pageState.tasks.length > 0
             ? pageState.tasks.map((task) => (
-                <button
-                  className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
-                  type="button"
+                <form
+                  action={selectTaskAction}
+                  className="taskSelectForm"
                   key={task.id}
                 >
-                  {task.title}
-                </button>
+                  <input name="taskId" type="hidden" value={task.id} />
+                  <button
+                    aria-current={task.id === activeTask?.id ? "page" : undefined}
+                    className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                    type="submit"
+                  >
+                    {task.title}
+                  </button>
+                </form>
               ))
-            : copy.sidebar.taskTitles.map((taskTitle, index) => (
-                <button
-                  className={index === 0 ? "taskItem taskItemActive" : "taskItem"}
-                  type="button"
-                  key={taskTitle}
-                >
-                  {taskTitle}
-                </button>
-              ))}
+            : <p className="sidebarEmptyState">{copy.sidebar.emptyTasks}</p>}
         </div>
 
         <div className="sidebarMeta">
@@ -986,7 +1020,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       <p>{copy.entry.placeholder}</p>
                       <div className="entryChipRow">
                         {copy.entry.chips.map((chip) => (
-                          <button type="button" key={chip}>{chip}</button>
+                          <React.Fragment key={chip}>
+                            {QuickPromptForm({
+                              className: "entryChipForm",
+                              implicitProjectName: copy.entry.implicitProjectName,
+                              prompt: chip
+                            })}
+                          </React.Fragment>
                         ))}
                       </div>
                     </div>
@@ -1112,7 +1152,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
                       <div>{copy.chat.suggestionsTitle}</div>
                       {chat.suggestions.map((suggestion) => (
-                        <button type="button" key={suggestion}>{suggestion}</button>
+                        <React.Fragment key={suggestion}>
+                          {QuickPromptForm({
+                            className: "suggestionPromptForm",
+                            implicitProjectName: copy.entry.implicitProjectName,
+                            prompt: suggestion
+                          })}
+                        </React.Fragment>
                       ))}
                     </section>
                   </>

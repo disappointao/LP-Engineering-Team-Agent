@@ -27,6 +27,10 @@
 - [ ] 左侧导航不会跟随主对话内容一起滚动。
 - [ ] 用户可以不先创建项目，直接提交普通聊天 prompt。
 - [ ] 用户仍然可以通过项目入口创建项目。
+- [ ] 左侧 `New task` 会回到当前项目的新任务入口，而不是停留在旧 task。
+- [ ] 左侧项目列表可以切换 active project，并清空旧 task 上下文。
+- [ ] 左侧任务列表可以切换 active task；没有任务时显示明确空状态，不显示伪任务。
+- [ ] 首页快捷 prompt chip 可以直接提交，而不是只作为静态示例。
 - [ ] 中英文 UI 文案符合当前 MVP 记录的浏览器或环境语言判断行为。
 
 ## 普通聊天 streaming
@@ -36,6 +40,7 @@
 - [ ] 生成完成后，对话详情保留 user / assistant messages。
 - [ ] 普通聊天任务不显示 LP artifact preview。
 - [ ] follow-up message 仍进入同一个普通聊天 task thread。
+- [ ] 任务详情底部的推荐追问可以直接提交到当前 task thread。
 - [ ] 没有 running worker job 时，interrupt control 应不可用，或 graceful failure，且不阻塞对话。
 
 ## LP live task 和静态产物
@@ -90,7 +95,7 @@
 ## 已知后续工作
 
 - [ ] Stage 31 Browser automation acceptance v0 已完成；后续可扩展到更多 failure injection 和视觉回归。
-- [ ] Provider streaming、usage/cost metadata 进入 Stage 32。
+- [ ] Stage 32 Provider usage metadata 和 streaming capability 可见性已完成；真实 provider token delta streaming、billing/cost ledger 仍是后续工作。
 - [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。
 - [ ] 真实 shell runner、真实部署编排和 Desktop packaging 仍是后续工作。
