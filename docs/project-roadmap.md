@@ -331,7 +331,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 ### Stage 30：Skill-Only Alpha Hardening v0
 
-**状态：** 推荐下一阶段。
+**状态：** 设计已确认，待实施计划。
 
 **为什么现在做：** 第一版可用闭环完成后，需要把“只用 Skill、不用 MCP”的 alpha 体验收敛到可交付状态：启动、配置、技能绑定、真实 provider opt-in、失败提示和验收都要清晰。
 
@@ -349,6 +349,8 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 - 不做 production Postgres migrations。
 - 不做 MCP。
 - 不做真实部署编排。
+
+**当前设计：** `docs/superpowers/specs/2026-05-22-skill-only-alpha-hardening-design.md`。
 
 ### Stage 31：Browser E2E Acceptance v0
 
@@ -511,6 +513,7 @@ Stage 29 v0 已把 LP task 的 run lifecycle、worker state、recovery view 和 
 
 ## 决策记录
 
+- Stage 30 已选择 “Alpha 收口优先” 路径：先把现有 Web/API 第一版闭环整理成 Skill-only local alpha，MCP、Browser E2E、provider usage/streaming 和真实部署继续后置。
 - Stage 29 已完成 Web task state no-refresh v0；后续高级 streaming run timeline、browser E2E 和视觉/交互 hardening 分别进入 Stage 31 与 Web UI backlog。
 - Stage 23 已完成 Web opt-in Postgres backend wiring；Stage 22 只提供 repository foundation，Stage 23 也不默认切换 runtime backend。
 - Stage 24 已完成 worker job Postgres backend；worker queue 默认仍是 JSON-file，可通过 `WORKER_REPOSITORY_BACKEND=postgres` 显式 opt in。
