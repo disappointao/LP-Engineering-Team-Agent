@@ -42,6 +42,7 @@
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
+- Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 
 ## 第一版可用闭环目标
 
@@ -54,13 +55,13 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，包含真实 provider 异常 UX hardening、artifact quality baseline 和试用反馈闭环，粗略估算 **3-6 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，剩余 artifact quality baseline、反馈 intake 和 RC 修复批次，粗略估算 **2-5 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。第一版可用闭环下一步优先补齐：
 
-- Assistant streaming failure UX hardening，处理真实 provider streaming 中途失败、慢首 token、空 delta 和取消体验。
 - LP artifact quality evaluation / prompt hardening，让内部 alpha 更容易判断“复杂 LP 任务是否真的可用”。
 - Alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。
+- Alpha RC trial fix batch，只处理内部 RC 后的 blocker / high priority 摩擦。
 
 当前仍明确后置：
 
@@ -543,30 +544,32 @@ Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go�
 
 **实施计划：** `docs/superpowers/plans/2026-05-23-skill-only-alpha-release-candidate-checklist.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 38：Assistant Streaming Failure UX Hardening v0
 
-**状态：** 当前阶段，设计和实施计划已确认，待实现。
+**状态：** 已实现。
 
-**为什么现在做：** Stage 35 已把 provider token delta 接入普通聊天，但真实 provider streaming 的中途失败、空 delta、慢首 token 和用户取消体验仍只走 bounded error 基线。内部 alpha 前后需要把这些异常路径整理成更清晰的 UI 和 recovery contract。
+Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed failure codes、API/runtime failure classification、route terminal error mapping、empty response guard、persistence failure copy、cancel-safe stream persistence guard 和 localized Web failure copy，并把 operator troubleshooting 写入真实 provider smoke 文档。
 
-**建议范围：**
+已实现范围：
 
-- 补充 assistant streaming 中途失败、空 terminal content、慢首 token 和 client cancel 的 deterministic regression。
-- 改进 Web 文案和 task/message 状态，让用户能区分 provider 配置失败、stream 中断和持久化失败。
-- 保持 refresh 后以 repository terminal message / run event 为准，不把 transient chunks 当作事实。
-- 梳理 operator docs 中的 streaming failure 排查入口。
+- `assistant` 普通聊天 provider streaming 失败会映射为 `provider_configuration_failed`、`stream_interrupted`、`empty_response` 和 `persistence_failed` 等安全类别。
+- Web/API failure copy 使用 localized、bounded 文案，不泄漏 secret、raw provider response、raw SSE frame、本机路径或完整 artifact 内容。
+- Empty terminal response 不再保存空 assistant message；persistence failure 会区分“模型已生成但本地保存失败”。
+- Client cancel / disconnect 不把 transient partial delta 当作已完成 assistant message，刷新后仍以 repository terminal facts 为准。
+- Regression 覆盖 fake-provider streaming failure、empty response、persistence failure 和 cancel-safe persistence guard。
+- `docs/real-provider-alpha-smoke.md` 已新增 ordinary chat streaming failure operator 排查表。
 
-**非目标：**
+未实现范围：
 
 - 不做 MCP/tool-call/raw stdout streaming。
 - 不做 provider fallback execution、billing/quota、production observability 或 hosted retry queue。
 - 不改变 LP Planner / Builder complete-buffer structured output 边界。
 
-**当前设计：** `docs/superpowers/specs/2026-05-23-assistant-streaming-failure-ux-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-23-assistant-streaming-failure-ux-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-23-assistant-streaming-failure-ux.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-23-assistant-streaming-failure-ux.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 39：LP Artifact Quality Evaluation and Prompt Hardening v0
 
@@ -605,6 +608,24 @@ Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go�
 - 不引入 hosted issue tracker、数据库、遥测、自动截图上传、用户账号或团队审批系统。
 - 不承诺 public roadmap、SLA 或客户发布节奏。
 - 不在同一阶段直接修复所有反馈；只做 intake、triage 和下一批计划。
+
+### Stage 41：Alpha RC Trial Fix Batch v0
+
+**状态：** Stage 40 后推荐，可按内部 RC 反馈提前。
+
+**为什么现在做：** Stage 37/40 会让内部试用反馈变成批次化输入。第一轮 RC 后需要一个小范围修复批次，只处理阻塞和高频 alpha 摩擦，避免把反馈直接扩成无边界 roadmap。
+
+**建议范围：**
+
+- 从 `docs/alpha-feedback-log.md` 或同等反馈批次中挑选 blocker/high priority。
+- 修复普通聊天、LP artifact、Skills 或 docs 的小范围 alpha blocker。
+- 保持每个修复都有 regression test 或明确人工验证步骤。
+
+**非目标：**
+
+- 不引入 production auth/RBAC、真实部署、billing/quota、MCP write tools、真实 shell runner 或 hosted observability。
+- 不把所有 feedback 一次性清空。
+- 不改变 LP artifact static HTML/CSS/JS contract。
 
 ## Backlog 分组
 
@@ -729,7 +750,8 @@ Stage 37 v0 已把内部 Skill-only local alpha release candidate 的 go/no-go�
 
 ## 决策记录
 
-- Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，后续 Stage 38/39/40 分别处理 streaming failure UX、artifact quality 和反馈 intake。
+- Stage 38 已完成 Assistant Streaming Failure UX Hardening v0：普通聊天 provider streaming 失败现在有 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard；Stage 38 不改变 LP Planner / Builder complete-buffer structured output 边界，后续 Stage 39/40/41 分别处理 artifact quality、反馈 intake 和 RC 修复批次。
+- Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，Stage 38 已处理 streaming failure UX，后续 Stage 39/40 分别处理 artifact quality 和反馈 intake。
 - Stage 36 已完成 Real Provider Alpha Smoke Matrix and Operator Docs v0：真实 provider 手动 smoke 已集中到 `docs/real-provider-alpha-smoke.md`，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider streaming usage metadata 和 missing-key fail-closed 脱敏行为。
 - Stage 35 已完成 Provider Token Delta Streaming v0：真实 provider token delta 只进入普通聊天 `assistant` role 的 transient UI，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer structured output parse / repair。
 - Stage 34 已完成 Browser Failure Injection and Visual Regression v0：`pnpm alpha:e2e` 现在覆盖 8 个 Chromium browser tests，包括 happy path、bounded recovery、provider fail-closed、worker queue bounded error、artifact invalid path 和空首页 layout contract；visual v0 采用 geometry assertion 和 diagnostic screenshot artifact，不提交 brittle screenshot baseline。
