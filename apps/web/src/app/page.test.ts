@@ -1447,323 +1447,59 @@ describe("HomePage project flow errors", () => {
     );
   });
 
-  it("renders the MCP view with localized project context", async () => {
-    setActiveEmptyProjectState();
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "en"
-    });
-
-    expect(html).toContain("Project MCP");
-    expect(html).toContain("Connector JSON");
-    expect(html).toContain("Visible tools");
-  });
-
-  it("renders MCP deferred guidance in the MCP view", async () => {
-    setActiveEmptyProjectState();
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "en"
-    });
-
-    expect(html).toContain(
-      "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors."
-    );
-  });
-
-  it("renders the MCP view in Chinese", async () => {
-    setActiveEmptyProjectState();
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "zh-CN"
-    });
-
-    expect(html).toContain("项目 MCP");
-    expect(html).toContain("连接器 JSON");
-    expect(html).toContain("可见工具");
-  });
-
-  it("renders execution controls only for visible read-only MCP tools", async () => {
-    setActiveEmptyProjectState();
-    (pageMocks.pageState as {
-      mcp: {
-        connectors: unknown[];
-        approvals: unknown[];
-        visibleToolsByRole: Record<string, unknown[]>;
-      };
-    }).mcp = {
-      connectors: [],
-      approvals: [],
-      visibleToolsByRole: {
-        assistant: [],
-        planner: [],
-        builder: [
-          {
-            connectorId: "connector_assets",
-            name: "searchAssets",
-            permission: "assets:read",
-            requiresApproval: false
-          },
-          {
-            connectorId: "connector_git",
-            name: "createPullRequest",
-            permission: "git:write",
-            requiresApproval: true,
-            readOnly: true
-          }
-        ],
-        reviewer: [],
-        deployer: []
-      }
-    };
-
+  it("hides MCP navigation from the V1 web surface", async () => {
     const page = await HomePage({
-      searchParams: Promise.resolve({ view: "mcp" })
-    });
-    const text = collectText(page).join(" ");
-    const formPayloads = collectElements(page, "form").map(collectFormPayload);
-
-    expect(text).toContain("Run read-only check");
-    expect(text).toContain("Arguments JSON");
-    expect(text).toContain("Write tools are blocked in this stage.");
-    expect(formPayloads).toContainEqual({
-      projectId: "project_1",
-      connectorId: "connector_assets",
-      toolName: "searchAssets",
-      role: "builder"
-    });
-    expect(formPayloads).not.toContainEqual(
-      expect.objectContaining({
-        toolName: "createPullRequest"
-      })
-    );
-  });
-
-  it("renders Chinese MCP tool summaries with localized punctuation", async () => {
-    pageMocks.pageState = {
-      kind: "empty",
-      projects: [
-        {
-          id: "project_1",
-          name: "Spring Campaign",
-          createdAt: "2026-05-12T08:00:00.000Z"
-        }
-      ],
-      tasks: [],
-      skills: {
-        boundSkills: [],
-        availableVersions: []
-      },
-      models: {
-        providers: [],
-        routes: [],
-        resolvedPolicy: {
-          assistant: { provider: "mock-openai", model: "assistant-model" },
-          planner: { provider: "mock-openai", model: "planning-model" },
-          builder: { provider: "mock-anthropic", model: "code-model" },
-          reviewer: { provider: "mock-openai", model: "review-model" },
-          deployer: { provider: "mock-local", model: "tool-model" }
-        }
-      },
-      mcp: {
-        connectors: [
-          {
-            id: "connector_assets",
-            scope: "project",
-            targetKey: "project_1",
-            projectId: "project_1",
-            name: "内部素材",
-            description: "读取已批准的素材元数据。",
-            tools: [
-              {
-                name: "searchAssets",
-                description: "搜索已批准的品牌素材。",
-                permission: "assets:read",
-                roles: ["planner", "builder"],
-                requiresApproval: false
-              }
-            ],
-            enabled: true,
-            createdAt: "2026-05-12T08:00:00.000Z",
-            updatedAt: "2026-05-12T08:00:00.000Z"
-          }
-        ],
-        approvals: [],
-        visibleToolsByRole: {
-          assistant: [],
-          planner: [],
-          builder: [],
-          reviewer: [],
-          deployer: []
-        }
-      }
-    };
-    pageMocks.currentProjectId = "project_1";
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "zh-CN"
-    });
-
-    expect(html).toContain("权限：assets:read");
-    expect(html).toContain("角色：规划员、构建员");
-    expect(html).not.toContain("权限: assets:read");
-    expect(html).not.toContain("角色：规划员, 构建员");
-  });
-
-  it("renders the MCP view when a persisted connector has malformed tool roles", async () => {
-    pageMocks.pageState = {
-      kind: "empty",
-      projects: [
-        {
-          id: "project_1",
-          name: "Spring Campaign",
-          createdAt: "2026-05-12T08:00:00.000Z"
-        }
-      ],
-      tasks: [],
-      skills: {
-        boundSkills: [],
-        availableVersions: []
-      },
-      models: {
-        providers: [],
-        routes: [],
-        resolvedPolicy: {
-          assistant: { provider: "mock-openai", model: "assistant-model" },
-          planner: { provider: "mock-openai", model: "planning-model" },
-          builder: { provider: "mock-anthropic", model: "code-model" },
-          reviewer: { provider: "mock-openai", model: "review-model" },
-          deployer: { provider: "mock-local", model: "tool-model" }
-        }
-      },
-      mcp: {
-        connectors: [
-          {
-            id: "connector_broken",
-            scope: "project",
-            targetKey: "project_1",
-            name: "Broken Connector",
-            tools: [
-              {
-                name: "brokenTool",
-                permission: "assets:read",
-                requiresApproval: false
-              }
-            ],
-            enabled: true,
-            createdAt: "2026-05-12T08:00:00.000Z",
-            updatedAt: "2026-05-12T08:00:00.000Z"
-          }
-        ],
-        approvals: [],
-        visibleToolsByRole: {
-          assistant: [],
-          planner: [],
-          builder: [],
-          reviewer: [],
-          deployer: []
-        }
-      }
-    };
-    pageMocks.currentProjectId = "project_1";
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "en"
-    });
-
-    expect(html).toContain("Broken Connector");
-    expect(html).toContain("brokenTool");
-  });
-
-  it("renders the MCP view when a persisted connector has malformed scalar fields", async () => {
-    pageMocks.pageState = {
-      kind: "empty",
-      projects: [
-        {
-          id: "project_1",
-          name: "Spring Campaign",
-          createdAt: "2026-05-12T08:00:00.000Z"
-        }
-      ],
-      tasks: [],
-      skills: {
-        boundSkills: [],
-        availableVersions: []
-      },
-      models: {
-        providers: [],
-        routes: [],
-        resolvedPolicy: {
-          assistant: { provider: "mock-openai", model: "assistant-model" },
-          planner: { provider: "mock-openai", model: "planning-model" },
-          builder: { provider: "mock-anthropic", model: "code-model" },
-          reviewer: { provider: "mock-openai", model: "review-model" },
-          deployer: { provider: "mock-local", model: "tool-model" }
-        }
-      },
-      mcp: {
-        connectors: [
-          {
-            id: { value: "connector_broken" },
-            scope: "project",
-            targetKey: "project_1",
-            name: { value: "Broken Connector" },
-            tools: [],
-            enabled: "false",
-            createdAt: "2026-05-12T08:00:00.000Z",
-            updatedAt: "2026-05-12T08:00:00.000Z"
-          }
-        ],
-        approvals: [],
-        visibleToolsByRole: {
-          assistant: [],
-          planner: [],
-          builder: [],
-          reviewer: [],
-          deployer: []
-        }
-      }
-    };
-    pageMocks.currentProjectId = "project_1";
-
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp" }),
-      acceptLanguage: "en"
-    });
-
-    expect(html).toContain("Project MCP");
-    expect(html).toContain("connector_invalid");
-    expect(html).toContain("Invalid connector");
-  });
-
-  it("marks the MCP nav link active from the mcp route", async () => {
-    const page = await HomePage({
-      searchParams: Promise.resolve({ view: "mcp" })
+      searchParams: Promise.resolve({})
     });
     const links = collectElements(page, "a");
+    const linkLabels = links.map((link) => collectText(link.props?.children).join(""));
 
+    expect(linkLabels).toContain("Workbench");
+    expect(linkLabels).toContain("Skills");
+    expect(linkLabels).toContain("Models");
+    expect(linkLabels).not.toContain("MCP");
     expect(
       links.some(
         (link) =>
-          link.props?.href === "/?view=mcp" &&
-          link.props?.className === "navItem navItemActive" &&
+          link.props?.href === "/?view=mcp" ||
           collectText(link.props?.children).join("") === "MCP"
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("renders localized MCP flow errors", async () => {
-    const html = await renderHomePage({
-      searchParams: Promise.resolve({ view: "mcp", mcpError: "mcp_connector_json_invalid" }),
-      acceptLanguage: "zh-CN"
-    });
+  it("downgrades the legacy mcp view to the workbench without rendering MCP forms", async () => {
+    setActiveEmptyProjectState();
 
-    expect(html).toContain("请输入有效的连接器 JSON。");
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "mcp", mcpError: "mcp_connector_json_invalid" })
+    });
+    const text = collectText(page).join(" ");
+    const links = collectElements(page, "a");
+    const textareas = collectElements(page, "textarea");
+
+    expect(text).toContain("What can I help you build?");
+    expect(text).not.toContain("Project MCP");
+    expect(text).not.toContain("Connector JSON");
+    expect(text).not.toContain("Visible tools");
+    expect(text).not.toContain("Run read-only check");
+    expect(text).not.toContain("Enter a valid connector JSON.");
+    expect(text).not.toContain("请输入有效的连接器 JSON。");
+    expect(textareas.some((textarea) => textarea.props?.name === "definitionJson")).toBe(false);
+    expect(
+      links.some(
+        (link) =>
+          link.props?.href === "/" &&
+          link.props?.["aria-current"] === "page" &&
+          collectText(link.props?.children).join("") === "Workbench"
+      )
+    ).toBe(true);
+    expect(
+      links.some(
+        (link) =>
+          link.props?.href === "/?view=mcp" ||
+          collectText(link.props?.children).join("") === "MCP"
+      )
+    ).toBe(false);
   });
 
   it("keeps the workbench page from rendering MCP forms", async () => {
@@ -3624,5 +3360,62 @@ describe("HomePage project flow errors", () => {
     expect(href).toContain("interruptError=interrupt_failed");
     expect(href).toContain("artifactPath=index.html");
     expect(href.match(/artifactPath=/g)).toHaveLength(1);
+  });
+
+  it("does not preserve legacy mcp view in artifact preview snippet links", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        view: "mcp",
+        interruptError: "interrupt_failed",
+        artifactPath: "styles.css"
+      })
+    });
+    const snippetLinks = collectElements(page, "a").filter(
+      (link) => collectText(link.props?.children).join("") === "Preview snippet"
+    );
+    const hrefs = snippetLinks.map((link) => String(link.props?.href));
+
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
+    expect(hrefs).toContainEqual(expect.stringContaining("interruptError=interrupt_failed"));
+    expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
   });
 });
