@@ -426,6 +426,10 @@
    - Stage 38 Assistant Streaming Failure UX Hardening v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 38 design 后阅读，用于按 TDD 实现 typed chat stream errors、API/runtime failure classification、route terminal error mapping、localized Web failure copy、operator docs 和 roadmap closeout。
 
+106. `specs/2026-05-23-lp-artifact-quality-prompt-hardening-design.md`
+   - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 design（设计已确认，待实施计划）。
+   - 在 Stage 38 implementation plan 和当前 roadmap 后阅读，用于建立 LP artifact quality rubric、prompt fixtures、人工评审记录和 Planner / Builder prompt hardening 边界；本阶段不改变三文件静态 artifact contract、artifact policy、provider adapter 或 preview/export。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
