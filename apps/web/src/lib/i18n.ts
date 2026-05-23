@@ -29,6 +29,7 @@ export interface WorkbenchCopy {
   nav: {
     label: string;
     workbench: string;
+    artifacts: string;
     skills: string;
     mcp: string;
     models: string;
@@ -255,6 +256,14 @@ export interface WorkbenchCopy {
     taskComplete: string;
     toolsTitle: string;
     artifactsTitle: string;
+    artifactWorkspaceTitle: string;
+    artifactWorkspaceSubtitle: string;
+    artifactWorkspaceEmptyTitle: string;
+    artifactWorkspaceEmptyDescription: string;
+    artifactWorkspaceManifestTitle: string;
+    artifactWorkspaceExportTitle: string;
+    artifactWorkspaceOpenLabel: string;
+    artifactWorkspaceUnavailableLabel: string;
     suggestionsTitle: string;
     resultRating: string;
     allFilesLabel: string;
@@ -370,6 +379,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     nav: {
       label: "Main navigation",
       workbench: "Workbench",
+      artifacts: "Artifacts",
       skills: "Skills",
       mcp: "MCP",
       models: "Models",
@@ -751,6 +761,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       taskComplete: "Task complete",
       toolsTitle: "Agent process",
       artifactsTitle: "Generated files",
+      artifactWorkspaceTitle: "Artifact workspace",
+      artifactWorkspaceSubtitle: "Inspect the current task's static LP files, preview, snippets, and exports.",
+      artifactWorkspaceEmptyTitle: "No artifact workspace yet",
+      artifactWorkspaceEmptyDescription: "Generate an LP task in the workbench to create static HTML, CSS, and JavaScript files.",
+      artifactWorkspaceManifestTitle: "File manifest",
+      artifactWorkspaceExportTitle: "Exports",
+      artifactWorkspaceOpenLabel: "Open artifact workspace",
+      artifactWorkspaceUnavailableLabel: "Artifact workspace is unavailable.",
       suggestionsTitle: "Suggested next prompts",
       resultRating: "How is this result?",
       allFilesLabel: "View all files in this task",
@@ -859,6 +877,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     nav: {
       label: "主导航",
       workbench: "工作台",
+      artifacts: "产物",
       skills: "技能",
       mcp: "MCP",
       models: "模型",
@@ -1239,6 +1258,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       taskComplete: "任务已完成",
       toolsTitle: "智能体过程",
       artifactsTitle: "生成文件",
+      artifactWorkspaceTitle: "产物工作区",
+      artifactWorkspaceSubtitle: "查看当前任务的静态 LP 文件、预览、片段和导出。",
+      artifactWorkspaceEmptyTitle: "还没有产物工作区",
+      artifactWorkspaceEmptyDescription: "先在工作台生成一个 LP 任务，系统会创建静态 HTML、CSS 和 JavaScript 文件。",
+      artifactWorkspaceManifestTitle: "文件清单",
+      artifactWorkspaceExportTitle: "导出",
+      artifactWorkspaceOpenLabel: "打开产物工作区",
+      artifactWorkspaceUnavailableLabel: "产物工作区暂不可用。",
       suggestionsTitle: "推荐追问",
       resultRating: "这个结果怎么样？",
       allFilesLabel: "查看此任务中的所有文件",

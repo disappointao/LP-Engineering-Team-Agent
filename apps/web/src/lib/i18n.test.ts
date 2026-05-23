@@ -132,6 +132,24 @@ describe("web i18n", () => {
     expect(zh.chat.bytesLabel(1280)).toBe("1,280 字节");
   });
 
+  it("includes dedicated artifact workspace copy in both locales", () => {
+    const zh = getWorkbenchCopy("zh-CN");
+    const en = getWorkbenchCopy("en");
+
+    expect(en.nav.artifacts).toBe("Artifacts");
+    expect(zh.nav.artifacts).toBe("产物");
+    expect(en.chat.artifactWorkspaceTitle).toBe("Artifact workspace");
+    expect(en.chat.artifactWorkspaceEmptyTitle).toBe("No artifact workspace yet");
+    expect(en.chat.artifactWorkspaceManifestTitle).toBe("File manifest");
+    expect(en.chat.artifactWorkspaceExportTitle).toBe("Exports");
+    expect(en.chat.artifactWorkspaceOpenLabel).toBe("Open artifact workspace");
+    expect(zh.chat.artifactWorkspaceTitle).toBe("产物工作区");
+    expect(zh.chat.artifactWorkspaceEmptyTitle).toBe("还没有产物工作区");
+    expect(zh.chat.artifactWorkspaceManifestTitle).toBe("文件清单");
+    expect(zh.chat.artifactWorkspaceExportTitle).toBe("导出");
+    expect(zh.chat.artifactWorkspaceOpenLabel).toBe("打开产物工作区");
+  });
+
   it("exposes localized live task progress labels", () => {
     const en = getWorkbenchCopy("en");
     const zh = getWorkbenchCopy("zh-CN");
