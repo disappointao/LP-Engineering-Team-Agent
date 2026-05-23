@@ -6,6 +6,7 @@ const activeStates = new Set(["queued", "running", "waiting_for_approval", "canc
 const attentionStates = new Set(["blocked", "failed"]);
 const stoppedStates = new Set(["cancelled"]);
 const executableActions = new Set(["resume_worker_finalization", "retry_run"]);
+const safeUnknownEventTypePattern = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 const markerByEventType = {
   "model.output.repair_started": "repair_started",
@@ -220,7 +221,10 @@ function getLastEventLabel({
     return undefined;
   }
   const kind = markerByEventType[latest.type as keyof typeof markerByEventType];
-  return kind ? copy.chat.runTimelineMarkerLabels[kind] : latest.type;
+  if (kind) {
+    return copy.chat.runTimelineMarkerLabels[kind];
+  }
+  return safeUnknownEventTypePattern.test(latest.type) ? latest.type : undefined;
 }
 
 function buildActions({

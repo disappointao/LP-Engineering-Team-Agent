@@ -103,7 +103,7 @@ describe("buildRunTimelineViewModel", () => {
               code: "handoff_blocked",
               message: "Reviewer blocked deployment.",
               source: "handoff",
-              errorName: "SAFE_CODE"
+              errorName: "RAW_SECRET"
             },
             recoveryActions: ["resolve_blocker", "inspect_manually"]
           }
@@ -155,7 +155,8 @@ describe("buildRunTimelineViewModel", () => {
               diagnosticSummary: {
                 code: "handoff_blocked",
                 message: "Reviewer blocked deployment.",
-                source: "handoff"
+                source: "handoff",
+                errorName: "RAW_SECRET"
               },
               recoveryActions: ["resolve_blocker", "inspect_manually"]
             }
@@ -184,5 +185,68 @@ describe("buildRunTimelineViewModel", () => {
       "Inspect manually"
     ]);
     expect(JSON.stringify(model)).not.toContain("RAW_SECRET");
+  });
+
+  it("surfaces only safe unknown latest event labels", () => {
+    const copy = getWorkbenchCopy("en");
+    const model = buildRunTimelineViewModel({
+      payload: createPayload({
+        runs: [
+          {
+            runId: "run_builder_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "builder",
+            state: "completed",
+            runRecordState: "completed",
+            startedAt: "2026-05-23T00:00:00.000Z",
+            completedAt: "2026-05-23T00:00:05.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_reviewer_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "reviewer",
+            state: "completed",
+            runRecordState: "completed",
+            startedAt: "2026-05-23T00:00:06.000Z",
+            completedAt: "2026-05-23T00:00:10.000Z",
+            recoveryActions: []
+          }
+        ],
+        runEvents: [
+          {
+            id: "event_safe_unknown",
+            projectId: "project_1",
+            taskId: "task_1",
+            runId: "run_builder_1",
+            type: "worker.job.linked",
+            createdAt: "2026-05-23T00:00:01.000Z",
+            payload: { runId: "run_builder_1" }
+          },
+          {
+            id: "event_unsafe_unknown",
+            projectId: "project_1",
+            taskId: "task_1",
+            runId: "run_reviewer_1",
+            type: "RAW_SECRET<script>/Users/ao/.ssh/id_rsa",
+            createdAt: "2026-05-23T00:00:07.000Z",
+            payload: { type: "RAW_SECRET" }
+          }
+        ],
+        recovery: { runs: [] }
+      }),
+      copy
+    });
+
+    const builder = model.steps.find((step) => step.role === "builder");
+    const reviewer = model.steps.find((step) => step.role === "reviewer");
+
+    expect(builder?.lastEventLabel).toBe("worker.job.linked");
+    expect(reviewer?.lastEventLabel).toBeUndefined();
+    expect(JSON.stringify(model)).not.toContain("RAW_SECRET");
+    expect(JSON.stringify(model)).not.toContain("<script>");
+    expect(JSON.stringify(model)).not.toContain("/Users/ao/.ssh/id_rsa");
   });
 });
