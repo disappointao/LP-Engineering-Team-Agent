@@ -851,7 +851,9 @@ describe("POST /api/chat/stream", () => {
     await vi.waitFor(() => {
       expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
         taskId: "task_1",
-        messageId: "message_2"
+        messageId: "message_2",
+        allowPersistedContent: true,
+        allowStale: true
       });
     });
   });

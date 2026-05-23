@@ -219,12 +219,14 @@ function enqueueTerminalError(
 
 async function abandonStreamingPlaceholder(
   store: WebWorkbenchStore,
-  started: StartedStreamingChatPrompt
+  started: StartedStreamingChatPrompt,
+  options: { allowPersistedContent?: boolean; allowStale?: boolean } = {}
 ): Promise<void> {
   try {
     await store.abandonStreamingChatPrompt({
       taskId: started.taskId,
-      messageId: started.assistantMessageId
+      messageId: started.assistantMessageId,
+      ...options
     });
   } catch {
     // Preserve the original terminal stream outcome; cleanup is best-effort.
@@ -454,10 +456,18 @@ export async function POST(request: Request): Promise<Response> {
 
     if (completion.type === "cancelled") {
       cancelAssistantStream(started);
-      await abandonStreamingPlaceholder(store, started);
+      await abandonStreamingPlaceholder(store, started, {
+        allowPersistedContent: true,
+        allowStale: true
+      });
       void completionPromise
         .catch(() => undefined)
-        .then(() => abandonStreamingPlaceholder(store, started))
+        .then(() =>
+          abandonStreamingPlaceholder(store, started, {
+            allowPersistedContent: true,
+            allowStale: true
+          })
+        )
         .catch(() => undefined);
       return;
     }
@@ -469,7 +479,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (streamState.isClosed()) {
-      await abandonStreamingPlaceholder(store, started);
+      await abandonStreamingPlaceholder(store, started, {
+        allowPersistedContent: true,
+        allowStale: true
+      });
       return;
     }
 

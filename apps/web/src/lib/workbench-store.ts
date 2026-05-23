@@ -648,6 +648,8 @@ export interface WebWorkbenchStore {
   abandonStreamingChatPrompt(input: {
     taskId: string;
     messageId: string;
+    allowPersistedContent?: boolean;
+    allowStale?: boolean;
   }): Promise<StreamingChatAbandonResult>;
   interruptCurrentTask(input: {
     taskId: string;
@@ -1531,9 +1533,20 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           (message) => message.id === input.messageId && message.role === "assistant"
         );
         const latestMessage = messages.at(-1);
-        if (!assistant || latestMessage?.id !== assistant.id) {
+        if (!assistant) {
           return { ok: false, error: "generation_failed" };
         }
+        if (assistant.content !== "" && !input.allowPersistedContent) {
+          return { ok: false, error: "generation_failed" };
+        }
+        if (
+          assistant.content !== "" &&
+          input.allowStale !== true &&
+          latestMessage?.id !== assistant.id
+        ) {
+          return { ok: false, error: "generation_failed" };
+        }
+        retireRepositoryMessageId(repositories, assistant.id);
         await repositories.messages.deleteById(assistant.id);
         return { ok: true };
       });
@@ -2322,6 +2335,27 @@ function isRecoverableModelResolutionError(
 }
 
 const repositoryTaskLocks = new WeakMap<WorkbenchRepositories, Promise<void>>();
+const repositoryRetiredMessageIds = new WeakMap<WorkbenchRepositories, Set<string>>();
+
+function retireRepositoryMessageId(repositories: WorkbenchRepositories, messageId: string): void {
+  let retiredIds = repositoryRetiredMessageIds.get(repositories);
+  if (!retiredIds) {
+    retiredIds = new Set<string>();
+    repositoryRetiredMessageIds.set(repositories, retiredIds);
+  }
+  retiredIds.add(messageId);
+}
+
+function nextRepositoryMessageId(
+  repositories: WorkbenchRepositories,
+  existingMessages: ChatMessageRecord[]
+): string {
+  const retiredIds = repositoryRetiredMessageIds.get(repositories);
+  return nextSequentialId("message", [
+    ...existingMessages.map((record) => record.id),
+    ...(retiredIds ? [...retiredIds] : [])
+  ]);
+}
 
 async function createTaskThread(input: {
   repositories: WorkbenchRepositories;
@@ -2344,7 +2378,7 @@ async function createTaskThread(input: {
       createdAt: now
     };
     const userMessage: ChatMessageRecord = {
-      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      id: nextRepositoryMessageId(input.repositories, existingMessages),
       taskId: task.id,
       role: "user",
       content: input.userMessage,
@@ -2367,7 +2401,7 @@ async function appendTaskMessage(input: {
     const now = (input.now ?? (() => new Date()))().toISOString();
     const existingMessages = await input.repositories.messages.listAll();
     const message: ChatMessageRecord = {
-      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      id: nextRepositoryMessageId(input.repositories, existingMessages),
       taskId: input.taskId,
       role: input.role,
       content: input.content,
@@ -2631,17 +2665,14 @@ async function saveTaskThread(input: {
       createdAt: now
     };
     const userMessage: ChatMessageRecord = {
-      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      id: nextRepositoryMessageId(input.repositories, existingMessages),
       taskId: task.id,
       role: "user",
       content: input.userMessage,
       createdAt: now
     };
     const assistantMessage: ChatMessageRecord = {
-      id: nextSequentialId(
-        "message",
-        [...existingMessages.map((record) => record.id), userMessage.id]
-      ),
+      id: nextRepositoryMessageId(input.repositories, [...existingMessages, userMessage]),
       taskId: task.id,
       role: "assistant",
       content: input.assistantMessage,
@@ -2689,17 +2720,14 @@ async function startStreamingChatThread(input: {
       now
     });
     const userMessage: ChatMessageRecord = {
-      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      id: nextRepositoryMessageId(input.repositories, existingMessages),
       taskId: task.id,
       role: "user",
       content: input.userMessage,
       createdAt: now
     };
     const assistantMessage: ChatMessageRecord = {
-      id: nextSequentialId(
-        "message",
-        [...existingMessages.map((record) => record.id), userMessage.id]
-      ),
+      id: nextRepositoryMessageId(input.repositories, [...existingMessages, userMessage]),
       taskId: task.id,
       role: "assistant",
       content: input.assistantMessage,
@@ -2749,7 +2777,7 @@ async function appendStreamingChatUserMessage(input: {
   return withRepositoryTaskLock(input.repositories, async () => {
     const existingMessages = await input.repositories.messages.listAll();
     const message: ChatMessageRecord = {
-      id: nextSequentialId("message", existingMessages.map((record) => record.id)),
+      id: nextRepositoryMessageId(input.repositories, existingMessages),
       taskId: input.taskId,
       role: "user",
       content: input.content,
