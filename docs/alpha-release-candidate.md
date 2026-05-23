@@ -153,9 +153,9 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 
 ## Follow-up Routing
 
-- Stage 40：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
-- Stage 41：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
-- Stage 42：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
+- Stage 40（已完成）：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
+- Stage 41（已完成）：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
+- Stage 42（当前推荐）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
 - Stage 43：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
 - Stage 44：Skills / Models client-side management，继续排除 MCP management。
 - Stage 45：Browser failure injection 和轻量视觉回归扩展。

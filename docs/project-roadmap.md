@@ -60,9 +60,8 @@
 
 按当前代码基础，面向本地/单用户 **V1 polished alpha**，粗略估算还需要 **7-14 个有效开发日**。如果把内部 RC 反馈、阻塞修复和最终 completion gate 都算入，粗略估算 **10-18 个有效开发日**；实际范围由后续 feedback batch 的 blocker 数量决定。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
 
-- Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。
 - Dedicated artifact workspace。
 - Run timeline / handoff / recovery UX polish。
 - Skills / Models client-side management。
@@ -626,18 +625,19 @@ Stage 40 v0 已把 RC feedback template 变成可重复的 alpha feedback intake
 
 ### Stage 41：Web Surface Pruning and V1 Navigation v0
 
-**状态：** 当前推荐，V1 polished alpha Web surface 第一阶段。
+**状态：** 已实现。
 
-**为什么现在做：** MCP backend 能力已经存在，但用户明确要求 MCP management 和网页 tab / sidebar / top-level 入口从第一版 Web 中屏蔽，后期再做。先收紧 navigation 可以防止后续 artifact、timeline、Skills/Models polish 继续围绕错误的信息架构扩展。
+Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 和 `view=mcp` 可见管理页从第一版 Web 中隐藏；旧 `/?view=mcp` 安全降级到 workbench，不展示 MCP connector、tool approval 或 execution form。后端 MCP registry / read-only execution / Context Pack 边界保留，后续 MCP management 仍在 backlog。
 
-**建议范围：**
+已实现范围：
 
-- 隐藏 MCP tab / sidebar / top-level navigation。
-- 旧 `view=mcp` 或等价入口安全降级到 workbench 或 deferred placeholder，不展示 MCP connector、tool approval 或 execution form。
-- 明确 V1 可见入口：chat/workbench、tasks、artifact workspace、Skills、Models。
-- 更新 Web acceptance、RC docs、i18n 文案和 browser tests，确保 MCP 不再是 V1 manual acceptance 主路径。
+- Web sidebar / top-level navigation 只展示 Workbench、Skills、Models；active nav 使用 `aria-current="page"`。
+- `view=mcp` 会回到 workbench surface，artifact snippet / preview links 不保留 legacy `view=mcp`。
+- First-viewport action chips 不再展示 `Check MCP` / `检查 MCP`。
+- `docs/web-v1-acceptance.md`、`docs/alpha-release-candidate.md` 和 browser E2E 已改为验证 MCP hidden / legacy route fallback。
+- `pnpm alpha:e2e` shell / boundary tests 现在一致断言 MCP nav 不可见。
 
-**非目标：**
+未实现范围：
 
 - 不删除 MCP backend repository、gateway、runtime context 类型或已有安全测试。
 - 不实现新的 artifact workspace 或 Skills/Models 管理体验。
@@ -649,7 +649,7 @@ Stage 40 v0 已把 RC feedback template 变成可重复的 alpha feedback intake
 
 ### Stage 42：Dedicated Artifact Workspace v0
 
-**状态：** Stage 41 后推荐。
+**状态：** 当前推荐。
 
 **为什么现在做：** LP artifact 已有 durable workspace、preview/export 和 bounded snippet，但第一版 polished alpha 需要把 artifact 从局部 panel 提升为独立工作区，让用户能可靠查看文件、预览、导出和理解失败状态。
 
@@ -838,6 +838,7 @@ Stage 46 是第一版收口阶段，不新增大功能。它运行完整 determi
 
 ## 决策记录
 
+- 2026-05-23 Stage 41 已完成 Web Surface Pruning and V1 Navigation v0：V1 Web navigation 不再展示 MCP，旧 `/?view=mcp` 安全降级到 workbench 且不展示 connector、tool approval 或 execution form；默认下一路由为 Stage 42 Dedicated Artifact Workspace v0。
 - 2026-05-23 Stage 40 已完成 Alpha Feedback Intake and Triage Loop v0：内部 RC 反馈现在通过 `docs/alpha-feedback-intake.md` 和 `docs/alpha-feedback-log.md` 记录 safe evidence、分类、优先级、accepted follow-ups 和 rejected/out-of-scope items；默认下一路由为 Stage 41 Web Surface Pruning and V1 Navigation v0。
 - 2026-05-23 用户将第一版 Web 口径调整为 V1 polished alpha：Stage 40 保留 feedback intake，Stage 41-46 规划到完整第一版结束；MCP management 和 MCP tab / sidebar / top-level Web 入口从第一版可见 UI 中移除，后期再做。后端 MCP registry / read-only execution 边界保留，但不作为 V1 Web surface。
 - Stage 39 已完成 LP Artifact Quality Evaluation and Prompt Hardening v0：内部 alpha 现在有 `docs/lp-artifact-quality.md` 质量 rubric、7 个 prompt fixtures、review record 和 safe evidence rules；Planner / Builder structured prompts 增加质量 guidance，但 `LPBriefSchema`、`StaticArtifactsSchema`、三文件静态 artifact policy、provider adapter 和 preview/export contract 不变。

@@ -443,8 +443,8 @@
    - 在 V1 polished alpha design 后阅读，用于审计 `docs/alpha-feedback-intake.md`、`docs/alpha-feedback-log.md`，以及 RC feedback template 到 Stage 41-46 / backlog 的批次化路由。
 
 110. `plans/2026-05-23-web-surface-pruning-v1-navigation.md`
-   - Stage 41 Web Surface Pruning and V1 Navigation v0 implementation plan（待执行）。
-   - 在 V1 polished alpha design、Stage 40 feedback intake plan 和当前 roadmap 后阅读，用于隐藏 MCP tab/sidebar/top-level Web 入口、让旧 `view=mcp` 安全降级，并更新 V1 acceptance / browser boundary tests。
+   - Stage 41 Web Surface Pruning and V1 Navigation v0 implementation plan（已实现，当前已完成）。
+   - 在 V1 polished alpha design、Stage 40 feedback intake plan 和当前 roadmap 后阅读，用于审计已隐藏的 MCP tab/sidebar/top-level Web 入口、旧 `view=mcp` 安全降级，以及 V1 acceptance / browser boundary tests 更新。
 
 ## 维护规则
 
