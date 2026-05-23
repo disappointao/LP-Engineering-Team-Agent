@@ -47,26 +47,33 @@
 
 ## 第一版可用闭环目标
 
-当前“第一版可用”不再按 README 里的本地 deterministic Web MVP 口径判断，而是按用户能在网页里完成真实产品闭环判断：
+当前“第一版可用”已调整为 **V1 polished alpha**：不再只按 README 里的本地 deterministic Web MVP 或“主路径能跑通”判断，而是按少数内部用户能在网页里完成较完整的本地单用户产品闭环判断。
 
 - 能在 Web workbench 里进行普通问答，回答支持流式展示。
 - Web/API 能接真实模型 runtime，同时保留 deterministic fallback 作为测试路径。
 - 能提交“写 LP / 改 LP / 继续优化 LP”这类复杂任务，并跑通 `Planner -> Builder -> Reviewer -> Deployer` 的可观察工作流。
 - Skill 是第一版主要扩展机制：已发布、已绑定的 project skills 能进入上下文；受控 skill command 继续走 approval、worker、run event 和 observation 边界。
-- Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
+- Web 页面无需手动刷新即可看到任务状态、细粒度 run timeline、artifact progress、失败诊断、handoff/recovery 状态和可用恢复动作。
+- Artifact workspace 是第一版可见工作区：支持文件 manifest、preview、bounded snippet、export 和安全失败状态。
+- Skills / Models client-side management 进入第一版 Web 范围；MCP management 和 MCP tab / sidebar / top-level Web 入口后置。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，剩余反馈 intake 和 RC 修复批次，粗略估算 **2-5 个有效开发日**。
+按当前代码基础，面向本地/单用户 **V1 polished alpha**，粗略估算还需要 **7-14 个有效开发日**。如果把内部 RC 反馈、阻塞修复和最终 completion gate 都算入，粗略估算 **10-18 个有效开发日**；实际范围由 Stage 40 feedback intake 后的 blocker 数量决定。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
 
 - Alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。
-- Alpha RC trial fix batch，只处理内部 RC 后的 blocker / high priority 摩擦。
+- Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。
+- Dedicated artifact workspace。
+- Run timeline / handoff / recovery UX polish。
+- Skills / Models client-side management。
+- Browser failure injection 和轻量视觉回归扩展。
+- V1 polished alpha completion gate。
 
 当前仍明确后置：
 
 - 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement、provider cost ledger，以及 LP structured output token-level UI。
-- 真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
+- MCP management、MCP tab / sidebar / top-level Web 入口、真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
@@ -597,9 +604,9 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 
 ### Stage 40：Alpha Feedback Intake and Triage Loop v0
 
-**状态：** Stage 39 后推荐，可按内部 RC 试用启动时间提前。
+**状态：** V1 polished alpha 第一阶段推荐。
 
-**为什么现在做：** Stage 37 已给出反馈模板和 triage 分类，但真实内部试用开始后需要把反馈批次化，形成 known issues、修复优先级和阶段切分，避免把所有反馈都直接变成无边界开发任务。
+**为什么现在做：** 用户已把第一版 Web 范围提高到 V1 polished alpha，但仍选择先保留 feedback intake。Stage 37 已给出反馈模板和 triage 分类，Stage 40 需要把它变成批次化 known issues、修复优先级和阶段切分，避免后续 Web polish 直接变成无边界 UI 重写。
 
 **建议范围：**
 
@@ -614,42 +621,93 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 - 不承诺 public roadmap、SLA 或客户发布节奏。
 - 不在同一阶段直接修复所有反馈；只做 intake、triage 和下一批计划。
 
-### Stage 41：Alpha RC Trial Fix Batch v0
+### Stage 41：Web Surface Pruning and V1 Navigation v0
 
-**状态：** Stage 40 后推荐，可按内部 RC 反馈提前。
+**状态：** Stage 40 后推荐，V1 polished alpha Web surface 第一阶段。
 
-**为什么现在做：** Stage 37/40 会让内部试用反馈变成批次化输入。第一轮 RC 后需要一个小范围修复批次，只处理阻塞和高频 alpha 摩擦，避免把反馈直接扩成无边界 roadmap。
-
-**建议范围：**
-
-- 从 `docs/alpha-feedback-log.md` 或同等反馈批次中挑选 blocker/high priority。
-- 修复普通聊天、LP artifact、Skills 或 docs 的小范围 alpha blocker。
-- 保持每个修复都有 regression test 或明确人工验证步骤。
-
-**非目标：**
-
-- 不引入 production auth/RBAC、真实部署、billing/quota、MCP write tools、真实 shell runner 或 hosted observability。
-- 不把所有 feedback 一次性清空。
-- 不改变 LP artifact static HTML/CSS/JS contract。
-
-### Stage 42：Post-alpha MCP Worker Execution Readiness v0
-
-**状态：** Stage 41 后推荐，可按内部 alpha 反馈提前或后置。
-
-**为什么现在做：** Skill-only alpha 稳定后，MCP execution through worker 是下一类真实工具执行能力的自然候选。当前 MCP v0 已有 registry、approval、read-only deterministic executor 和 safe `ToolObservationRecord`；worker runtime 已有 queue、payload、logs 和 sandbox policy。下一步应先做 readiness 设计，确认 worker payload、approval、timeout、cancellation、safe observation 和 Web visibility 边界，而不是直接接远端 MCP SDK。
+**为什么现在做：** MCP backend 能力已经存在，但用户明确要求 MCP management 和网页 tab / sidebar / top-level 入口从第一版 Web 中屏蔽，后期再做。先收紧 navigation 可以防止后续 artifact、timeline、Skills/Models polish 继续围绕错误的信息架构扩展。
 
 **建议范围：**
 
-- 审计现有 MCP execution、worker queue、ToolCommandRunner 和 observation contract。
-- 设计 MCP worker execution v0 的 job payload、approval handoff、timeout/cancel、safe output summary 和 run event mapping。
-- 明确 deterministic local test adapter 和 future remote MCP adapter 的边界。
+- 隐藏 MCP tab / sidebar / top-level navigation。
+- 旧 `view=mcp` 或等价入口安全降级到 workbench 或 deferred placeholder，不展示 MCP connector、tool approval 或 execution form。
+- 明确 V1 可见入口：chat/workbench、tasks、artifact workspace、Skills、Models。
+- 更新 Web acceptance、RC docs、i18n 文案和 browser tests，确保 MCP 不再是 V1 manual acceptance 主路径。
 
 **非目标：**
 
-- 不开放 MCP write tools。
-- 不接真实 remote MCP server SDK。
-- 不开放真实 shell execution 或 OS-level sandbox。
-- 不做 hosted observability、billing/quota 或团队审批队列。
+- 不删除 MCP backend repository、gateway、runtime context 类型或已有安全测试。
+- 不实现新的 artifact workspace 或 Skills/Models 管理体验。
+- 不开放 MCP write tools、remote MCP SDK、MCP worker execution 或真实 shell runner。
+
+### Stage 42：Dedicated Artifact Workspace v0
+
+**状态：** Stage 41 后推荐。
+
+**为什么现在做：** LP artifact 已有 durable workspace、preview/export 和 bounded snippet，但第一版 polished alpha 需要把 artifact 从局部 panel 提升为独立工作区，让用户能可靠查看文件、预览、导出和理解失败状态。
+
+**建议范围：**
+
+- 为当前 task / project 提供 dedicated artifact workspace page 或 view。
+- 展示 artifact file manifest、hash/summary、status、preview、bounded snippet 和 single HTML export。
+- Artifact key 或 task state 更新时保持 no-refresh 刷新。
+- 对 unknown path、path traversal、missing artifact、policy failure 显示安全失败状态。
+- 保持三文件静态 contract：`index.html`、`styles.css`、`script.js`。
+
+**非目标：**
+
+- 不做 line-level diff、patch/apply workflow、binary asset、object storage、desktop filesystem mapping 或框架化 artifact。
+- 不把完整 artifact 内容放入默认 timeline、chat message 或 model context。
+- 不改变 artifact policy 或 export contract。
+
+### Stage 43：Run Timeline and Recovery UX Polish v0
+
+**状态：** Stage 42 后推荐。
+
+**为什么现在做：** Stage 29 已有 no-refresh live task panel，Stage 25 已有 inline recovery block；V1 polished alpha 需要更清楚的 run lifecycle、handoff、recovery 和 failure hierarchy，让 LP 复杂任务看起来像一个可跟踪的工程流程，而不是一组压缩状态。
+
+**建议范围：**
+
+- 更细粒度展示 Planner、Builder、Reviewer、Deployer lifecycle。
+- 区分 running、completed、failed、cancelled、blocked、recovered、repair/retry history。
+- 增强 handoff / recovery block 的视觉层级和行动入口。
+- 加入轻量 progress animation；动画只表达 transient UI 状态，不写入 repository fact。
+- 保持 bounded diagnostics，不展示 raw provider response、raw tool output、完整 artifact 内容、本机路径或 secret。
+
+**非目标：**
+
+- 不引入 SSE、raw stdout/stderr streaming、真实 shell runner、MCP streaming 或实时多人协作。
+- 不改变 run event schema 或 recovery action contract，除非实现中发现必须补小范围 safe view model。
+- 不把 transient animation 状态当作 repository fact。
+
+### Stage 44：Skills and Models Client-side Management v0
+
+**状态：** Stage 43 后推荐。
+
+**为什么现在做：** Skills 是第一版主要扩展机制，Models 是真实 provider opt-in 的入口。Core flow 稳定后，V1 polished alpha 需要让 Skills/Models 管理更顺滑，而 MCP management 继续后置。
+
+**建议范围：**
+
+- Skills：draft、validate、publish、bind、enable/disable、command approval 的 client-side state、错误提示和成功反馈。
+- Models：project provider config、route assignment、真实 provider opt-in、missing key / protocol mismatch / disabled provider 的安全提示。
+- 页面操作尽量局部刷新或乐观显示 pending state，完成后回到 repository fact。
+- UI context summary 继续只展示 bounded skill/model metadata，不展示 raw skill content、secret、base URL 或 raw provider response。
+
+**非目标：**
+
+- 不做 MCP client-side management。
+- 不做 provider marketplace、billing/quota、cost ledger、自动 fallback provider execution 或团队级模型审批。
+- 不改变 real provider opt-in 的默认关闭策略。
+
+## V1 polished alpha 已规划后续收尾
+
+### Stage 45：Browser Failure and Visual Regression Expansion v0
+
+Stage 45 在 Stage 41-44 后执行，扩展 deterministic browser acceptance：覆盖 MCP entry hidden / legacy route safe fallback、artifact workspace happy path 和安全失败路径、timeline/recovery 关键状态、Skills/Models client-side management 主路径和 fail-closed 文案。继续使用轻量 geometry/layout assertions 和 diagnostic screenshots，不做远端 browser farm、跨浏览器矩阵或 pixel-perfect baseline。
+
+### Stage 46：V1 Polished Alpha Completion Gate v0
+
+Stage 46 是第一版收口阶段，不新增大功能。它运行完整 deterministic gates、人工 acceptance、可选真实 provider smoke、RC decision record、known limitations、roadmap/README closeout 和 V1 completion note。发现 blocker 时进入明确修复批次，不在 completion gate 中临时扩大范围。
 
 ## Backlog 分组
 
@@ -683,6 +741,7 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 
 ### MCP
 
+- MCP Web management 和 tab / sidebar / top-level entry。
 - Real MCP SDK / remote MCP server adapter。
 - MCP execution through worker runtime。
 - MCP Write Tools with Approval v0。
@@ -692,7 +751,7 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 
 ### Artifact Workspace
 
-- Line-level textual diff。
+- Stage 42 之后的 line-level textual diff。
 - File edit proposal model。
 - Artifact patch/apply workflow。
 - Desktop filesystem workspace mapping。
@@ -717,12 +776,10 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 
 ### Web UI
 
-- Stage 29 v0 之后的高级 no-refresh workbench interaction。
-- 更细粒度 streaming run timeline / animation / visual hierarchy hardening。
-- Browser failure injection 和轻量视觉回归扩展。
-- Dedicated artifact workspace page。
-- Stage 25 inline block 之后的高级 handoff/recovery UX。
-- Core flow 稳定后再做 Skills/Models/MCP client-side management。
+- Stage 41-46 完成后的 advanced workspace personalization。
+- Stage 41-46 完成后的更高级跨任务 navigation 和 saved views。
+- Stage 45 之后的跨浏览器矩阵、远端 browser farm 和更系统的 visual baseline。
+- V1 之后的 MCP client-side management。
 
 ### Desktop
 
@@ -774,9 +831,10 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 
 ## 决策记录
 
+- 2026-05-23 用户将第一版 Web 口径调整为 V1 polished alpha：Stage 40 保留 feedback intake，Stage 41-46 规划到完整第一版结束；MCP management 和 MCP tab / sidebar / top-level Web 入口从第一版可见 UI 中移除，后期再做。后端 MCP registry / read-only execution 边界保留，但不作为 V1 Web surface。
 - Stage 39 已完成 LP Artifact Quality Evaluation and Prompt Hardening v0：内部 alpha 现在有 `docs/lp-artifact-quality.md` 质量 rubric、7 个 prompt fixtures、review record 和 safe evidence rules；Planner / Builder structured prompts 增加质量 guidance，但 `LPBriefSchema`、`StaticArtifactsSchema`、三文件静态 artifact policy、provider adapter 和 preview/export contract 不变。
-- Stage 38 已完成 Assistant Streaming Failure UX Hardening v0：普通聊天 provider streaming 失败现在有 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard；Stage 38 不改变 LP Planner / Builder complete-buffer structured output 边界，后续 Stage 39/40/41 分别处理 artifact quality、反馈 intake 和 RC 修复批次。
-- Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，Stage 38 已处理 streaming failure UX，后续 Stage 39/40/41 分别处理 artifact quality、反馈 intake 和 RC 修复批次。
+- Stage 38 已完成 Assistant Streaming Failure UX Hardening v0：普通聊天 provider streaming 失败现在有 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard；Stage 38 不改变 LP Planner / Builder complete-buffer structured output 边界，后续由 Stage 39 处理 artifact quality，由 Stage 40-46 收口 V1 polished alpha。
+- Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，Stage 38 已处理 streaming failure UX，Stage 39 已处理 artifact quality，后续 Stage 40-46 处理 feedback intake 和 V1 polished alpha Web completion。
 - Stage 36 已完成 Real Provider Alpha Smoke Matrix and Operator Docs v0：真实 provider 手动 smoke 已集中到 `docs/real-provider-alpha-smoke.md`，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider streaming usage metadata 和 missing-key fail-closed 脱敏行为。
 - Stage 35 已完成 Provider Token Delta Streaming v0：真实 provider token delta 只进入普通聊天 `assistant` role 的 transient UI，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer structured output parse / repair。
 - Stage 34 已完成 Browser Failure Injection and Visual Regression v0：`pnpm alpha:e2e` 现在覆盖 8 个 Chromium browser tests，包括 happy path、bounded recovery、provider fail-closed、worker queue bounded error、artifact invalid path 和空首页 layout contract；visual v0 采用 geometry assertion 和 diagnostic screenshot artifact，不提交 brittle screenshot baseline。

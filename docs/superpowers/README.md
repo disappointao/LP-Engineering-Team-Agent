@@ -434,6 +434,10 @@
    - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 39 design 后阅读，用于按 TDD 新增 LP artifact quality rubric、prompt fixtures、Planner / Builder prompt hardening、alpha docs 路由和 roadmap closeout。
 
+108. `specs/2026-05-23-v1-polished-alpha-web-completion-design.md`
+   - V1 Polished Alpha Web Completion design（待评审）。
+   - 在 Stage 39 implementation plan 和当前 roadmap 后阅读，用于理解第一版 Web 范围扩展：保留 Stage 40 feedback intake，随后规划 Web surface pruning、dedicated artifact workspace、run timeline/recovery polish、Skills/Models client-side management、browser failure/visual regression expansion 和 V1 completion gate；MCP 管理和 Web 入口明确后置。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
