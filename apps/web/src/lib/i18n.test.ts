@@ -139,15 +139,27 @@ describe("web i18n", () => {
     expect(en.nav.artifacts).toBe("Artifacts");
     expect(zh.nav.artifacts).toBe("产物");
     expect(en.chat.artifactWorkspaceTitle).toBe("Artifact workspace");
+    expect(en.chat.artifactWorkspaceSubtitle).toBe(
+      "Inspect the current task's static LP files, preview, snippets, and exports."
+    );
     expect(en.chat.artifactWorkspaceEmptyTitle).toBe("No artifact workspace yet");
+    expect(en.chat.artifactWorkspaceEmptyDescription).toBe(
+      "Generate an LP task in the workbench to create static HTML, CSS, and JavaScript files."
+    );
     expect(en.chat.artifactWorkspaceManifestTitle).toBe("File manifest");
     expect(en.chat.artifactWorkspaceExportTitle).toBe("Exports");
     expect(en.chat.artifactWorkspaceOpenLabel).toBe("Open artifact workspace");
+    expect(en.chat.artifactWorkspaceUnavailableLabel).toBe("Artifact workspace is unavailable.");
     expect(zh.chat.artifactWorkspaceTitle).toBe("产物工作区");
+    expect(zh.chat.artifactWorkspaceSubtitle).toBe("查看当前任务的静态 LP 文件、预览、片段和导出。");
     expect(zh.chat.artifactWorkspaceEmptyTitle).toBe("还没有产物工作区");
+    expect(zh.chat.artifactWorkspaceEmptyDescription).toBe(
+      "先在工作台生成一个 LP 任务，系统会创建静态 HTML、CSS 和 JavaScript 文件。"
+    );
     expect(zh.chat.artifactWorkspaceManifestTitle).toBe("文件清单");
     expect(zh.chat.artifactWorkspaceExportTitle).toBe("导出");
     expect(zh.chat.artifactWorkspaceOpenLabel).toBe("打开产物工作区");
+    expect(zh.chat.artifactWorkspaceUnavailableLabel).toBe("产物工作区暂不可用。");
   });
 
   it("exposes localized live task progress labels", () => {
