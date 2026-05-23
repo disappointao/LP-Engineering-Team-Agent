@@ -36,7 +36,10 @@ export type LiveTaskCopy = Pick<
   | "liveTaskRefreshError"
   | "liveTaskRunning"
   | "liveTaskTitle"
->;
+  | "recoveryStateLabels"
+> & {
+  roleLabels: WorkbenchCopy["modelsView"]["roleLabels"];
+};
 
 export interface LiveTaskStatusSummaryProps {
   payload?: LiveTaskStatePayload;
@@ -229,7 +232,7 @@ function renderLiveTaskStatusContent({
       </header>
       {activeRun ? (
         <p className="liveTaskMeta">
-          {activeRun.role} · {activeRun.state}
+          {`${copy.roleLabels[activeRun.role]} · ${copy.recoveryStateLabels[activeRun.state]}`}
         </p>
       ) : null}
       {artifactProgress && artifactSummary ? (

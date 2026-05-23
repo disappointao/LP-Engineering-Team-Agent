@@ -224,7 +224,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     liveTaskIdle: copy.chat.liveTaskIdle,
     liveTaskRefreshError: copy.chat.liveTaskRefreshError,
     liveTaskRunning: copy.chat.liveTaskRunning,
-    liveTaskTitle: copy.chat.liveTaskTitle
+    liveTaskTitle: copy.chat.liveTaskTitle,
+    recoveryStateLabels: copy.chat.recoveryStateLabels,
+    roleLabels: copy.modelsView.roleLabels
   };
 
   return (
@@ -1321,6 +1323,8 @@ function ArtifactWorkspaceView({
     liveTaskRefreshError: string;
     liveTaskRunning: string;
     liveTaskTitle: string;
+    recoveryStateLabels: ReturnType<typeof getWorkbenchCopy>["chat"]["recoveryStateLabels"];
+    roleLabels: ReturnType<typeof getWorkbenchCopy>["modelsView"]["roleLabels"];
   };
   pageState: WorkbenchPageState;
   previewSearchParams: URLSearchParams;

@@ -89,7 +89,10 @@ afterEach(() => {
 
 describe("LiveTaskStatusSummary", () => {
   it("renders a safe compact task summary without exposing raw artifact content", () => {
-    const copy = getWorkbenchCopy("en").chat;
+    const copy = {
+      ...getWorkbenchCopy("en").chat,
+      roleLabels: getWorkbenchCopy("en").modelsView.roleLabels
+    };
     const payload = createPayload({
       messages: [
         {
@@ -126,6 +129,8 @@ describe("LiveTaskStatusSummary", () => {
 
     expect(text).toContain("Live task progress");
     expect(text).toContain("Task is running");
+    expect(text).toContain("Builder · Running");
+    expect(text).not.toContain("builder · running");
     expect(text).toContain("Artifact workspace ready");
     expect(text).toContain("3 files · 2 changed");
     expect(text).not.toContain("<!doctype html");
