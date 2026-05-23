@@ -439,8 +439,12 @@
    - 在 Stage 39 implementation plan 和当前 roadmap 后阅读，用于理解第一版 Web 范围扩展：保留 Stage 40 feedback intake，随后规划 Web surface pruning、dedicated artifact workspace、run timeline/recovery polish、Skills/Models client-side management、browser failure/visual regression expansion 和 V1 completion gate；MCP 管理和 Web 入口明确后置。
 
 109. `plans/2026-05-23-alpha-feedback-intake-triage.md`
-   - Stage 40 Alpha Feedback Intake and Triage Loop v0 implementation plan（待执行）。
-   - 在 V1 polished alpha design 后阅读，用于创建 `docs/alpha-feedback-intake.md`、`docs/alpha-feedback-log.md`，并把 RC feedback template 路由到 Stage 40-46 / backlog 的批次化流程。
+   - Stage 40 Alpha Feedback Intake and Triage Loop v0 implementation plan（已实现，当前已完成）。
+   - 在 V1 polished alpha design 后阅读，用于审计 `docs/alpha-feedback-intake.md`、`docs/alpha-feedback-log.md`，以及 RC feedback template 到 Stage 41-46 / backlog 的批次化路由。
+
+110. `plans/2026-05-23-web-surface-pruning-v1-navigation.md`
+   - Stage 41 Web Surface Pruning and V1 Navigation v0 implementation plan（待执行）。
+   - 在 V1 polished alpha design、Stage 40 feedback intake plan 和当前 roadmap 后阅读，用于隐藏 MCP tab/sidebar/top-level Web 入口、让旧 `view=mcp` 安全降级，并更新 V1 acceptance / browser boundary tests。
 
 ## 维护规则
 

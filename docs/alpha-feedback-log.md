@@ -166,7 +166,7 @@
 
 ## Next Review
 
-- Next batch trigger: after Stage 40 implementation or first internal V1 polished alpha trial.
+- Next batch trigger: after first internal V1 polished alpha trial, or after Stage 41 produces navigation-related feedback.
 - Required review inputs:
   - `docs/alpha-release-candidate.md` feedback template submissions.
   - Safe command summaries.

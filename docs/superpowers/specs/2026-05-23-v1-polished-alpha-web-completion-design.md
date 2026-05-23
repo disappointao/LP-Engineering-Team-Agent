@@ -1,7 +1,7 @@
 # V1 Polished Alpha Web Completion Design
 
 **日期：** 2026-05-23
-**状态：** 已批准，等待 Stage 40 implementation
+**状态：** 已批准；Stage 40 implementation 已完成，当前作为 Stage 41-46 规划依据
 **关联阶段：** Stage 40-46
 
 ## 背景
