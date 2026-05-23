@@ -68,6 +68,8 @@ describe("web i18n", () => {
     expect(zh.collaboration.localUser).toBe("本地用户");
     expect(zh.collaboration.roleLabels.owner).toBe("负责人");
     expect(en.hero.title).toBe("What LP should we build?");
+    expect(en.hero.actionChips.join(" ").toLowerCase()).not.toContain("mcp");
+    expect(zh.hero.actionChips.join(" ").toLowerCase()).not.toContain("mcp");
     expect(en.entry.title).toBe("What can I help you build?");
     expect(en.entry.implicitProjectName).toBe("Untitled LP Project");
     expect(en.chat.composerPlaceholder).toBe("Message LP Agent");

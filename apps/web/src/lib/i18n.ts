@@ -390,7 +390,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       title: "What LP should we build?",
       subtitle: "Brief, generate, review, and hand off framework-free landing pages with scoped skills and provider-ready runtime context.",
       promptLabel: "Current task",
-      actionChips: ["Build LP", "Apply skill", "Check MCP", "Route model", "Export handoff"]
+      actionChips: ["Build LP", "Apply skill", "Review artifacts", "Route model", "Export handoff"]
     },
     entry: {
       title: "What can I help you build?",
@@ -879,7 +879,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       title: "我能帮你生成什么 LP？",
       subtitle: "从需求拆解、页面生成、审核到部署交接，生成物保持框架无关的静态 HTML/CSS/JS。",
       promptLabel: "当前任务",
-      actionChips: ["生成 LP", "应用技能", "检查 MCP", "选择模型", "导出交接"]
+      actionChips: ["生成 LP", "应用技能", "检查产物", "选择模型", "导出交接"]
     },
     entry: {
       title: "我能为你做什么？",
