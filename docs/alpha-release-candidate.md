@@ -112,7 +112,7 @@ blocker | high | medium | low
 ### Safe Evidence
 
 - Command output summary:
-- Screenshot path or description:
+- Screenshot description or relative artifact filename:
 - Run/event type if relevant:
 - Artifact filenames if relevant:
 

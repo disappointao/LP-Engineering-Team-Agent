@@ -128,7 +128,7 @@ Recommended interpretation:
 ### Safe Evidence
 
 - Bounded snippet summary:
-- Screenshot description or path:
+- Screenshot description or relative artifact filename:
 - Relevant run/event type:
 - Artifact filenames:
 
@@ -144,7 +144,7 @@ Recommended interpretation:
 Allowed:
 
 - Rubric score.
-- Screenshot path or short visual description.
+- Screenshot description or relative artifact filename.
 - Bounded snippet summary.
 - Run/event type.
 - Artifact filenames.
@@ -155,7 +155,7 @@ Not allowed:
 - Secret values or API keys.
 - Raw provider response.
 - Full generated artifact content.
-- Local absolute paths outside an intentional screenshot path.
+- Local absolute paths.
 - Raw worker payload.
 - Raw tool output.
 - Raw stdout/stderr.
