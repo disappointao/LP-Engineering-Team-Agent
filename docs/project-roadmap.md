@@ -43,6 +43,7 @@
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
+- LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
 
 ## 第一版可用闭环目标
 
@@ -55,11 +56,10 @@
 - Web 页面无需手动刷新即可看到任务状态、run timeline、artifact progress、失败诊断和可用恢复动作。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，剩余 artifact quality baseline、反馈 intake 和 RC 修复批次，粗略估算 **2-5 个有效开发日**。
+按当前代码基础，面向本地/单用户第一版可用闭环，粗略估算还需要 **0-2 个有效开发日**。如果要给少数内部用户稳定 alpha 试用，剩余反馈 intake 和 RC 修复批次，粗略估算 **2-5 个有效开发日**。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。第一版可用闭环下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。第一版可用闭环下一步优先补齐：
 
-- LP artifact quality evaluation / prompt hardening，让内部 alpha 更容易判断“复杂 LP 任务是否真的可用”。
 - Alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。
 - Alpha RC trial fix batch，只处理内部 RC 后的 blocker / high priority 摩擦。
 
@@ -569,30 +569,31 @@ Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed fa
 
 **实施计划：** `docs/superpowers/plans/2026-05-23-assistant-streaming-failure-ux.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 39：LP Artifact Quality Evaluation and Prompt Hardening v0
 
-**状态：** 设计已确认，实施计划已创建，待实现。
+**状态：** 已实现。
 
-**为什么现在做：** Web/API/Skill/LP 主链路已经可跑通，下一步内部 alpha 需要判断复杂 LP 任务的实际输出质量，而不是只看是否生成三文件 artifact。需要一套轻量质量 rubric、prompt fixtures 和人工评审记录，让后续 prompt/runtime 改动有可比较基线。
+Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner / Builder structured prompts 做小范围质量 hardening。质量评审继续是人工 rubric，不进入默认 deterministic gates；artifact policy 继续负责 fail-closed 安全和三文件静态 contract。
 
-**建议范围：**
+已实现范围：
 
-- 整理 5-8 个代表性 LP prompt fixtures，覆盖电商活动、B2B SaaS、活动报名、本地服务、移动端优先和中英混合输入。
-- 定义静态 artifact 质量 rubric：结构完整、视觉层级、CTA、响应式、安全资源、framework-free、可读 copy 和基础可访问性。
-- 补充 deterministic / fake-provider artifact quality smoke 或文档化人工评审表，避免把质量判断完全留在聊天记录里。
-- 对 Planner / Builder prompt 做小范围 hardening，只基于现有 schema/policy，不改变 artifact contract。
+- 新增 `docs/lp-artifact-quality.md`，包含 7 个代表性 prompt fixtures、rubric、review record 和 safe evidence rules。
+- `docs/alpha-release-candidate.md` 和 `docs/real-provider-alpha-smoke.md` 已把 artifact quality spot-check 和反馈路由指向质量文档。
+- Planner structured prompt 增加 LP quality guidance，要求更清晰的 audience、offer、CTA、section hierarchy、responsive hints、accessibility notes 和 specific copy。
+- Builder structured prompt 和 repair prompt 增加 semantic HTML、scannable hero、mobile-first responsive CSS、focus/hover states、alt text 和 local script guidance。
+- Focused Vitest 覆盖 prompt hardening 文案，并保留 strict JSON、安全禁令、schema parse 和 policy regression。
 
-**非目标：**
+未实现范围：
 
-- 不做自动视觉评分、LLM-as-judge 生产 gate、设计系统重写或图片生成 pipeline。
-- 不改变三文件静态 artifact policy、preview/export contract 或 provider adapter。
-- 不把质量 rubric 变成 public SaaS onboarding 或客户验收 SLA。
+- 不做自动视觉评分、LLM-as-judge production gate、图片生成 pipeline、设计系统重写或 provider 自动 E2E。
+- 不改变 `LPBriefSchema`、`StaticArtifactsSchema`、三文件静态 artifact policy、preview/export contract 或 provider adapter。
+- 不把 rubric 变成 public SaaS onboarding、客户验收 SLA 或 release blocker。
 
-**当前设计：** `docs/superpowers/specs/2026-05-23-lp-artifact-quality-prompt-hardening-design.md`。
+**设计：** `docs/superpowers/specs/2026-05-23-lp-artifact-quality-prompt-hardening-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-23-lp-artifact-quality-prompt-hardening.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-23-lp-artifact-quality-prompt-hardening.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 40：Alpha Feedback Intake and Triage Loop v0
 
@@ -630,6 +631,25 @@ Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed fa
 - 不引入 production auth/RBAC、真实部署、billing/quota、MCP write tools、真实 shell runner 或 hosted observability。
 - 不把所有 feedback 一次性清空。
 - 不改变 LP artifact static HTML/CSS/JS contract。
+
+### Stage 42：Post-alpha MCP Worker Execution Readiness v0
+
+**状态：** Stage 41 后推荐，可按内部 alpha 反馈提前或后置。
+
+**为什么现在做：** Skill-only alpha 稳定后，MCP execution through worker 是下一类真实工具执行能力的自然候选。当前 MCP v0 已有 registry、approval、read-only deterministic executor 和 safe `ToolObservationRecord`；worker runtime 已有 queue、payload、logs 和 sandbox policy。下一步应先做 readiness 设计，确认 worker payload、approval、timeout、cancellation、safe observation 和 Web visibility 边界，而不是直接接远端 MCP SDK。
+
+**建议范围：**
+
+- 审计现有 MCP execution、worker queue、ToolCommandRunner 和 observation contract。
+- 设计 MCP worker execution v0 的 job payload、approval handoff、timeout/cancel、safe output summary 和 run event mapping。
+- 明确 deterministic local test adapter 和 future remote MCP adapter 的边界。
+
+**非目标：**
+
+- 不开放 MCP write tools。
+- 不接真实 remote MCP server SDK。
+- 不开放真实 shell execution 或 OS-level sandbox。
+- 不做 hosted observability、billing/quota 或团队审批队列。
 
 ## Backlog 分组
 
@@ -754,6 +774,7 @@ Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed fa
 
 ## 决策记录
 
+- Stage 39 已完成 LP Artifact Quality Evaluation and Prompt Hardening v0：内部 alpha 现在有 `docs/lp-artifact-quality.md` 质量 rubric、7 个 prompt fixtures、review record 和 safe evidence rules；Planner / Builder structured prompts 增加质量 guidance，但 `LPBriefSchema`、`StaticArtifactsSchema`、三文件静态 artifact policy、provider adapter 和 preview/export contract 不变。
 - Stage 38 已完成 Assistant Streaming Failure UX Hardening v0：普通聊天 provider streaming 失败现在有 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard；Stage 38 不改变 LP Planner / Builder complete-buffer structured output 边界，后续 Stage 39/40/41 分别处理 artifact quality、反馈 intake 和 RC 修复批次。
 - Stage 37 已完成 Skill-only Alpha Release Candidate Checklist v0：内部 RC 的 go/no-go、operator trial script、feedback template、triage 分类和 known limitations 已集中到 `docs/alpha-release-candidate.md`；Stage 37 不改变 runtime/provider/artifact contract，Stage 38 已处理 streaming failure UX，后续 Stage 39/40/41 分别处理 artifact quality、反馈 intake 和 RC 修复批次。
 - Stage 36 已完成 Real Provider Alpha Smoke Matrix and Operator Docs v0：真实 provider 手动 smoke 已集中到 `docs/real-provider-alpha-smoke.md`，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider streaming usage metadata 和 missing-key fail-closed 脱敏行为。

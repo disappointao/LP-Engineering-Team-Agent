@@ -135,7 +135,7 @@ Agent 经常需要知道文件状态：
 
 本项目生成 LP 必须保持框架无关静态 HTML/CSS/JS。当前 runtime 有 artifact workspace 概念，但 Web V1 主要还是内存产物。后续桌面版或真实文件工作区要优先引入 file manifest 和 diff，而不是每次塞全文。
 
-Artifact quality 和 artifact safety 需要分开理解。安全 policy 是代码强制的 fail-closed 边界，例如三文件静态 contract、禁止 external JavaScript、禁止 framework marker、禁止 inline event handler；quality rubric 是内部 alpha 用来评价生成结果是否“可用”的人工基线，例如视觉层级、CTA、响应式、copy 具体度和基础可访问性。Stage 39 选择先用 prompt fixtures、rubric 和小范围 Planner / Builder prompt hardening 建立可比较质量基线，而不是把自动视觉评分或 LLM-as-judge 放进主流程。
+Artifact quality 和 artifact safety 需要分开理解。安全 policy 是代码强制的 fail-closed 边界，例如三文件静态 contract、禁止 external JavaScript、禁止 framework marker、禁止 inline event handler；quality rubric 是内部 alpha 用来评价生成结果是否“可用”的人工基线，例如视觉层级、CTA、响应式、copy 具体度和基础可访问性。Stage 39 选择先用 prompt fixtures、rubric 和小范围 Planner / Builder prompt hardening 建立可比较质量基线，而不是把自动视觉评分或 LLM-as-judge 放进主流程。实现完成后，这条边界表现为：prompt 可以提升默认生成质量，rubric 可以稳定记录内部 alpha 观察，但 schema/policy 仍决定什么能进入 artifact workspace。
 
 ### 2.8 多 Agent 协调
 

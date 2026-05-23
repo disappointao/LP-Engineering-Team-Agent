@@ -427,11 +427,11 @@
    - 在 Stage 38 design 后阅读，用于按 TDD 实现 typed chat stream errors、API/runtime failure classification、route terminal error mapping、localized Web failure copy、operator docs 和 roadmap closeout。
 
 106. `specs/2026-05-23-lp-artifact-quality-prompt-hardening-design.md`
-   - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 design（设计已确认，实施计划已创建，待实现）。
+   - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 design（已实现，当前已完成）。
    - 在 Stage 38 implementation plan 和当前 roadmap 后阅读，用于建立 LP artifact quality rubric、prompt fixtures、人工评审记录和 Planner / Builder prompt hardening 边界；本阶段不改变三文件静态 artifact contract、artifact policy、provider adapter 或 preview/export。
 
 107. `plans/2026-05-23-lp-artifact-quality-prompt-hardening.md`
-   - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 implementation plan（待实现）。
+   - Stage 39 LP Artifact Quality Evaluation and Prompt Hardening v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 39 design 后阅读，用于按 TDD 新增 LP artifact quality rubric、prompt fixtures、Planner / Builder prompt hardening、alpha docs 路由和 roadmap closeout。
 
 ## 维护规则
