@@ -24,7 +24,10 @@ import {
   createChatWorkbenchThread,
   createGeneralTaskThread
 } from "../lib/chat-workbench";
-import { createArtifactDownloadLinks } from "../lib/export-links";
+import {
+  createArtifactDownloadLinks,
+  type ArtifactDownloadLink
+} from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import {
   getWebWorkbenchStore,
@@ -77,7 +80,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const view = getFirstSearchParam(params?.view);
   const artifactPath = getFirstSearchParam(params?.artifactPath);
   const activeView =
-    view === "skills" ? "skills" : view === "models" ? "models" : "workbench";
+    view === "artifacts"
+      ? "artifacts"
+      : view === "skills"
+        ? "skills"
+        : view === "models"
+          ? "models"
+          : "workbench";
   const previewSearchParams = toURLSearchParams({
     ...params,
     view: activeView === "workbench" ? undefined : activeView
@@ -238,6 +247,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             {copy.nav.workbench}
           </a>
           <a
+            aria-current={activeView === "artifacts" ? "page" : undefined}
+            className={activeView === "artifacts" ? "navItem navItemActive" : "navItem"}
+            href="/?view=artifacts"
+          >
+            {copy.nav.artifacts}
+          </a>
+          <a
             aria-current={activeView === "skills" ? "page" : undefined}
             className={activeView === "skills" ? "navItem navItemActive" : "navItem"}
             href="/?view=skills"
@@ -330,7 +346,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <section
         className="chatWorkspace"
         aria-label={
-          activeView === "skills"
+          activeView === "artifacts"
+            ? copy.nav.artifacts
+            : activeView === "skills"
             ? copy.nav.skills
             : activeView === "models"
               ? copy.nav.models
@@ -357,6 +375,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         {activeView !== "workbench" ? (
           <div className="conversationViewport">
             <div className="conversationStack">
+              {activeView === "artifacts"
+                ? ArtifactWorkspaceView({
+                    completedSnapshot,
+                    copy,
+                    downloadLinks,
+                    initialPreviewVersionKey,
+                    liveTaskCopy,
+                    pageState,
+                    previewSearchParams
+                  })
+                : null}
+
               {activeView === "skills" ? (
                 <section className="skillsView" aria-labelledby="skills-title">
                   <header className="skillsHeader">
@@ -951,6 +981,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                         <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
                                       </a>
                                     ))}
+                                    <a
+                                      className="artifactCard"
+                                      href="/?view=artifacts"
+                                    >
+                                      <span>{copy.nav.artifacts}</span>
+                                      <strong>{copy.chat.artifactWorkspaceOpenLabel}</strong>
+                                      <small>{copy.chat.artifactWorkspaceSubtitle}</small>
+                                    </a>
                                   </div>
                                   {pageState.kind === "task_ready" && pageState.artifactDiff ? (
                                     ArtifactDiffBlock({
@@ -1112,7 +1150,14 @@ function ProjectMembersBlock({
   );
 }
 
-type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
+type TaskReadyWorkbenchPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
+type TaskReadyPageState = TaskReadyWorkbenchPageState;
+type CompletedArtifactSnapshot = {
+  brief: NonNullable<NonNullable<TaskReadyWorkbenchPageState["snapshot"]>["brief"]>;
+  pageVersion: NonNullable<
+    NonNullable<TaskReadyWorkbenchPageState["snapshot"]>["currentPageVersion"]
+  >;
+};
 
 function RecoveryBlock({
   pageState,
@@ -1247,6 +1292,154 @@ function ArtifactDiffBlock({
       ) : artifactDiff.errorCode === "artifact_snippet_unavailable" ? (
         <p className="artifactSnippetNotice">{copy.snippetUnavailableMessage}</p>
       ) : null}
+    </section>
+  );
+}
+
+function ArtifactWorkspaceView({
+  completedSnapshot,
+  copy,
+  downloadLinks,
+  initialPreviewVersionKey,
+  liveTaskCopy,
+  pageState,
+  previewSearchParams
+}: {
+  completedSnapshot: CompletedArtifactSnapshot | undefined;
+  copy: ReturnType<typeof getWorkbenchCopy>;
+  downloadLinks: ArtifactDownloadLink[] | undefined;
+  initialPreviewVersionKey: string | undefined;
+  liveTaskCopy: {
+    liveTaskArtifactReady: string;
+    liveTaskCompleted: string;
+    liveTaskIdle: string;
+    liveTaskRefreshError: string;
+    liveTaskRunning: string;
+    liveTaskTitle: string;
+  };
+  pageState: WorkbenchPageState;
+  previewSearchParams: URLSearchParams;
+}) {
+  if (!completedSnapshot || pageState.kind !== "task_ready") {
+    return (
+      <section className="artifactWorkspaceView" aria-labelledby="artifact-workspace-title">
+        <div className="artifactWorkspaceEmpty">
+          <h1 id="artifact-workspace-title">{copy.chat.artifactWorkspaceEmptyTitle}</h1>
+          <p>{copy.chat.artifactWorkspaceEmptyDescription}</p>
+          <a className="artifactCard" href="/">
+            <span>{copy.nav.workbench}</span>
+            <strong>{copy.nav.workbench}</strong>
+          </a>
+        </div>
+      </section>
+    );
+  }
+
+  const artifactDiff = pageState.artifactDiff;
+  const artifactWorkspaceUnavailable =
+    !artifactDiff ||
+    artifactDiff.files.length === 0 ||
+    artifactDiff.errorCode === "artifact_diff_unavailable";
+  const shouldRenderArtifactDiff =
+    artifactDiff !== undefined &&
+    (!artifactWorkspaceUnavailable || artifactDiff.errorCode === "artifact_snippet_unavailable");
+  const workspaceId =
+    artifactDiff?.artifactWorkspaceId ?? completedSnapshot.pageVersion.artifactWorkspaceId;
+
+  return (
+    <section className="artifactWorkspaceView" aria-labelledby="artifact-workspace-title">
+      <header className="artifactWorkspaceHero">
+        <div>
+          <h1 id="artifact-workspace-title">{copy.chat.artifactWorkspaceTitle}</h1>
+          <p>{copy.chat.artifactWorkspaceSubtitle}</p>
+        </div>
+        <dl className="artifactWorkspaceMeta">
+          <div>
+            <dt>Project</dt>
+            <dd>{pageState.snapshot?.project.name ?? pageState.task.projectId}</dd>
+          </div>
+          <div>
+            <dt>Task</dt>
+            <dd>{pageState.task.title}</dd>
+          </div>
+          <div>
+            <dt>Page version</dt>
+            <dd>{completedSnapshot.pageVersion.id}</dd>
+          </div>
+          {workspaceId ? (
+            <div>
+              <dt>Artifact workspace</dt>
+              <dd>{workspaceId}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </header>
+
+      <LiveTaskPanel
+        taskId={pageState.task.id}
+        initialProjectId={pageState.task.projectId}
+        initialPreviewVersionKey={initialPreviewVersionKey}
+        copy={liveTaskCopy}
+      />
+
+      <section
+        className="artifactWorkspaceSection"
+        aria-labelledby="artifact-workspace-manifest-title"
+      >
+        <header className="artifactWorkspaceSectionHeader">
+          <h2 id="artifact-workspace-manifest-title">
+            {copy.chat.artifactWorkspaceManifestTitle}
+          </h2>
+          {artifactDiff ? (
+            <span>{copy.chat.filesLabel}: {artifactDiff.files.length}</span>
+          ) : null}
+        </header>
+        {artifactWorkspaceUnavailable ? (
+          <p className="artifactSnippetNotice">
+            {copy.chat.artifactWorkspaceUnavailableLabel}
+          </p>
+        ) : null}
+        {artifactDiff && shouldRenderArtifactDiff
+          ? ArtifactDiffBlock({
+              artifactDiff,
+              copy: copy.chat,
+              previewSearchParams
+            })
+          : null}
+      </section>
+
+      <section
+        className="artifactWorkspaceSection inlinePreview"
+        aria-label={copy.chat.previewTitle}
+      >
+        <div className="previewTitle">{copy.chat.previewTitle}</div>
+        <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
+      </section>
+
+      <section
+        className="artifactWorkspaceSection"
+        aria-labelledby="artifact-workspace-export-title"
+      >
+        <header className="artifactWorkspaceSectionHeader">
+          <h2 id="artifact-workspace-export-title">
+            {copy.chat.artifactWorkspaceExportTitle}
+          </h2>
+        </header>
+        <div className="artifactGrid artifactWorkspaceExportGrid">
+          {(downloadLinks ?? []).map((link) => (
+            <a
+              className="artifactCard"
+              download={link.filename}
+              href={link.href}
+              key={link.filename}
+            >
+              <span>{link.label}</span>
+              <strong>{link.filename}</strong>
+              <small>{copy.chat.bytesLabel(link.bytes)}</small>
+            </a>
+          ))}
+        </div>
+      </section>
     </section>
   );
 }

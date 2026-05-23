@@ -3117,6 +3117,126 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("body { color: #111827; }");
   });
 
+  it("renders artifacts as a top-level navigation item", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "artifacts" })
+    });
+    const text = collectText(page).join(" ");
+    const links = collectElements(page, "a");
+    const artifactLink = links.find(
+      (link) => collectText(link.props?.children).join("") === "Artifacts"
+    );
+
+    expect(artifactLink?.props?.href).toBe("/?view=artifacts");
+    expect(artifactLink?.props?.["aria-current"]).toBe("page");
+    expect(text).toContain("No artifact workspace yet");
+  });
+
+  it("renders the dedicated artifact workspace for the current LP task", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          },
+          {
+            path: "script.js",
+            state: "unchanged",
+            sizeBytes: 24,
+            sha256: "c".repeat(64),
+            shortSha256: "c".repeat(12),
+            summary: "script.js static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        view: "artifacts",
+        artifactPath: "styles.css"
+      })
+    });
+    const text = collectText(page).join(" ");
+    const links = collectElements(page, "a");
+    const hrefs = links.map((link) => String(link.props?.href));
+
+    expect(text).toContain("Artifact workspace");
+    expect(text).toContain("Completed LP");
+    expect(text).toContain("Create a no git spring ecommerce landing page.");
+    expect(text).toContain("File manifest");
+    expect(text).toContain("index.html static LP file");
+    expect(text).toContain("styles.css static LP file");
+    expect(text).toContain("script.js static LP file");
+    expect(text).toContain("Snippet preview");
+    expect(text).toContain("body { color: #111827; }");
+    expect(text).toContain("Static LP preview");
+    expect(text).toContain("Exports");
+    expect(text).toContain("index.single.html");
+    expect(text).not.toContain("<!doctype html>");
+    expect(text).not.toContain("window.lpAgent");
+    expect(hrefs).toContainEqual(expect.stringContaining("view=artifacts"));
+    expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
+    expect(hrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
+  });
+
+  it("renders sanitized artifact workspace failure states without leaking invalid paths", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [],
+        errorCode: "artifact_snippet_unavailable"
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        view: "artifacts",
+        artifactPath: "../secret.css?token=ARTIFACT_QUERY_SECRET"
+      })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Artifact workspace is unavailable.");
+    expect(text).toContain("Snippet is unavailable.");
+    expect(text).not.toContain("ARTIFACT_QUERY_SECRET");
+    expect(text).not.toContain("../secret.css");
+    expect(text).not.toContain("..");
+  });
+
   it("labels artifact snippet preview links by file path", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";

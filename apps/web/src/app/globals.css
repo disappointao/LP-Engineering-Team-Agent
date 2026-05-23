@@ -519,6 +519,7 @@ button {
 }
 
 .mcpView,
+.artifactWorkspaceView,
 .skillsView,
 .modelsView {
   min-width: 0;
@@ -527,6 +528,7 @@ button {
 }
 
 .mcpHeader,
+.artifactWorkspaceHero,
 .skillsHeader,
 .modelsHeader {
   min-width: 0;
@@ -539,6 +541,7 @@ button {
 }
 
 .mcpHeader h1,
+.artifactWorkspaceHero h1,
 .skillsHeader h1,
 .modelsHeader h1 {
   margin: 0;
@@ -549,6 +552,7 @@ button {
 }
 
 .mcpHeader p,
+.artifactWorkspaceHero p,
 .skillsHeader p,
 .modelsHeader p {
   max-width: 620px;
@@ -557,6 +561,86 @@ button {
   font-size: 0.92rem;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.artifactWorkspaceMeta {
+  min-width: min(100%, 280px);
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.artifactWorkspaceMeta div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 8px 10px;
+}
+
+.artifactWorkspaceMeta dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 820;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.artifactWorkspaceMeta dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.artifactWorkspaceSection,
+.artifactWorkspaceEmpty {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.artifactWorkspaceSectionHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.artifactWorkspaceSectionHeader h2,
+.artifactWorkspaceEmpty h1 {
+  margin: 0;
+  color: #25292e;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.artifactWorkspaceSectionHeader span,
+.artifactWorkspaceEmpty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.artifactWorkspaceSection .artifactDiffBlock {
+  border-top: 0;
+  padding: 0;
+}
+
+.artifactWorkspaceExportGrid {
+  padding: 0;
 }
 
 .mcpHeader .alphaBoundaryNote,
@@ -1956,6 +2040,8 @@ button {
   .deliveryHeader,
   .toolEventTop,
   .mcpHeader,
+  .artifactWorkspaceHero,
+  .artifactWorkspaceSectionHeader,
   .skillsHeader,
   .skillCommandsHeader,
   .modelsHeader,
