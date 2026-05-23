@@ -2,7 +2,7 @@
 
 这份文档用于判断当前本地单用户版本是否可以作为内部 **Skill-only local alpha release candidate** 交给少数试用者。它不是 public SaaS onboarding，也不是生产发布 SLA。
 
-详细人工验收继续使用 `docs/web-v1-acceptance.md`。真实 provider 手动 smoke 继续使用 `docs/real-provider-alpha-smoke.md`。本文只负责编排 go/no-go、试用脚本、反馈模板和 triage 分类。
+详细人工验收继续使用 `docs/web-v1-acceptance.md`。真实 provider 手动 smoke 继续使用 `docs/real-provider-alpha-smoke.md`。本文负责编排 go/no-go、试用脚本、反馈模板和 triage 分类；反馈进入 `docs/alpha-feedback-intake.md` 和 `docs/alpha-feedback-log.md`，由 Stage 40 之后的批次化流程维护。
 
 ## RC 定义
 
@@ -26,7 +26,7 @@
 | Manual acceptance | `docs/web-v1-acceptance.md` 主路径通过：普通聊天、LP live task、artifact preview/export/snippet、Skills、Models/MCP boundary。 | 主路径无法完成，或 failure display 泄漏 secret/raw provider/raw tool/raw artifact、本机路径。 |
 | Optional real provider smoke | 如需真实 provider 试用，按 `docs/real-provider-alpha-smoke.md` 完成普通聊天、LP Planner/Builder、usage metadata、missing key fail-closed。 | 真实 provider 成功路径不可用，或 fail-closed 泄漏 key、env value、raw provider response。 |
 | Known limitations | 试用者已知道 MCP、真实部署、auth/RBAC、billing/quota、production storage、真实 shell runner 后置。 | 试用目标依赖这些后置能力。 |
-| Feedback readiness | 试用者使用本文反馈模板，并按 triage 分类提交。 | 反馈需要收集 secret、完整 artifact、raw provider body、本机路径或不可脱敏日志。 |
+| Feedback readiness | 试用者使用本文反馈模板；operator 按 `docs/alpha-feedback-intake.md` 脱敏、分类并记录到 `docs/alpha-feedback-log.md`。 | 反馈需要收集 secret、完整 artifact、raw provider body、本机路径或不可脱敏日志。 |
 
 ## Operator Trial Script
 
@@ -68,6 +68,10 @@
 10. 可选真实 provider：
    - 只有在试用目标需要真实模型时，按 `docs/real-provider-alpha-smoke.md` 执行。
    - 完成后把 `.env.local` 改回默认 deterministic 值。
+11. Feedback intake：
+   - 使用本文 Feedback Template 收集反馈。
+   - 按 `docs/alpha-feedback-intake.md` 脱敏和分类。
+   - 将 accepted / rejected / routed items 写入 `docs/alpha-feedback-log.md`。
 
 ## Feedback Template
 
@@ -118,19 +122,19 @@ blocker | high | medium | low
 
 ### Suggested Routing
 
-Stage 38 | Stage 39 | Stage 40 | backlog | needs immediate fix
+Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | backlog | needs immediate fix
 ```
 
 ## Triage Categories
 
 | Category | Definition | Examples | Default routing |
 | --- | --- | --- | --- |
-| `blocking_bug` | RC 主路径无法完成，或安全边界被破坏。 | 普通聊天无法完成；LP task 不生成 artifact；secret/raw provider response 出现在 UI。 | 立即修复，必要时暂停 RC。 |
-| `ux_friction` | 功能可完成，但交互、文案或状态让试用者误解。 | 用户不知道任务还在跑；失败文案无法区分 provider 配置和 stream 中断。 | Stage 38 或后续 UX batch。 |
-| `provider_config_issue` | 真实 provider opt-in 配置或排错不清楚。 | `apiKeyEnv` 填写误解；protocol mismatch 不知道怎么恢复。 | `docs/real-provider-alpha-smoke.md` 或 Stage 38。 |
-| `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | `docs/lp-artifact-quality.md` + Stage 39/41。 |
-| `docs_gap` | 文档缺少步骤、命令、前置条件或边界说明。 | 不知道先跑 `pnpm alpha:e2e:install`；不清楚如何 reset deterministic。 | 文档补丁或 Stage 40。 |
-| `future_feature` | 明确超出当前 RC 的能力需求。 | 团队登录、真实部署、MCP write tools、billing、远端 observability。 | Backlog，不阻塞 RC。 |
+| `blocking_bug` | RC 主路径无法完成，或安全边界被破坏。 | 普通聊天无法完成；LP task 不生成 artifact；secret/raw provider response 出现在 UI。 | `needs immediate fix`，必要时暂停 RC。 |
+| `ux_friction` | 功能可完成，但交互、文案、状态或视觉层级让试用者误解。 | 用户不知道任务还在跑；失败文案无法区分 provider 配置和 stream 中断。 | Stage 41-45，按页面或流程归类。 |
+| `provider_config_issue` | 真实 provider opt-in 配置或排错不清楚。 | `apiKeyEnv` 填写误解；protocol mismatch 不知道怎么恢复。 | Stage 44 或 `docs/real-provider-alpha-smoke.md`。 |
+| `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | `docs/lp-artifact-quality.md` + Stage 42/43。 |
+| `docs_gap` | 文档缺少步骤、命令、前置条件或边界说明。 | 不知道先跑 `pnpm alpha:e2e:install`；不清楚如何 reset deterministic。 | Stage 40 或当前阶段文档补丁。 |
+| `future_feature` | 明确超出当前 RC 的能力需求。 | 团队登录、真实部署、MCP management/write tools、billing、远端 observability。 | Backlog，不阻塞 RC。 |
 
 ## Known Limitations
 
@@ -147,10 +151,14 @@ Stage 38 | Stage 39 | Stage 40 | backlog | needs immediate fix
 
 ## Follow-up Routing
 
-- Stage 38：真实 provider ordinary chat streaming 的中途失败、慢首 token、空 terminal content、client cancel、Web failure copy 和 recovery UX。
-- Stage 39：`docs/lp-artifact-quality.md`、LP artifact quality rubric、prompt fixtures、Builder/Planner prompt hardening 和人工质量评审。
-- Stage 40：内部 alpha 反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
-- Backlog：production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
+- Stage 40：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
+- Stage 41：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
+- Stage 42：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
+- Stage 43：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
+- Stage 44：Skills / Models client-side management，继续排除 MCP management。
+- Stage 45：Browser failure injection 和轻量视觉回归扩展。
+- Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。
+- Backlog：MCP management、production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
 
 ## RC Decision Record
 
