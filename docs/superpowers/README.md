@@ -435,8 +435,12 @@
    - 在 Stage 39 design 后阅读，用于按 TDD 新增 LP artifact quality rubric、prompt fixtures、Planner / Builder prompt hardening、alpha docs 路由和 roadmap closeout。
 
 108. `specs/2026-05-23-v1-polished-alpha-web-completion-design.md`
-   - V1 Polished Alpha Web Completion design（待评审）。
+   - V1 Polished Alpha Web Completion design（已批准，当前作为 Stage 40-46 规划依据）。
    - 在 Stage 39 implementation plan 和当前 roadmap 后阅读，用于理解第一版 Web 范围扩展：保留 Stage 40 feedback intake，随后规划 Web surface pruning、dedicated artifact workspace、run timeline/recovery polish、Skills/Models client-side management、browser failure/visual regression expansion 和 V1 completion gate；MCP 管理和 Web 入口明确后置。
+
+109. `plans/2026-05-23-alpha-feedback-intake-triage.md`
+   - Stage 40 Alpha Feedback Intake and Triage Loop v0 implementation plan（待执行）。
+   - 在 V1 polished alpha design 后阅读，用于创建 `docs/alpha-feedback-intake.md`、`docs/alpha-feedback-log.md`，并把 RC feedback template 路由到 Stage 40-46 / backlog 的批次化流程。
 
 ## 维护规则
 

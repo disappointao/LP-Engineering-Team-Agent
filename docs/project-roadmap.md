@@ -621,6 +621,10 @@ Stage 39 v0 已建立内部 alpha LP artifact quality baseline，并对 Planner 
 - 不承诺 public roadmap、SLA 或客户发布节奏。
 - 不在同一阶段直接修复所有反馈；只做 intake、triage 和下一批计划。
 
+**设计：** `docs/superpowers/specs/2026-05-23-v1-polished-alpha-web-completion-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-23-alpha-feedback-intake-triage.md`。
+
 ### Stage 41：Web Surface Pruning and V1 Navigation v0
 
 **状态：** Stage 40 后推荐，V1 polished alpha Web surface 第一阶段。
