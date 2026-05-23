@@ -87,16 +87,21 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         : view === "models"
           ? "models"
           : "workbench";
-  const previewSearchParams = toURLSearchParams({
-    ...params,
-    view: activeView === "workbench" ? undefined : activeView
-  });
   const errorCode = toProjectFlowError(getFirstSearchParam(params?.error));
   const skillError = toSkillFlowError(getFirstSearchParam(params?.skillError));
   const modelError = toModelFlowError(getFirstSearchParam(params?.modelError));
   const interruptError = toInterruptFlowError(getFirstSearchParam(params?.interruptError));
   const recoveryError = toRunRecoveryFlowError(getFirstSearchParam(params?.recoveryError));
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
+  const previewSearchParams = createArtifactPreviewSearchParams({
+    activeView,
+    errorCode,
+    interruptError,
+    modelError,
+    recoveryError,
+    skillError,
+    workerError
+  });
   const currentProjectId = await getCurrentProjectId();
   const currentTaskId = await getCurrentTaskId();
   const store = await getWebWorkbenchStore();
@@ -1448,19 +1453,46 @@ function getFirstSearchParam(value: PageSearchParamValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function toURLSearchParams(params: PageSearchParams | undefined): URLSearchParams {
+function createArtifactPreviewSearchParams({
+  activeView,
+  errorCode,
+  interruptError,
+  modelError,
+  recoveryError,
+  skillError,
+  workerError
+}: {
+  activeView: "artifacts" | "skills" | "models" | "workbench";
+  errorCode?: ProjectFlowErrorCode;
+  interruptError?: InterruptFlowErrorCode;
+  modelError?: ModelFlowErrorCode;
+  recoveryError?: RunRecoveryFlowErrorCode;
+  skillError?: SkillFlowErrorCode;
+  workerError?: WorkerQueueFlowErrorCode;
+}): URLSearchParams {
   const query = new URLSearchParams();
-  if (!params) {
-    return query;
+
+  if (activeView !== "workbench") {
+    query.set("view", activeView);
   }
 
-  for (const [key, value] of Object.entries(params)) {
-    const values = Array.isArray(value) ? value : [value];
-    for (const item of values) {
-      if (item !== undefined) {
-        query.append(key, item);
-      }
-    }
+  if (errorCode) {
+    query.set("error", errorCode);
+  }
+  if (skillError) {
+    query.set("skillError", skillError);
+  }
+  if (modelError) {
+    query.set("modelError", modelError);
+  }
+  if (interruptError) {
+    query.set("interruptError", interruptError);
+  }
+  if (recoveryError) {
+    query.set("recoveryError", recoveryError);
+  }
+  if (workerError) {
+    query.set("workerError", workerError);
   }
 
   return query;

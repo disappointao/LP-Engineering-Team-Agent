@@ -3551,4 +3551,62 @@ describe("HomePage project flow errors", () => {
     expect(hrefs).toContainEqual(expect.stringContaining("interruptError=interrupt_failed"));
     expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
   });
+
+  it("drops unknown query params from artifact preview snippet links", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      artifactDiff: {
+        projectId: "project_1",
+        pageVersionId: "version_1",
+        artifactWorkspaceId: "artifact_workspace_1",
+        files: [
+          {
+            path: "index.html",
+            state: "initial",
+            sizeBytes: 128,
+            sha256: "a".repeat(64),
+            shortSha256: "a".repeat(12),
+            summary: "index.html static LP file",
+            canPreview: true
+          },
+          {
+            path: "styles.css",
+            state: "changed",
+            sizeBytes: 32,
+            sha256: "b".repeat(64),
+            shortSha256: "b".repeat(12),
+            summary: "styles.css static LP file",
+            canPreview: true
+          }
+        ],
+        selectedSnippet: {
+          path: "styles.css",
+          sizeBytes: 32,
+          sha256: "b".repeat(64),
+          shortSha256: "b".repeat(12),
+          content: "body { color: #111827; }",
+          maxBytes: 8192
+        }
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({
+        view: "artifacts",
+        token: "ARTIFACT_QUERY_SECRET",
+        artifactPath: "styles.css"
+      })
+    });
+    const snippetLinks = collectElements(page, "a").filter(
+      (link) => collectText(link.props?.children).join("") === "Preview snippet"
+    );
+    const hrefs = snippetLinks.map((link) => String(link.props?.href));
+
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs).toContainEqual(expect.stringContaining("view=artifacts"));
+    expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
+    expect(hrefs).not.toContainEqual(expect.stringContaining("token="));
+    expect(hrefs).not.toContainEqual(expect.stringContaining("ARTIFACT_QUERY_SECRET"));
+  });
 });
