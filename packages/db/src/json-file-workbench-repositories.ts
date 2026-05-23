@@ -871,6 +871,12 @@ class JsonFileWorkbenchMessageRepository implements WorkbenchMessageRepository {
     });
   }
 
+  async deleteById(messageId: string): Promise<void> {
+    await updateState(this.filePath, (state) => {
+      state.messages = state.messages.filter((message) => message.id !== messageId);
+    });
+  }
+
   async listForTask(taskId: string): Promise<WorkbenchMessageRecord[]> {
     const state = await readState(this.filePath);
     return state.messages

@@ -588,7 +588,12 @@ describe("HomePage project flow errors", () => {
       promptLabel: "LP request",
       placeholder: "Assign a task or ask anything",
       streamingStatusLabel: "Generating response",
-      streamingErrorLabel: "The chat response could not be generated."
+      streamingErrorLabel: "The chat response could not be generated.",
+      streamingErrorMessages: expect.objectContaining({
+        generation_failed: "The chat response could not be generated.",
+        stream_interrupted:
+          "The provider stream stopped before the response completed."
+      })
     });
   });
 
@@ -680,7 +685,12 @@ describe("HomePage project flow errors", () => {
       runtimeChip: "Cloud runtime",
       sendLabel: "Send",
       streamingStatusLabel: "Generating response",
-      streamingErrorLabel: "The chat response could not be generated."
+      streamingErrorLabel: "The chat response could not be generated.",
+      streamingErrorMessages: expect.objectContaining({
+        generation_failed: "The chat response could not be generated.",
+        stream_interrupted:
+          "The provider stream stopped before the response completed."
+      })
     });
     expect(streamingWorkbenchProps?.taskId).toBeUndefined();
     expect(streamingWorkbenchProps?.interruptControl).toBeDefined();

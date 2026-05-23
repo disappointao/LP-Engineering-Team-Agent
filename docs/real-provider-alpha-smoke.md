@@ -137,6 +137,19 @@ pnpm exec vitest run packages/model-gateway/src/anthropic-messages.integration.t
 - Usage 显示 `estimated`：provider stream 或 response 没有返回完整 usage；系统会估算 token usage，仍应显示 duration、attempt 和 streaming summary。
 - `pnpm alpha:e2e` 出现本地端口 sandbox 错误：这通常是本地执行环境限制，不代表 provider 配置问题；默认 browser gate 仍不需要真实 provider key。
 
+### Ordinary Chat Streaming Failures
+
+普通聊天 provider streaming 的 Web/API failure copy 会把异常分成以下安全类别：
+
+| Code | Meaning | Operator check |
+| --- | --- | --- |
+| `provider_configuration_failed` | Provider route、base URL、API protocol 或 key env 缺失。 | 检查 Models view、`.env.local`、`REAL_MODEL_RUNTIME=1` 和 provider `apiKeyEnv`，不要记录 key value。 |
+| `stream_interrupted` | SSE stream 中断、malformed frame、provider 网络失败或 runtime 没有 terminal event。 | 确认 provider 支持当前 API protocol 的 streaming；用 fake-provider regression 或 provider dashboard 的 safe summary 复核。 |
+| `empty_response` | Provider 完成但没有可用 assistant 文本。 | 复核 prompt、model id 和 provider response summary；不要复制 raw provider body。 |
+| `persistence_failed` | Assistant text 已生成但本地 repository placeholder 保存失败。 | 检查 Web server log summary 和 repository backend 配置。 |
+
+提交反馈时继续使用 `docs/alpha-release-candidate.md` 的 safe evidence 模板，不附带 secret、raw provider response、raw SSE frame、本机路径或完整 artifact 内容。
+
 ## 收尾
 
 完成真实 provider smoke 后，把 `.env.local` 改回默认：

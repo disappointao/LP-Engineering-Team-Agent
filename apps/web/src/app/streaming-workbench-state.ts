@@ -1,4 +1,4 @@
-import type { ChatStreamEvent } from "../lib/chat-stream";
+import type { ChatStreamErrorCode, ChatStreamEvent } from "../lib/chat-stream";
 
 export type StreamingWorkbenchStatus =
   | "idle"
@@ -22,6 +22,8 @@ export type StreamingWorkbenchState = {
   assistantMessageId: string | undefined;
   assistantContent: string;
   errorMessage: string | undefined;
+  statusMessage: string | undefined;
+  errorCode: ChatStreamErrorCode | undefined;
   fallbackMessage: string | undefined;
   contextSummary: StreamingContextSummary | undefined;
 };
@@ -33,6 +35,8 @@ export function createInitialStreamingWorkbenchState(): StreamingWorkbenchState 
     assistantMessageId: undefined,
     assistantContent: "",
     errorMessage: undefined,
+    statusMessage: undefined,
+    errorCode: undefined,
     fallbackMessage: undefined,
     contextSummary: undefined
   };
@@ -50,6 +54,8 @@ export function reduceStreamingWorkbenchEvent(
         assistantMessageId: undefined,
         assistantContent: "",
         errorMessage: undefined,
+        statusMessage: undefined,
+        errorCode: undefined,
         fallbackMessage: undefined,
         contextSummary: undefined
       };
@@ -71,20 +77,23 @@ export function reduceStreamingWorkbenchEvent(
         return {
           ...state,
           status: "streaming",
-          taskId: event.taskId
+          taskId: event.taskId,
+          statusMessage: event.label
         };
       }
       if (event.state === "completed") {
         return {
           ...state,
           status: "completed",
-          taskId: event.taskId
+          taskId: event.taskId,
+          statusMessage: event.label
         };
       }
       return {
         ...state,
         status: "error",
         taskId: event.taskId,
+        statusMessage: event.label,
         errorMessage: event.label
       };
     case "assistant.delta":
@@ -93,7 +102,8 @@ export function reduceStreamingWorkbenchEvent(
         status: "streaming",
         taskId: event.taskId,
         assistantMessageId: event.messageId,
-        assistantContent: `${state.assistantContent}${event.delta}`
+        assistantContent: `${state.assistantContent}${event.delta}`,
+        statusMessage: undefined
       };
     case "assistant.completed":
       return {
@@ -102,7 +112,9 @@ export function reduceStreamingWorkbenchEvent(
         taskId: event.taskId,
         assistantMessageId: event.messageId,
         assistantContent: event.content,
-        errorMessage: undefined
+        errorMessage: undefined,
+        statusMessage: undefined,
+        errorCode: undefined
       };
     case "fallback.required":
       return {
@@ -115,6 +127,7 @@ export function reduceStreamingWorkbenchEvent(
       return {
         ...state,
         status: "error",
+        errorCode: event.code,
         errorMessage: event.message
       };
   }

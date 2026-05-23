@@ -418,6 +418,14 @@
    - Stage 37 Skill-only Alpha Release Candidate Checklist v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 37 design 后阅读，用于审计 RC checklist 文档、README/manual/provider smoke links、roadmap closeout 和最终验证。
 
+104. `specs/2026-05-23-assistant-streaming-failure-ux-design.md`
+   - Stage 38 Assistant Streaming Failure UX Hardening v0 design（已实现，当前已完成）。
+   - 在 Stage 37 implementation plan 和当前 roadmap 后阅读，用于收紧普通聊天 `assistant` provider token streaming 的中途失败、空 terminal content、慢首 token、client cancel 和安全 Web failure copy；本阶段不改变 LP Planner / Builder complete-buffer structured output 边界。
+
+105. `plans/2026-05-23-assistant-streaming-failure-ux.md`
+   - Stage 38 Assistant Streaming Failure UX Hardening v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 38 design 后阅读，用于按 TDD 实现 typed chat stream errors、API/runtime failure classification、route terminal error mapping、localized Web failure copy、operator docs 和 roadmap closeout。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

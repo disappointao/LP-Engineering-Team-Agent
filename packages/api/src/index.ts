@@ -70,7 +70,8 @@ import {
   type RuntimeEvent,
   type RuntimeRunContext,
   type RuntimeRunRequest,
-  type RuntimeRunResult
+  type RuntimeRunResult,
+  type RuntimeStreamEvent
 } from "@lp-agent/runtime-adapters";
 import {
   SkillManifestSchema,
@@ -463,6 +464,7 @@ export type RunAssistantChatStreamResult =
       runId: string;
       content?: string;
       stream?: AsyncIterable<string>;
+      cancelStream?: () => void;
       contextSummary: AssistantContextSummary;
     }
   | {
@@ -476,6 +478,27 @@ export type AssistantChatErrorCode =
   | "project_not_found"
   | "generation_failed"
   | "provider_configuration_failed";
+
+export type AssistantChatStreamFailureCode =
+  | "provider_configuration_failed"
+  | "stream_interrupted"
+  | "empty_response"
+  | "generation_failed";
+
+export class AssistantChatStreamError extends Error {
+  readonly code: AssistantChatStreamFailureCode;
+
+  constructor(code: AssistantChatStreamFailureCode, message = "assistant stream failed") {
+    super(message);
+    this.name = "AssistantChatStreamError";
+    this.code = code;
+  }
+}
+
+interface AssistantStreamCancellation {
+  readonly cancelled: Promise<void>;
+  cancel(): void;
+}
 
 export type RuntimeEnvironment = Record<string, string | undefined>;
 
@@ -2401,16 +2424,19 @@ export class DemoWorkbenchService {
         },
         context: contextPack.runtimeContext
       };
+      const cancellation = createAssistantStreamCancellation();
       const stream = this.streamAssistantChatDeltas({
         runtimeRequest,
         contextTrace: contextPack.trace,
-        releaseRunId
+        releaseRunId,
+        cancellation
       });
       releaseRunId = undefined;
       return {
         ok: true,
         runId,
         stream,
+        cancelStream: cancellation.cancel,
         contextSummary
       };
     } catch (error) {
@@ -2423,6 +2449,7 @@ export class DemoWorkbenchService {
     runtimeRequest: RuntimeRunRequest;
     contextTrace: { injected: string[]; omitted: string[] };
     releaseRunId?: () => void;
+    cancellation?: AssistantStreamCancellation;
   }): AsyncIterable<string> {
     const startedAt = nextRepositoryTimestamp(this.repositories, this.now);
     const startedRun: RunRecord = {
@@ -2442,33 +2469,76 @@ export class DemoWorkbenchService {
 
     try {
       await this.repositories.runs.save(startedRun);
-      for await (const event of this.assistantRuntime.stream!(input.runtimeRequest)) {
+      const runtimeStream = this.assistantRuntime.stream!(input.runtimeRequest);
+      const runtimeIterator = runtimeStream[Symbol.asyncIterator]();
+      for (;;) {
+        const read = await readAssistantRuntimeStreamEvent(runtimeIterator, input.cancellation);
+        if (read.type === "cancelled") {
+          if (runtimeIterator.return) {
+            void Promise.resolve(runtimeIterator.return()).catch(() => undefined);
+          }
+          terminalResult = createAssistantStreamCancelledResult(input.runtimeRequest);
+          await this.persistStreamingAssistantRun({
+            startedRun,
+            result: terminalResult
+          });
+          persistedTerminal = true;
+          return;
+        }
+        if (read.type === "done") {
+          break;
+        }
+        const event = read.event;
         if (event.type === "model.delta") {
           yield event.text;
         } else {
           terminalResult = event.result;
+          break;
         }
       }
       if (!terminalResult) {
-        terminalResult = createAssistantStreamFailedResult(input.runtimeRequest);
+        terminalResult = createAssistantStreamFailedResult(
+          input.runtimeRequest,
+          "assistant_stream_interrupted"
+        );
       }
+      terminalResult = normalizeAssistantStreamingTerminalResult(terminalResult);
       await this.persistStreamingAssistantRun({
         startedRun,
         result: terminalResult
       });
       persistedTerminal = true;
-      if (terminalResult.state !== "completed" || !terminalResult.modelOutputText?.trim()) {
-        throw createAssistantChatStreamError(terminalResult);
+      if (terminalResult.state !== "completed") {
+        throw new AssistantChatStreamError(classifyAssistantStreamFailure(terminalResult));
       }
     } catch (error) {
+      const failedResult = createAssistantStreamFailedResult(
+        input.runtimeRequest,
+        error instanceof AssistantChatStreamError
+          ? `assistant_${error.code}`
+          : "assistant_stream_interrupted"
+      );
       if (!persistedTerminal) {
         await this.persistStreamingAssistantRun({
           startedRun,
-          result: createAssistantStreamFailedResult(input.runtimeRequest)
+          result: failedResult
         });
+        persistedTerminal = true;
       }
-      throw createAssistantChatStreamError(undefined, error);
+      throw error instanceof AssistantChatStreamError
+        ? error
+        : new AssistantChatStreamError("stream_interrupted");
     } finally {
+      if (!persistedTerminal) {
+        try {
+          await this.persistStreamingAssistantRun({
+            startedRun,
+            result: createAssistantStreamCancelledResult(input.runtimeRequest)
+          });
+        } catch {
+          // Stream cancellation cleanup is best-effort and must not mask the original outcome.
+        }
+      }
       input.releaseRunId?.();
     }
   }
@@ -4602,60 +4672,31 @@ function isProviderConfigurationFailure(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return assistantProviderConfigurationErrorMessages.has(error.message);
+  return assistantProviderConfigurationErrorCodes.has(error.message);
 }
 
-const assistantProviderConfigurationErrorMessages = new Set([
-  "model_id_required",
-  "model_provider_api_key_env_missing",
-  "model_provider_api_key_missing",
-  "model_provider_base_url_missing",
-  "model_provider_config_missing",
-  "model_provider_disabled",
-  "model_provider_fetch_unavailable",
-  "model_provider_mock_route_disabled",
-  "model_provider_protocol_mismatch",
-  "model_route_provider_invalid"
-]);
-
-class AssistantChatStreamError extends Error {
-  readonly code?: Extract<AssistantChatErrorCode, "provider_configuration_failed">;
-
-  constructor(code?: Extract<AssistantChatErrorCode, "provider_configuration_failed">) {
-    super("assistant_stream_failed");
-    this.name = "AssistantChatStreamError";
-    if (code) {
-      this.code = code;
+function createAssistantStreamCancellation(): AssistantStreamCancellation {
+  let isCancelled = false;
+  let resolveCancelled!: () => void;
+  const cancelled = new Promise<void>((resolve) => {
+    resolveCancelled = resolve;
+  });
+  return {
+    cancelled,
+    cancel() {
+      if (isCancelled) {
+        return;
+      }
+      isCancelled = true;
+      resolveCancelled();
     }
-  }
+  };
 }
 
-function createAssistantChatStreamError(
-  result?: RuntimeRunResult,
-  cause?: unknown
-): AssistantChatStreamError {
-  if (cause instanceof AssistantChatStreamError) {
-    return cause;
-  }
-  if (isProviderConfigurationFailure(cause) || hasProviderConfigurationFailureEvent(result)) {
-    return new AssistantChatStreamError("provider_configuration_failed");
-  }
-  return new AssistantChatStreamError();
-}
-
-function hasProviderConfigurationFailureEvent(result: RuntimeRunResult | undefined): boolean {
-  return (
-    result?.events.some((event) => {
-      const errorCode = "errorCode" in event ? event.errorCode : undefined;
-      return (
-        typeof errorCode === "string" &&
-        assistantProviderConfigurationErrorMessages.has(errorCode)
-      );
-    }) ?? false
-  );
-}
-
-function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeRunResult {
+function createAssistantStreamFailedResult(
+  request: RuntimeRunRequest,
+  errorCode = "assistant_stream_failed"
+): RuntimeRunResult {
   return {
     runId: request.runId,
     projectId: request.projectId,
@@ -4668,10 +4709,118 @@ function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeR
         runId: request.runId,
         role: request.role,
         state: "failed",
-        errorCode: "assistant_stream_failed"
+        errorCode
       }
     ]
   };
+}
+
+async function readAssistantRuntimeStreamEvent(
+  iterator: AsyncIterator<RuntimeStreamEvent>,
+  cancellation: AssistantStreamCancellation | undefined
+): Promise<
+  | { type: "event"; event: RuntimeStreamEvent }
+  | { type: "done" }
+  | { type: "cancelled" }
+> {
+  if (!cancellation) {
+    const result = await iterator.next();
+    return result.done ? { type: "done" } : { type: "event", event: result.value };
+  }
+
+  const read = await Promise.race([
+    iterator.next().then((result) => ({ type: "next" as const, result })),
+    cancellation.cancelled.then(() => ({ type: "cancelled" as const }))
+  ]);
+  if (read.type === "cancelled") {
+    return { type: "cancelled" };
+  }
+  if (read.result.done) {
+    return { type: "done" };
+  }
+  return { type: "event", event: read.result.value };
+}
+
+function createAssistantStreamCancelledResult(request: RuntimeRunRequest): RuntimeRunResult {
+  return {
+    runId: request.runId,
+    projectId: request.projectId,
+    role: request.role,
+    state: "cancelled",
+    events: [
+      {
+        type: "run.cancelled",
+        message: "assistant stream cancelled",
+        runId: request.runId,
+        role: request.role,
+        state: "cancelled"
+      }
+    ]
+  };
+}
+
+function normalizeAssistantStreamingTerminalResult(result: RuntimeRunResult): RuntimeRunResult {
+  if (result.state !== "completed" || result.modelOutputText?.trim()) {
+    return result;
+  }
+
+  return {
+    ...result,
+    state: "failed",
+    events: [
+      ...result.events.filter((event) => event.type !== "run.completed"),
+      {
+        type: "run.failed",
+        message: "assistant stream completed without usable text",
+        runId: result.runId,
+        role: result.role ?? "assistant",
+        state: "failed",
+        errorCode: "assistant_empty_response"
+      }
+    ],
+    modelOutputText: undefined
+  };
+}
+
+function classifyAssistantStreamFailure(
+  result: RuntimeRunResult
+): AssistantChatStreamFailureCode {
+  const errorCode = [...result.events]
+    .reverse()
+    .map((event) => getRuntimeEventErrorCode(event))
+    .find((code): code is string => typeof code === "string" && code.length > 0);
+
+  if (errorCode === "assistant_empty_response") {
+    return "empty_response";
+  }
+  if (errorCode && assistantProviderConfigurationErrorCodes.has(errorCode)) {
+    return "provider_configuration_failed";
+  }
+  if (result.state === "failed") {
+    return "stream_interrupted";
+  }
+  return "generation_failed";
+}
+
+const assistantProviderConfigurationErrorCodes = new Set([
+  "model_id_required",
+  "model_provider_api_key_env_missing",
+  "model_provider_api_key_missing",
+  "model_provider_base_url_missing",
+  "model_provider_config_missing",
+  "model_provider_disabled",
+  "model_provider_fetch_unavailable",
+  "model_provider_mock_route_disabled",
+  "model_provider_protocol_mismatch",
+  "model_route_not_configured",
+  "model_route_provider_invalid"
+]);
+
+function getRuntimeEventErrorCode(event: RuntimeEvent): string | undefined {
+  if (!("errorCode" in event) || typeof event.errorCode !== "string") {
+    return undefined;
+  }
+  return event.errorCode;
 }
 
 function canStreamAssistantRoute(route: ModelRoute | undefined): boolean {

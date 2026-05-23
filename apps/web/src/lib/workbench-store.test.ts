@@ -83,6 +83,16 @@ const webStoreGlobal = globalThis as typeof globalThis & {
   __lpAgentWebWorkbenchStore?: unknown;
 };
 
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function tempQueueFiles() {
   const dir = await mkdtemp(join(tmpdir(), "web-store-worker-queue-"));
   tempDirs.push(dir);
@@ -2901,6 +2911,132 @@ describe("web workbench store", () => {
       expect(pageState.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(pageState.messages[0]?.content).toBe("Help me write a campaign plan.");
       expect(pageState.messages[1]?.content).toBe(started.assistantContent);
+    });
+
+    it("abandons unfinished streaming assistant placeholders before refresh", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+
+      await expect(
+        store.abandonStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
+
+      const pageState = await store.getPageState({ taskId: started.taskId });
+      expect(pageState.kind).toBe("task_ready");
+      if (pageState.kind !== "task_ready") {
+        throw new Error("expected task_ready page state");
+      }
+      expect(pageState.messages.map((message) => message.role)).toEqual(["user"]);
+    });
+
+    it("abandons cancelled assistant content even after a newer turn is appended", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const baseMessages = repositories.messages;
+      const oldSaveStarted = deferred();
+      const releaseOldSave = deferred();
+      let delayedAssistantMessageId: string | undefined;
+      repositories.messages = {
+        async save(message) {
+          if (
+            message.id === delayedAssistantMessageId &&
+            message.role === "assistant" &&
+            message.content === "Late canceled content"
+          ) {
+            oldSaveStarted.resolve();
+            await releaseOldSave.promise;
+          }
+          await baseMessages.save(message);
+        },
+        async deleteById(messageId) {
+          await baseMessages.deleteById(messageId);
+        },
+        async listForTask(taskId) {
+          return baseMessages.listForTask(taskId);
+        },
+        async listAll() {
+          return baseMessages.listAll();
+        }
+      };
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+      delayedAssistantMessageId = started.assistantMessageId;
+
+      const oldCompletion = store.completeStreamingChatPrompt({
+        taskId: started.taskId,
+        messageId: started.assistantMessageId,
+        content: "Late canceled content"
+      });
+      await oldSaveStarted.promise;
+      await expect(
+        store.abandonStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          allowPersistedContent: true,
+          allowStale: true
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const nextStarted = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: started.taskId,
+        prompt: "Continue the campaign plan."
+      });
+      expect(nextStarted.ok).toBe(true);
+      if (!nextStarted.ok) {
+        throw new Error("expected next streaming chat start to succeed");
+      }
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: nextStarted.taskId,
+          messageId: nextStarted.assistantMessageId,
+          content: "Newer completed content."
+        })
+      ).resolves.toEqual({ ok: true });
+
+      releaseOldSave.resolve();
+      await expect(oldCompletion).resolves.toEqual({ ok: true });
+      await expect(
+        store.abandonStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          allowPersistedContent: true,
+          allowStale: true
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages.map((message) => [message.role, message.content])).toEqual([
+        ["user", "Help me write a campaign plan."],
+        ["user", "Continue the campaign plan."],
+        ["assistant", "Newer completed content."]
+      ]);
     });
 
     it("streams project-bound assistant runtime content with safe context summary", async () => {

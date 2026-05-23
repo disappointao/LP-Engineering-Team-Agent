@@ -12,6 +12,7 @@ import {
   createStreamingChatRequestBody,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
+  getVisibleStreamingStatus,
   isLiveTaskFallbackHandoffPending,
   resetLiveTaskFallbackHandoff,
   startLiveTaskFallbackHandoff,
@@ -158,6 +159,74 @@ describe("streaming workbench terminal refresh state", () => {
     };
 
     expect(getTerminalStreamingStateAfterRefresh(errorState, false)).toEqual(errorState);
+  });
+});
+
+describe("streaming workbench visible status", () => {
+  const errorMessages = {
+    prompt_required: "Enter a prompt before sending.",
+    project_not_found: "The selected project is unavailable.",
+    generation_failed: "The chat response could not be generated.",
+    provider_configuration_failed:
+      "Check the project model provider configuration before retrying.",
+    stream_interrupted: "The provider stream stopped before the response completed.",
+    empty_response: "The provider completed without usable assistant text.",
+    persistence_failed: "The response was generated but could not be saved."
+  };
+
+  it("uses running stream status labels before the first token arrives", () => {
+    const state: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "streaming",
+      statusMessage: "Connecting to model provider"
+    };
+
+    expect(
+      getVisibleStreamingStatus(
+        state,
+        "Generating response",
+        "The chat response could not be generated.",
+        errorMessages
+      )
+    ).toBe("Connecting to model provider");
+  });
+
+  it("uses localized typed error messages instead of raw server messages", () => {
+    const state: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "error",
+      errorCode: "stream_interrupted",
+      errorMessage: "server safe fallback"
+    };
+
+    expect(
+      getVisibleStreamingStatus(
+        state,
+        "Generating response",
+        "The chat response could not be generated.",
+        errorMessages
+      )
+    ).toBe("The provider stream stopped before the response completed.");
+  });
+
+  it("falls back to safe error text when typed error copy is unavailable", () => {
+    const state: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "error",
+      errorCode: "stream_interrupted",
+      errorMessage: "server safe fallback"
+    };
+
+    expect(
+      getVisibleStreamingStatus(
+        state,
+        "Generating response",
+        "The chat response could not be generated.",
+        {
+          generation_failed: "The chat response could not be generated."
+        } as Record<keyof typeof errorMessages, string>
+      )
+    ).toBe("server safe fallback");
   });
 });
 

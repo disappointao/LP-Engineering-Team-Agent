@@ -12,8 +12,25 @@ describe("streaming workbench state", () => {
       assistantMessageId: undefined,
       assistantContent: "",
       errorMessage: undefined,
+      statusMessage: undefined,
+      errorCode: undefined,
       fallbackMessage: undefined,
       contextSummary: undefined
+    });
+  });
+
+  it("stores running status labels for slow first-token streams", () => {
+    const state = reduceStreamingWorkbenchEvent(createInitialStreamingWorkbenchState(), {
+      type: "run.status",
+      taskId: "task_1",
+      state: "running",
+      label: "Connecting to model provider"
+    });
+
+    expect(state).toMatchObject({
+      status: "streaming",
+      taskId: "task_1",
+      statusMessage: "Connecting to model provider"
     });
   });
 
@@ -115,6 +132,30 @@ describe("streaming workbench state", () => {
       assistantMessageId: "message_1",
       assistantContent: "Partial answer",
       errorMessage: "The assistant response could not be completed."
+    });
+  });
+
+  it("stores typed stream errors while preserving partial content", () => {
+    let state = createInitialStreamingWorkbenchState();
+    state = reduceStreamingWorkbenchEvent(state, {
+      type: "assistant.delta",
+      taskId: "task_1",
+      messageId: "message_1",
+      delta: "Partial answer"
+    });
+    state = reduceStreamingWorkbenchEvent(state, {
+      type: "error",
+      code: "stream_interrupted",
+      message: "The provider stream stopped before the response completed."
+    });
+
+    expect(state).toMatchObject({
+      status: "error",
+      taskId: "task_1",
+      assistantMessageId: "message_1",
+      assistantContent: "Partial answer",
+      errorCode: "stream_interrupted",
+      errorMessage: "The provider stream stopped before the response completed."
     });
   });
 });

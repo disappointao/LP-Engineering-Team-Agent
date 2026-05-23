@@ -1,10 +1,12 @@
 import {
   encodeChatStreamEvent,
+  type ChatStreamErrorCode,
   type ChatStreamEvent
 } from "../../../../lib/chat-stream";
 import {
   getWebWorkbenchStore,
-  type ProjectFlowErrorCode
+  type ProjectFlowErrorCode,
+  type WebWorkbenchStore
 } from "../../../../lib/workbench-store";
 import {
   CURRENT_PROJECT_COOKIE,
@@ -21,7 +23,10 @@ type ChatStreamRequest = {
   prompt?: unknown;
 };
 
-type ChatStreamErrorCode = Extract<ChatStreamEvent, { type: "error" }>["code"];
+type ProjectFlowChatStreamErrorCode = Extract<
+  ChatStreamErrorCode,
+  "prompt_required" | "project_not_found" | "generation_failed" | "provider_configuration_failed"
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -38,11 +43,28 @@ async function readChatStreamRequest(request: Request): Promise<ChatStreamReques
 
 type ChatStreamEnqueue = (event: ChatStreamEvent) => void;
 
+type ChatStreamProducerState = {
+  isClosed: () => boolean;
+  cancelled: Promise<void>;
+};
+
+type StartedStreamingChatPrompt = Extract<
+  Awaited<ReturnType<WebWorkbenchStore["startStreamingChatPrompt"]>>,
+  { ok: true }
+>;
+
 function createEventStream(
-  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void
+  produceEvents: (
+    enqueue: ChatStreamEnqueue,
+    state: ChatStreamProducerState
+  ) => Promise<void> | void
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let closed = false;
+  let resolveCancelled!: () => void;
+  const cancelled = new Promise<void>((resolve) => {
+    resolveCancelled = resolve;
+  });
   return new ReadableStream({
     start(controller) {
       const enqueue: ChatStreamEnqueue = (event) => {
@@ -68,9 +90,9 @@ function createEventStream(
         }
       };
       void Promise.resolve()
-        .then(() => produceEvents(enqueue))
+        .then(() => produceEvents(enqueue, { isClosed: () => closed, cancelled }))
         .catch((error) => {
-          const code = toUnhandledChatStreamErrorCode(error);
+          const code = toChatStreamErrorCodeFromUnknown(error);
           enqueue({
             type: "error",
             code,
@@ -83,12 +105,16 @@ function createEventStream(
     },
     cancel() {
       closed = true;
+      resolveCancelled();
     }
   });
 }
 
 function createStreamResponse(
-  produceEvents: (enqueue: ChatStreamEnqueue) => Promise<void> | void,
+  produceEvents: (
+    enqueue: ChatStreamEnqueue,
+    state: ChatStreamProducerState
+  ) => Promise<void> | void,
   cookies: string[] = []
 ): Response {
   const headers = new Headers({
@@ -122,13 +148,19 @@ function getSafeErrorMessage(error: ChatStreamErrorCode) {
     case "project_not_found":
       return "The selected project is unavailable.";
     case "provider_configuration_failed":
-      return "The model provider is not ready. Check the project model settings.";
+      return "Check the project model provider configuration before retrying.";
+    case "stream_interrupted":
+      return "The provider stream stopped before the response completed.";
+    case "empty_response":
+      return "The provider completed without usable assistant text.";
+    case "persistence_failed":
+      return "The response was generated but could not be saved.";
     case "generation_failed":
       return "The chat response could not be generated.";
   }
 }
 
-function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode {
+function toChatStreamErrorCode(error: ProjectFlowErrorCode): ProjectFlowChatStreamErrorCode {
   switch (error) {
     case "prompt_required":
     case "project_not_found":
@@ -140,11 +172,102 @@ function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode
   }
 }
 
-function toUnhandledChatStreamErrorCode(error: unknown): ChatStreamErrorCode {
-  if (isRecord(error) && error.code === "provider_configuration_failed") {
-    return "provider_configuration_failed";
+function toChatStreamErrorCodeFromUnknown(error: unknown): ChatStreamErrorCode {
+  const code = (error as { code?: unknown })?.code;
+  if (
+    code === "provider_configuration_failed" ||
+    code === "stream_interrupted" ||
+    code === "empty_response"
+  ) {
+    return code;
   }
   return "generation_failed";
+}
+
+function getTerminalErrorLabel(code: ChatStreamErrorCode): string {
+  switch (code) {
+    case "provider_configuration_failed":
+      return "Provider configuration failed";
+    case "stream_interrupted":
+      return "Provider stream interrupted";
+    case "empty_response":
+      return "Provider returned empty response";
+    case "persistence_failed":
+      return "Response persistence failed";
+    default:
+      return "Response generation failed";
+  }
+}
+
+function enqueueTerminalError(
+  enqueue: ChatStreamEnqueue,
+  taskId: string | undefined,
+  code: ChatStreamErrorCode
+): void {
+  if (taskId) {
+    enqueue({
+      type: "run.status",
+      taskId,
+      state: "failed",
+      label: getTerminalErrorLabel(code)
+    });
+  }
+  enqueue({
+    type: "error",
+    code,
+    message: getSafeErrorMessage(code)
+  });
+}
+
+async function abandonStreamingPlaceholder(
+  store: WebWorkbenchStore,
+  started: StartedStreamingChatPrompt,
+  options: { allowPersistedContent?: boolean; allowStale?: boolean } = {}
+): Promise<void> {
+  try {
+    await store.abandonStreamingChatPrompt({
+      taskId: started.taskId,
+      messageId: started.assistantMessageId,
+      ...options
+    });
+  } catch {
+    // Preserve the original terminal stream outcome; cleanup is best-effort.
+  }
+}
+
+function cancelAssistantStream(
+  started: StartedStreamingChatPrompt,
+  iterator?: AsyncIterator<string>
+): void {
+  try {
+    started.cancelAssistantStream?.();
+  } catch {
+    // Cancellation cleanup is best-effort.
+  }
+  if (iterator?.return) {
+    void Promise.resolve(iterator.return()).catch(() => undefined);
+  }
+}
+
+async function readAssistantStreamDelta(
+  iterator: AsyncIterator<string>,
+  state: ChatStreamProducerState
+): Promise<
+  | { type: "delta"; delta: string }
+  | { type: "done" }
+  | { type: "cancelled" }
+> {
+  const next = await Promise.race([
+    iterator.next().then((result) => ({ type: "next" as const, result })),
+    state.cancelled.then(() => ({ type: "cancelled" as const }))
+  ]);
+  if (next.type === "cancelled") {
+    return { type: "cancelled" };
+  }
+  if (next.result.done) {
+    return { type: "done" };
+  }
+  return { type: "delta", delta: next.result.value };
 }
 
 function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {
@@ -245,7 +368,7 @@ export async function POST(request: Request): Promise<Response> {
   } else if (hasOwnField(payload, "projectId") && payload.projectId === null) {
     cookies.push(createExpiredCookie(CURRENT_PROJECT_COOKIE));
   }
-  return createStreamResponse(async (enqueue) => {
+  return createStreamResponse(async (enqueue, streamState) => {
     enqueue({
       type: "task.created",
       taskId: started.taskId,
@@ -263,34 +386,109 @@ export async function POST(request: Request): Promise<Response> {
       label: "Generating response"
     });
     let assistantContent = started.assistantStream ? "" : started.assistantContent;
-    if (started.assistantStream) {
-      for await (const delta of started.assistantStream) {
-        assistantContent += delta;
-        enqueue({
-          type: "assistant.delta",
-          taskId: started.taskId,
-          messageId: started.assistantMessageId,
-          delta
-        });
+    try {
+      if (started.assistantStream) {
+        const iterator = started.assistantStream[Symbol.asyncIterator]();
+        for (;;) {
+          const read = await readAssistantStreamDelta(iterator, streamState);
+          if (read.type === "cancelled") {
+            cancelAssistantStream(started, iterator);
+            await abandonStreamingPlaceholder(store, started);
+            return;
+          }
+          if (read.type === "done") {
+            break;
+          }
+          const delta = read.delta;
+          assistantContent += delta;
+          enqueue({
+            type: "assistant.delta",
+            taskId: started.taskId,
+            messageId: started.assistantMessageId,
+            delta
+          });
+          if (streamState.isClosed()) {
+            cancelAssistantStream(started, iterator);
+            await abandonStreamingPlaceholder(store, started);
+            return;
+          }
+        }
+      } else {
+        for (const delta of started.chunks) {
+          enqueue({
+            type: "assistant.delta",
+            taskId: started.taskId,
+            messageId: started.assistantMessageId,
+            delta
+          });
+          if (streamState.isClosed()) {
+            await abandonStreamingPlaceholder(store, started);
+            return;
+          }
+        }
       }
-    } else {
-      for (const delta of started.chunks) {
-        enqueue({
-          type: "assistant.delta",
-          taskId: started.taskId,
-          messageId: started.assistantMessageId,
-          delta
-        });
-      }
+    } catch (error) {
+      await abandonStreamingPlaceholder(store, started);
+      enqueueTerminalError(enqueue, started.taskId, toChatStreamErrorCodeFromUnknown(error));
+      return;
     }
 
-    const completed = await store.completeStreamingChatPrompt({
+    if (streamState.isClosed()) {
+      await abandonStreamingPlaceholder(store, started);
+      return;
+    }
+    if (!assistantContent.trim()) {
+      await abandonStreamingPlaceholder(store, started);
+      enqueueTerminalError(enqueue, started.taskId, "empty_response");
+      return;
+    }
+
+    const completionPromise = store.completeStreamingChatPrompt({
       taskId: started.taskId,
       messageId: started.assistantMessageId,
       content: assistantContent
     });
+    const completion = await Promise.race([
+      completionPromise.then(
+        (completed) => ({ type: "completed" as const, completed }),
+        () => ({ type: "failed" as const })
+      ),
+      streamState.cancelled.then(() => ({ type: "cancelled" as const }))
+    ]);
 
-    if (completed.ok) {
+    if (completion.type === "cancelled") {
+      cancelAssistantStream(started);
+      await abandonStreamingPlaceholder(store, started, {
+        allowPersistedContent: true,
+        allowStale: true
+      });
+      void completionPromise
+        .catch(() => undefined)
+        .then(() =>
+          abandonStreamingPlaceholder(store, started, {
+            allowPersistedContent: true,
+            allowStale: true
+          })
+        )
+        .catch(() => undefined);
+      return;
+    }
+
+    if (completion.type === "failed") {
+      await abandonStreamingPlaceholder(store, started);
+      enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
+      return;
+    }
+
+    if (streamState.isClosed()) {
+      await abandonStreamingPlaceholder(store, started, {
+        allowPersistedContent: true,
+        allowStale: true
+      });
+      return;
+    }
+
+    if (completion.completed.ok) {
       enqueue({
         type: "assistant.completed",
         taskId: started.taskId,
@@ -306,11 +504,7 @@ export async function POST(request: Request): Promise<Response> {
       return;
     }
 
-    const errorCode = toChatStreamErrorCode(completed.error);
-    enqueue({
-      type: "error",
-      code: errorCode,
-      message: getSafeErrorMessage(errorCode)
-    });
+    await abandonStreamingPlaceholder(store, started);
+    enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
   }, cookies);
 }

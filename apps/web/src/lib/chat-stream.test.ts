@@ -89,6 +89,28 @@ describe("chat stream contract", () => {
     });
   });
 
+  it("decodes typed streaming failure errors", () => {
+    const decoded = decodeChatStreamLines(
+      '{"type":"error","code":"stream_interrupted","message":"The provider stream stopped before the response completed."}\n'
+    );
+
+    expect(decoded.events).toEqual([
+      {
+        type: "error",
+        code: "stream_interrupted",
+        message: "The provider stream stopped before the response completed."
+      }
+    ]);
+  });
+
+  it("rejects unknown streaming failure error codes", () => {
+    expect(() =>
+      decodeChatStreamLines(
+        '{"type":"error","code":"raw_provider_body","message":"unsafe"}\n'
+      )
+    ).toThrow("chat_stream_event_invalid");
+  });
+
   it("rejects decoded events with unknown types", () => {
     expect(() => decodeChatStreamLines('{"type":"unknown"}\n')).toThrow(
       "chat_stream_event_invalid"

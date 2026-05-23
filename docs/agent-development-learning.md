@@ -265,6 +265,14 @@ Stage 35 在这个边界上补了 provider token delta streaming，但只用于�
 
 Stage 36 的学习点是把真实 provider alpha smoke 当成 operator opt-in 流程，而不是默认 readiness gate。`REAL_MODEL_RUNTIME=1`、provider route 和本地 key 可以用于少数内部手动 smoke；`pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和普通 `pnpm test` 仍必须保持 deterministic/no-key。真实 provider operator 文档应该说明 missing key、disabled provider、protocol mismatch、structured output parse failure 和 usage metadata 解读，但不能要求默认开发流程触网或泄漏 key/base URL/raw provider response。
 
+### 2.16 Streaming failure UX 也要分清 transient 和事实
+
+普通聊天 token streaming 带来更好的体感，也带来新的失败形态：provider 配置错误、SSE 中途断开、malformed frame、慢首 token、空 terminal content、repository persistence failure，以及浏览器侧 cancel / disconnect。这些不能全部压成“聊天失败”，否则用户和 operator 都无法判断是 provider 配置问题、网络/stream 协议问题，还是本地持久化问题。
+
+Stage 38 的学习点是：streaming failure classification 仍然属于 Agent 可观察性边界，而不是纯前端文案。正确做法是让 API/service/runtime 产出安全、bounded、可测试的 failure code 和 terminal run facts；Web 可以保留 transient partial content 做当前页面提示，但不能把 partial delta 当作已完成 assistant message。刷新后仍以 repository 里的 terminal message、run record 和 run event 为准。浏览器侧 cancel / disconnect 不应展示成失败，也不能留下 `running` run 或空 assistant message；v0 用 route cancellation signal 主动唤醒 service stream、落安全 `run.cancelled` terminal fact，并清理 placeholder，以覆盖 provider stall 后没有下一次 delta、最终 message persistence 正在 pending 时用户取消、以及 late save 与后续同 task turn 竞争时的旧 message id 复活问题。
+
+这条边界也保护安全性：失败文案可以说 provider 配置缺失、stream 中断、空响应或持久化失败，但不能展示 raw provider response、raw SSE frame、API key env value、secret、base URL、本机路径或完整 artifact 内容。真实 provider operator 排查也应使用 safe event summary 和文档化 smoke matrix，而不是要求试用者复制 raw provider body。
+
 ## 3. 本项目当前怎么处理
 
 ### 已经完成或基本成型

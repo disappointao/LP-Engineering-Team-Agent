@@ -38,6 +38,15 @@ describe("web i18n", () => {
     expect(zh.chat.composerPlaceholder).toBe("发送消息给 LP Agent");
     expect(zh.chat.streamingStatusLabel).toBe("正在生成回复");
     expect(zh.chat.streamingErrorLabel).toBe("聊天回复生成失败。");
+    expect(zh.chat.streamingErrorMessages).toEqual({
+      prompt_required: "请先输入提示词。",
+      project_not_found: "当前项目不可用。",
+      generation_failed: "聊天回复生成失败。",
+      provider_configuration_failed: "请检查项目模型 provider 配置后重试。",
+      stream_interrupted: "Provider stream 在回复完成前中断。",
+      empty_response: "Provider 已结束，但没有返回可用的 assistant 文本。",
+      persistence_failed: "回复已生成，但无法保存。"
+    });
     expect(zh.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
       "构建模型：provider_openai/gpt-5.4"
     );
@@ -64,6 +73,15 @@ describe("web i18n", () => {
     expect(en.chat.composerPlaceholder).toBe("Message LP Agent");
     expect(en.chat.streamingStatusLabel).toBe("Generating response");
     expect(en.chat.streamingErrorLabel).toBe("The chat response could not be generated.");
+    expect(en.chat.streamingErrorMessages).toEqual({
+      prompt_required: "Enter a prompt before sending.",
+      project_not_found: "The selected project is unavailable.",
+      generation_failed: "The chat response could not be generated.",
+      provider_configuration_failed: "Check the project model provider configuration before retrying.",
+      stream_interrupted: "The provider stream stopped before the response completed.",
+      empty_response: "The provider completed without usable assistant text.",
+      persistence_failed: "The response was generated but could not be saved."
+    });
     expect(en.chat.builderModelRoute("provider_openai/gpt-5.4")).toBe(
       "Builder model: provider_openai/gpt-5.4"
     );
