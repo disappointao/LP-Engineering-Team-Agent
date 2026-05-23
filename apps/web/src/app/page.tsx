@@ -962,7 +962,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             ) : null}
 
                             {turnIndex === chat.turns.length - 1 &&
-                            pageState.kind === "task_ready"
+                            pageState.kind === "task_ready" &&
+                            pageState.task.type === "lp_generation"
                               ? RunTimelineBlock({ pageState, copy })
                               : null}
 

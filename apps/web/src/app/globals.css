@@ -1558,11 +1558,16 @@ button {
   font-weight: 830;
 }
 
+.runTimelineHeader > div {
+  min-width: 0;
+}
+
 .runTimelineHeader p {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .runTimelineHeader span {
@@ -2185,6 +2190,7 @@ button {
   }
 
   .processHeader,
+  .runTimelineHeader,
   .deliveryHeader,
   .toolEventTop,
   .mcpHeader,
@@ -2200,6 +2206,11 @@ button {
   .modelRouteForm {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .runTimelineHeader span {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .skillRow,

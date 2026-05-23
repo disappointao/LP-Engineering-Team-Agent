@@ -139,6 +139,41 @@ function collectText(node: unknown): string[] {
   return [];
 }
 
+function collectRenderOrderText(node: unknown): string[] {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return [];
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    return [String(node)];
+  }
+
+  if (Array.isArray(node)) {
+    return node.flatMap(collectRenderOrderText);
+  }
+
+  if (typeof node === "object" && "type" in node && "props" in node) {
+    const element = node as {
+      type?: string | { name?: string };
+      props?: { children?: unknown };
+    };
+    const isLiveTaskPanel =
+      element.type === "LiveTaskPanel" ||
+      (typeof element.type !== "string" && element.type?.name === "LiveTaskPanel");
+    return [
+      ...(isLiveTaskPanel ? ["LiveTaskPanel"] : []),
+      ...collectRenderOrderText(element.props?.children)
+    ];
+  }
+
+  if (typeof node === "object" && "props" in node) {
+    const element = node as { props?: { children?: unknown } };
+    return collectRenderOrderText(element.props?.children);
+  }
+
+  return [];
+}
+
 function collectElements(node: unknown, type: string): Array<{ props?: Record<string, unknown> }> {
   if (node === null || node === undefined || typeof node === "boolean") {
     return [];
@@ -1167,9 +1202,13 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
     const text = collectText(page).join(" ");
+    const orderedText = collectRenderOrderText(page).join(" ");
     const recoveryForms = collectElements(page, "form").filter(
       (form) => form.props?.action === executeRunRecoveryAction
     );
+    const livePanelIndex = orderedText.indexOf("LiveTaskPanel");
+    const runTimelineIndex = orderedText.indexOf("Run timeline");
+    const runRecoveryIndex = orderedText.indexOf("Run recovery");
 
     expect(text).toContain("Run timeline");
     expect(text).toContain("Planner");
@@ -1186,6 +1225,9 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Retry run");
     expect(text).not.toContain("RAW_HANDOFF_SECRET");
     expect(text).not.toContain("RAW_DIAGNOSTIC_SECRET");
+    expect(livePanelIndex).toBeGreaterThanOrEqual(0);
+    expect(runTimelineIndex).toBeGreaterThan(livePanelIndex);
+    expect(runRecoveryIndex).toBeGreaterThan(runTimelineIndex);
     expect(recoveryForms.map(collectFormPayload)).toContainEqual({
       taskId: "task_1",
       runId: "run_deployer_failed",
@@ -2603,6 +2645,7 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Help me write a campaign plan.");
     expect(text).toContain("I created a task thread and can continue from here.");
     expect(text).toContain("Assistant");
+    expect(text).not.toContain("Run timeline");
     expect(text).not.toContain("index.single.html");
     expect(text).not.toContain("Static LP preview");
   });
