@@ -282,6 +282,25 @@ describe("web i18n", () => {
       inspect_manually: "Inspect manually"
     });
     expect(en.chat.recoveryErrorLabel).toBe("Recovery action could not be completed.");
+    expect(en.chat.runTimelineTitle).toBe("Run timeline");
+    expect(en.chat.runTimelineSubtitle).toBe("Planner to deployment handoff");
+    expect(en.chat.runTimelinePending).toBe("Not started");
+    expect(en.chat.runTimelineActive).toBe("Active");
+    expect(en.chat.runTimelineActionGroupLabels).toEqual({
+      executable: "Actions",
+      guidance: "Guidance"
+    });
+    expect(en.chat.runTimelineMarkerLabels).toEqual({
+      repair_started: "Repair started",
+      repaired: "Repaired",
+      repair_failed: "Repair failed",
+      retry_scheduled: "Retry scheduled",
+      retry_exhausted: "Retry exhausted",
+      retry_attempt: "Retry attempt",
+      handoff_ready: "Handoff ready",
+      handoff_consumed: "Handoff consumed",
+      handoff_blocked: "Handoff blocked"
+    });
 
     expect(zh.chat.recoveryTitle).toBe("运行恢复");
     expect(zh.chat.recoverySubtitle).toBe("根据运行生命周期派生的安全恢复选项。");
@@ -305,5 +324,24 @@ describe("web i18n", () => {
       inspect_manually: "人工检查"
     });
     expect(zh.chat.recoveryErrorLabel).toBe("恢复动作未能完成。");
+    expect(zh.chat.runTimelineTitle).toBe("运行时间线");
+    expect(zh.chat.runTimelineSubtitle).toBe("从规划到部署交接");
+    expect(zh.chat.runTimelinePending).toBe("未开始");
+    expect(zh.chat.runTimelineActive).toBe("当前步骤");
+    expect(zh.chat.runTimelineActionGroupLabels).toEqual({
+      executable: "可执行动作",
+      guidance: "处理建议"
+    });
+    expect(zh.chat.runTimelineMarkerLabels).toEqual({
+      repair_started: "开始修复",
+      repaired: "已修复",
+      repair_failed: "修复失败",
+      retry_scheduled: "已安排重试",
+      retry_exhausted: "重试耗尽",
+      retry_attempt: "重试尝试",
+      handoff_ready: "交接就绪",
+      handoff_consumed: "交接已消费",
+      handoff_blocked: "交接阻塞"
+    });
   });
 });

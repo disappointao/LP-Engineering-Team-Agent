@@ -302,6 +302,23 @@ export interface WorkbenchCopy {
       string
     >;
     recoveryErrorLabel: string;
+    runTimelineTitle: string;
+    runTimelineSubtitle: string;
+    runTimelinePending: string;
+    runTimelineActive: string;
+    runTimelineActionGroupLabels: Record<"executable" | "guidance", string>;
+    runTimelineMarkerLabels: Record<
+      | "repair_started"
+      | "repaired"
+      | "repair_failed"
+      | "retry_scheduled"
+      | "retry_exhausted"
+      | "retry_attempt"
+      | "handoff_ready"
+      | "handoff_consumed"
+      | "handoff_blocked",
+      string
+    >;
     sendLabel: string;
     toolStatusRunning: string;
     toolStatusComplete: string;
@@ -818,6 +835,25 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         inspect_manually: "Inspect manually"
       },
       recoveryErrorLabel: "Recovery action could not be completed.",
+      runTimelineTitle: "Run timeline",
+      runTimelineSubtitle: "Planner to deployment handoff",
+      runTimelinePending: "Not started",
+      runTimelineActive: "Active",
+      runTimelineActionGroupLabels: {
+        executable: "Actions",
+        guidance: "Guidance"
+      },
+      runTimelineMarkerLabels: {
+        repair_started: "Repair started",
+        repaired: "Repaired",
+        repair_failed: "Repair failed",
+        retry_scheduled: "Retry scheduled",
+        retry_exhausted: "Retry exhausted",
+        retry_attempt: "Retry attempt",
+        handoff_ready: "Handoff ready",
+        handoff_consumed: "Handoff consumed",
+        handoff_blocked: "Handoff blocked"
+      },
       sendLabel: "Send",
       toolStatusRunning: "Running",
       toolStatusComplete: "Complete",
@@ -1315,6 +1351,25 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         inspect_manually: "人工检查"
       },
       recoveryErrorLabel: "恢复动作未能完成。",
+      runTimelineTitle: "运行时间线",
+      runTimelineSubtitle: "从规划到部署交接",
+      runTimelinePending: "未开始",
+      runTimelineActive: "当前步骤",
+      runTimelineActionGroupLabels: {
+        executable: "可执行动作",
+        guidance: "处理建议"
+      },
+      runTimelineMarkerLabels: {
+        repair_started: "开始修复",
+        repaired: "已修复",
+        repair_failed: "修复失败",
+        retry_scheduled: "已安排重试",
+        retry_exhausted: "重试耗尽",
+        retry_attempt: "重试尝试",
+        handoff_ready: "交接就绪",
+        handoff_consumed: "交接已消费",
+        handoff_blocked: "交接阻塞"
+      },
       sendLabel: "发送",
       toolStatusRunning: "运行中",
       toolStatusComplete: "完成",
