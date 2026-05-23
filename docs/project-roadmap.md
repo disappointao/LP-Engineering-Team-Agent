@@ -682,7 +682,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
-**状态：** 当前推荐；设计已批准，等待 implementation plan。
+**状态：** 当前推荐；设计已批准，implementation plan 已写入，等待执行选择。
 
 **为什么现在做：** Stage 29 已有 no-refresh live task panel，Stage 25 已有 inline recovery block；V1 polished alpha 需要更清楚的 run lifecycle、handoff、recovery 和 failure hierarchy，让 LP 复杂任务看起来像一个可跟踪的工程流程，而不是一组压缩状态。
 
@@ -702,6 +702,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 不把 transient animation 状态当作 repository fact。
 
 **设计：** `docs/superpowers/specs/2026-05-23-run-timeline-recovery-ux-polish-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-23-run-timeline-recovery-ux-polish.md`。
 
 ### Stage 44：Skills and Models Client-side Management v0
 
@@ -854,6 +856,7 @@ Stage 46 是第一版收口阶段，不新增大功能。它运行完整 determi
 
 ## 决策记录
 
+- 2026-05-23 Stage 43 implementation plan 已写入：计划按 TDD 分为 localized timeline copy、Web-only pure view model、localized live task summary、timeline/recovery rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
 - 2026-05-23 Stage 43 设计已批准：Run Timeline and Recovery UX Polish v0 采用 Web-only view-model polish，从现有 safe live task payload 和 run lifecycle facts 派生固定 LP 链路 timeline、repair/retry hints、handoff/recovery hierarchy 和 transient progress affordance；不改变 run event schema、recovery action contract，不引入 SSE 或 raw log streaming。
 - 2026-05-23 Stage 42 已完成 Dedicated Artifact Workspace v0：V1 Web navigation 新增 `Artifacts`，`view=artifacts` 展示当前 LP task 的三文件 manifest、bounded snippet、preview、export 和安全失败状态；默认下一路由为 Stage 43 Run Timeline and Recovery UX Polish v0。
 - 2026-05-23 Stage 42 设计已批准：Dedicated Artifact Workspace v0 采用现有 `HomePage` 内的 `view=artifacts`，新增 V1 顶层 Artifacts 入口，复用当前 task/project session、artifact diff、bounded snippet、preview/export 和 live task refresh 边界；不新建独立 route，不改变 artifact policy/export contract。
