@@ -26,6 +26,15 @@ export class PlannerLPBriefParseError extends Error {
   }
 }
 
+const LP_BRIEF_QUALITY_GUIDE = [
+  "Turn vague requests into a concrete LP structure with audience, offer, CTA, section hierarchy, and proof.",
+  "Sections should cover hero, benefits/value props, proof or trust, FAQ/risk reducer, and final CTA when the request allows it.",
+  "Use layoutHints for mobile-first and desktop layout intent, including card grids, two-column hero layouts, repeated CTA placement, or single-column mobile flow.",
+  "Use validationRules and complianceNotes for accessibility notes, claim caution, required CTA behavior, and content constraints.",
+  "Use assets alt text, section media notes, and productData details so the Builder can create accessible static HTML.",
+  "Keep copy specific to the audience, offer, product, location, event, or brand named in the request."
+];
+
 export function createStructuredLPBriefPlannerPrompt(userPrompt: string): string {
   return [
     "You are the Planner for an LP Engineering Team Agent.",
@@ -50,6 +59,9 @@ export function createStructuredLPBriefPlannerPrompt(userPrompt: string): string
     "- seo: { title, description, socialImage? }",
     "- tracking: { analyticsId?, events: string[] }",
     "- complianceNotes: string[]",
+    "",
+    "LP quality guidance:",
+    ...LP_BRIEF_QUALITY_GUIDE,
     "",
     "User request:",
     userPrompt
@@ -102,6 +114,9 @@ export function createStructuredLPBriefRepairPrompt(
     "- seo: { title, description, socialImage? }",
     "- tracking: { analyticsId?, events: string[] }",
     "- complianceNotes: string[]",
+    "",
+    "LP quality guidance:",
+    ...LP_BRIEF_QUALITY_GUIDE,
     "",
     "Original user request:",
     input.userPrompt

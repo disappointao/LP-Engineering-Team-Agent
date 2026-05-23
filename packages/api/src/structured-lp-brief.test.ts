@@ -19,6 +19,19 @@ describe("structured LP brief model output", () => {
     expect(prompt).toContain("LPBriefSchema");
     expect(prompt).toContain("Framework-free static HTML/CSS/JS");
     expect(prompt).toContain(userPrompt);
+    expect(prompt).toContain("LP quality guidance:");
+    expect(prompt).toContain(
+      "Turn vague requests into a concrete LP structure with audience, offer, CTA, section hierarchy, and proof."
+    );
+    expect(prompt).toContain(
+      "Sections should cover hero, benefits/value props, proof or trust, FAQ/risk reducer, and final CTA when the request allows it."
+    );
+    expect(prompt).toContain(
+      "Use layoutHints for mobile-first and desktop layout intent, including card grids, two-column hero layouts, repeated CTA placement, or single-column mobile flow."
+    );
+    expect(prompt).toContain(
+      "Use validationRules and complianceNotes for accessibility notes, claim caution, required CTA behavior, and content constraints."
+    );
   });
 
   it("creates a safe LP brief repair prompt without raw model output", () => {
@@ -39,6 +52,13 @@ describe("structured LP brief model output", () => {
     expect(prompt).toContain("Build a landing page for a spring sale.");
     expect(prompt).not.toContain("RAW_MODEL_OUTPUT_SECRET");
     expect(prompt).not.toContain("```");
+    expect(prompt).toContain("LP quality guidance:");
+    expect(prompt).toContain(
+      "Turn vague requests into a concrete LP structure with audience, offer, CTA, section hierarchy, and proof."
+    );
+    expect(prompt).toContain(
+      "Keep copy specific to the audience, offer, product, location, event, or brand named in the request."
+    );
   });
 
   it("parses a complete LPBriefSchema JSON object", () => {
