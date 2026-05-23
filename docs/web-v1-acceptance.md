@@ -60,7 +60,7 @@
 ## Artifact Diff 和源码片段
 
 - [ ] Artifact diff list 显示 `index.html`、`styles.css`、`script.js` 的 file-level metadata。
-- [ ] 默认 artifact diff cards 只展示 metadata；完整源码只在点击 `Preview snippet` 后显示。
+- [ ] 默认 artifact diff cards 只展示 metadata；bounded read-only source snippet 只在点击 `Preview snippet` 后显示。
 - [ ] 点击 `index.html` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=index.html`。
 - [ ] 点击 `styles.css` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=styles.css`。
 - [ ] 点击 `script.js` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=script.js`。
@@ -68,11 +68,11 @@
 
 ### Dedicated Artifact Workspace
 
-- Open the `Artifacts` navigation item after an LP task completes.
-- Confirm the workspace shows `index.html`, `styles.css`, and `script.js` with bounded metadata.
-- Preview snippets for each file; oversized or invalid paths must show safe unavailable copy.
-- Confirm static preview and export links are visible.
-- Confirm invalid `artifactPath` values do not echo query secrets, local paths, or traversal strings.
+- [ ] LP task 完成后打开 `Artifacts` navigation item。
+- [ ] 确认 workspace 展示 `index.html`、`styles.css`、`script.js`，并且只显示 bounded metadata。
+- [ ] 分别 preview 每个文件的 snippet；oversized 或 invalid path 必须显示安全 unavailable copy。
+- [ ] 确认 static preview 和 export links 可见。
+- [ ] 确认 invalid `artifactPath` 不回显 query secrets、本机路径或 traversal strings。
 
 ## Skill-only alpha 主路径
 

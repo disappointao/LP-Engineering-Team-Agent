@@ -620,7 +620,7 @@ Stage 40 v0 已把 RC feedback template 变成可重复的 alpha feedback intake
 
 **实施计划：** `docs/superpowers/plans/2026-05-23-alpha-feedback-intake-triage.md`。
 
-## 推荐下一阶段队列
+## 近期已完成 Web polish 阶段
 
 ### Stage 41：Web Surface Pruning and V1 Navigation v0
 
@@ -677,6 +677,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 **设计：** `docs/superpowers/specs/2026-05-23-dedicated-artifact-workspace-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-23-dedicated-artifact-workspace.md`。
+
+## 推荐下一阶段队列
 
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
