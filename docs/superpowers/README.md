@@ -450,6 +450,10 @@
    - Stage 42 Dedicated Artifact Workspace v0 design（已批准，当前推荐实施）。
    - 在 Stage 41 implementation plan 和当前 roadmap 后阅读，用于理解 `view=artifacts` dedicated artifact workspace、file manifest、bounded snippet、preview/export、安全失败状态和 no-refresh task state refresh 边界。
 
+112. `plans/2026-05-23-dedicated-artifact-workspace.md`
+   - Stage 42 Dedicated Artifact Workspace v0 implementation plan（当前实施依据）。
+   - 在 Stage 42 design 后阅读，用于按 TDD 实现 `view=artifacts` navigation、dedicated artifact workspace UI、browser acceptance、manual acceptance docs 和 roadmap closeout。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

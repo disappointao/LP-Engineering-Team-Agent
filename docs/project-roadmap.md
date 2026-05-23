@@ -669,6 +669,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **设计：** `docs/superpowers/specs/2026-05-23-dedicated-artifact-workspace-design.md`。
 
+**当前实施计划：** `docs/superpowers/plans/2026-05-23-dedicated-artifact-workspace.md`。
+
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
 **状态：** Stage 42 后推荐。
