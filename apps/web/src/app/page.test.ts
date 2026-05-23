@@ -393,6 +393,9 @@ function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
       }
     ],
     runEvents: [],
+    recovery: {
+      runs: []
+    },
     interrupt: unavailableInterrupt,
     snapshot: {
       project: {
@@ -1075,6 +1078,119 @@ describe("HomePage project flow errors", () => {
         action: "resume_worker_finalization"
       }
     ]);
+  });
+
+  it("renders a polished run timeline with repair retry and recovery hierarchy", async () => {
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      runEvents: [
+        {
+          id: "event_repaired",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_planner_1_retry_1",
+          type: "model.output.repaired",
+          createdAt: "2026-05-23T00:00:03.000Z",
+          payload: { type: "model.output.repaired" }
+        },
+        {
+          id: "event_handoff",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_reviewer_blocked",
+          type: "handoff.blocked",
+          createdAt: "2026-05-23T00:00:11.000Z",
+          payload: {
+            type: "handoff.blocked",
+            handoffId: "handoff_1",
+            summary: "RAW_HANDOFF_SECRET"
+          }
+        }
+      ],
+      recovery: {
+        runs: [
+          {
+            runId: "run_planner_1_retry_1",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "planner",
+            state: "completed",
+            runRecordState: "completed",
+            startedAt: "2026-05-23T00:00:00.000Z",
+            completedAt: "2026-05-23T00:00:05.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_builder_running",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "builder",
+            state: "running",
+            runRecordState: "running",
+            startedAt: "2026-05-23T00:00:06.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_reviewer_blocked",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "reviewer",
+            state: "blocked",
+            runRecordState: "needs_input",
+            startedAt: "2026-05-23T00:00:10.000Z",
+            diagnosticSummary: {
+              code: "handoff_blocked",
+              message: "Reviewer blocked deployment.",
+              source: "handoff",
+              errorName: "RAW_DIAGNOSTIC_SECRET"
+            },
+            recoveryActions: ["resolve_blocker", "inspect_manually"]
+          },
+          {
+            runId: "run_deployer_failed",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "deployer",
+            state: "failed",
+            runRecordState: "failed",
+            startedAt: "2026-05-23T00:00:12.000Z",
+            diagnosticSummary: {
+              code: "deployment_failed",
+              message: "Deployment handoff failed safely.",
+              source: "run_event"
+            },
+            recoveryActions: ["retry_run"]
+          }
+        ]
+      }
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const recoveryForms = collectElements(page, "form").filter(
+      (form) => form.props?.action === executeRunRecoveryAction
+    );
+
+    expect(text).toContain("Run timeline");
+    expect(text).toContain("Planner");
+    expect(text).toContain("Builder");
+    expect(text).toContain("Reviewer");
+    expect(text).toContain("Deployer");
+    expect(text).toContain("Retry attempt");
+    expect(text).toContain("Repaired");
+    expect(text).toContain("Handoff blocked");
+    expect(text).toContain("Actions");
+    expect(text).toContain("Guidance");
+    expect(text).toContain("Resolve blocker");
+    expect(text).toContain("Inspect manually");
+    expect(text).toContain("Retry run");
+    expect(text).not.toContain("RAW_HANDOFF_SECRET");
+    expect(text).not.toContain("RAW_DIAGNOSTIC_SECRET");
+    expect(recoveryForms.map(collectFormPayload)).toContainEqual({
+      taskId: "task_1",
+      runId: "run_deployer_failed",
+      action: "retry_run"
+    });
   });
 
   it("renders cancelled, blocked, and worker finalization recovery rows safely", async () => {
@@ -3049,7 +3165,6 @@ describe("HomePage project flow errors", () => {
     expect(spacedText).toContain("script.js");
     expect(spacedText).not.toContain("Prepare a deployment skill command");
     expect(spacedText).not.toContain("deployment-handoff.json");
-    expect(spacedText).not.toContain("Deployer");
     expect(spacedText).not.toContain("PR handoff");
     expect(spacedText).not.toContain("Deployments");
     expect(spacedText).not.toContain("Repository URL");

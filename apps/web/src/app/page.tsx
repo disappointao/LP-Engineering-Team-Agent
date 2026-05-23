@@ -44,6 +44,10 @@ import {
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 import { InterruptSubmitButton } from "./interrupt-submit-button";
 import { LiveTaskPanel } from "./live-task-panel";
+import {
+  buildRunTimelineViewModel,
+  type RunTimelineStepView
+} from "./run-timeline-view-model";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -958,6 +962,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             ) : null}
 
                             {turnIndex === chat.turns.length - 1 &&
+                            pageState.kind === "task_ready"
+                              ? RunTimelineBlock({ pageState, copy })
+                              : null}
+
+                            {turnIndex === chat.turns.length - 1 &&
                             pageState.kind === "task_ready" &&
                             (pageState.recovery?.runs.length ?? 0) > 0
                               ? RecoveryBlock({ pageState, copy })
@@ -1166,6 +1175,69 @@ type CompletedArtifactSnapshot = {
   >;
 };
 
+function RunTimelineBlock({
+  pageState,
+  copy
+}: {
+  pageState: TaskReadyPageState;
+  copy: ReturnType<typeof getWorkbenchCopy>;
+}) {
+  const recovery = pageState.recovery ?? { runs: [] };
+  const timeline = buildRunTimelineViewModel({
+    payload: {
+      runs: recovery.runs,
+      runEvents: pageState.runEvents ?? [],
+      recovery
+    },
+    copy
+  });
+
+  return (
+    <section className="runTimelineBlock" aria-label={timeline.title}>
+      <div className="runTimelineHeader">
+        <div>
+          <strong>{timeline.title}</strong>
+          <p>{timeline.subtitle}</p>
+        </div>
+        {timeline.activeStep ? (
+          <span>
+            {copy.chat.runTimelineActive}: {timeline.activeStep.label}
+          </span>
+        ) : null}
+      </div>
+      <div className="runTimelineSteps">
+        {timeline.steps.map((step) => RunTimelineStep({ step }))}
+      </div>
+    </section>
+  );
+}
+
+function RunTimelineStep({ step }: { step: RunTimelineStepView }) {
+  return (
+    <div className="runTimelineStep" data-status={step.status} key={step.role}>
+      <div className="runTimelineDot" aria-hidden="true" />
+      <div className="runTimelineBody">
+        <div className="toolEventTop">
+          <strong>{step.label}</strong>
+          <span>{step.stateLabel}</span>
+        </div>
+        {step.diagnosticMessage ? <p>{step.diagnosticMessage}</p> : null}
+        {step.lastEventLabel ? <small>{step.lastEventLabel}</small> : null}
+        {step.diagnosticCode ? <small>{step.diagnosticCode}</small> : null}
+        {step.markers.length > 0 ? (
+          <div className="runTimelineMarkers">
+            {step.markers.map((marker) => (
+              <span data-marker={marker.kind} key={marker.kind}>
+                {marker.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function RecoveryBlock({
   pageState,
   copy
@@ -1206,22 +1278,28 @@ function RecoveryBlock({
               <p>{diagnosticMessage}</p>
               <small>{diagnosticCode}</small>
               {executable.length > 0 ? (
-                <div className="recoveryActions">
-                  {executable.map((action) => (
-                    <form action={executeRunRecoveryAction} key={action}>
-                      <input name="taskId" type="hidden" value={pageState.task.id} />
-                      <input name="runId" type="hidden" value={run.runId} />
-                      <input name="action" type="hidden" value={action} />
-                      <button type="submit">{copy.chat.recoveryActionLabels[action]}</button>
-                    </form>
-                  ))}
+                <div className="recoveryActionGroup">
+                  <strong>{copy.chat.runTimelineActionGroupLabels.executable}</strong>
+                  <div className="recoveryActions">
+                    {executable.map((action) => (
+                      <form action={executeRunRecoveryAction} key={action}>
+                        <input name="taskId" type="hidden" value={pageState.task.id} />
+                        <input name="runId" type="hidden" value={run.runId} />
+                        <input name="action" type="hidden" value={action} />
+                        <button type="submit">{copy.chat.recoveryActionLabels[action]}</button>
+                      </form>
+                    ))}
+                  </div>
                 </div>
               ) : null}
               {guidance.length > 0 ? (
-                <div className="recoveryGuidance">
-                  {guidance.map((action) => (
-                    <span key={action}>{copy.chat.recoveryGuidanceLabels[action]}</span>
-                  ))}
+                <div className="recoveryActionGroup">
+                  <strong>{copy.chat.runTimelineActionGroupLabels.guidance}</strong>
+                  <div className="recoveryGuidance">
+                    {guidance.map((action) => (
+                      <span key={action}>{copy.chat.recoveryGuidanceLabels[action]}</span>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
