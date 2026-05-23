@@ -820,6 +820,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             interruptControl={
               <InterruptSubmitButton
                 action={interruptCurrentTaskAction}
+                key="interrupt-control"
                 state={pageState.kind === "task_ready"
                   ? pageState.interrupt.state
                   : "not_interruptible"}

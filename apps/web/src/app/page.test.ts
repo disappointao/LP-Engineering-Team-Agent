@@ -196,6 +196,7 @@ function collectStreamingWorkbenchProps(node: unknown): Array<Record<string, unk
 }
 
 type ReactTestElement = {
+  key?: unknown;
   type?: unknown;
   props?: { children?: unknown; className?: unknown } & Record<string, unknown>;
 };
@@ -595,6 +596,18 @@ describe("HomePage project flow errors", () => {
           "The provider stream stopped before the response completed."
       })
     });
+  });
+
+  it("keys the parent-provided interrupt control so React dev overlay stays clear", async () => {
+    const page = await HomePage({
+      searchParams: Promise.resolve({})
+    });
+    const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
+    const interruptControl = streamingWorkbenchProps?.interruptControl as
+      | ReactTestElement
+      | undefined;
+
+    expect(interruptControl?.key).toBe("interrupt-control");
   });
 
   it("wires sidebar task controls to real navigation actions", async () => {
