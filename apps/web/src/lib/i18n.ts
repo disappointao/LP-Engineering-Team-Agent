@@ -411,7 +411,9 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         project_name_required: "Enter a project name.",
         prompt_required: "Enter an LP request.",
         project_not_found: "The selected project is no longer available.",
-        generation_failed: "The LP generation flow failed. Try again with a shorter request."
+        generation_failed: "The LP generation flow failed. Try again with a shorter request.",
+        provider_configuration_failed:
+          "The model provider is not ready. Check the project model settings."
       }
     },
     interruptFlow: {
@@ -889,7 +891,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         project_name_required: "请输入项目名称。",
         prompt_required: "请输入 LP 需求。",
         project_not_found: "当前项目已经不可用。",
-        generation_failed: "LP 生成流程失败，请换一个更短的需求重试。"
+        generation_failed: "LP 生成流程失败，请换一个更短的需求重试。",
+        provider_configuration_failed: "模型供应商尚未就绪，请检查项目模型设置。"
       }
     },
     interruptFlow: {

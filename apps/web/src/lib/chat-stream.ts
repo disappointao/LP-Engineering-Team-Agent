@@ -39,7 +39,11 @@ export type ChatStreamEvent =
     }
   | {
       type: "error";
-      code: "prompt_required" | "project_not_found" | "generation_failed";
+      code:
+        | "prompt_required"
+        | "project_not_found"
+        | "generation_failed"
+        | "provider_configuration_failed";
       message: string;
     };
 
@@ -109,7 +113,8 @@ function isErrorCode(
   return (
     value === "prompt_required" ||
     value === "project_not_found" ||
-    value === "generation_failed"
+    value === "generation_failed" ||
+    value === "provider_configuration_failed"
   );
 }
 

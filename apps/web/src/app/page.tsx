@@ -1175,7 +1175,8 @@ function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | u
     value === "project_name_required" ||
     value === "prompt_required" ||
     value === "project_not_found" ||
-    value === "generation_failed"
+    value === "generation_failed" ||
+    value === "provider_configuration_failed"
   ) {
     return value;
   }

@@ -78,7 +78,8 @@ export type ProjectFlowErrorCode =
   | "project_name_required"
   | "prompt_required"
   | "project_not_found"
-  | "generation_failed";
+  | "generation_failed"
+  | "provider_configuration_failed";
 
 export type InterruptFlowErrorCode =
   | "task_not_found"

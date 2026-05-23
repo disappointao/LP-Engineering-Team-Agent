@@ -51,6 +51,7 @@ import {
 } from "@lp-agent/mcp-gateway";
 import {
   InMemoryModelGateway,
+  ModelProviderConfigurationError,
   ProviderBackedModelGateway,
   agentRoles,
   createDefaultModelPolicy,
@@ -451,7 +452,7 @@ export type RunAssistantChatResult =
     }
   | {
       ok: false;
-      error: "project_not_found" | "generation_failed";
+      error: AssistantChatErrorCode;
       runId?: string;
       contextSummary?: AssistantContextSummary;
     };
@@ -466,10 +467,15 @@ export type RunAssistantChatStreamResult =
     }
   | {
       ok: false;
-      error: "project_not_found" | "generation_failed";
+      error: AssistantChatErrorCode;
       runId?: string;
       contextSummary?: AssistantContextSummary;
     };
+
+export type AssistantChatErrorCode =
+  | "project_not_found"
+  | "generation_failed"
+  | "provider_configuration_failed";
 
 export type RuntimeEnvironment = Record<string, string | undefined>;
 
@@ -2303,8 +2309,8 @@ export class DemoWorkbenchService {
         runId,
         contextSummary
       };
-    } catch {
-      return createAssistantChatGenerationFailure(runId, contextSummary);
+    } catch (error) {
+      return createAssistantChatFailureForError(error, runId, contextSummary);
     } finally {
       if (createdRunId && runId) {
         releaseRepositoryId(this.repositories, runId);
@@ -2407,9 +2413,9 @@ export class DemoWorkbenchService {
         stream,
         contextSummary
       };
-    } catch {
+    } catch (error) {
       releaseRunId?.();
-      return createAssistantChatGenerationFailure(runId, contextSummary);
+      return createAssistantChatFailureForError(error, runId, contextSummary);
     }
   }
 
@@ -2452,16 +2458,16 @@ export class DemoWorkbenchService {
       });
       persistedTerminal = true;
       if (terminalResult.state !== "completed" || !terminalResult.modelOutputText?.trim()) {
-        throw new Error("assistant_stream_failed");
+        throw createAssistantChatStreamError(terminalResult);
       }
-    } catch {
+    } catch (error) {
       if (!persistedTerminal) {
         await this.persistStreamingAssistantRun({
           startedRun,
           result: createAssistantStreamFailedResult(input.runtimeRequest)
         });
       }
-      throw new Error("assistant_stream_failed");
+      throw createAssistantChatStreamError(undefined, error);
     } finally {
       input.releaseRunId?.();
     }
@@ -4571,6 +4577,82 @@ function createAssistantChatGenerationFailure(
     ...(runId !== undefined ? { runId } : {}),
     ...(contextSummary !== undefined ? { contextSummary } : {})
   };
+}
+
+function createAssistantChatFailureForError(
+  error: unknown,
+  runId: string | undefined,
+  contextSummary: AssistantContextSummary | undefined
+): RunAssistantChatResult {
+  if (isProviderConfigurationFailure(error)) {
+    return {
+      ok: false,
+      error: "provider_configuration_failed",
+      ...(runId !== undefined ? { runId } : {}),
+      ...(contextSummary !== undefined ? { contextSummary } : {})
+    };
+  }
+  return createAssistantChatGenerationFailure(runId, contextSummary);
+}
+
+function isProviderConfigurationFailure(error: unknown): boolean {
+  if (error instanceof ModelProviderConfigurationError) {
+    return true;
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return assistantProviderConfigurationErrorMessages.has(error.message);
+}
+
+const assistantProviderConfigurationErrorMessages = new Set([
+  "model_id_required",
+  "model_provider_api_key_env_missing",
+  "model_provider_api_key_missing",
+  "model_provider_base_url_missing",
+  "model_provider_config_missing",
+  "model_provider_disabled",
+  "model_provider_fetch_unavailable",
+  "model_provider_mock_route_disabled",
+  "model_provider_protocol_mismatch",
+  "model_route_provider_invalid"
+]);
+
+class AssistantChatStreamError extends Error {
+  readonly code?: Extract<AssistantChatErrorCode, "provider_configuration_failed">;
+
+  constructor(code?: Extract<AssistantChatErrorCode, "provider_configuration_failed">) {
+    super("assistant_stream_failed");
+    this.name = "AssistantChatStreamError";
+    if (code) {
+      this.code = code;
+    }
+  }
+}
+
+function createAssistantChatStreamError(
+  result?: RuntimeRunResult,
+  cause?: unknown
+): AssistantChatStreamError {
+  if (cause instanceof AssistantChatStreamError) {
+    return cause;
+  }
+  if (isProviderConfigurationFailure(cause) || hasProviderConfigurationFailureEvent(result)) {
+    return new AssistantChatStreamError("provider_configuration_failed");
+  }
+  return new AssistantChatStreamError();
+}
+
+function hasProviderConfigurationFailureEvent(result: RuntimeRunResult | undefined): boolean {
+  return (
+    result?.events.some((event) => {
+      const errorCode = "errorCode" in event ? event.errorCode : undefined;
+      return (
+        typeof errorCode === "string" &&
+        assistantProviderConfigurationErrorMessages.has(errorCode)
+      );
+    }) ?? false
+  );
 }
 
 function createAssistantStreamFailedResult(request: RuntimeRunRequest): RuntimeRunResult {

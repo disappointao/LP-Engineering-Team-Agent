@@ -3027,6 +3027,57 @@ describe("web workbench store", () => {
       expect(messages[0]?.content).toBe("How should this page sound?");
     });
 
+    it("keeps provider configuration failures distinct when assistant streaming cannot start", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({
+        repositories,
+        env: { REAL_MODEL_RUNTIME: "1" },
+        modelFetch: async () => {
+          throw new Error("fetch_should_not_run_for_invalid_route");
+        }
+      });
+      const project = await store.createProject({ name: "Spring Campaign" });
+      const provider = await store.createModelProvider({
+        projectId: project.id,
+        providerId: "provider_openai",
+        name: "OpenAI",
+        provider: "openai",
+        secretEnvName: "OPENAI_API_KEY"
+      });
+      if (!provider.ok) {
+        throw new Error(`Expected provider creation to succeed, got ${provider.error}.`);
+      }
+      const route = await store.upsertProjectModelRoute({
+        projectId: project.id,
+        role: "assistant",
+        providerId: provider.value.id,
+        model: "gpt-5.4"
+      });
+      if (!route.ok) {
+        throw new Error(`Expected route upsert to succeed, got ${route.error}.`);
+      }
+      await repositories.modelProviders.save({
+        ...provider.value,
+        enabled: false,
+        updatedAt: "2026-05-12T08:10:00.000Z"
+      });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: project.id,
+        taskId: null,
+        prompt: "How should this page sound?"
+      });
+
+      expect(started).toMatchObject({
+        ok: false,
+        error: "provider_configuration_failed",
+        taskId: "task_1",
+        projectId: project.id
+      });
+      const messages = await repositories.messages.listForTask("task_1");
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
+    });
+
     it("keeps projectless streaming chat deterministic with no context summary skills", async () => {
       const store = createWebWorkbenchStore();
 

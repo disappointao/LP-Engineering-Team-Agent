@@ -126,6 +126,7 @@ pnpm exec vitest run packages/model-gateway/src/anthropic-messages.integration.t
 
 ## 排错
 
+- Web 普通聊天开始前或首个 delta 前遇到 provider / route 配置错误时，会显示安全错误码 `provider_configuration_failed`。继续查看 Models view、run timeline 或服务日志中的 bounded `model_provider_*` 诊断码定位具体配置项。
 - `model_provider_api_key_missing`：`apiKeyEnv` 指向的环境变量不存在或为空。确认 `.env.local` 已填写，并重启 `pnpm dev`。
 - `model_provider_api_key_env_missing`：provider 配置没有 `apiKeyEnv`。回到 Models view，只填写变量名，不填写 key 值。
 - `model_provider_config_missing`：route 指向的 provider 不存在或不属于当前 project。重新保存 provider 和 role route。

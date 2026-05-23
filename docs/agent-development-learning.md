@@ -195,6 +195,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 当前采用的方向是：项目自己维护轻量 provider manifest，先做配置和 mock 链路验证，再按协议逐步接真实 adapter。
 
+模型路由错误也要分层处理。provider adapter 和 run timeline 可以记录 bounded `model_provider_*` 诊断码，帮助开发者判断是缺少 `apiKeyEnv`、provider disabled、协议不匹配还是 mock route 被真实 runtime 禁用；但 Web 普通聊天在 stream 开始前或首个 delta 前失败时，不能把这些底层细节直接当作通用 `generation_failed` 或泄露给用户。当前做法是把 context assembly / route resolution 阶段，以及 async stream 初始阶段的已知 provider 配置错误归类为稳定 UI 错误码 `provider_configuration_failed`，提示用户检查项目模型设置，同时继续避免暴露 secret env 名、base URL 和 raw provider message。
+
 ### 2.12 普通聊天也需要明确 Agent role
 
 普通问答不是 LP `Planner`。如果把普通聊天临时复用 `planner` model route，短期可以少改类型，但长期会混淆两类完全不同的职责：`planner` 负责把 LP 需求转成结构化 brief，普通聊天则负责回答问题、解释项目状态和承接后续工作流入口。

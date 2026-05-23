@@ -69,11 +69,12 @@ function createEventStream(
       };
       void Promise.resolve()
         .then(() => produceEvents(enqueue))
-        .catch(() => {
+        .catch((error) => {
+          const code = toUnhandledChatStreamErrorCode(error);
           enqueue({
             type: "error",
-            code: "generation_failed",
-            message: getSafeErrorMessage("generation_failed")
+            code,
+            message: getSafeErrorMessage(code)
           });
         })
         .finally(() => {
@@ -114,12 +115,14 @@ function createExpiredCookie(name: string): string {
   return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-function getSafeErrorMessage(error: "prompt_required" | "project_not_found" | "generation_failed") {
+function getSafeErrorMessage(error: ChatStreamErrorCode) {
   switch (error) {
     case "prompt_required":
       return "Enter a prompt before sending.";
     case "project_not_found":
       return "The selected project is unavailable.";
+    case "provider_configuration_failed":
+      return "The model provider is not ready. Check the project model settings.";
     case "generation_failed":
       return "The chat response could not be generated.";
   }
@@ -130,10 +133,18 @@ function toChatStreamErrorCode(error: ProjectFlowErrorCode): ChatStreamErrorCode
     case "prompt_required":
     case "project_not_found":
     case "generation_failed":
+    case "provider_configuration_failed":
       return error;
     default:
       return "generation_failed";
   }
+}
+
+function toUnhandledChatStreamErrorCode(error: unknown): ChatStreamErrorCode {
+  if (isRecord(error) && error.code === "provider_configuration_failed") {
+    return "provider_configuration_failed";
+  }
+  return "generation_failed";
 }
 
 function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {

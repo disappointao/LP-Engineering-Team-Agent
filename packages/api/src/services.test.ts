@@ -4614,13 +4614,19 @@ describe("demo workbench service", () => {
     }
     const stream = started.stream;
     const deltas: string[] = [];
-    await expect(async () => {
+    let streamError: unknown;
+    try {
       for await (const delta of stream) {
         deltas.push(delta);
       }
-    }).rejects.toThrow("assistant_stream_failed");
+    } catch (error) {
+      streamError = error;
+    }
 
     expect(deltas).toEqual([]);
+    expect(streamError).toBeInstanceOf(Error);
+    expect((streamError as Error).message).toBe("assistant_stream_failed");
+    expect((streamError as { code?: string }).code).toBe("provider_configuration_failed");
     expect(fetchCalls).toHaveLength(0);
     const events = await repositories.runEvents.listForTask("task_1");
     expect(events.find((event) => event.type === "model.fallback.not_configured")).toMatchObject({
@@ -4640,6 +4646,63 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("classifies pre-stream assistant provider configuration failures", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const fakeFetch: ModelFetch = async (input, init) => {
+      fetchCalls.push({ input, init });
+      throw new Error("fetch_should_not_run_for_invalid_route");
+    };
+    const service = new DemoWorkbenchService({
+      repositories,
+      env: { REAL_MODEL_RUNTIME: "1" },
+      modelFetch: fakeFetch,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Disabled Provider" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "assistant",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+    await repositories.modelProviders.save({
+      ...provider,
+      enabled: false,
+      updatedAt: "2026-05-12T08:10:00.000Z"
+    });
+
+    await expect(
+      service.runAssistantChatStream({
+        projectId: project.id,
+        taskId: "task_1",
+        prompt: "Hello"
+      })
+    ).resolves.toEqual({
+      ok: false,
+      error: "provider_configuration_failed"
+    });
+    expect(fetchCalls).toHaveLength(0);
   });
 
   it("returns safe assistant chat failure without raw provider details", async () => {
