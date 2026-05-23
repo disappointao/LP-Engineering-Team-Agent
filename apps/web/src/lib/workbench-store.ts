@@ -889,7 +889,24 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     );
     const activeWorkerCount =
       pageState.workerQueue.counts.queued + pageState.workerQueue.counts.running;
-    return !runningRun && activeWorkerCount === 0;
+    if (runningRun || activeWorkerCount > 0) {
+      return false;
+    }
+
+    if (pageState.task.type === "lp_generation") {
+      const currentPageVersion = pageState.snapshot?.currentPageVersion;
+      if (!currentPageVersion) {
+        return true;
+      }
+      if (currentPageVersion.reviewStatus === "pending") {
+        return false;
+      }
+      if (currentPageVersion.reviewStatus === "passed" && !pageState.snapshot?.deployment) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   function buildLiveTaskStateVersion(pageState: TaskReadyPageState): string {
@@ -899,6 +916,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       pageState.runEvents.at(-1)?.id ?? "no-event",
       pageState.snapshot?.currentPageVersion?.id ?? "no-page",
       pageState.artifactDiff?.artifactWorkspaceId ?? "no-workspace",
+      pageState.snapshot?.deployment?.id ?? "no-deployment",
       String(pageState.workerQueue.counts.queued),
       String(pageState.workerQueue.counts.running)
     ];

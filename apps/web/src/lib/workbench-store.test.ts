@@ -1110,6 +1110,155 @@ describe("web workbench store", () => {
       expect(JSON.stringify(live.value)).not.toContain("window.lpAgent");
     });
 
+    it("keeps passed LP review live until the deployment handoff is created", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const createdAt = "2026-05-20T00:00:00.000Z";
+      const projectId = "project_1";
+      const taskId = "task_1";
+      const briefId = "brief_1";
+      const pageVersionId = "version_1";
+      const workspaceId = "artifact_workspace_1";
+      const artifacts: StaticArtifacts = {
+        indexHtml:
+          '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body><main><h1>Spring</h1></main><script src="script.js"></script></body></html>',
+        stylesCss: "body { color: #111827; }",
+        scriptJs: "window.lpAgent = true;"
+      };
+
+      await repositories.projects.save({
+        id: projectId,
+        name: "Review Gap Project",
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: taskId,
+        title: "Create a review gap LP",
+        type: "lp_generation",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.messages.save({
+        id: "message_1",
+        taskId,
+        role: "user",
+        content: "Create a review gap LP",
+        createdAt
+      });
+      await repositories.briefs.save({
+        id: briefId,
+        projectId,
+        prompt: "Create a review gap LP",
+        brief: sampleBrief,
+        createdAt
+      });
+      await repositories.artifactWorkspaces.save({
+        id: workspaceId,
+        projectId,
+        pageVersionId,
+        runId: "run_builder_1",
+        kind: "static_lp",
+        state: "active",
+        createdAt,
+        updatedAt: createdAt
+      });
+      for (const file of createStaticArtifactWorkspaceFiles({
+        workspaceId,
+        projectId,
+        pageVersionId,
+        artifacts,
+        createdAt
+      })) {
+        await repositories.artifactWorkspaceFiles.save(file);
+      }
+      await repositories.pageVersions.save({
+        id: pageVersionId,
+        projectId,
+        briefId,
+        artifactWorkspaceId: workspaceId,
+        artifacts,
+        reviewStatus: "passed",
+        findings: [],
+        createdAt
+      });
+      await repositories.taskSnapshots.save({
+        taskId,
+        projectId,
+        briefId,
+        pageVersionId,
+        createdAt
+      });
+
+      const roles = ["planner", "builder", "reviewer"] as const;
+      for (const [index, role] of roles.entries()) {
+        const runId = `run_${role}_1`;
+        await repositories.runs.save({
+          id: runId,
+          projectId,
+          taskId,
+          role,
+          state: "completed",
+          startedAt: `2026-05-20T00:00:0${index}.000Z`,
+          completedAt: `2026-05-20T00:00:0${index}.500Z`,
+          contextSummary: {
+            injected: [],
+            omitted: []
+          }
+        });
+        await repositories.runEvents.save({
+          id: `event_${role}_completed`,
+          runId,
+          projectId,
+          taskId,
+          sequence: 1,
+          type: "run.completed",
+          message: `${role} run completed`,
+          payload: {
+            type: "run.completed",
+            runId,
+            role,
+            state: "completed"
+          },
+          createdAt: `2026-05-20T00:00:0${index}.500Z`
+        });
+      }
+      await repositories.agentHandoffs.save({
+        id: "handoff_reviewer_deployer",
+        projectId,
+        taskId,
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "ready",
+        summary: "Reviewer passed page version",
+        artifactRefs: {
+          pageVersionId
+        },
+        createdAt,
+        updatedAt: createdAt
+      });
+
+      const live = await store.getLiveTaskState({
+        taskId,
+        projectId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(live.value.runs.map((run) => run.role)).toEqual([
+        "planner",
+        "builder",
+        "reviewer"
+      ]);
+      expect(live.value.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
+      expect(live.value.snapshot?.deployment).toBeUndefined();
+      expect(live.value.isTerminal).toBe(false);
+      expect(live.value.nextPollMs).toBe(1200);
+    });
+
     it("fails closed when the requested project does not own the task", async () => {
       const store = createWebWorkbenchStore();
       const first = await store.submitTaskPrompt({
