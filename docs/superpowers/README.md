@@ -446,6 +446,10 @@
    - Stage 41 Web Surface Pruning and V1 Navigation v0 implementation plan（已实现，当前已完成）。
    - 在 V1 polished alpha design、Stage 40 feedback intake plan 和当前 roadmap 后阅读，用于审计已隐藏的 MCP tab/sidebar/top-level Web 入口、旧 `view=mcp` 安全降级，以及 V1 acceptance / browser boundary tests 更新。
 
+111. `specs/2026-05-23-dedicated-artifact-workspace-design.md`
+   - Stage 42 Dedicated Artifact Workspace v0 design（已批准，当前推荐实施）。
+   - 在 Stage 41 implementation plan 和当前 roadmap 后阅读，用于理解 `view=artifacts` dedicated artifact workspace、file manifest、bounded snippet、preview/export、安全失败状态和 no-refresh task state refresh 边界。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

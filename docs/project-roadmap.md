@@ -667,6 +667,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 不把完整 artifact 内容放入默认 timeline、chat message 或 model context。
 - 不改变 artifact policy 或 export contract。
 
+**设计：** `docs/superpowers/specs/2026-05-23-dedicated-artifact-workspace-design.md`。
+
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
 **状态：** Stage 42 后推荐。
@@ -838,6 +840,7 @@ Stage 46 是第一版收口阶段，不新增大功能。它运行完整 determi
 
 ## 决策记录
 
+- 2026-05-23 Stage 42 设计已批准：Dedicated Artifact Workspace v0 采用现有 `HomePage` 内的 `view=artifacts`，新增 V1 顶层 Artifacts 入口，复用当前 task/project session、artifact diff、bounded snippet、preview/export 和 live task refresh 边界；不新建独立 route，不改变 artifact policy/export contract。
 - 2026-05-23 Stage 41 已完成 Web Surface Pruning and V1 Navigation v0：V1 Web navigation 不再展示 MCP，旧 `/?view=mcp` 安全降级到 workbench 且不展示 connector、tool approval 或 execution form；默认下一路由为 Stage 42 Dedicated Artifact Workspace v0。
 - 2026-05-23 Stage 40 已完成 Alpha Feedback Intake and Triage Loop v0：内部 RC 反馈现在通过 `docs/alpha-feedback-intake.md` 和 `docs/alpha-feedback-log.md` 记录 safe evidence、分类、优先级、accepted follow-ups 和 rejected/out-of-scope items；默认下一路由为 Stage 41 Web Surface Pruning and V1 Navigation v0。
 - 2026-05-23 用户将第一版 Web 口径调整为 V1 polished alpha：Stage 40 保留 feedback intake，Stage 41-46 规划到完整第一版结束；MCP management 和 MCP tab / sidebar / top-level Web 入口从第一版可见 UI 中移除，后期再做。后端 MCP registry / read-only execution 边界保留，但不作为 V1 Web surface。
