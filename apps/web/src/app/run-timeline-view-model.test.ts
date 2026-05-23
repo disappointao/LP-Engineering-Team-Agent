@@ -42,6 +42,12 @@ function createPayload(
   };
 }
 
+function createRecoveryActions(
+  actions: string[]
+): LiveTaskStatePayload["runs"][number]["recoveryActions"] {
+  return actions as LiveTaskStatePayload["runs"][number]["recoveryActions"];
+}
+
 describe("buildRunTimelineViewModel", () => {
   it("keeps the fixed LP role order and marks missing roles pending", () => {
     const copy = getWorkbenchCopy("en");
@@ -72,6 +78,48 @@ describe("buildRunTimelineViewModel", () => {
     ]);
     expect(model.activeStep?.role).toBe("builder");
     expect(model.steps[0]?.stateLabel).toBe("Not started");
+  });
+
+  it("drops unknown recovery actions and groups known actions explicitly", () => {
+    const copy = getWorkbenchCopy("en");
+    const model = buildRunTimelineViewModel({
+      payload: createPayload({
+        runs: [
+          {
+            runId: "run_reviewer_actions",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "reviewer",
+            state: "blocked",
+            runRecordState: "needs_input",
+            startedAt: "2026-05-23T00:00:08.000Z",
+            recoveryActions: createRecoveryActions([
+              "retry_run",
+              "resume_worker_finalization",
+              "request_approval",
+              "resolve_blocker",
+              "inspect_manually",
+              "RAW_SECRET<script>"
+            ])
+          }
+        ],
+        recovery: { runs: [] }
+      }),
+      copy
+    });
+
+    const reviewer = model.steps.find((step) => step.role === "reviewer");
+
+    expect(reviewer?.executableActions.map((action) => action.label)).toEqual([
+      "Retry run",
+      "Resume finalization"
+    ]);
+    expect(reviewer?.guidanceActions.map((action) => action.label)).toEqual([
+      "Request approval",
+      "Resolve blocker",
+      "Inspect manually"
+    ]);
+    expect(JSON.stringify(model)).not.toContain("RAW_SECRET");
   });
 
   it("derives repair, retry, handoff, diagnostics, and action groups safely", () => {
@@ -105,7 +153,13 @@ describe("buildRunTimelineViewModel", () => {
               source: "handoff",
               errorName: "RAW_SECRET"
             },
-            recoveryActions: ["resolve_blocker", "inspect_manually"]
+            recoveryActions: createRecoveryActions([
+              "resolve_blocker",
+              "inspect_manually",
+              "retry_run",
+              "resume_worker_finalization",
+              "RAW_SECRET<script>"
+            ])
           }
         ],
         runEvents: [
@@ -126,6 +180,15 @@ describe("buildRunTimelineViewModel", () => {
             type: "model.retry.exhausted",
             createdAt: "2026-05-23T00:00:03.000Z",
             payload: { type: "model.retry.exhausted" }
+          },
+          {
+            id: "event_repair_duplicate",
+            projectId: "project_1",
+            taskId: "task_1",
+            runId: "run_planner_1_retry_1",
+            type: "model.output.repaired",
+            createdAt: "2026-05-23T00:00:05.000Z",
+            payload: { type: "model.output.repaired" }
           },
           {
             id: "event_handoff",
@@ -158,7 +221,13 @@ describe("buildRunTimelineViewModel", () => {
                 source: "handoff",
                 errorName: "RAW_SECRET"
               },
-              recoveryActions: ["resolve_blocker", "inspect_manually"]
+              recoveryActions: createRecoveryActions([
+                "resolve_blocker",
+                "inspect_manually",
+                "retry_run",
+                "resume_worker_finalization",
+                "RAW_SECRET<script>"
+              ])
             }
           ]
         }
@@ -171,8 +240,8 @@ describe("buildRunTimelineViewModel", () => {
 
     expect(planner?.markers.map((marker) => marker.label)).toEqual([
       "Retry attempt",
-      "Repaired",
-      "Retry exhausted"
+      "Retry exhausted",
+      "Repaired"
     ]);
     expect(reviewer).toMatchObject({
       status: "attention",
@@ -184,7 +253,81 @@ describe("buildRunTimelineViewModel", () => {
       "Resolve blocker",
       "Inspect manually"
     ]);
+    expect(reviewer?.executableActions.map((action) => action.label)).toEqual([
+      "Retry run",
+      "Resume finalization"
+    ]);
     expect(JSON.stringify(model)).not.toContain("RAW_SECRET");
+  });
+
+  it("selects the latest role run without depending on payload order", () => {
+    const copy = getWorkbenchCopy("en");
+    const model = buildRunTimelineViewModel({
+      payload: createPayload({
+        runs: [
+          {
+            runId: "run_builder_latest",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "builder",
+            state: "running",
+            runRecordState: "running",
+            startedAt: "2026-05-23T00:00:10.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_builder_older",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "builder",
+            state: "completed",
+            runRecordState: "completed",
+            startedAt: "2026-05-23T00:00:00.000Z",
+            completedAt: "2026-05-23T00:00:05.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_deployer_z",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "deployer",
+            state: "completed",
+            runRecordState: "completed",
+            startedAt: "2026-05-23T00:00:20.000Z",
+            completedAt: "2026-05-23T00:00:30.000Z",
+            recoveryActions: []
+          },
+          {
+            runId: "run_deployer_a",
+            projectId: "project_1",
+            taskId: "task_1",
+            role: "deployer",
+            state: "failed",
+            runRecordState: "failed",
+            startedAt: "2026-05-23T00:00:20.000Z",
+            completedAt: "2026-05-23T00:00:30.000Z",
+            recoveryActions: []
+          }
+        ],
+        recovery: { runs: [] }
+      }),
+      copy
+    });
+
+    const builder = model.steps.find((step) => step.role === "builder");
+    const deployer = model.steps.find((step) => step.role === "deployer");
+
+    expect(builder).toMatchObject({
+      runId: "run_builder_latest",
+      state: "running",
+      status: "active"
+    });
+    expect(deployer).toMatchObject({
+      runId: "run_deployer_z",
+      state: "completed",
+      status: "complete"
+    });
+    expect(model.activeStep?.runId).toBe("run_builder_latest");
   });
 
   it("surfaces only safe unknown latest event labels", () => {

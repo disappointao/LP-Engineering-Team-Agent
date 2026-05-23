@@ -6,6 +6,7 @@ const activeStates = new Set(["queued", "running", "waiting_for_approval", "canc
 const attentionStates = new Set(["blocked", "failed"]);
 const stoppedStates = new Set(["cancelled"]);
 const executableActions = new Set(["resume_worker_finalization", "retry_run"]);
+const guidanceActions = new Set(["request_approval", "resolve_blocker", "inspect_manually"]);
 const safeUnknownEventTypePattern = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 const markerByEventType = {
@@ -83,7 +84,10 @@ export function buildRunTimelineViewModel({
   const latestRunByRole = new Map<RunTimelineRole, LiveTaskStatePayload["runs"][number]>();
   for (const run of payload.runs) {
     if (isTimelineRole(run.role)) {
-      latestRunByRole.set(run.role, run);
+      const existing = latestRunByRole.get(run.role);
+      if (!existing || compareRunsByTimeline(run, existing) > 0) {
+        latestRunByRole.set(run.role, run);
+      }
     }
   }
 
@@ -135,12 +139,12 @@ export function buildRunTimelineViewModel({
       executableActions: buildActions({
         actions: effectiveRun.recoveryActions,
         labels: copy.chat.recoveryActionLabels,
-        includeExecutable: true
+        allowedActions: executableActions
       }),
       guidanceActions: buildActions({
         actions: effectiveRun.recoveryActions,
         labels: copy.chat.recoveryGuidanceLabels,
-        includeExecutable: false
+        allowedActions: guidanceActions
       })
     } satisfies RunTimelineStepView;
   });
@@ -155,6 +159,17 @@ export function buildRunTimelineViewModel({
 
 function isTimelineRole(role: string): role is RunTimelineRole {
   return lpRunTimelineRoles.includes(role as RunTimelineRole);
+}
+
+function compareRunsByTimeline(
+  left: LiveTaskStatePayload["runs"][number],
+  right: LiveTaskStatePayload["runs"][number]
+): number {
+  return (
+    left.startedAt.localeCompare(right.startedAt) ||
+    (left.completedAt ?? "").localeCompare(right.completedAt ?? "") ||
+    left.runId.localeCompare(right.runId)
+  );
 }
 
 function classifyStatus(state: Exclude<RunTimelineStepState, "pending">): RunTimelineStepStatus {
@@ -187,7 +202,9 @@ function buildMarkers({
     });
   }
 
-  for (const event of events.filter((candidate) => candidate.runId === runId)) {
+  for (const event of events
+    .filter((candidate) => candidate.runId === runId)
+    .sort(compareRunEventsByTimeline)) {
     const kind = markerByEventType[event.type as keyof typeof markerByEventType];
     if (kind) {
       markers.push({ kind, label: copy.chat.runTimelineMarkerLabels[kind] });
@@ -215,7 +232,7 @@ function getLastEventLabel({
 }): string | undefined {
   const latest = [...events]
     .filter((event) => event.runId === runId)
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .sort(compareRunEventsByTimeline)
     .at(-1);
   if (!latest) {
     return undefined;
@@ -229,17 +246,25 @@ function getLastEventLabel({
 
 function buildActions({
   actions,
-  includeExecutable,
+  allowedActions,
   labels
 }: {
   actions: string[];
-  includeExecutable: boolean;
+  allowedActions: ReadonlySet<string>;
   labels: Partial<Record<string, string>>;
 }): RunTimelineActionView[] {
-  return actions
-    .filter((action) => executableActions.has(action) === includeExecutable)
-    .map((action) => ({
-      action,
-      label: labels[action] ?? action
-    }));
+  return actions.flatMap((action) => {
+    if (!allowedActions.has(action)) {
+      return [];
+    }
+    const label = labels[action];
+    return label ? [{ action, label }] : [];
+  });
+}
+
+function compareRunEventsByTimeline(
+  left: LiveTaskStatePayload["runEvents"][number],
+  right: LiveTaskStatePayload["runEvents"][number]
+): number {
+  return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
 }
