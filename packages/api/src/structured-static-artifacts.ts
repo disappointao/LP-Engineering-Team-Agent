@@ -77,6 +77,16 @@ const CSS_FRAMEWORK_HREFS: RegExp[] = [
   /(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/uikit(?:@|\/)|\/uikit(?:\.min)?\.css(?:[?#]|$)|\/uikit@[\w.-]+\//i
 ];
 
+const STATIC_ARTIFACT_QUALITY_GUIDE = [
+  "Use semantic HTML structure such as header, main, section, and footer.",
+  "Make the hero immediately scannable with a specific headline, supporting copy, primary CTA, and offer or value signal.",
+  "Write mobile-first responsive CSS with stable spacing, readable line-height, no text overflow, and desktop media-query enhancements.",
+  "Provide visible focus styles plus hover or active states for interactive elements.",
+  "Give every meaningful image alt text.",
+  "Keep all behavior in local script.js and do not use inline event handler attributes such as onclick.",
+  "If no images are available, rely on strong structure, typography, cards, and copy instead of unsafe external assets."
+];
+
 export function createStructuredStaticArtifactsBuilderPrompt(brief: LPBrief): string {
   return [
     "You are the Builder for an LP Engineering Team Agent.",
@@ -93,6 +103,9 @@ export function createStructuredStaticArtifactsBuilderPrompt(brief: LPBrief): st
     "External images are allowed.",
     "External font CSS and non-framework brand/material CSS are allowed.",
     "External JavaScript, javascript: URLs, inline event handler attributes, and CSS frameworks are forbidden.",
+    "",
+    "Static artifact quality guidance:",
+    ...STATIC_ARTIFACT_QUALITY_GUIDE,
     "Use the LP brief JSON below as the source of truth for page content, sections, CTA, products, SEO, and tone.",
     "",
     "LPBrief JSON:",
@@ -122,6 +135,9 @@ export function createStructuredStaticArtifactsRepairPrompt(
     "Do not include prose before or after the JSON.",
     "Build Framework-free static HTML/CSS/JS only.",
     "External JavaScript, javascript: URLs, inline event handler attributes, and CSS frameworks are forbidden.",
+    "",
+    "Static artifact quality guidance:",
+    ...STATIC_ARTIFACT_QUALITY_GUIDE,
     "",
     "Failure summary:",
     `- reason: ${input.failure.reason}`,

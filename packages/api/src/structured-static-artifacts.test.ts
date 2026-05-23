@@ -19,6 +19,20 @@ describe("structured static artifact model output", () => {
     expect(prompt).toContain("scriptJs");
     expect(prompt).toContain("Framework-free static HTML/CSS/JS");
     expect(prompt).toContain("Do not include React, Vue, Angular, Svelte");
+    expect(prompt).toContain("Static artifact quality guidance:");
+    expect(prompt).toContain(
+      "Use semantic HTML structure such as header, main, section, and footer."
+    );
+    expect(prompt).toContain(
+      "Make the hero immediately scannable with a specific headline, supporting copy, primary CTA, and offer or value signal."
+    );
+    expect(prompt).toContain(
+      "Write mobile-first responsive CSS with stable spacing, readable line-height, no text overflow, and desktop media-query enhancements."
+    );
+    expect(prompt).toContain(
+      "Provide visible focus styles plus hover or active states for interactive elements."
+    );
+    expect(prompt).toContain("Give every meaningful image alt text.");
     expect(prompt).toContain(sampleBrief.title);
   });
 
@@ -39,6 +53,13 @@ describe("structured static artifact model output", () => {
     expect(prompt).toContain("stylesCss");
     expect(prompt).toContain("scriptJs");
     expect(prompt).toContain("external_script_blocked");
+    expect(prompt).toContain("Static artifact quality guidance:");
+    expect(prompt).toContain(
+      "Keep all behavior in local script.js and do not use inline event handler attributes such as onclick."
+    );
+    expect(prompt).toContain(
+      "If no images are available, rely on strong structure, typography, cards, and copy instead of unsafe external assets."
+    );
     expect(prompt).toContain(sampleBrief.title);
     expect(prompt).not.toContain("RAW_STATIC_ARTIFACT_SECRET");
     expect(prompt).not.toContain("<script src=\"https://");
