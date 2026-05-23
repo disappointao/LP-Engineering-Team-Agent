@@ -2,7 +2,7 @@
 
 这份日志记录内部 V1 polished alpha feedback batch。所有条目必须遵守 `docs/alpha-feedback-intake.md` 的 safe evidence 规则。
 
-不要在本文件保存 secret、raw provider response、完整 artifact 内容、本机绝对路径、raw worker payload、raw tool output、raw stdout/stderr 或不可脱敏日志。
+`docs/alpha-feedback-intake.md` 的 Not allowed list 是本文件的权威安全边界。不要在本文件保存 secret/API key/env value、raw provider response、raw SSE frame、full artifact content、local absolute paths、raw worker payload、raw worker output、raw tool payload、raw tool output、raw stdout/stderr、private customer data 或 unsafe logs。
 
 ## Status Legend
 
@@ -33,6 +33,9 @@
 - Category: `ux_friction`
 - Severity: `high`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: V1 scope and routing are explicit in roadmap/spec.
+- Actual: planning item routed to Stage 40-46 V1 polished alpha completion scope.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
@@ -50,6 +53,9 @@
 - Category: `docs_gap`
 - Severity: `medium`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: feedback intake and log routing are explicit before Web polish work.
+- Actual: planning item routed to Stage 40 feedback intake/log process.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
@@ -66,6 +72,9 @@
 - Category: `future_feature`
 - Severity: `high`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: MCP Web surface routing is explicit as hidden from V1 Web and moved to backlog where applicable.
+- Actual: planning item routed to Stage 41 and backlog.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
@@ -82,6 +91,9 @@
 - Category: `artifact_quality_issue`
 - Severity: `high`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: dedicated artifact workspace routing is explicit in V1 polished alpha roadmap/spec.
+- Actual: planning item routed to Stage 42.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
@@ -98,6 +110,9 @@
 - Category: `ux_friction`
 - Severity: `high`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: run timeline, progress, handoff, and recovery polish routing are explicit before V1 completion.
+- Actual: planning item routed to Stage 43.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
@@ -114,6 +129,9 @@
 - Category: `ux_friction`
 - Severity: `medium`
 - Status: `routed`
+- Steps: not applicable; planning decision captured from roadmap discussion.
+- Expected: Skills and Models management routing is explicit while MCP management remains later.
+- Actual: planning item routed to Stage 44.
 - Environment:
   - Commit: `a446fad`
   - Date: 2026-05-23
