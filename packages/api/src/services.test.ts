@@ -4476,6 +4476,52 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("Partial content");
   });
 
+  it("cancels stalled assistant streams without waiting for another provider event", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new StalledStreamingRuntime();
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    await saveStreamingAssistantRoute(repositories, project.id);
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    expect(started.cancelStream).toEqual(expect.any(Function));
+    const iterator = started.stream[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: "Partial " });
+    started.cancelStream?.();
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+
+    const runs = await repositories.runs.listForTask("task_1");
+    expect(runs).toEqual([
+      expect.objectContaining({
+        id: "run_assistant_1",
+        state: "cancelled"
+      })
+    ]);
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.map((event) => event.type)).toEqual(["run.cancelled"]);
+    expect(JSON.stringify(events)).not.toContain("Partial ");
+  });
+
   it("classifies interrupted assistant streams without persisting token chunks as facts", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new FailingStreamingRuntime(["Partial "], {
@@ -7379,6 +7425,21 @@ class StreamingRuntime implements AgentRuntimeAdapter {
         ]
       }
     };
+  }
+}
+
+class StalledStreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+  private readonly stalled = new Promise<void>(() => undefined);
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(request);
+    yield { type: "model.delta", text: "Partial " };
+    await this.stalled;
   }
 }
 

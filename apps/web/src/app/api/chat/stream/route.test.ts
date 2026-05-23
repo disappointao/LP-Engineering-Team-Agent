@@ -757,6 +757,58 @@ describe("POST /api/chat/stream", () => {
     });
   });
 
+  it("abandons a stalled provider stream immediately after client cancellation", async () => {
+    const cancelAssistantStream = vi.fn();
+    const never = new Promise<void>(() => undefined);
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "",
+      chunks: [],
+      assistantStream: (async function* () {
+        yield "Partial ";
+        await never;
+        yield "content";
+      })(),
+      cancelAssistantStream,
+      contextSummary: deterministicContextSummary
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    if (!reader) {
+      return;
+    }
+
+    const initialText = await readEventTextUntil(reader, 4);
+    expect(decodeChatStreamLines(initialText).events.map((event) => event.type)).toEqual([
+      "task.created",
+      "context.summary",
+      "run.status",
+      "assistant.delta"
+    ]);
+
+    await reader.cancel();
+    await vi.waitFor(() => {
+      expect(cancelAssistantStream).toHaveBeenCalledOnce();
+      expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+        taskId: "task_1",
+        messageId: "message_2"
+      });
+    });
+    expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       outcome: "resolves",

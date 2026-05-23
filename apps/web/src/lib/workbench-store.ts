@@ -384,6 +384,7 @@ export type StreamingChatStartResult =
       assistantMessageId: string;
       assistantContent: string;
       assistantStream?: AsyncIterable<string>;
+      cancelAssistantStream?: () => void;
       contextSummary: StreamingChatContextSummary;
       chunks: string[];
     }
@@ -1431,6 +1432,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       let streamTaskId = requestedTaskId;
       let assistantContent = "I created a task thread and can continue from here.";
       let assistantStream: AsyncIterable<string> | undefined;
+      let cancelAssistantStream: (() => void) | undefined;
       let contextSummary: StreamingChatContextSummary = {
         runtimeMode: "deterministic",
         skillCount: 0,
@@ -1465,6 +1467,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         if (assistant.stream) {
           assistantContent = "";
           assistantStream = assistant.stream;
+          cancelAssistantStream = assistant.cancelStream;
         } else {
           assistantContent = assistant.content ?? "";
         }
@@ -1489,6 +1492,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         assistantMessageId: started.assistantMessage.id,
         assistantContent,
         ...(assistantStream ? { assistantStream } : {}),
+        ...(cancelAssistantStream ? { cancelAssistantStream } : {}),
         contextSummary,
         chunks: assistantStream ? [] : chunkAssistantText(assistantContent, 12)
       };

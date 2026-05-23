@@ -69,7 +69,8 @@ import {
   type RuntimeEvent,
   type RuntimeRunContext,
   type RuntimeRunRequest,
-  type RuntimeRunResult
+  type RuntimeRunResult,
+  type RuntimeStreamEvent
 } from "@lp-agent/runtime-adapters";
 import {
   SkillManifestSchema,
@@ -462,6 +463,7 @@ export type RunAssistantChatStreamResult =
       runId: string;
       content?: string;
       stream?: AsyncIterable<string>;
+      cancelStream?: () => void;
       contextSummary: AssistantContextSummary;
     }
   | {
@@ -485,6 +487,11 @@ export class AssistantChatStreamError extends Error {
     this.name = "AssistantChatStreamError";
     this.code = code;
   }
+}
+
+interface AssistantStreamCancellation {
+  readonly cancelled: Promise<void>;
+  cancel(): void;
 }
 
 export type RuntimeEnvironment = Record<string, string | undefined>;
@@ -2411,16 +2418,19 @@ export class DemoWorkbenchService {
         },
         context: contextPack.runtimeContext
       };
+      const cancellation = createAssistantStreamCancellation();
       const stream = this.streamAssistantChatDeltas({
         runtimeRequest,
         contextTrace: contextPack.trace,
-        releaseRunId
+        releaseRunId,
+        cancellation
       });
       releaseRunId = undefined;
       return {
         ok: true,
         runId,
         stream,
+        cancelStream: cancellation.cancel,
         contextSummary
       };
     } catch {
@@ -2433,6 +2443,7 @@ export class DemoWorkbenchService {
     runtimeRequest: RuntimeRunRequest;
     contextTrace: { injected: string[]; omitted: string[] };
     releaseRunId?: () => void;
+    cancellation?: AssistantStreamCancellation;
   }): AsyncIterable<string> {
     const startedAt = nextRepositoryTimestamp(this.repositories, this.now);
     const startedRun: RunRecord = {
@@ -2452,11 +2463,31 @@ export class DemoWorkbenchService {
 
     try {
       await this.repositories.runs.save(startedRun);
-      for await (const event of this.assistantRuntime.stream!(input.runtimeRequest)) {
+      const runtimeStream = this.assistantRuntime.stream!(input.runtimeRequest);
+      const runtimeIterator = runtimeStream[Symbol.asyncIterator]();
+      for (;;) {
+        const read = await readAssistantRuntimeStreamEvent(runtimeIterator, input.cancellation);
+        if (read.type === "cancelled") {
+          if (runtimeIterator.return) {
+            void Promise.resolve(runtimeIterator.return()).catch(() => undefined);
+          }
+          terminalResult = createAssistantStreamCancelledResult(input.runtimeRequest);
+          await this.persistStreamingAssistantRun({
+            startedRun,
+            result: terminalResult
+          });
+          persistedTerminal = true;
+          return;
+        }
+        if (read.type === "done") {
+          break;
+        }
+        const event = read.event;
         if (event.type === "model.delta") {
           yield event.text;
         } else {
           terminalResult = event.result;
+          break;
         }
       }
       if (!terminalResult) {
@@ -4612,6 +4643,24 @@ function createAssistantChatGenerationFailure(
   };
 }
 
+function createAssistantStreamCancellation(): AssistantStreamCancellation {
+  let isCancelled = false;
+  let resolveCancelled!: () => void;
+  const cancelled = new Promise<void>((resolve) => {
+    resolveCancelled = resolve;
+  });
+  return {
+    cancelled,
+    cancel() {
+      if (isCancelled) {
+        return;
+      }
+      isCancelled = true;
+      resolveCancelled();
+    }
+  };
+}
+
 function createAssistantStreamFailedResult(
   request: RuntimeRunRequest,
   errorCode = "assistant_stream_failed"
@@ -4632,6 +4681,32 @@ function createAssistantStreamFailedResult(
       }
     ]
   };
+}
+
+async function readAssistantRuntimeStreamEvent(
+  iterator: AsyncIterator<RuntimeStreamEvent>,
+  cancellation: AssistantStreamCancellation | undefined
+): Promise<
+  | { type: "event"; event: RuntimeStreamEvent }
+  | { type: "done" }
+  | { type: "cancelled" }
+> {
+  if (!cancellation) {
+    const result = await iterator.next();
+    return result.done ? { type: "done" } : { type: "event", event: result.value };
+  }
+
+  const read = await Promise.race([
+    iterator.next().then((result) => ({ type: "next" as const, result })),
+    cancellation.cancelled.then(() => ({ type: "cancelled" as const }))
+  ]);
+  if (read.type === "cancelled") {
+    return { type: "cancelled" };
+  }
+  if (read.result.done) {
+    return { type: "done" };
+  }
+  return { type: "event", event: read.result.value };
 }
 
 function createAssistantStreamCancelledResult(request: RuntimeRunRequest): RuntimeRunResult {

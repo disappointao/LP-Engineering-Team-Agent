@@ -45,6 +45,7 @@ type ChatStreamEnqueue = (event: ChatStreamEvent) => void;
 
 type ChatStreamProducerState = {
   isClosed: () => boolean;
+  cancelled: Promise<void>;
 };
 
 type StartedStreamingChatPrompt = Extract<
@@ -60,6 +61,10 @@ function createEventStream(
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let closed = false;
+  let resolveCancelled!: () => void;
+  const cancelled = new Promise<void>((resolve) => {
+    resolveCancelled = resolve;
+  });
   return new ReadableStream({
     start(controller) {
       const enqueue: ChatStreamEnqueue = (event) => {
@@ -85,7 +90,7 @@ function createEventStream(
         }
       };
       void Promise.resolve()
-        .then(() => produceEvents(enqueue, { isClosed: () => closed }))
+        .then(() => produceEvents(enqueue, { isClosed: () => closed, cancelled }))
         .catch(() => {
           enqueue({
             type: "error",
@@ -99,6 +104,7 @@ function createEventStream(
     },
     cancel() {
       closed = true;
+      resolveCancelled();
     }
   });
 }
@@ -225,6 +231,41 @@ async function abandonStreamingPlaceholder(
   }
 }
 
+function cancelAssistantStream(
+  started: StartedStreamingChatPrompt,
+  iterator?: AsyncIterator<string>
+): void {
+  try {
+    started.cancelAssistantStream?.();
+  } catch {
+    // Cancellation cleanup is best-effort.
+  }
+  if (iterator?.return) {
+    void Promise.resolve(iterator.return()).catch(() => undefined);
+  }
+}
+
+async function readAssistantStreamDelta(
+  iterator: AsyncIterator<string>,
+  state: ChatStreamProducerState
+): Promise<
+  | { type: "delta"; delta: string }
+  | { type: "done" }
+  | { type: "cancelled" }
+> {
+  const next = await Promise.race([
+    iterator.next().then((result) => ({ type: "next" as const, result })),
+    state.cancelled.then(() => ({ type: "cancelled" as const }))
+  ]);
+  if (next.type === "cancelled") {
+    return { type: "cancelled" };
+  }
+  if (next.result.done) {
+    return { type: "done" };
+  }
+  return { type: "delta", delta: next.result.value };
+}
+
 function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {
   return Object.prototype.hasOwnProperty.call(payload, field);
 }
@@ -343,7 +384,18 @@ export async function POST(request: Request): Promise<Response> {
     let assistantContent = started.assistantStream ? "" : started.assistantContent;
     try {
       if (started.assistantStream) {
-        for await (const delta of started.assistantStream) {
+        const iterator = started.assistantStream[Symbol.asyncIterator]();
+        for (;;) {
+          const read = await readAssistantStreamDelta(iterator, streamState);
+          if (read.type === "cancelled") {
+            cancelAssistantStream(started, iterator);
+            await abandonStreamingPlaceholder(store, started);
+            return;
+          }
+          if (read.type === "done") {
+            break;
+          }
+          const delta = read.delta;
           assistantContent += delta;
           enqueue({
             type: "assistant.delta",
@@ -352,6 +404,7 @@ export async function POST(request: Request): Promise<Response> {
             delta
           });
           if (streamState.isClosed()) {
+            cancelAssistantStream(started, iterator);
             await abandonStreamingPlaceholder(store, started);
             return;
           }
