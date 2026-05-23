@@ -54,6 +54,7 @@
    - 打开 preview/export。
    - 分别查看三个文件的 bounded snippet。
    - 确认 UI 不展示完整 artifact 内容作为默认 diff。
+   - Artifact workspace: after LP generation, open `Artifacts`, inspect the three-file manifest, preview snippets, check static preview, and verify single HTML export is available.
    - 如本次试用关注 LP 输出质量，按 `docs/lp-artifact-quality.md` 选择 2-4 个 fixtures 做人工 rubric 记录。
 7. Skills 主路径：
    - 创建 project-scoped Skill draft。
@@ -155,8 +156,8 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 
 - Stage 40（已完成）：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
 - Stage 41（已完成）：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
-- Stage 42（当前推荐）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
-- Stage 43：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
+- Stage 42（已完成）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
+- Stage 43（当前推荐）：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
 - Stage 44：Skills / Models client-side management，继续排除 MCP management。
 - Stage 45：Browser failure injection 和轻量视觉回归扩展。
 - Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。

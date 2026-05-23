@@ -66,6 +66,14 @@
 - [ ] 点击 `script.js` 的 `Preview snippet`，确认 UI 展示 bounded read-only source snippet。实现细节：这会选择 `artifactPath=script.js`。
 - [ ] 未知 artifact path 应 graceful failure，不破坏任务页面。
 
+### Dedicated Artifact Workspace
+
+- Open the `Artifacts` navigation item after an LP task completes.
+- Confirm the workspace shows `index.html`, `styles.css`, and `script.js` with bounded metadata.
+- Preview snippets for each file; oversized or invalid paths must show safe unavailable copy.
+- Confirm static preview and export links are visible.
+- Confirm invalid `artifactPath` values do not echo query secrets, local paths, or traversal strings.
+
 ## Skill-only alpha 主路径
 
 - [ ] 点击 sidebar 中的 `Skills`，确认 view 能打开。

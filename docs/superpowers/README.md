@@ -447,11 +447,11 @@
    - 在 V1 polished alpha design、Stage 40 feedback intake plan 和当前 roadmap 后阅读，用于审计已隐藏的 MCP tab/sidebar/top-level Web 入口、旧 `view=mcp` 安全降级，以及 V1 acceptance / browser boundary tests 更新。
 
 111. `specs/2026-05-23-dedicated-artifact-workspace-design.md`
-   - Stage 42 Dedicated Artifact Workspace v0 design（已批准，当前推荐实施）。
+   - Stage 42 Dedicated Artifact Workspace v0 design（已批准，已实现）。
    - 在 Stage 41 implementation plan 和当前 roadmap 后阅读，用于理解 `view=artifacts` dedicated artifact workspace、file manifest、bounded snippet、preview/export、安全失败状态和 no-refresh task state refresh 边界。
 
 112. `plans/2026-05-23-dedicated-artifact-workspace.md`
-   - Stage 42 Dedicated Artifact Workspace v0 implementation plan（当前实施依据）。
+   - Stage 42 Dedicated Artifact Workspace v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 42 design 后阅读，用于按 TDD 实现 `view=artifacts` navigation、dedicated artifact workspace UI、browser acceptance、manual acceptance docs 和 roadmap closeout。
 
 ## 维护规则

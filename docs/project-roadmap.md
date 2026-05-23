@@ -60,9 +60,8 @@
 
 按当前代码基础，面向本地/单用户 **V1 polished alpha**，粗略估算还需要 **7-14 个有效开发日**。如果把内部 RC 反馈、阻塞修复和最终 completion gate 都算入，粗略估算 **10-18 个有效开发日**；实际范围由后续 feedback batch 的 blocker 数量决定。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
 
-- Dedicated artifact workspace。
 - Run timeline / handoff / recovery UX polish。
 - Skills / Models client-side management。
 - Browser failure injection 和轻量视觉回归扩展。
@@ -649,9 +648,17 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 42：Dedicated Artifact Workspace v0
 
-**状态：** 当前推荐。
+**状态：** 已实现。
 
 **为什么现在做：** LP artifact 已有 durable workspace、preview/export 和 bounded snippet，但第一版 polished alpha 需要把 artifact 从局部 panel 提升为独立工作区，让用户能可靠查看文件、预览、导出和理解失败状态。
+
+已实现范围：
+
+- V1 顶层 navigation 新增 `Artifacts`，使用 `view=artifacts` 复用当前 project/task session。
+- Dedicated artifact workspace 展示三文件 manifest、state、size、short hash、summary、bounded snippet、static preview 和 export links。
+- artifact snippet links 保留 `view=artifacts`，legacy `view=mcp` 继续安全降级并不被 artifact links 保留。
+- Unknown path、path traversal、missing workspace/diff 和 snippet unavailable 显示安全失败状态，不回显危险 query。
+- Browser acceptance 已覆盖 artifact workspace happy path 和 unsafe artifact path。
 
 **建议范围：**
 
@@ -669,11 +676,11 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **设计：** `docs/superpowers/specs/2026-05-23-dedicated-artifact-workspace-design.md`。
 
-**当前实施计划：** `docs/superpowers/plans/2026-05-23-dedicated-artifact-workspace.md`。
+**实施计划：** `docs/superpowers/plans/2026-05-23-dedicated-artifact-workspace.md`。
 
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
-**状态：** Stage 42 后推荐。
+**状态：** 当前推荐。
 
 **为什么现在做：** Stage 29 已有 no-refresh live task panel，Stage 25 已有 inline recovery block；V1 polished alpha 需要更清楚的 run lifecycle、handoff、recovery 和 failure hierarchy，让 LP 复杂任务看起来像一个可跟踪的工程流程，而不是一组压缩状态。
 
@@ -842,6 +849,7 @@ Stage 46 是第一版收口阶段，不新增大功能。它运行完整 determi
 
 ## 决策记录
 
+- 2026-05-23 Stage 42 已完成 Dedicated Artifact Workspace v0：V1 Web navigation 新增 `Artifacts`，`view=artifacts` 展示当前 LP task 的三文件 manifest、bounded snippet、preview、export 和安全失败状态；默认下一路由为 Stage 43 Run Timeline and Recovery UX Polish v0。
 - 2026-05-23 Stage 42 设计已批准：Dedicated Artifact Workspace v0 采用现有 `HomePage` 内的 `view=artifacts`，新增 V1 顶层 Artifacts 入口，复用当前 task/project session、artifact diff、bounded snippet、preview/export 和 live task refresh 边界；不新建独立 route，不改变 artifact policy/export contract。
 - 2026-05-23 Stage 41 已完成 Web Surface Pruning and V1 Navigation v0：V1 Web navigation 不再展示 MCP，旧 `/?view=mcp` 安全降级到 workbench 且不展示 connector、tool approval 或 execution form；默认下一路由为 Stage 42 Dedicated Artifact Workspace v0。
 - 2026-05-23 Stage 40 已完成 Alpha Feedback Intake and Triage Loop v0：内部 RC 反馈现在通过 `docs/alpha-feedback-intake.md` 和 `docs/alpha-feedback-log.md` 记录 safe evidence、分类、优先级、accepted follow-ups 和 rejected/out-of-scope items；默认下一路由为 Stage 41 Web Surface Pruning and V1 Navigation v0。
