@@ -75,7 +75,7 @@
 
 ## Feedback Template
 
-提交反馈时使用下面格式。不要附带 secret、raw provider response、完整 artifact 内容、本机绝对路径、raw worker payload 或 raw tool output。
+提交反馈时使用下面格式，并遵守 `docs/alpha-feedback-intake.md` 的完整 Not allowed 规则。不要附带 secret、API key、env value、raw provider response、raw SSE frame、完整 artifact 内容、本机绝对路径、raw worker payload/output、raw tool payload/output、raw stdout/stderr、private customer data 或不可脱敏日志。
 
 ```markdown
 ### Summary
@@ -122,14 +122,14 @@ blocker | high | medium | low
 
 ### Suggested Routing
 
-Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | backlog | needs immediate fix
+Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | backlog | needs_immediate_fix
 ```
 
 ## Triage Categories
 
 | Category | Definition | Examples | Default routing |
 | --- | --- | --- | --- |
-| `blocking_bug` | RC 主路径无法完成，或安全边界被破坏。 | 普通聊天无法完成；LP task 不生成 artifact；secret/raw provider response 出现在 UI。 | `needs immediate fix`，必要时暂停 RC。 |
+| `blocking_bug` | RC 主路径无法完成，或安全边界被破坏。 | 普通聊天无法完成；LP task 不生成 artifact；secret/raw provider response 出现在 UI。 | `needs_immediate_fix`，必要时暂停 RC。 |
 | `ux_friction` | 功能可完成，但交互、文案、状态或视觉层级让试用者误解。 | 用户不知道任务还在跑；失败文案无法区分 provider 配置和 stream 中断。 | Stage 41-45，按页面或流程归类。 |
 | `provider_config_issue` | 真实 provider opt-in 配置或排错不清楚。 | `apiKeyEnv` 填写误解；protocol mismatch 不知道怎么恢复。 | Stage 44 或 `docs/real-provider-alpha-smoke.md`。 |
 | `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | `docs/lp-artifact-quality.md` + Stage 42/43。 |

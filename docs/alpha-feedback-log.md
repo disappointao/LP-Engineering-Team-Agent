@@ -83,7 +83,7 @@
 - Safe Evidence:
   - User decision: MCP management and Web visible entry move to later work.
 - Suggested Routing: Stage 41 and backlog
-- Decision: accepted. Stage 41 hides MCP Web surface; backend MCP capabilities remain in backlog.
+- Decision: accepted. Stage 41 hides MCP Web surface; MCP management remains backlog while existing backend MCP boundaries stay available for later stages.
 
 ### AF-2026-05-23-004
 
