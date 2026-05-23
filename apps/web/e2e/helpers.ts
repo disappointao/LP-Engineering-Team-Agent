@@ -66,6 +66,42 @@ export async function expectSnippetFor(page: Page, filePath: string) {
   await expect(snippetHeader.getByText(filePath, { exact: true })).toBeVisible();
 }
 
+export async function expectDedicatedArtifactWorkspace(page: Page) {
+  const artifactsNav = page.getByRole("link", { name: "Artifacts", exact: true });
+  await expect(artifactsNav).toBeVisible();
+  await artifactsNav.click();
+  await expect(page).toHaveURL(/[?&]view=artifacts(?:&|$)/);
+
+  const workspace = page.getByLabel("Artifact workspace");
+  await expect(workspace).toBeVisible();
+  const manifest = workspace.getByLabel("File manifest");
+  await expect(manifest).toBeVisible();
+  await expect(manifest.getByText("File manifest", { exact: true })).toBeVisible();
+
+  for (const filePath of ["index.html", "styles.css", "script.js"]) {
+    await expect(manifest.getByText(filePath, { exact: true })).toBeVisible();
+    await expect(
+      manifest.getByRole("link", { name: `Preview snippet: ${filePath}` })
+    ).toBeVisible();
+  }
+
+  await expect(workspace.getByLabel("Static LP preview")).toBeVisible();
+  await expect(workspace.getByLabel("Exports")).toBeVisible();
+  await expect(workspace.getByRole("link", { name: /index\.single\.html/ })).toBeVisible();
+}
+
+export async function expectWorkspaceSnippetFor(page: Page, filePath: string) {
+  const workspace = page.getByLabel("Artifact workspace");
+  await workspace.getByRole("link", { name: `Preview snippet: ${filePath}` }).click();
+  await expect(page).toHaveURL(/[?&]view=artifacts(?:&|$)/);
+  await expect(page).toHaveURL(
+    new RegExp(`[?&]artifactPath=${escapeRegExp(encodeURIComponent(filePath))}(?:&|$)`)
+  );
+  const snippetHeader = workspace.getByLabel("Artifact changes").locator(".artifactSnippetHeader");
+  await expect(snippetHeader.getByText("Snippet preview", { exact: true })).toBeVisible();
+  await expect(snippetHeader.getByText(filePath, { exact: true })).toBeVisible();
+}
+
 export async function expectWorkbenchLayoutContract(page: Page) {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
