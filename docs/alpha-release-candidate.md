@@ -54,6 +54,7 @@
    - 打开 preview/export。
    - 分别查看三个文件的 bounded snippet。
    - 确认 UI 不展示完整 artifact 内容作为默认 diff。
+   - 如本次试用关注 LP 输出质量，按 `docs/lp-artifact-quality.md` 选择 2-4 个 fixtures 做人工 rubric 记录。
 7. Skills 主路径：
    - 创建 project-scoped Skill draft。
    - Validate、publish、bind、enable。
@@ -127,7 +128,7 @@ Stage 38 | Stage 39 | Stage 40 | backlog | needs immediate fix
 | `blocking_bug` | RC 主路径无法完成，或安全边界被破坏。 | 普通聊天无法完成；LP task 不生成 artifact；secret/raw provider response 出现在 UI。 | 立即修复，必要时暂停 RC。 |
 | `ux_friction` | 功能可完成，但交互、文案或状态让试用者误解。 | 用户不知道任务还在跑；失败文案无法区分 provider 配置和 stream 中断。 | Stage 38 或后续 UX batch。 |
 | `provider_config_issue` | 真实 provider opt-in 配置或排错不清楚。 | `apiKeyEnv` 填写误解；protocol mismatch 不知道怎么恢复。 | `docs/real-provider-alpha-smoke.md` 或 Stage 38。 |
-| `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | Stage 39。 |
+| `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | `docs/lp-artifact-quality.md` + Stage 39/41。 |
 | `docs_gap` | 文档缺少步骤、命令、前置条件或边界说明。 | 不知道先跑 `pnpm alpha:e2e:install`；不清楚如何 reset deterministic。 | 文档补丁或 Stage 40。 |
 | `future_feature` | 明确超出当前 RC 的能力需求。 | 团队登录、真实部署、MCP write tools、billing、远端 observability。 | Backlog，不阻塞 RC。 |
 
@@ -147,7 +148,7 @@ Stage 38 | Stage 39 | Stage 40 | backlog | needs immediate fix
 ## Follow-up Routing
 
 - Stage 38：真实 provider ordinary chat streaming 的中途失败、慢首 token、空 terminal content、client cancel、Web failure copy 和 recovery UX。
-- Stage 39：LP artifact quality rubric、prompt fixtures、Builder/Planner prompt hardening 和人工质量评审。
+- Stage 39：`docs/lp-artifact-quality.md`、LP artifact quality rubric、prompt fixtures、Builder/Planner prompt hardening 和人工质量评审。
 - Stage 40：内部 alpha 反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
 - Backlog：production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
 

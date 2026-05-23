@@ -93,6 +93,7 @@ Models view 中创建 provider：
 | S5 | Usage metadata | 真实 provider 成功后查看 timeline | 查看 `model.completed` | 显示 provider、model、usage、duration、attempt、streaming summary；usage 可能是 `provider reported` 或 `estimated`。 |
 | S6 | Provider HTTP / response error | 使用错误 base URL、错误 model 或临时无效 key | 提交普通聊天或 LP prompt | fail closed，显示 bounded provider failure；不保存 raw provider body。 |
 | S7 | Reset deterministic | 改回 `REAL_MODEL_RUNTIME=0` | 重启 dev server，运行默认 gates | 默认本地路径恢复 deterministic，不依赖 provider route。 |
+| S8 | LP artifact quality spot-check | `REAL_MODEL_RUNTIME=1`，配置 `planner` 和 `builder` route | 按 `docs/lp-artifact-quality.md` 选择 2 个 fixtures 提交 LP prompt | 记录 rubric score 和 safe evidence；不保存 raw provider response 或完整 artifact 内容。 |
 
 ## 可选 Integration Tests
 
@@ -134,6 +135,7 @@ pnpm exec vitest run packages/model-gateway/src/anthropic-messages.integration.t
 - `model_provider_protocol_mismatch`：route 的 `api` 与 provider 配置不一致。确认 OpenAI-compatible 使用 `openai-completions`，Anthropic-compatible 使用 `anthropic-messages`。
 - Structured output parse failure：Planner / Builder 返回了非 schema JSON。当前 runtime 会做一次 repair；仍失败时查看 bounded `model.output.parse_failed` 和 `run.failed`。
 - Artifact policy failure：Builder 返回了不符合静态 artifact policy 的内容，例如框架依赖或非法路径。需要调整 prompt 或 provider/model。
+- Artifact quality issue：生成成功且 policy 通过，但视觉层级、CTA、移动端、copy 或基础可访问性不达预期。按 `docs/lp-artifact-quality.md` 记录 rubric score 和 safe evidence，再路由到 Stage 39/41。
 - Usage 显示 `estimated`：provider stream 或 response 没有返回完整 usage；系统会估算 token usage，仍应显示 duration、attempt 和 streaming summary。
 - `pnpm alpha:e2e` 出现本地端口 sandbox 错误：这通常是本地执行环境限制，不代表 provider 配置问题；默认 browser gate 仍不需要真实 provider key。
 
