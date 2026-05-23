@@ -14,7 +14,7 @@
 
 不适用范围：
 
-- 不收集 secret、API key、env value、raw provider response、完整 artifact 内容、本机绝对路径、raw worker payload、raw tool output 或 raw stdout/stderr。
+- 不收集 secret、API key、env value、raw provider response、完整 artifact 内容、本机绝对路径、raw worker payload、raw worker output、raw tool payload、raw tool output 或 raw stdout/stderr。
 - 不承诺 public release date、SLA 或客户支持流程。
 - 不替代 `docs/project-roadmap.md`；路线优先级仍以 roadmap 为准。
 
@@ -56,6 +56,8 @@ Not allowed:
 - Full generated artifact content。
 - Local absolute paths。
 - Raw worker payload。
+- Raw worker output。
+- Raw tool payload。
 - Raw tool output。
 - Raw stdout/stderr。
 - Private customer data。
