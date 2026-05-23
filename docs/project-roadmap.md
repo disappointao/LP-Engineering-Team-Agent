@@ -682,7 +682,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 43：Run Timeline and Recovery UX Polish v0
 
-**状态：** 当前推荐。
+**状态：** 当前推荐；设计已批准，等待 implementation plan。
 
 **为什么现在做：** Stage 29 已有 no-refresh live task panel，Stage 25 已有 inline recovery block；V1 polished alpha 需要更清楚的 run lifecycle、handoff、recovery 和 failure hierarchy，让 LP 复杂任务看起来像一个可跟踪的工程流程，而不是一组压缩状态。
 
@@ -693,12 +693,15 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 增强 handoff / recovery block 的视觉层级和行动入口。
 - 加入轻量 progress animation；动画只表达 transient UI 状态，不写入 repository fact。
 - 保持 bounded diagnostics，不展示 raw provider response、raw tool output、完整 artifact 内容、本机路径或 secret。
+- 采用 Web-only view-model polish：从现有 `LiveTaskStatePayload`、`RunLifecycleView`、safe run events 和 `recovery.runs` 派生 timeline display，不扩展 agent runtime schema。
 
 **非目标：**
 
 - 不引入 SSE、raw stdout/stderr streaming、真实 shell runner、MCP streaming 或实时多人协作。
 - 不改变 run event schema 或 recovery action contract，除非实现中发现必须补小范围 safe view model。
 - 不把 transient animation 状态当作 repository fact。
+
+**设计：** `docs/superpowers/specs/2026-05-23-run-timeline-recovery-ux-polish-design.md`。
 
 ### Stage 44：Skills and Models Client-side Management v0
 
@@ -851,6 +854,7 @@ Stage 46 是第一版收口阶段，不新增大功能。它运行完整 determi
 
 ## 决策记录
 
+- 2026-05-23 Stage 43 设计已批准：Run Timeline and Recovery UX Polish v0 采用 Web-only view-model polish，从现有 safe live task payload 和 run lifecycle facts 派生固定 LP 链路 timeline、repair/retry hints、handoff/recovery hierarchy 和 transient progress affordance；不改变 run event schema、recovery action contract，不引入 SSE 或 raw log streaming。
 - 2026-05-23 Stage 42 已完成 Dedicated Artifact Workspace v0：V1 Web navigation 新增 `Artifacts`，`view=artifacts` 展示当前 LP task 的三文件 manifest、bounded snippet、preview、export 和安全失败状态；默认下一路由为 Stage 43 Run Timeline and Recovery UX Polish v0。
 - 2026-05-23 Stage 42 设计已批准：Dedicated Artifact Workspace v0 采用现有 `HomePage` 内的 `view=artifacts`，新增 V1 顶层 Artifacts 入口，复用当前 task/project session、artifact diff、bounded snippet、preview/export 和 live task refresh 边界；不新建独立 route，不改变 artifact policy/export contract。
 - 2026-05-23 Stage 41 已完成 Web Surface Pruning and V1 Navigation v0：V1 Web navigation 不再展示 MCP，旧 `/?view=mcp` 安全降级到 workbench 且不展示 connector、tool approval 或 execution form；默认下一路由为 Stage 42 Dedicated Artifact Workspace v0。

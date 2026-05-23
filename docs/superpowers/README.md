@@ -454,6 +454,10 @@
    - Stage 42 Dedicated Artifact Workspace v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 42 design 后阅读，用于按 TDD 实现 `view=artifacts` navigation、dedicated artifact workspace UI、browser acceptance、manual acceptance docs 和 roadmap closeout。
 
+113. `specs/2026-05-23-run-timeline-recovery-ux-polish-design.md`
+   - Stage 43 Run Timeline and Recovery UX Polish v0 design（已批准，等待 implementation plan）。
+   - 在 Stage 42 implementation plan 和当前 roadmap 后阅读，用于理解 Web-only timeline / recovery view-model polish：从现有 `LiveTaskStatePayload`、`RunLifecycleView` 和 safe run events 派生 Planner / Builder / Reviewer / Deployer lifecycle、repair/retry hints、handoff/recovery hierarchy 和 transient progress affordance；本阶段不改变 run event schema 或 recovery action contract。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
