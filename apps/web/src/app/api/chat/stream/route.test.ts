@@ -4,6 +4,7 @@ import { decodeChatStreamLines } from "../../../../lib/chat-stream";
 const mocks = vi.hoisted(() => ({
   startStreamingChatPrompt: vi.fn(),
   completeStreamingChatPrompt: vi.fn(),
+  abandonStreamingChatPrompt: vi.fn(),
   getCurrentProjectId: vi.fn(),
   getCurrentTaskId: vi.fn()
 }));
@@ -11,7 +12,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(async () => ({
     startStreamingChatPrompt: mocks.startStreamingChatPrompt,
-    completeStreamingChatPrompt: mocks.completeStreamingChatPrompt
+    completeStreamingChatPrompt: mocks.completeStreamingChatPrompt,
+    abandonStreamingChatPrompt: mocks.abandonStreamingChatPrompt
   }))
 }));
 
@@ -110,6 +112,7 @@ describe("POST /api/chat/stream", () => {
   beforeEach(() => {
     mocks.startStreamingChatPrompt.mockReset();
     mocks.completeStreamingChatPrompt.mockReset();
+    mocks.abandonStreamingChatPrompt.mockReset();
     mocks.getCurrentProjectId.mockReset();
     mocks.getCurrentTaskId.mockReset();
     mocks.getCurrentProjectId.mockResolvedValue(undefined);
@@ -330,6 +333,10 @@ describe("POST /api/chat/stream", () => {
     });
     expect(decoded.events.some((event) => event.type === "assistant.completed")).toBe(false);
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+    expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+      taskId: "task_stream",
+      messageId: "message_2"
+    });
   });
 
   it("emits empty_response without persisting blank assistant content", async () => {
@@ -360,6 +367,10 @@ describe("POST /api/chat/stream", () => {
     });
     expect(decoded.events.some((event) => event.type === "assistant.completed")).toBe(false);
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+    expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
+      messageId: "message_2"
+    });
   });
 
   it("streams fallback_required without completing the assistant message", async () => {
@@ -690,6 +701,10 @@ describe("POST /api/chat/stream", () => {
       ],
       remainder: ""
     });
+    expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
+      messageId: "message_2"
+    });
   });
 
   it("does not persist provider content after the client cancels the response stream", async () => {
@@ -736,6 +751,10 @@ describe("POST /api/chat/stream", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+    expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
+      messageId: "message_2"
+    });
   });
 
   it.each([

@@ -2486,11 +2486,22 @@ export class DemoWorkbenchService {
           startedRun,
           result: failedResult
         });
+        persistedTerminal = true;
       }
       throw error instanceof AssistantChatStreamError
         ? error
         : new AssistantChatStreamError("stream_interrupted");
     } finally {
+      if (!persistedTerminal) {
+        try {
+          await this.persistStreamingAssistantRun({
+            startedRun,
+            result: createAssistantStreamCancelledResult(input.runtimeRequest)
+          });
+        } catch {
+          // Stream cancellation cleanup is best-effort and must not mask the original outcome.
+        }
+      }
       input.releaseRunId?.();
     }
   }
@@ -4618,6 +4629,24 @@ function createAssistantStreamFailedResult(
         role: request.role,
         state: "failed",
         errorCode
+      }
+    ]
+  };
+}
+
+function createAssistantStreamCancelledResult(request: RuntimeRunRequest): RuntimeRunResult {
+  return {
+    runId: request.runId,
+    projectId: request.projectId,
+    role: request.role,
+    state: "cancelled",
+    events: [
+      {
+        type: "run.cancelled",
+        message: "assistant stream cancelled",
+        runId: request.runId,
+        role: request.role,
+        state: "cancelled"
       }
     ]
   };

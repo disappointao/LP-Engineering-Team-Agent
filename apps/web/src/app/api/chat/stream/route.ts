@@ -5,7 +5,8 @@ import {
 } from "../../../../lib/chat-stream";
 import {
   getWebWorkbenchStore,
-  type ProjectFlowErrorCode
+  type ProjectFlowErrorCode,
+  type WebWorkbenchStore
 } from "../../../../lib/workbench-store";
 import {
   CURRENT_PROJECT_COOKIE,
@@ -45,6 +46,11 @@ type ChatStreamEnqueue = (event: ChatStreamEvent) => void;
 type ChatStreamProducerState = {
   isClosed: () => boolean;
 };
+
+type StartedStreamingChatPrompt = Extract<
+  Awaited<ReturnType<WebWorkbenchStore["startStreamingChatPrompt"]>>,
+  { ok: true }
+>;
 
 function createEventStream(
   produceEvents: (
@@ -205,6 +211,20 @@ function enqueueTerminalError(
   });
 }
 
+async function abandonStreamingPlaceholder(
+  store: WebWorkbenchStore,
+  started: StartedStreamingChatPrompt
+): Promise<void> {
+  try {
+    await store.abandonStreamingChatPrompt({
+      taskId: started.taskId,
+      messageId: started.assistantMessageId
+    });
+  } catch {
+    // Preserve the original terminal stream outcome; cleanup is best-effort.
+  }
+}
+
 function hasOwnField(payload: ChatStreamRequest, field: keyof ChatStreamRequest): boolean {
   return Object.prototype.hasOwnProperty.call(payload, field);
 }
@@ -332,6 +352,7 @@ export async function POST(request: Request): Promise<Response> {
             delta
           });
           if (streamState.isClosed()) {
+            await abandonStreamingPlaceholder(store, started);
             return;
           }
         }
@@ -344,19 +365,23 @@ export async function POST(request: Request): Promise<Response> {
             delta
           });
           if (streamState.isClosed()) {
+            await abandonStreamingPlaceholder(store, started);
             return;
           }
         }
       }
     } catch (error) {
+      await abandonStreamingPlaceholder(store, started);
       enqueueTerminalError(enqueue, started.taskId, toChatStreamErrorCodeFromUnknown(error));
       return;
     }
 
     if (streamState.isClosed()) {
+      await abandonStreamingPlaceholder(store, started);
       return;
     }
     if (!assistantContent.trim()) {
+      await abandonStreamingPlaceholder(store, started);
       enqueueTerminalError(enqueue, started.taskId, "empty_response");
       return;
     }
@@ -369,6 +394,7 @@ export async function POST(request: Request): Promise<Response> {
         content: assistantContent
       });
     } catch {
+      await abandonStreamingPlaceholder(store, started);
       enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
       return;
     }
@@ -389,6 +415,7 @@ export async function POST(request: Request): Promise<Response> {
       return;
     }
 
+    await abandonStreamingPlaceholder(store, started);
     enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
   }, cookies);
 }

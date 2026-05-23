@@ -315,6 +315,7 @@ export interface WorkbenchTaskRepository {
 
 export interface WorkbenchMessageRepository {
   save(message: WorkbenchMessageRecord): Promise<void>;
+  deleteById(messageId: string): Promise<void>;
   listForTask(taskId: string): Promise<WorkbenchMessageRecord[]>;
   listAll(): Promise<WorkbenchMessageRecord[]>;
 }
@@ -1071,6 +1072,10 @@ class InMemoryWorkbenchMessageRepository implements WorkbenchMessageRepository {
 
   async save(message: WorkbenchMessageRecord): Promise<void> {
     this.messages.set(message.id, copyWorkbenchMessage(message));
+  }
+
+  async deleteById(messageId: string): Promise<void> {
+    this.messages.delete(messageId);
   }
 
   async listForTask(taskId: string): Promise<WorkbenchMessageRecord[]> {

@@ -85,6 +85,7 @@ type PrismaRow = Record<string, unknown>;
 
 export interface PrismaDelegate {
   upsert(input: { where: PrismaWhere; create: PrismaRow; update: PrismaRow }): Promise<PrismaRow>;
+  deleteMany(input: { where?: PrismaWhere }): Promise<{ count: number }>;
   findUnique(input: { where: PrismaWhere }): Promise<PrismaRow | null>;
   findMany(input?: {
     where?: PrismaWhere;
@@ -617,6 +618,10 @@ function createWorkbenchMessageRepository(delegate: PrismaDelegate): WorkbenchMe
   return {
     async save(message) {
       await upsert(delegate, { id: message.id }, toPrismaWorkbenchMessage(message));
+    },
+
+    async deleteById(messageId) {
+      await delegate.deleteMany({ where: { id: messageId } });
     },
 
     async listForTask(taskId) {

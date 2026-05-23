@@ -19,6 +19,7 @@ interface FakeFindManyArgs {
 
 interface FakeDelegate {
   upsert(input: { where: FakeWhere; create: FakeRow; update: FakeRow }): Promise<FakeRow>;
+  deleteMany(input: { where?: FakeWhere }): Promise<{ count: number }>;
   findUnique(input: { where: FakeWhere }): Promise<FakeRow | null>;
   findMany(input?: FakeFindManyArgs): Promise<FakeRow[]>;
 }
@@ -957,6 +958,18 @@ function createFakeDelegate(options: FakeDelegateOptions = {}): FakeDelegate {
       const created = cloneRow(normalizeFakePrismaJsonNulls(input.create));
       rows.push(created);
       return cloneRow(created);
+    },
+
+    async deleteMany(input = {}) {
+      const where = input.where ?? {};
+      let count = 0;
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        if (matchesWhere(rows[index] ?? {}, where)) {
+          rows.splice(index, 1);
+          count += 1;
+        }
+      }
+      return { count };
     },
 
     async findUnique(input) {

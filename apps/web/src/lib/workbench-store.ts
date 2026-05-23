@@ -403,6 +403,10 @@ export type StreamingChatCompleteResult =
   | { ok: true }
   | { ok: false; error: ProjectFlowErrorCode };
 
+export type StreamingChatAbandonResult =
+  | { ok: true }
+  | { ok: false; error: ProjectFlowErrorCode };
+
 export type WorkbenchPageState =
   | {
       kind: "empty";
@@ -640,6 +644,10 @@ export interface WebWorkbenchStore {
     messageId: string;
     content: string;
   }): Promise<StreamingChatCompleteResult>;
+  abandonStreamingChatPrompt(input: {
+    taskId: string;
+    messageId: string;
+  }): Promise<StreamingChatAbandonResult>;
   interruptCurrentTask(input: {
     taskId: string;
     reason?: string;
@@ -1505,6 +1513,26 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         createdAt: assistant.createdAt
       });
       return { ok: true };
+    },
+
+    async abandonStreamingChatPrompt(input) {
+      const task = await repositories.tasks.getById(input.taskId);
+      if (!task) {
+        return { ok: false, error: "generation_failed" };
+      }
+
+      return withRepositoryTaskLock(repositories, async () => {
+        const messages = await repositories.messages.listForTask(input.taskId);
+        const assistant = messages.find(
+          (message) => message.id === input.messageId && message.role === "assistant"
+        );
+        const latestMessage = messages.at(-1);
+        if (!assistant || assistant.content !== "" || latestMessage?.id !== assistant.id) {
+          return { ok: false, error: "generation_failed" };
+        }
+        await repositories.messages.deleteById(assistant.id);
+        return { ok: true };
+      });
     },
 
     async submitTaskPrompt(input) {
