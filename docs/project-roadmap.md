@@ -573,7 +573,7 @@ Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed fa
 
 ### Stage 39：LP Artifact Quality Evaluation and Prompt Hardening v0
 
-**状态：** 设计已确认，待实施计划。
+**状态：** 设计已确认，实施计划已创建，待实现。
 
 **为什么现在做：** Web/API/Skill/LP 主链路已经可跑通，下一步内部 alpha 需要判断复杂 LP 任务的实际输出质量，而不是只看是否生成三文件 artifact。需要一套轻量质量 rubric、prompt fixtures 和人工评审记录，让后续 prompt/runtime 改动有可比较基线。
 
@@ -591,6 +591,8 @@ Stage 38 v0 已为普通聊天 provider streaming 的失败路径增加 typed fa
 - 不把质量 rubric 变成 public SaaS onboarding 或客户验收 SLA。
 
 **当前设计：** `docs/superpowers/specs/2026-05-23-lp-artifact-quality-prompt-hardening-design.md`。
+
+**当前实施计划：** `docs/superpowers/plans/2026-05-23-lp-artifact-quality-prompt-hardening.md`。
 
 ### Stage 40：Alpha Feedback Intake and Triage Loop v0
 
