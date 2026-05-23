@@ -42,16 +42,20 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
     )
   ).toBeVisible();
 
-  await navigation.getByRole("link", { name: "MCP" }).click();
+  await expect(navigation.getByRole("link", { name: "MCP" })).toHaveCount(0);
+
+  await page.goto("/?view=mcp");
   await expect(
-    page.getByRole("heading", { exact: true, name: "Project MCP" })
+    page.getByRole("heading", { name: "What can I help you build?" })
   ).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: "Project MCP" })).toHaveCount(0);
+  await expect(page.getByText("Connector JSON")).toHaveCount(0);
+  await expect(page.getByText("Run read-only check")).toHaveCount(0);
   await expect(
-    page.getByText(
-      "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors.",
-      { exact: true }
-    )
-  ).toBeVisible();
+    page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "MCP" })
+  ).toHaveCount(0);
 });
 
 test("shows bounded recovery error display", async ({ page }) => {

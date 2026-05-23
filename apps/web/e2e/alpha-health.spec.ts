@@ -10,5 +10,5 @@ test("loads the Skill-only alpha workbench shell", async ({ page }) => {
   await expect(navigation.getByRole("link", { name: "Workbench" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Skills" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Models" })).toBeVisible();
-  await expect(navigation.getByRole("link", { name: "MCP" })).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "MCP" })).toHaveCount(0);
 });

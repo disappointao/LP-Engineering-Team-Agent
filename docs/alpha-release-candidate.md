@@ -61,7 +61,9 @@
    - 确认普通聊天或 LP task 展示安全 context summary，而不是 raw skill content。
 8. Models / MCP 边界：
    - 打开 Models view，确认真实 provider 是 opt-in。
-   - 打开 MCP view，确认 MCP 在当前 alpha 后置；不配置 MCP 仍可完成普通聊天和 LP task。
+   - 确认 sidebar / top-level navigation 不展示 MCP 入口。
+   - 直接访问 `/?view=mcp`，确认页面安全降级，不展示 MCP connector、tool approval 或 execution form。
+   - 不配置 MCP 仍可完成普通聊天和 LP task。
 9. Failure display：
    - 确认 provider fail-closed、artifact invalid path、worker queue bounded error 由 `pnpm alpha:e2e` 覆盖。
    - 人工 spot-check 页面不泄漏 secret、raw provider response、raw tool output、本机路径或完整 artifact 内容。

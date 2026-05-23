@@ -84,7 +84,8 @@
 - [ ] Models view 明确真实 provider 是 opt-in；默认 alpha check 不需要 API key。
 - [ ] 缺失 provider、disabled provider 或 route 指向不可用 provider 时，页面显示 bounded fail-closed 提示。
 - [ ] 可选真实 provider smoke：按 `docs/real-provider-alpha-smoke.md` 设置 `REAL_MODEL_RUNTIME=1`，配置 provider、`apiKeyEnv`、`assistant` / `planner` / `builder` routes，然后手动验证普通聊天 streaming、LP prompt、usage metadata 和 missing key fail-closed。
-- [ ] 点击 sidebar 中的 `MCP`，确认 view 能打开，并明确 MCP 在本 alpha 中后置。
+- [ ] 确认 sidebar / top-level navigation 不展示 `MCP` 入口。
+- [ ] 直接访问 `/?view=mcp`，确认页面安全降级到 workbench 或只读 deferred surface，不展示 MCP connector、tool approval 或 execution form。
 - [ ] 不配置 MCP connector 的情况下，普通聊天和 LP 任务仍可完成。
 - [ ] 当前 alpha 不要求真实 MCP server、write tools、真实 shell execution 或真实部署。
 
