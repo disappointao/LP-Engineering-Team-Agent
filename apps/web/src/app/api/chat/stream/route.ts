@@ -439,20 +439,41 @@ export async function POST(request: Request): Promise<Response> {
       return;
     }
 
-    let completed: Awaited<ReturnType<typeof store.completeStreamingChatPrompt>>;
-    try {
-      completed = await store.completeStreamingChatPrompt({
-        taskId: started.taskId,
-        messageId: started.assistantMessageId,
-        content: assistantContent
-      });
-    } catch {
+    const completionPromise = store.completeStreamingChatPrompt({
+      taskId: started.taskId,
+      messageId: started.assistantMessageId,
+      content: assistantContent
+    });
+    const completion = await Promise.race([
+      completionPromise.then(
+        (completed) => ({ type: "completed" as const, completed }),
+        () => ({ type: "failed" as const })
+      ),
+      streamState.cancelled.then(() => ({ type: "cancelled" as const }))
+    ]);
+
+    if (completion.type === "cancelled") {
+      cancelAssistantStream(started);
+      await abandonStreamingPlaceholder(store, started);
+      void completionPromise
+        .catch(() => undefined)
+        .then(() => abandonStreamingPlaceholder(store, started))
+        .catch(() => undefined);
+      return;
+    }
+
+    if (completion.type === "failed") {
       await abandonStreamingPlaceholder(store, started);
       enqueueTerminalError(enqueue, started.taskId, "persistence_failed");
       return;
     }
 
-    if (completed.ok) {
+    if (streamState.isClosed()) {
+      await abandonStreamingPlaceholder(store, started);
+      return;
+    }
+
+    if (completion.completed.ok) {
       enqueue({
         type: "assistant.completed",
         taskId: started.taskId,

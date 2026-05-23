@@ -809,6 +809,53 @@ describe("POST /api/chat/stream", () => {
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
   });
 
+  it("abandons assistant content when the client cancels while final persistence is pending", async () => {
+    const completion = deferred<{ ok: true }>();
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "Hello there",
+      chunks: ["Hello there"],
+      contextSummary: deterministicContextSummary
+    });
+    mocks.completeStreamingChatPrompt.mockReturnValue(completion.promise);
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    if (!reader) {
+      return;
+    }
+
+    const initialText = await readEventTextUntil(reader, 4);
+    expect(decodeChatStreamLines(initialText).events.map((event) => event.type)).toEqual([
+      "task.created",
+      "context.summary",
+      "run.status",
+      "assistant.delta"
+    ]);
+    await waitForCompletionCall();
+
+    await reader.cancel();
+    completion.resolve({ ok: true });
+
+    await vi.waitFor(() => {
+      expect(mocks.abandonStreamingChatPrompt).toHaveBeenCalledWith({
+        taskId: "task_1",
+        messageId: "message_2"
+      });
+    });
+  });
+
   it.each([
     {
       outcome: "resolves",

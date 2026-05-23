@@ -2936,6 +2936,39 @@ describe("web workbench store", () => {
       expect(pageState.messages.map((message) => message.role)).toEqual(["user"]);
     });
 
+    it("abandons the latest streaming assistant message after late persistence", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: null,
+        taskId: null,
+        prompt: "Help me write a campaign plan."
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+
+      await expect(
+        store.completeStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId,
+          content: started.assistantContent
+        })
+      ).resolves.toEqual({ ok: true });
+      await expect(
+        store.abandonStreamingChatPrompt({
+          taskId: started.taskId,
+          messageId: started.assistantMessageId
+        })
+      ).resolves.toEqual({ ok: true });
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
+    });
+
     it("streams project-bound assistant runtime content with safe context summary", async () => {
       const repositories = createInMemoryWorkbenchRepositories();
       const store = createWebWorkbenchStore({ repositories });

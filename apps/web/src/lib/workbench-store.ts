@@ -1531,7 +1531,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           (message) => message.id === input.messageId && message.role === "assistant"
         );
         const latestMessage = messages.at(-1);
-        if (!assistant || assistant.content !== "" || latestMessage?.id !== assistant.id) {
+        if (!assistant || latestMessage?.id !== assistant.id) {
           return { ok: false, error: "generation_failed" };
         }
         await repositories.messages.deleteById(assistant.id);
