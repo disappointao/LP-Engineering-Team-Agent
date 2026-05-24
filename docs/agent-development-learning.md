@@ -1042,6 +1042,13 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-24-skills-models-client-management.md](./superpowers/plans/2026-05-24-skills-models-client-management.md)
 
+当前实现状态：
+
+- Stage 44 v0 已实现 Web-only Skills / Models client-side management view-model。
+- Skills 页面从 repository-backed facts 派生 lifecycle、binding、runtime context summary 和 command queue hierarchy。
+- Models 页面从 provider/route/resolved policy facts 派生 provider summary、role routing summary、real provider opt-in note 和 fail-closed diagnostics。
+- Client-side pending / notice 只用于反馈，不改变 Agent fact source。
+
 学习重点：
 
 - Client-side pending state 只能改善交互反馈，不能成为 Agent fact source。action 完成后必须回到 server action / API service / repository fact。

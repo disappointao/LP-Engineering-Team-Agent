@@ -98,6 +98,14 @@
 - [ ] 不配置 MCP connector 的情况下，普通聊天和 LP 任务仍可完成。
 - [ ] 当前 alpha 不要求真实 MCP server、write tools、真实 shell execution 或真实部署。
 
+### Stage 44：Skills / Models client-side management
+
+- [ ] Skills 页面展示 `Runtime context`、lifecycle stage、成功 notice、错误 notice 和 command queue hierarchy。
+- [ ] 创建 skill draft 后不会回显 raw skill content；validate、publish、bind、enable/disable 后回到 repository fact。
+- [ ] Models 页面展示 provider summary、route summary、resolved runtime routes、real provider opt-in 提示和 fail-closed diagnostics。
+- [ ] Provider summary 只显示 provider/model/API protocol/env var configured state 等 bounded metadata，不展示 secret 值、raw provider response 或完整 base URL。
+- [ ] MCP management 仍隐藏；旧 `/?view=mcp` 仍安全降级到 Workbench。
+
 ## 回归命令
 
 - [ ] `pnpm alpha:check` 通过。

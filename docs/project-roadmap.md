@@ -45,6 +45,7 @@
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 - LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
 - Run timeline and recovery UX polish v0：Stage 43 已实现 Web-only run timeline view model、localized active role summary、handoff / repair / retry markers、recovery action hierarchy 和 browser acceptance 覆盖；runtime schemas/contracts 不变。
+- Skills and Models client-side management v0：Stage 44 已实现 Web-only Skills / Models management view-model，覆盖 Skills lifecycle / runtime context / command queue hierarchy 和 Models provider / route / resolved runtime summary；MCP management 继续隐藏。
 
 ## 第一版可用闭环目标
 
@@ -61,11 +62,11 @@
 
 按当前代码基础，面向本地/单用户 **V1 polished alpha**，粗略估算还需要 **7-14 个有效开发日**。如果把内部 RC 反馈、阻塞修复和最终 completion gate 都算入，粗略估算 **10-18 个有效开发日**；实际范围由后续 feedback batch 的 blocker 数量决定。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
 
-- Skills / Models client-side management。
 - Browser failure injection 和轻量视觉回归扩展。
 - V1 polished alpha completion gate。
+- RC blocker 修复和后续 backlog routing。
 
 当前仍明确后置：
 
@@ -705,9 +706,15 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 44：Skills and Models Client-side Management v0
 
-**状态：** 设计和实施计划已写入，待实现。
+**状态：** 已实现。
 
 **为什么现在做：** Skills 是第一版主要扩展机制，Models 是真实 provider opt-in 的入口。Core flow 稳定后，V1 polished alpha 需要让 Skills/Models 管理更顺滑，而 MCP management 继续后置。
+
+**实现摘要：**
+
+- Skills 页面现在展示 runtime context summary、lifecycle state、success notice、pending affordance、binding enabled/disabled state 和 command queue hierarchy。
+- Models 页面现在展示 provider summary、route summary、resolved runtime routes、real provider opt-in note 和 fail-closed diagnostics。
+- 新增 Web-only Skills / Models management view-model 和 browser acceptance；runtime schemas/contracts、real provider opt-in 默认关闭策略和 MCP hidden surface 不变。
 
 **建议范围：**
 
@@ -724,7 +731,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 45：Browser Failure and Visual Regression Expansion v0
 
-**状态：** Stage 44 后推荐。
+**状态：** 当前推荐。
 
 **为什么现在做：** Stage 34 已建立 browser failure injection 和轻量 visual contract，Stage 41-44 补齐 V1 Web surface、artifact workspace、timeline/recovery 和 Skills/Models 管理后，需要把 deterministic browser acceptance 扩展到这些新增主路径和安全失败状态。
 
@@ -883,6 +890,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 44 已完成 Skills and Models Client-side Management v0：Web-only management view-model 已覆盖 Skills lifecycle、runtime context summary、command queue hierarchy、Models provider/route/resolved summaries、real provider opt-in 和 fail-closed diagnostics；默认下一路由为 Stage 45 Browser Failure and Visual Regression Expansion v0。
 - 2026-05-24 Stage 44 implementation plan 已写入：计划按 TDD 分为 localized management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
 - 2026-05-24 Stage 44 设计已批准：Skills and Models Client-side Management v0 采用 Web-only client management view-model 和 progressive form affordance，收紧 Skills lifecycle、binding、command queue、Models provider config、route assignment、real provider opt-in 和 fail-closed diagnostics；不改变 Agent runtime/model gateway/skill command contract，不恢复 MCP management。
 - 2026-05-24 Stage 43 已完成 Run Timeline and Recovery UX Polish v0：Web-only timeline/recovery polish 已覆盖 fixed LP role lifecycle、handoff marker、repair/retry hints、recovery action hierarchy、manual acceptance 和 browser acceptance；默认下一路由为 Stage 44 Skills and Models Client-side Management v0。
