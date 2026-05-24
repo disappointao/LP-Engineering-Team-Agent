@@ -518,6 +518,19 @@ button {
   overflow-wrap: anywhere;
 }
 
+.formNotice {
+  min-width: 0;
+  border: 1px solid #b8ddc2;
+  border-radius: 8px;
+  background: #eef8f1;
+  color: #1f6f37;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .mcpView,
 .artifactWorkspaceView,
 .skillsView,
@@ -875,6 +888,67 @@ button {
   padding: 16px;
 }
 
+.managementSummary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.managementSummary h2 {
+  margin: 0;
+  color: #25292e;
+  font-size: 0.98rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.managementSummary p,
+.formHint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.managementSummary ul {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.managementState {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.routeState-failClosed {
+  color: var(--danger);
+}
+
+.routeState-fallback {
+  color: #8b5e16;
+}
+
+button[data-pending-label] {
+  position: relative;
+}
+
 .mcpEditor h2,
 .mcpList h2,
 .skillEditor h2,
@@ -970,6 +1044,12 @@ button {
   padding: 0 12px;
   font-size: 0.84rem;
   font-weight: 800;
+}
+
+@media (max-width: 820px) {
+  .managementSummary {
+    grid-template-columns: 1fr;
+  }
 }
 
 .mcpEditor button,

@@ -48,6 +48,13 @@ import {
   buildRunTimelineViewModel,
   type RunTimelineStepView
 } from "./run-timeline-view-model";
+import {
+  buildModelsManagementViewModel,
+  buildSkillsManagementViewModel,
+  modelManagementRoleOrder,
+  toModelManagementNotice,
+  toSkillManagementNotice
+} from "./skills-models-management-view-model";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -97,12 +104,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const interruptError = toInterruptFlowError(getFirstSearchParam(params?.interruptError));
   const recoveryError = toRunRecoveryFlowError(getFirstSearchParam(params?.recoveryError));
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
+  const skillNotice = toSkillManagementNotice(getFirstSearchParam(params?.skillNotice));
+  const modelNotice = toModelManagementNotice(getFirstSearchParam(params?.modelNotice));
   const previewSearchParams = createArtifactPreviewSearchParams({
     activeView,
     errorCode,
     interruptError,
     modelError,
+    modelNotice,
     recoveryError,
+    skillNotice,
     skillError,
     workerError
   });
@@ -135,21 +146,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     ? copy.interruptFlow.errors[interruptError]
     : undefined;
   const recoveryErrorMessage = recoveryError ? copy.chat.recoveryErrorLabel : undefined;
-  const roleOrder = ["assistant", "planner", "builder", "reviewer", "deployer"] as const;
   const assistantModelRoute = modelState.resolvedPolicy.assistant;
   const assistantModelLabel = copy.chat.assistantModelRoute(
     `${assistantModelRoute.provider}/${assistantModelRoute.model}`
   );
-  const activeSkillCount = pageState.skills.boundSkills.filter(
-    (boundSkill) =>
-      boundSkill.binding.enabled &&
-      boundSkill.version.reviewState === "published" &&
-      boundSkill.version.manifest.reviewState === "published"
-  ).length;
   const boundSkillVersionIds = new Set(
     pageState.skills.boundSkills.map((boundSkill) => boundSkill.version.id)
   );
-  const activeSkillLabel = copy.skillsView.activeCount(activeSkillCount);
   const currentPageVersionId =
     pageState.kind === "task_ready"
       ? pageState.snapshot?.currentPageVersion?.id
@@ -166,6 +169,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     value: workerQueue.counts[key]
   }));
   const workerHeartbeat = workerQueue.heartbeat;
+  const skillsManagement = buildSkillsManagementViewModel({
+    copy,
+    skillState: pageState.skills,
+    skillCommands,
+    ...(skillNotice ? { notice: skillNotice } : {})
+  });
+  const modelsManagement = buildModelsManagementViewModel({
+    copy,
+    modelState,
+    ...(modelNotice ? { notice: modelNotice } : {})
+  });
+  const activeSkillLabel = copy.skillsView.activeCount(skillsManagement.activeSkillCount);
   const completedSnapshot =
     pageState.kind === "task_ready" &&
     activeTask?.type === "lp_generation" &&
@@ -370,7 +385,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="topBarTitle">
             <strong>{copy.chat.topbarModel}</strong>
             <span>{activeProject?.name ?? activeTask?.title ?? copy.sidebar.newTask}</span>
-            {activeSkillCount > 0 ? (
+            {skillsManagement.activeSkillCount > 0 ? (
               <span className="skillRuntimeChip">{activeSkillLabel}</span>
             ) : null}
             {activeView === "workbench" ? (
@@ -412,6 +427,24 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <div className="formError" role="alert">{skillErrorMessage}</div>
                 ) : null}
 
+                {skillsManagement.noticeMessage ? (
+                  <div className="formNotice" role="status">{skillsManagement.noticeMessage}</div>
+                ) : null}
+
+                <section className="managementSummary" aria-labelledby="skills-runtime-summary-title">
+                  <div>
+                    <h2 id="skills-runtime-summary-title">
+                      {copy.skillsView.management.runtimeSummaryTitle}
+                    </h2>
+                    <p>{skillsManagement.runtimeSummary}</p>
+                  </div>
+                  <ul>
+                    {copy.skillsView.management.policyItems.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+
                 <div className="skillsProjectContext">
                   <span>{copy.skillsView.activeProjectLabel}</span>
                   <strong>{activeProject?.name ?? copy.skillsView.noProject}</strong>
@@ -446,11 +479,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         <option value="text/markdown">{copy.skillsView.markdown}</option>
                         <option value="text/plain">{copy.skillsView.plainText}</option>
                       </select>
-                      <button type="submit">{copy.skillsView.createDraft}</button>
+                      <p className="formHint">{copy.skillsView.management.noRawContentNotice}</p>
+                      <button
+                        type="submit"
+                        data-pending-label={copy.skillsView.management.pending.createDraft}
+                      >
+                        {copy.skillsView.createDraft}
+                      </button>
                     </form>
 
                     <section className="skillsList" aria-labelledby="skill-versions-title">
-                      <h2 id="skill-versions-title">{copy.skillsView.versionsTitle}</h2>
+                      <h2 id="skill-versions-title">{copy.skillsView.management.lifecycleTitle}</h2>
                       {pageState.skills.availableVersions.length > 0 ? (
                         pageState.skills.availableVersions.map((version) => (
                           <div className="skillRow" key={version.id}>
@@ -460,25 +499,50 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 {version.version} ·{" "}
                                 {copy.skillsView.statusLabels[version.reviewState]}
                               </span>
+                              {(() => {
+                                const row = skillsManagement.versionRows.find(
+                                  (candidate) => candidate.id === version.id
+                                );
+                                return row ? (
+                                  <small className="managementState">
+                                    {row.stageLabel} · {row.nextActionLabel}
+                                  </small>
+                                ) : null;
+                              })()}
                             </div>
                             <div className="skillActions">
                               {version.reviewState === "draft" ? (
                                 <form action={validateSkillVersionAction}>
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button type="submit">{copy.skillsView.validate}</button>
+                                  <button
+                                    type="submit"
+                                    data-pending-label={copy.skillsView.management.pending.validate}
+                                  >
+                                    {copy.skillsView.validate}
+                                  </button>
                                 </form>
                               ) : null}
                               {version.reviewState === "validated" ? (
                                 <form action={publishSkillVersionAction}>
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button type="submit">{copy.skillsView.publish}</button>
+                                  <button
+                                    type="submit"
+                                    data-pending-label={copy.skillsView.management.pending.publish}
+                                  >
+                                    {copy.skillsView.publish}
+                                  </button>
                                 </form>
                               ) : null}
                               {version.reviewState === "published" && !boundSkillVersionIds.has(version.id) ? (
                                 <form action={bindSkillVersionAction}>
                                   <input name="projectId" type="hidden" value={activeProject.id} />
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button type="submit">{copy.skillsView.bind}</button>
+                                  <button
+                                    type="submit"
+                                    data-pending-label={copy.skillsView.management.pending.bind}
+                                  >
+                                    {copy.skillsView.bind}
+                                  </button>
                                 </form>
                               ) : null}
                             </div>
@@ -500,6 +564,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 {boundSkill.version.version} ·{" "}
                                 {copy.skillsView.statusLabels[boundSkill.version.reviewState]}
                               </span>
+                              {(() => {
+                                const row = skillsManagement.boundRows.find(
+                                  (candidate) => candidate.bindingId === boundSkill.binding.id
+                                );
+                                return row ? (
+                                  <small className="managementState">
+                                    {row.stageLabel} · {row.nextActionLabel}
+                                  </small>
+                                ) : null;
+                              })()}
                             </div>
                             <div className="skillActions">
                               <form action={setSkillBindingEnabledAction}>
@@ -510,7 +584,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   type="hidden"
                                   value={boundSkill.binding.enabled ? "false" : "true"}
                                 />
-                                <button type="submit">
+                                <button
+                                  type="submit"
+                                  data-pending-label={
+                                    boundSkill.binding.enabled
+                                      ? copy.skillsView.management.pending.disable
+                                      : copy.skillsView.management.pending.enable
+                                  }
+                                >
                                   {boundSkill.binding.enabled
                                     ? copy.skillsView.disable
                                     : copy.skillsView.enable}
@@ -575,7 +656,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 {pageState.kind === "task_ready" ? (
                                   <input name="taskId" type="hidden" value={pageState.task.id} />
                                 ) : null}
-                                <button type="submit">
+                                <button
+                                  type="submit"
+                                  data-pending-label={copy.skillsView.management.pending.queueCommand}
+                                >
                                   {copy.skillsView.approveAndQueue}
                                 </button>
                               </form>
@@ -595,7 +679,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         </div>
                         <form action={runLocalWorkerOnceAction}>
                           <input type="hidden" name="projectId" value={activeProject.id} />
-                          <button type="submit">{copy.skillsView.runLocalWorkerOnce}</button>
+                          <button
+                            type="submit"
+                            data-pending-label={copy.skillsView.management.pending.runWorker}
+                          >
+                            {copy.skillsView.runLocalWorkerOnce}
+                          </button>
                         </form>
                       </div>
 
@@ -669,6 +758,24 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <div className="formError" role="alert">{modelErrorMessage}</div>
                 ) : null}
 
+                {modelsManagement.noticeMessage ? (
+                  <div className="formNotice" role="status">{modelsManagement.noticeMessage}</div>
+                ) : null}
+
+                <section className="managementSummary" aria-labelledby="models-summary-title">
+                  <div>
+                    <h2 id="models-summary-title">
+                      {copy.modelsView.management.projectSummaryTitle}
+                    </h2>
+                    <p>{modelsManagement.providerSummary}</p>
+                    <p>{modelsManagement.routeSummary}</p>
+                  </div>
+                  <ul>
+                    <li>{copy.modelsView.management.safeMetadataNote}</li>
+                    <li>{copy.modelsView.management.optInRuntimeNote}</li>
+                  </ul>
+                </section>
+
                 <div className="modelsProjectContext">
                   <span>{copy.modelsView.activeProjectLabel}</span>
                   <strong>{activeProject?.name ?? copy.modelsView.noProject}</strong>
@@ -734,29 +841,46 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       <input id="modelId" name="modelId" aria-describedby="model-id-example" />
                       <small id="model-id-example">glm-5.1</small>
 
-                      <button type="submit">{copy.modelsView.createProvider}</button>
+                      <button
+                        type="submit"
+                        data-pending-label={copy.modelsView.management.pending.createProvider}
+                      >
+                        {copy.modelsView.createProvider}
+                      </button>
                     </form>
 
                     <section className="modelsList" aria-labelledby="model-providers-title">
-                      <h2 id="model-providers-title">{copy.modelsView.providersTitle}</h2>
+                      <h2 id="model-providers-title">
+                        {copy.modelsView.management.providerSummaryTitle}
+                      </h2>
                       {modelState.providers.length > 0 ? (
                         modelState.providers.map((provider) => (
                           <div className="modelRow" key={provider.id}>
                             <div>
                               <strong>{provider.name}</strong>
-                              <span>
-                                {copy.modelsView.providerTypes[provider.provider]} ·{" "}
-                                {provider.config.api ?? "legacy"} ·{" "}
-                                {provider.config.baseUrl
-                                  ? copy.modelsView.baseUrlConfigured
-                                  : copy.modelsView.fallbackLabel} ·{" "}
-                                {provider.config.apiKeyEnv || provider.config.secretEnvName
-                                  ? copy.modelsView.apiKeyEnvConfigured
-                                  : copy.modelsView.fallbackLabel} ·{" "}
-                                {provider.enabled
-                                  ? copy.modelsView.enabled
-                                  : copy.modelsView.disabled}
-                              </span>
+                              {(() => {
+                                const providerRow = modelsManagement.providerRows.find(
+                                  (row) => row.id === provider.id
+                                );
+                                return providerRow ? (
+                                  <span>
+                                    {providerRow.providerLabel} · {providerRow.apiLabel} ·{" "}
+                                    {providerRow.api} · {copy.modelsView.baseUrlLabel}:{" "}
+                                    {providerRow.baseUrlState}
+                                    {providerRow.baseUrlState ===
+                                    copy.modelsView.management.metadataStates.configured
+                                      ? ` (${copy.modelsView.baseUrlConfigured})`
+                                      : ""}{" "}
+                                    · {copy.modelsView.apiKeyEnvLabel}: {providerRow.secretState}
+                                    {providerRow.secretState ===
+                                    copy.modelsView.management.metadataStates.configured
+                                      ? ` (${copy.modelsView.apiKeyEnvConfigured})`
+                                      : ""}{" "}
+                                    ·{" "}
+                                    {providerRow.stateLabel} · {providerRow.modelCount} models
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                             <form action={setModelProviderEnabledAction}>
                               <input name="projectId" type="hidden" value={activeProject.id} />
@@ -766,7 +890,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 type="hidden"
                                 value={provider.enabled ? "false" : "true"}
                               />
-                              <button type="submit">
+                              <button
+                                type="submit"
+                                data-pending-label={
+                                  provider.enabled
+                                    ? copy.modelsView.management.pending.disable
+                                    : copy.modelsView.management.pending.enable
+                                }
+                              >
                                 {provider.enabled
                                   ? copy.modelsView.disable
                                   : copy.modelsView.enable}
@@ -780,8 +911,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </section>
 
                     <section className="modelsList" aria-labelledby="model-routes-title">
-                      <h2 id="model-routes-title">{copy.modelsView.routesTitle}</h2>
-                      {roleOrder.map((role) => {
+                      <h2 id="model-routes-title">
+                        {copy.modelsView.management.routeSummaryTitle}
+                      </h2>
+                      {modelManagementRoleOrder.map((role) => {
                         const route = modelState.routes.find(
                           (modelRoute) => modelRoute.role === role
                         );
@@ -796,6 +929,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             key={role}
                           >
                             <strong>{copy.modelsView.roleLabels[role]}</strong>
+                            {(() => {
+                              const routeRow = modelsManagement.routeRows.find(
+                                (row) => row.role === role
+                              );
+                              return routeRow ? (
+                                <small className={`managementState routeState-${routeRow.state}`}>
+                                  {routeRow.stateLabel} · {routeRow.resolvedLabel}
+                                </small>
+                              ) : null;
+                            })()}
                             <input name="projectId" type="hidden" value={activeProject.id} />
                             <input name="role" type="hidden" value={role} />
                             <select
@@ -817,7 +960,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               name="model"
                               defaultValue={route?.model ?? resolvedRoute.model}
                             />
-                            <button type="submit" disabled={enabledProviders.length === 0}>
+                            <button
+                              type="submit"
+                              disabled={enabledProviders.length === 0}
+                              data-pending-label={copy.modelsView.management.pending.saveRoute}
+                            >
                               {copy.modelsView.saveRoute}
                             </button>
                           </form>
@@ -826,8 +973,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </section>
 
                     <section className="modelsList" aria-labelledby="resolved-routes-title">
-                      <h2 id="resolved-routes-title">{copy.modelsView.resolvedTitle}</h2>
-                      {roleOrder.map((role) => {
+                      <h2 id="resolved-routes-title">
+                        {copy.modelsView.management.resolvedSummaryTitle}
+                      </h2>
+                      {modelManagementRoleOrder.map((role) => {
                         const resolvedRoute = modelState.resolvedPolicy[role];
                         return (
                           <div className="modelRow" key={role}>
@@ -1541,7 +1690,9 @@ function createArtifactPreviewSearchParams({
   errorCode,
   interruptError,
   modelError,
+  modelNotice,
   recoveryError,
+  skillNotice,
   skillError,
   workerError
 }: {
@@ -1549,7 +1700,9 @@ function createArtifactPreviewSearchParams({
   errorCode?: ProjectFlowErrorCode;
   interruptError?: InterruptFlowErrorCode;
   modelError?: ModelFlowErrorCode;
+  modelNotice?: ReturnType<typeof toModelManagementNotice>;
   recoveryError?: RunRecoveryFlowErrorCode;
+  skillNotice?: ReturnType<typeof toSkillManagementNotice>;
   skillError?: SkillFlowErrorCode;
   workerError?: WorkerQueueFlowErrorCode;
 }): URLSearchParams {
@@ -1567,6 +1720,12 @@ function createArtifactPreviewSearchParams({
   }
   if (modelError) {
     query.set("modelError", modelError);
+  }
+  if (skillNotice) {
+    query.set("skillNotice", skillNotice);
+  }
+  if (modelNotice) {
+    query.set("modelNotice", modelNotice);
   }
   if (interruptError) {
     query.set("interruptError", interruptError);

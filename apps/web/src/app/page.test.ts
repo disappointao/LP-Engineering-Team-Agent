@@ -1350,6 +1350,68 @@ describe("HomePage project flow errors", () => {
     expect(sections.some((section) => section.props?.className === "chatWorkspace" && section.props?.["aria-label"] === "Skills")).toBe(true);
   });
 
+  it("renders skills management lifecycle, notices, and safe runtime summary", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      skills: {
+        availableVersions: [
+          {
+            id: "skill_version_draft",
+            skillId: "skill_brand",
+            version: "0.1.0",
+            manifest: {
+              id: "skill_brand",
+              name: "Brand voice",
+              version: "0.1.0",
+              type: "template",
+              scope: "project",
+              description: "RAW_SKILL_CONTENT_SECRET",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["brand.md"],
+              reviewState: "draft"
+            },
+            content: "RAW_SKILL_CONTENT_SECRET",
+            contentType: "text/markdown",
+            reviewState: "draft",
+            createdAt: "2026-05-24T00:00:00.000Z"
+          }
+        ],
+        boundSkills: []
+      },
+      skillCommands: []
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills", skillNotice: "draft_created" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Skill draft saved.");
+    expect(text).toContain("Runtime context");
+    expect(text).toContain("0 active context skills");
+    expect(text).toContain("Skill lifecycle");
+    expect(text).toContain("Draft");
+    expect(text).toContain("Validate next");
+    expect(text).toContain("Saved skill content is not echoed on this page.");
+    expect(text).not.toContain("RAW_SKILL_CONTENT_SECRET");
+  });
+
+  it("ignores unknown skills and models management notices", async () => {
+    setActiveEmptyProjectState();
+
+    const skillsPage = await HomePage({
+      searchParams: Promise.resolve({ view: "skills", skillNotice: "RAW_SECRET" })
+    });
+    const modelsPage = await HomePage({
+      searchParams: Promise.resolve({ view: "models", modelNotice: "RAW_SECRET" })
+    });
+    const text = [...collectText(skillsPage), ...collectText(modelsPage)].join(" ");
+
+    expect(text).not.toContain("RAW_SECRET");
+  });
+
   it("renders localized skill command errors", async () => {
     setActiveEmptyProjectState();
 
@@ -1600,6 +1662,69 @@ describe("HomePage project flow errors", () => {
     expect(apiSelect).toBeDefined();
     expect(apiOptionValues).toEqual(["mock", "openai-completions", "anthropic-messages"]);
     expect(text).toContain("mock-anthropic/code-model");
+  });
+
+  it("renders models management summaries, route states, notices, and safe metadata", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: {
+              api: "openai-completions",
+              baseUrl: "https://secret-provider.example.test/v1",
+              apiKeyEnv: "OPENAI_API_KEY",
+              models: [{ id: "gpt-5.4" }]
+            },
+            enabled: true,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "route_planner",
+            scope: "project",
+            targetKey: "project_1",
+            role: "planner",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:01:00.000Z",
+            updatedAt: "2026-05-24T00:01:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
+          planner: { provider: "provider_openai", model: "gpt-5.4" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models", modelNotice: "route_saved" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Model route saved.");
+    expect(text).toContain("Project model summary");
+    expect(text).toContain("1 enabled of 1 provider");
+    expect(text).toContain("1 configured of 5 routes");
+    expect(text).toContain("Provider configuration");
+    expect(text).toContain("Role routing");
+    expect(text).toContain("Resolved runtime routes");
+    expect(text).toContain("Configured");
+    expect(text).toContain("Deterministic fallback");
+    expect(text).not.toContain("secret-provider.example.test");
+    expect(text).not.toContain("OPENAI_API_KEY=");
   });
 
   it("renders real provider opt-in and fail-closed guidance in the models view", async () => {
