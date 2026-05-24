@@ -39,6 +39,7 @@
 - Provider usage metadata v0：Stage 32 已实现 provider-reported / estimated usage metadata、duration、attempt、streaming capability summary，并把安全摘要从 model gateway 传到 runtime/API run event 和 Web timeline。
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
+- Browser failure / visual regression expansion v0：Stage 45 已把 `pnpm alpha:e2e` 扩展到 Stage 41-44 V1 Web surface，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 visual contracts。
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
@@ -62,11 +63,11 @@
 
 按当前代码基础，面向本地/单用户 **V1 polished alpha**，粗略估算还需要 **7-14 个有效开发日**。如果把内部 RC 反馈、阻塞修复和最终 completion gate 都算入，粗略估算 **10-18 个有效开发日**；实际范围由后续 feedback batch 的 blocker 数量决定。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。Stage 45 已完成 browser failure / visual regression expansion。第一版 Web 范围已扩大为 V1 polished alpha，下一步优先补齐：
 
-- Browser failure injection 和轻量视觉回归扩展。
 - V1 polished alpha completion gate。
 - RC blocker 修复和后续 backlog routing。
+- Stage 45 之后的跨浏览器矩阵、远端 browser farm 和更系统的 visual baseline。
 
 当前仍明确后置：
 
@@ -731,9 +732,17 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 45：Browser Failure and Visual Regression Expansion v0
 
-**状态：** 设计已批准，当前推荐实施。
+**状态：** 已实现。
 
 **为什么现在做：** Stage 34 已建立 browser failure injection 和轻量 visual contract，Stage 41-44 补齐 V1 Web surface、artifact workspace、timeline/recovery 和 Skills/Models 管理后，需要把 deterministic browser acceptance 扩展到这些新增主路径和安全失败状态。
+
+**实现摘要：**
+
+- `pnpm alpha:e2e` 现在覆盖 MCP hidden / legacy route safe fallback。
+- Artifact workspace browser coverage 已包含 happy path、invalid path、oversized snippet 和安全 unavailable copy。
+- Timeline / recovery coverage 已包含 handoff marker、recovery executable guidance 和 diagnostics non-leakage。
+- Skills / Models browser coverage 已包含 invalid manifest、worker queue error、provider fail-closed、invalid provider config 和 secret/base URL non-leakage。
+- Visual contract 扩展到 empty workbench、artifact workspace、Skills 和 Models management surface，并继续只保存 diagnostic screenshots。
 
 **建议范围：**
 
@@ -751,7 +760,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 46：V1 Polished Alpha Completion Gate v0
 
-**状态：** Stage 45 后推荐。
+**状态：** 当前推荐。
 
 **为什么现在做：** Stage 46 是第一版收口阶段，需要把 V1 polished alpha 的自动 gate、人工验收、可选真实 provider smoke、known limitations 和 RC decision record 汇总成明确 go/no-go，而不是继续扩大功能范围。
 
@@ -890,6 +899,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 45 已完成 Browser Failure and Visual Regression Expansion v0：deterministic Playwright gate 已覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed、non-leakage 和轻量 V1 visual contracts；默认下一路由为 Stage 46 V1 Polished Alpha Completion Gate v0。
 - 2026-05-24 Stage 45 implementation plan 已写入：计划按 TDD 分为 shared browser contracts / visual coverage、artifact workspace boundary、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、docs closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development。
 - 2026-05-24 Stage 45 设计已批准：Browser Failure and Visual Regression Expansion v0 采用 deterministic Playwright gate expansion，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
 - 2026-05-24 Stage 44 已完成 Skills and Models Client-side Management v0：Web-only management view-model 已覆盖 Skills lifecycle、runtime context summary、command queue hierarchy、Models provider/route/resolved summaries、real provider opt-in 和 fail-closed diagnostics；默认下一路由为 Stage 45 Browser Failure and Visual Regression Expansion v0。

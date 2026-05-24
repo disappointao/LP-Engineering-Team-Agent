@@ -41,7 +41,7 @@
 - Modify: `apps/web/e2e/helpers.ts`
 - Modify: `apps/web/e2e/alpha-visual.spec.ts`
 
-- [ ] **Step 1: Add failing visual tests that reference the new helpers**
+- [x] **Step 1: Add failing visual tests that reference the new helpers**
 
 Replace `apps/web/e2e/alpha-visual.spec.ts` with:
 
@@ -107,7 +107,7 @@ test("keeps the management surfaces visually stable", async ({ page }, testInfo)
 });
 ```
 
-- [ ] **Step 2: Run the focused visual spec and verify it fails because helpers are missing**
+- [x] **Step 2: Run the focused visual spec and verify it fails because helpers are missing**
 
 Run:
 
@@ -117,7 +117,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-visual.spec.ts
 
 Expected: FAIL with TypeScript / Playwright import errors for `expectArtifactWorkspaceLayoutContract` and `expectManagementLayoutContract`.
 
-- [ ] **Step 3: Add shared layout and non-leakage helpers**
+- [x] **Step 3: Add shared layout and non-leakage helpers**
 
 In `apps/web/e2e/helpers.ts`, add these exports after `expectWorkbenchLayoutContract` and before `escapeRegExp`:
 
@@ -187,7 +187,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
 }
 ```
 
-- [ ] **Step 4: Replace the duplicate overflow assertion in `expectWorkbenchLayoutContract`**
+- [x] **Step 4: Replace the duplicate overflow assertion in `expectWorkbenchLayoutContract`**
 
 In `apps/web/e2e/helpers.ts`, replace the final metrics block inside `expectWorkbenchLayoutContract`:
 
@@ -205,7 +205,7 @@ with:
   await expectNoHorizontalOverflow(page);
 ```
 
-- [ ] **Step 5: Run the focused visual spec**
+- [x] **Step 5: Run the focused visual spec**
 
 Run:
 
@@ -215,7 +215,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-visual.spec.ts
 
 Expected: PASS with 3 Chromium tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/e2e/helpers.ts apps/web/e2e/alpha-visual.spec.ts
@@ -229,7 +229,7 @@ git commit -m "expand browser visual contracts"
 **Files:**
 - Modify: `apps/web/e2e/alpha-lp-artifacts.spec.ts`
 
-- [ ] **Step 1: Add failing oversized snippet coverage**
+- [x] **Step 1: Add failing oversized snippet coverage**
 
 Modify imports at the top of `apps/web/e2e/alpha-lp-artifacts.spec.ts` to include Node helpers and the non-leak helper:
 
@@ -284,7 +284,7 @@ function makeArtifactWorkspaceFileOversized(path: string, secret: string) {
 }
 ```
 
-- [ ] **Step 2: Run the focused artifact spec and verify the new assertion fails before helper/import fixes are complete**
+- [x] **Step 2: Run the focused artifact spec and verify the new assertion fails before helper/import fixes are complete**
 
 Run:
 
@@ -294,7 +294,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-lp-artifacts.spec.ts
 
 Expected before implementation is complete: FAIL because `expectNoVisibleTextLeaks` is not imported or `makeArtifactWorkspaceFileOversized` has not been added. Expected after Task 1 helper exists and this task is implemented: PASS.
 
-- [ ] **Step 3: Strengthen invalid artifact query non-leakage**
+- [x] **Step 3: Strengthen invalid artifact query non-leakage**
 
 In the same test, after each invalid artifact path navigation, ensure these assertions exist:
 
@@ -308,7 +308,7 @@ In the same test, after each invalid artifact path navigation, ensure these asse
 
 Keep the existing exact `Snippet is unavailable.` assertions.
 
-- [ ] **Step 4: Run the focused artifact spec**
+- [x] **Step 4: Run the focused artifact spec**
 
 Run:
 
@@ -318,7 +318,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-lp-artifacts.spec.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/e2e/alpha-lp-artifacts.spec.ts
@@ -333,7 +333,7 @@ git commit -m "cover artifact workspace failure boundaries"
 - Modify: `apps/web/e2e/alpha-boundaries.spec.ts`
 - Modify: `apps/web/e2e/alpha-failures.spec.ts`
 
-- [ ] **Step 1: Extend MCP legacy route assertions**
+- [x] **Step 1: Extend MCP legacy route assertions**
 
 In `apps/web/e2e/alpha-boundaries.spec.ts`, add this import:
 
@@ -365,7 +365,7 @@ After the existing MCP form absence assertions, add:
   ]);
 ```
 
-- [ ] **Step 2: Extend failure query coverage**
+- [x] **Step 2: Extend failure query coverage**
 
 In `apps/web/e2e/alpha-failures.spec.ts`, update the import:
 
@@ -433,7 +433,7 @@ test("shows recovery errors without exposing raw diagnostics", async ({ page }) 
 
 Remove the older recovery query test if it becomes a duplicate with the same name. Keep the existing provider fail-closed and worker queue tests.
 
-- [ ] **Step 3: Run focused boundary/failure specs**
+- [x] **Step 3: Run focused boundary/failure specs**
 
 Run:
 
@@ -443,7 +443,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-boundaries.spec.ts apps/web/e2e/alpha-failu
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/e2e/alpha-boundaries.spec.ts apps/web/e2e/alpha-failures.spec.ts
@@ -458,7 +458,7 @@ git commit -m "harden browser failure non leakage"
 - Create: `apps/web/e2e/alpha-recovery-timeline.spec.ts`
 - Modify: `apps/web/e2e/helpers.ts`
 
-- [ ] **Step 1: Strengthen timeline helper expectations**
+- [x] **Step 1: Strengthen timeline helper expectations**
 
 In `apps/web/e2e/helpers.ts`, update `expectRunTimeline` to include marker label visibility and layout safety:
 
@@ -488,7 +488,7 @@ export async function expectRunTimeline(page: Page) {
 }
 ```
 
-- [ ] **Step 2: Add recovery timeline fixture test**
+- [x] **Step 2: Add recovery timeline fixture test**
 
 Create `apps/web/e2e/alpha-recovery-timeline.spec.ts` with:
 
@@ -574,7 +574,7 @@ function injectFailedBuilderRun(secret: string, localPath: string) {
 }
 ```
 
-- [ ] **Step 3: Run focused recovery timeline spec**
+- [x] **Step 3: Run focused recovery timeline spec**
 
 Run:
 
@@ -584,7 +584,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-recovery-timeline.spec.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Run LP artifact spec again because `expectRunTimeline` changed**
+- [x] **Step 4: Run LP artifact spec again because `expectRunTimeline` changed**
 
 Run:
 
@@ -594,7 +594,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-lp-artifacts.spec.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/e2e/helpers.ts apps/web/e2e/alpha-recovery-timeline.spec.ts
@@ -614,7 +614,7 @@ git commit -m "cover recovery timeline browser guidance"
 - Modify: `docs/agent-development-learning.md`
 - Modify: `docs/superpowers/plans/2026-05-24-browser-failure-visual-regression-expansion.md`
 
-- [ ] **Step 1: Update README browser gate summary**
+- [x] **Step 1: Update README browser gate summary**
 
 In `README.md`, replace the browser E2E scope bullet with:
 
@@ -628,7 +628,7 @@ Replace the paragraph after `pnpm alpha:e2e` with:
 `pnpm alpha:e2e` 会启动本地 Next.js dev server，使用隔离的 `LP_AGENT_WORKBENCH_STATE_FILE`，默认运行 Chromium + deterministic runtime。它不需要真实 provider key、MCP server、Postgres、远端 browser farm 或真实部署。当前 browser gate 覆盖 happy path、V1 Web surface failure injection、recovery/timeline diagnostics non-leakage 和轻量 layout visual contract；不会做跨平台 pixel-perfect 截图基线。失败时排查 artifact 位于 `test-results/alpha-e2e-artifacts/` 和 `playwright-report/`，layout contract 会额外留下诊断截图。
 ```
 
-- [ ] **Step 2: Update Web V1 acceptance checklist**
+- [x] **Step 2: Update Web V1 acceptance checklist**
 
 In `docs/web-v1-acceptance.md`, in **Browser E2E 自动验收**, replace the Stage 34-era bullet group with:
 
@@ -646,7 +646,7 @@ In **已知后续工作**, replace the Stage 34 bullet with:
 - [ ] Stage 45 Browser failure / visual regression expansion 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
 ```
 
-- [ ] **Step 3: Update RC doc Stage 45 references**
+- [x] **Step 3: Update RC doc Stage 45 references**
 
 In `docs/alpha-release-candidate.md`, in **Operator Trial Script** step 9, replace:
 
@@ -666,7 +666,7 @@ In **Follow-up Routing**, replace the Stage 45 bullet with:
 - Stage 45（已完成）：Browser failure injection、recovery/timeline diagnostics non-leakage 和轻量视觉回归扩展。
 ```
 
-- [ ] **Step 4: Update roadmap state**
+- [x] **Step 4: Update roadmap state**
 
 In `docs/project-roadmap.md`, add this bullet to **当前状态快照** near the existing browser E2E bullets:
 
@@ -706,7 +706,7 @@ Add a decision record at the top:
 - 2026-05-24 Stage 45 已完成 Browser Failure and Visual Regression Expansion v0：deterministic Playwright gate 已覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed、non-leakage 和轻量 V1 visual contracts；默认下一路由为 Stage 46 V1 Polished Alpha Completion Gate v0。
 ```
 
-- [ ] **Step 5: Update Superpowers index**
+- [x] **Step 5: Update Superpowers index**
 
 In `docs/superpowers/README.md`, after the Stage 45 spec entry, add:
 
@@ -716,7 +716,7 @@ In `docs/superpowers/README.md`, after the Stage 45 spec entry, add:
    - 在 Stage 45 design 后阅读，用于按 TDD 扩展 Playwright helpers、artifact workspace boundaries、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、visual contracts、docs closeout 和最终验证。
 ```
 
-- [ ] **Step 6: Update Agent learning note**
+- [x] **Step 6: Update Agent learning note**
 
 In `docs/agent-development-learning.md`, under Stage 45, add the current plan link:
 
@@ -736,11 +736,11 @@ Then add implementation status:
 - 没有改变 Agent runtime、model gateway、artifact policy、skill command execution、MCP backend 或 recovery action contract。
 ```
 
-- [ ] **Step 7: Mark this plan’s completed tasks**
+- [x] **Step 7: Mark this plan’s completed tasks**
 
 In `docs/superpowers/plans/2026-05-24-browser-failure-visual-regression-expansion.md`, change completed task checkboxes from `- [ ]` to `- [x]` only for steps that have actually been completed by the implementation.
 
-- [ ] **Step 8: Run documentation checks**
+- [x] **Step 8: Run documentation checks**
 
 Run:
 
@@ -751,7 +751,7 @@ git diff --check
 
 Expected: all Stage 45 references are consistent; `git diff --check` exits 0.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add README.md docs/web-v1-acceptance.md docs/alpha-release-candidate.md docs/project-roadmap.md docs/superpowers/README.md docs/agent-development-learning.md docs/superpowers/plans/2026-05-24-browser-failure-visual-regression-expansion.md

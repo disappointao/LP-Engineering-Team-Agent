@@ -67,7 +67,7 @@
    - 直接访问 `/?view=mcp`，确认页面安全降级，不展示 MCP connector、tool approval 或 execution form。
    - 不配置 MCP 仍可完成普通聊天和 LP task。
 9. Failure display：
-   - 确认 provider fail-closed、artifact invalid path、worker queue bounded error 由 `pnpm alpha:e2e` 覆盖。
+   - 确认 provider fail-closed、Skills invalid manifest、Models invalid config、artifact invalid path / oversized snippet、worker queue bounded error、recovery/timeline diagnostics non-leakage 由 `pnpm alpha:e2e` 覆盖。
    - 人工 spot-check 页面不泄漏 secret、raw provider response、raw tool output、本机路径或完整 artifact 内容。
 10. 可选真实 provider：
    - 只有在试用目标需要真实模型时，按 `docs/real-provider-alpha-smoke.md` 执行。
@@ -160,7 +160,7 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 - Stage 42（已完成）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
 - Stage 43（已完成）：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
 - Stage 44（已完成）：Skills / Models client-side management，继续排除 MCP management。
-- Stage 45（当前推荐）：Browser failure injection 和轻量视觉回归扩展。
+- Stage 45（已完成）：Browser failure injection、recovery/timeline diagnostics non-leakage 和轻量视觉回归扩展。
 - Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。
 - Backlog：MCP management、production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
 

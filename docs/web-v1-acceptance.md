@@ -18,11 +18,11 @@
 - [ ] 执行 `pnpm alpha:e2e`，确认 browser-level alpha acceptance 通过。
 - [ ] 自动验收覆盖普通聊天 streaming。
 - [ ] 自动验收覆盖 LP live task。
-- [ ] 自动验收覆盖 artifact preview/export/snippet。
-- [ ] 自动验收覆盖 Skills / Models / MCP alpha boundary。
-- [ ] 自动验收覆盖 bounded recovery error display。
-- [ ] 自动验收覆盖 provider fail-closed、artifact invalid path 和 worker queue bounded error display。
-- [ ] 自动验收覆盖空首页 sidebar / workspace / composer 的轻量 layout visual contract，并在失败 artifact 中保留诊断截图。
+- [ ] 自动验收覆盖 artifact workspace happy path、invalid path、oversized snippet 和安全 unavailable copy。
+- [ ] 自动验收覆盖 MCP hidden navigation 和 legacy `/?view=mcp` safe fallback。
+- [ ] 自动验收覆盖 provider fail-closed、Skills invalid manifest、worker queue bounded error、Models invalid config 和 recovery error display。
+- [ ] 自动验收覆盖 timeline / recovery diagnostics non-leakage，不展示 raw model output、provider secret、worker raw detail、本机路径或 query debug values。
+- [ ] 自动验收覆盖空首页、artifact workspace、Skills 和 Models surface 的轻量 layout visual contract，并在失败 artifact 中保留诊断截图。
 - [ ] 真实 provider smoke 仍是可选手动验收，不进入默认 `pnpm alpha:e2e`。
 
 ## 首屏
@@ -116,7 +116,7 @@
 
 ## 已知后续工作
 
-- [ ] Stage 34 Browser failure injection 和轻量 visual layout contract 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
+- [ ] Stage 45 Browser failure / visual regression expansion 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
 - [ ] Stage 35 Provider token delta streaming 已完成普通聊天 `assistant` role；LP structured output token-level UI、billing/cost ledger 仍是后续工作。
 - [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。

@@ -1069,6 +1069,12 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-24-browser-failure-visual-regression-expansion.md](./superpowers/plans/2026-05-24-browser-failure-visual-regression-expansion.md)
 
+当前实现状态：
+
+- Stage 45 v0 已实现 deterministic browser acceptance expansion。
+- 新增覆盖保持在 browser-visible contract：MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和 geometry visual contracts。
+- 没有改变 Agent runtime、model gateway、artifact policy、skill command execution、MCP backend 或 recovery action contract。
+
 学习重点：
 
 - Browser acceptance 是 Agent workflow 的用户可见 contract，不是新的事实来源。测试应回到 repository/API/runtime 已有事实，而不是在浏览器里创造第二套 Agent state。
