@@ -470,6 +470,10 @@
    - Stage 44 Skills and Models Client-side Management v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 44 design 后阅读，用于按 TDD 实现 i18n management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout。
 
+117. `specs/2026-05-24-browser-failure-visual-regression-expansion-design.md`
+   - Stage 45 Browser Failure and Visual Regression Expansion v0 design（已批准，当前推荐实施）。
+   - 在 Stage 44 implementation plan 和当前 roadmap 后阅读，用于扩展 deterministic `pnpm alpha:e2e`：覆盖 MCP hidden fallback、artifact workspace failure / snippet boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；本阶段不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

@@ -1056,6 +1056,22 @@ pnpm --filter @lp-agent/model-gateway test
 - Models UI 保存的是 provider / model metadata 和 secret reference，不保存 secret 值；错误诊断必须通过 stable error code 和 bounded copy 表达。
 - “会进入 runtime context 的是什么”应在 UI 中讲清：bounded skill/model metadata 可以展示，raw content、secret、raw provider response、完整 base URL、本机路径和完整 artifact 内容不应扩散。
 
+### 阶段 45：Browser Failure and Visual Regression Expansion v0
+
+当前设计：
+
+- [2026-05-24-browser-failure-visual-regression-expansion-design.md](./superpowers/specs/2026-05-24-browser-failure-visual-regression-expansion-design.md)
+- 这一阶段只扩展 deterministic browser acceptance，不新增 Agent runtime 能力。
+- `pnpm alpha:e2e` 要覆盖 Stage 41-44 后的 V1 Web surface：MCP hidden fallback、dedicated artifact workspace、run timeline / recovery diagnostics、Skills / Models management fail-closed 和轻量 visual contracts。
+- 默认 gate 继续不依赖真实 provider、MCP server、Postgres、真实部署或网络服务。
+
+学习重点：
+
+- Browser acceptance 是 Agent workflow 的用户可见 contract，不是新的事实来源。测试应回到 repository/API/runtime 已有事实，而不是在浏览器里创造第二套 Agent state。
+- Visual regression 在当前阶段选择 geometry / layout contract 和 diagnostic screenshot，而不是 pixel-perfect baseline；它保护“用户能看清关键状态和动作”，不冻结 UI 微小样式。
+- Failure injection 的价值是验证 safe diagnostics 和 non-leakage。raw model output、raw provider response、secret、base URL、raw skill content、完整 artifact 内容、本机路径和 worker raw details 不能因为测试或调试参数进入 UI。
+- 通过 isolated Playwright JSON state 构造 fail-closed edge case 是可接受的，但只能用于 UI 无法合法创建的状态，并且不能污染用户本地 state 或绕开产品安全边界。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
