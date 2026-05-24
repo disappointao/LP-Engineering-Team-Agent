@@ -60,22 +60,24 @@ export async function expectRunTimeline(page: Page) {
   const runTimeline = page.getByLabel("Run timeline");
   await expect(runTimeline).toBeVisible();
   await expect(runTimeline.getByText("Run timeline", { exact: true })).toBeVisible();
+  await expect(runTimeline.getByText("Planner to deployment handoff", { exact: true })).toBeVisible();
 
   for (const role of ["Planner", "Builder", "Reviewer", "Deployer"]) {
     await expect(runTimeline.getByText(role, { exact: true })).toBeVisible();
   }
 
-  await expect(
-    runTimeline
-      .locator(
-        [
-          '[data-marker="handoff_ready"]',
-          '[data-marker="handoff_consumed"]',
-          '[data-marker="handoff_blocked"]'
-        ].join(", ")
-      )
-      .first()
-  ).toBeVisible();
+  const marker = runTimeline
+    .locator(
+      [
+        '[data-marker="handoff_ready"]',
+        '[data-marker="handoff_consumed"]',
+        '[data-marker="handoff_blocked"]'
+      ].join(", ")
+    )
+    .first();
+  await expect(marker).toBeVisible();
+  await expect(runTimeline.getByText(/Handoff ready|Handoff consumed|Handoff blocked/).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 }
 
 export async function expectSnippetFor(page: Page, filePath: string) {
