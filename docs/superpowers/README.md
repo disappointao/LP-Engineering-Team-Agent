@@ -479,11 +479,11 @@
    - 在 Stage 45 design 后阅读，用于按 TDD 扩展 Playwright helpers、artifact workspace boundaries、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、visual contracts、scoped / atomic E2E state fixtures、docs closeout 和最终验证。
 
 119. `specs/2026-05-24-v1-polished-alpha-completion-gate-design.md`
-   - Stage 46 V1 Polished Alpha Completion Gate v0 design（已批准，当前推荐实施）。
+   - Stage 46 V1 Polished Alpha Completion Gate v0 design（已实现，当前已完成）。
    - 在 Stage 45 implementation plan 和当前 roadmap 后阅读，用于收口 V1 polished alpha：运行完整 deterministic gates、记录人工 acceptance / 可选真实 provider smoke 状态、更新 RC decision record、known limitations、completion note、roadmap 和后续 backlog routing；本阶段不新增功能、不修 blocker、不改变默认 no-key gate。
 
 120. `plans/2026-05-24-v1-polished-alpha-completion-gate.md`
-   - Stage 46 V1 Polished Alpha Completion Gate v0 implementation plan（已批准，待实施）。
+   - Stage 46 V1 Polished Alpha Completion Gate v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing。
 
 ## 维护规则
