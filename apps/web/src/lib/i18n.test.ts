@@ -185,6 +185,26 @@ describe("web i18n", () => {
     expect(zh.modelsView.errors.model_provider_api_key_env_invalid).toContain("环境变量");
   });
 
+  it("has localized skills and models management copy", () => {
+    const en = getWorkbenchCopy("en");
+    const zh = getWorkbenchCopy("zh-CN");
+
+    expect(en.skillsView.management.runtimeSummaryTitle).toBe("Runtime context");
+    expect(en.skillsView.management.notices.draft_created).toBe("Skill draft saved.");
+    expect(en.skillsView.management.pending.createDraft).toBe("Saving draft...");
+    expect(en.skillsView.management.lifecycleStages.enabled).toBe("Enabled");
+    expect(en.skillsView.management.policyItems.join(" ")).toContain("Published and enabled");
+    expect(zh.skillsView.management.runtimeSummaryTitle).toBe("运行上下文");
+    expect(zh.skillsView.management.notices.command_queued).toBe("技能命令已入队。");
+
+    expect(en.modelsView.management.projectSummaryTitle).toBe("Project model summary");
+    expect(en.modelsView.management.notices.provider_created).toBe("Model provider saved.");
+    expect(en.modelsView.management.routeStates.failClosed).toBe("Fail closed");
+    expect(en.modelsView.management.safeMetadataNote).toContain("Secret values are never shown");
+    expect(zh.modelsView.management.projectSummaryTitle).toBe("项目模型摘要");
+    expect(zh.modelsView.management.notices.route_saved).toBe("模型路由已保存。");
+  });
+
   it("exposes localized skill command errors for both locales", () => {
     const zh = getWorkbenchCopy("zh-CN");
     const en = getWorkbenchCopy("en");

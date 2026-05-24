@@ -133,6 +133,47 @@ export interface WorkbenchCopy {
     statusLabels: Record<"draft" | "validated" | "published" | "deprecated" | "archived", string>;
     errors: Record<SkillFlowErrorCode, string>;
     workerErrors: Record<WorkerQueueFlowErrorCode, string>;
+    management: {
+      runtimeSummaryTitle: string;
+      lifecycleTitle: string;
+      createPolicyTitle: string;
+      versionsSummaryTitle: string;
+      bindingSummaryTitle: string;
+      commandSummaryTitle: string;
+      noRawContentNotice: string;
+      runtimeSummary: (activeCount: number, commandCount: number) => string;
+      lifecycleStages: Record<
+        "draft" | "validated" | "published" | "bound" | "enabled" | "disabled",
+        string
+      >;
+      nextActions: Record<
+        "validate" | "publish" | "bind" | "enable" | "disable" | "none",
+        string
+      >;
+      notices: Record<
+        | "draft_created"
+        | "validated"
+        | "published"
+        | "bound"
+        | "enabled"
+        | "disabled"
+        | "command_queued"
+        | "worker_ran",
+        string
+      >;
+      pending: Record<
+        | "createDraft"
+        | "validate"
+        | "publish"
+        | "bind"
+        | "enable"
+        | "disable"
+        | "queueCommand"
+        | "runWorker",
+        string
+      >;
+      policyItems: string[];
+    };
   };
   mcpView: {
     title: string;
@@ -202,6 +243,24 @@ export interface WorkbenchCopy {
     providerTypes: Record<"mock" | "openai" | "anthropic" | "internal" | "custom", string>;
     providerApis: Record<"mock" | "openai-completions" | "anthropic-messages", string>;
     errors: Record<ModelFlowErrorCode, string>;
+    management: {
+      projectSummaryTitle: string;
+      providerSummaryTitle: string;
+      routeSummaryTitle: string;
+      resolvedSummaryTitle: string;
+      safeMetadataNote: string;
+      optInRuntimeNote: string;
+      providerCount: (enabledCount: number, totalCount: number) => string;
+      routeCount: (configuredCount: number, totalCount: number) => string;
+      notices: Record<
+        "provider_created" | "provider_enabled" | "provider_disabled" | "route_saved",
+        string
+      >;
+      pending: Record<"createProvider" | "enable" | "disable" | "saveRoute", string>;
+      providerStates: Record<"enabled" | "disabled", string>;
+      routeStates: Record<"configured" | "fallback" | "failClosed", string>;
+      metadataStates: Record<"configured" | "notConfigured", string>;
+    };
   };
   status: {
     review: string;
@@ -577,6 +636,59 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         worker_runtime_not_configured: "Local worker runtime is not configured. Worker queue is unavailable.",
         worker_job_execution_failed: "Local worker job execution failed.",
         worker_job_finalization_failed: "Worker result could not be finalized."
+      },
+      management: {
+        runtimeSummaryTitle: "Runtime context",
+        lifecycleTitle: "Skill lifecycle",
+        createPolicyTitle: "Draft input policy",
+        versionsSummaryTitle: "Versions",
+        bindingSummaryTitle: "Project bindings",
+        commandSummaryTitle: "Deployment commands",
+        noRawContentNotice: "Saved skill content is not echoed on this page.",
+        runtimeSummary: (activeCount, commandCount) =>
+          `${activeCount} active context ${activeCount === 1 ? "skill" : "skills"} · ${commandCount} queueable ${commandCount === 1 ? "command" : "commands"}`,
+        lifecycleStages: {
+          draft: "Draft",
+          validated: "Validated",
+          published: "Published",
+          bound: "Bound",
+          enabled: "Enabled",
+          disabled: "Disabled"
+        },
+        nextActions: {
+          validate: "Validate next",
+          publish: "Publish next",
+          bind: "Bind to project next",
+          enable: "Enable for runtime",
+          disable: "Disable from runtime",
+          none: "No action available"
+        },
+        notices: {
+          draft_created: "Skill draft saved.",
+          validated: "Skill validated.",
+          published: "Skill published.",
+          bound: "Skill bound to the project.",
+          enabled: "Skill enabled for runtime context.",
+          disabled: "Skill disabled from runtime context.",
+          command_queued: "Skill command queued.",
+          worker_ran: "Local worker run completed."
+        },
+        pending: {
+          createDraft: "Saving draft...",
+          validate: "Validating...",
+          publish: "Publishing...",
+          bind: "Binding...",
+          enable: "Enabling...",
+          disable: "Disabling...",
+          queueCommand: "Queuing...",
+          runWorker: "Running worker..."
+        },
+        policyItems: [
+          "Project-scoped manifest only.",
+          "Markdown or plain text content under the local size cap.",
+          "Published and enabled project-bound skills enter runtime context.",
+          "Executable content and raw skill text are not shown after save."
+        ]
       }
     },
     mcpView: {
@@ -723,6 +835,45 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         model_route_provider_invalid: "The route points to an unavailable provider.",
         model_secret_reference_invalid: "Use an environment variable name, not a secret value.",
         model_routing_operation_failed: "The model routing operation failed. Try again."
+      },
+      management: {
+        projectSummaryTitle: "Project model summary",
+        providerSummaryTitle: "Provider configuration",
+        routeSummaryTitle: "Role routing",
+        resolvedSummaryTitle: "Resolved runtime routes",
+        safeMetadataNote:
+          "Secret values are never shown. The page stores provider metadata and environment variable names only.",
+        optInRuntimeNote:
+          "Real provider calls still require REAL_MODEL_RUNTIME=1 and configured environment variables.",
+        providerCount: (enabledCount, totalCount) =>
+          `${enabledCount} enabled of ${totalCount} ${totalCount === 1 ? "provider" : "providers"}`,
+        routeCount: (configuredCount, totalCount) =>
+          `${configuredCount} configured of ${totalCount} ${totalCount === 1 ? "route" : "routes"}`,
+        notices: {
+          provider_created: "Model provider saved.",
+          provider_enabled: "Model provider enabled.",
+          provider_disabled: "Model provider disabled.",
+          route_saved: "Model route saved."
+        },
+        pending: {
+          createProvider: "Saving provider...",
+          enable: "Enabling...",
+          disable: "Disabling...",
+          saveRoute: "Saving route..."
+        },
+        providerStates: {
+          enabled: "Enabled",
+          disabled: "Disabled"
+        },
+        routeStates: {
+          configured: "Configured",
+          fallback: "Deterministic fallback",
+          failClosed: "Fail closed"
+        },
+        metadataStates: {
+          configured: "Configured",
+          notConfigured: "Not configured"
+        }
       }
     },
     status: {
@@ -1093,6 +1244,59 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         worker_runtime_not_configured: "本地 Worker runtime 未配置。",
         worker_job_execution_failed: "本地 Worker 任务执行失败。",
         worker_job_finalization_failed: "Worker 结果无法写回运行状态。"
+      },
+      management: {
+        runtimeSummaryTitle: "运行上下文",
+        lifecycleTitle: "技能生命周期",
+        createPolicyTitle: "草稿输入规则",
+        versionsSummaryTitle: "版本",
+        bindingSummaryTitle: "项目绑定",
+        commandSummaryTitle: "部署命令",
+        noRawContentNotice: "已保存的技能正文不会在本页面回显。",
+        runtimeSummary: (activeCount, commandCount) =>
+          `${activeCount} 个启用上下文技能 · ${commandCount} 个可入队命令`,
+        lifecycleStages: {
+          draft: "草稿",
+          validated: "已验证",
+          published: "已发布",
+          bound: "已绑定",
+          enabled: "已启用",
+          disabled: "已停用"
+        },
+        nextActions: {
+          validate: "下一步验证",
+          publish: "下一步发布",
+          bind: "下一步绑定到项目",
+          enable: "启用到运行上下文",
+          disable: "从运行上下文停用",
+          none: "暂无可用操作"
+        },
+        notices: {
+          draft_created: "技能草稿已保存。",
+          validated: "技能已验证。",
+          published: "技能已发布。",
+          bound: "技能已绑定到项目。",
+          enabled: "技能已启用到运行上下文。",
+          disabled: "技能已从运行上下文停用。",
+          command_queued: "技能命令已入队。",
+          worker_ran: "本地 Worker 运行已完成。"
+        },
+        pending: {
+          createDraft: "正在保存草稿...",
+          validate: "正在验证...",
+          publish: "正在发布...",
+          bind: "正在绑定...",
+          enable: "正在启用...",
+          disable: "正在停用...",
+          queueCommand: "正在入队...",
+          runWorker: "正在运行 Worker..."
+        },
+        policyItems: [
+          "仅支持项目级 manifest。",
+          "Markdown 或纯文本内容必须低于本地大小限制。",
+          "已发布、已启用并绑定到项目的技能会进入运行上下文。",
+          "可执行内容和技能正文保存后不会在页面回显。"
+        ]
       }
     },
     mcpView: {
@@ -1239,6 +1443,43 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         model_route_provider_invalid: "该路由指向不可用的供应商。",
         model_secret_reference_invalid: "请使用环境变量名，不要填写密钥值。",
         model_routing_operation_failed: "模型路由操作失败，请重试。"
+      },
+      management: {
+        projectSummaryTitle: "项目模型摘要",
+        providerSummaryTitle: "Provider 配置",
+        routeSummaryTitle: "角色路由",
+        resolvedSummaryTitle: "已解析运行路由",
+        safeMetadataNote: "页面只保存 provider metadata 和环境变量名，不展示 secret 值。",
+        optInRuntimeNote: "真实 provider 调用仍需要 REAL_MODEL_RUNTIME=1 和已配置的环境变量。",
+        providerCount: (enabledCount, totalCount) =>
+          `${totalCount} 个 provider 中 ${enabledCount} 个已启用`,
+        routeCount: (configuredCount, totalCount) =>
+          `${totalCount} 条路由中 ${configuredCount} 条已配置`,
+        notices: {
+          provider_created: "模型 provider 已保存。",
+          provider_enabled: "模型 provider 已启用。",
+          provider_disabled: "模型 provider 已停用。",
+          route_saved: "模型路由已保存。"
+        },
+        pending: {
+          createProvider: "正在保存 provider...",
+          enable: "正在启用...",
+          disable: "正在停用...",
+          saveRoute: "正在保存路由..."
+        },
+        providerStates: {
+          enabled: "已启用",
+          disabled: "已停用"
+        },
+        routeStates: {
+          configured: "已配置",
+          fallback: "Deterministic fallback",
+          failClosed: "Fail closed"
+        },
+        metadataStates: {
+          configured: "已配置",
+          notConfigured: "未配置"
+        }
       }
     },
     status: {
