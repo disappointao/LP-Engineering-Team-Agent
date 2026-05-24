@@ -11,14 +11,17 @@ import {
 const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
 
 test("shows timeline recovery guidance without leaking raw diagnostics", async ({ page }) => {
+  const prompt = "Generate a recovery timeline browser fixture LP";
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
-  await submitPrompt(page, "Generate a recovery timeline browser fixture LP");
+  await submitPrompt(page, prompt);
   await expectStaticLpArtifacts(page);
   await expectRunTimeline(page);
 
-  injectFailedBuilderRun("RECOVERY_BROWSER_SECRET", "/Users/ao/Desktop/recovery-secret");
+  const taskId = getLatestLpTaskId(prompt);
+  injectFailedBuilderRun(taskId, "RECOVERY_BROWSER_SECRET", "/Users/ao/Desktop/recovery-secret");
   await page.reload();
 
   await expectRunTimeline(page);
@@ -35,14 +38,29 @@ test("shows timeline recovery guidance without leaking raw diagnostics", async (
   ]);
 });
 
-function injectFailedBuilderRun(secret: string, localPath: string) {
+function getLatestLpTaskId(prompt: string): string {
+  const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
+    tasks?: Array<Record<string, unknown>>;
+  };
+  const task = (state.tasks ?? [])
+    .filter((record) => record.title === prompt && record.type === "lp_generation")
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))[0];
+  if (!task || typeof task.id !== "string") {
+    throw new Error(`Expected a persisted LP task for prompt: ${prompt}`);
+  }
+  return task.id;
+}
+
+function injectFailedBuilderRun(taskId: string, secret: string, localPath: string) {
   const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
     runs?: Array<Record<string, unknown>>;
     runEvents?: Array<Record<string, unknown>>;
   };
-  const builderRun = state.runs?.find((run) => run.role === "builder");
+  const builderRun = state.runs?.find(
+    (run) => run.role === "builder" && run.taskId === taskId
+  );
   if (!builderRun || typeof builderRun.id !== "string") {
-    throw new Error("Expected a persisted builder run in the E2E state.");
+    throw new Error(`Expected a persisted builder run for task ${taskId} in the E2E state.`);
   }
   if (typeof builderRun.projectId !== "string" || typeof builderRun.taskId !== "string") {
     throw new Error("Expected the builder run to include projectId and taskId.");
