@@ -764,6 +764,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **为什么现在做：** Stage 46 是第一版收口阶段，需要把 V1 polished alpha 的自动 gate、人工验收、可选真实 provider smoke、known limitations 和 RC decision record 汇总成明确 go/no-go，而不是继续扩大功能范围。
 
+**设计：** `docs/superpowers/specs/2026-05-24-v1-polished-alpha-completion-gate-design.md`。
+
 **建议范围：**
 
 - 运行完整 deterministic gates、人工 acceptance 和可选真实 provider smoke。
@@ -899,6 +901,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 46 设计已批准：V1 Polished Alpha Completion Gate v0 将完整 deterministic gates、人工 acceptance 状态、可选真实 provider smoke 状态、known limitations、open blockers、RC decision record 和后续 routing 汇总到 completion note；本阶段不新增功能、不修 blocker，不改变默认 no-key gate。
 - 2026-05-24 Stage 45 已完成 Browser Failure and Visual Regression Expansion v0：deterministic Playwright gate 已覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed、non-leakage 和轻量 V1 visual contracts；默认下一路由为 Stage 46 V1 Polished Alpha Completion Gate v0。
 - 2026-05-24 Stage 45 implementation plan 已写入：计划按 TDD 分为 shared browser contracts / visual coverage、artifact workspace boundary、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、docs closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development。
 - 2026-05-24 Stage 45 设计已批准：Browser Failure and Visual Regression Expansion v0 采用 deterministic Playwright gate expansion，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
