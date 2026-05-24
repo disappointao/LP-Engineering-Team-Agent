@@ -1038,6 +1038,10 @@ pnpm --filter @lp-agent/model-gateway test
 - Models 页面要让用户理解 provider config、role route、resolved route、deterministic mock fallback 和真实 provider opt-in 的差异；真实 provider 仍需要 `REAL_MODEL_RUNTIME=1` 和环境变量。
 - Stage 44 不改变 Agent runtime、Context Pack、model gateway、skill command runner、worker queue 或 repository schema，也不恢复 MCP management。
 
+当前计划：
+
+- [2026-05-24-skills-models-client-management.md](./superpowers/plans/2026-05-24-skills-models-client-management.md)
+
 学习重点：
 
 - Client-side pending state 只能改善交互反馈，不能成为 Agent fact source。action 完成后必须回到 server action / API service / repository fact。

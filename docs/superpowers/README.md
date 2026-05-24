@@ -463,8 +463,12 @@
    - 在 Stage 43 design 后阅读，用于审计已实现的 Web-only run timeline view model、localized active role summary、timeline/recovery rendering、browser acceptance 和 roadmap closeout。
 
 115. `specs/2026-05-24-skills-models-client-management-design.md`
-   - Stage 44 Skills and Models Client-side Management v0 design（已批准，待实施计划）。
+   - Stage 44 Skills and Models Client-side Management v0 design（已批准，待实现）。
    - 在 Stage 43 implementation plan 和当前 roadmap 后阅读，用于理解 Skills / Models 保留 Web surface 的 client-side 管理体验：lifecycle/status 分组、pending/success/error affordance、safe runtime summary、真实 provider opt-in 提示和 fail-closed diagnostics；本阶段不改变 Agent runtime、model gateway、skill command execution contract，也不恢复 MCP management。
+
+116. `plans/2026-05-24-skills-models-client-management.md`
+   - Stage 44 Skills and Models Client-side Management v0 implementation plan（已写入，待执行）。
+   - 在 Stage 44 design 后阅读，用于按 TDD 实现 i18n management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout。
 
 ## 维护规则
 

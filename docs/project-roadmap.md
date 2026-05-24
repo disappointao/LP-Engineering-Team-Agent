@@ -705,7 +705,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 44：Skills and Models Client-side Management v0
 
-**状态：** 设计已批准，待实施计划。
+**状态：** 设计和实施计划已写入，待实现。
 
 **为什么现在做：** Skills 是第一版主要扩展机制，Models 是真实 provider opt-in 的入口。Core flow 稳定后，V1 polished alpha 需要让 Skills/Models 管理更顺滑，而 MCP management 继续后置。
 
@@ -883,6 +883,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 44 implementation plan 已写入：计划按 TDD 分为 localized management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
 - 2026-05-24 Stage 44 设计已批准：Skills and Models Client-side Management v0 采用 Web-only client management view-model 和 progressive form affordance，收紧 Skills lifecycle、binding、command queue、Models provider config、route assignment、real provider opt-in 和 fail-closed diagnostics；不改变 Agent runtime/model gateway/skill command contract，不恢复 MCP management。
 - 2026-05-24 Stage 43 已完成 Run Timeline and Recovery UX Polish v0：Web-only timeline/recovery polish 已覆盖 fixed LP role lifecycle、handoff marker、repair/retry hints、recovery action hierarchy、manual acceptance 和 browser acceptance；默认下一路由为 Stage 44 Skills and Models Client-side Management v0。
 - 2026-05-23 Stage 43 implementation plan 已写入：计划按 TDD 分为 localized timeline copy、Web-only pure view model、localized live task summary、timeline/recovery rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
