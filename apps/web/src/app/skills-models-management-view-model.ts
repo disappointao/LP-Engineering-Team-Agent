@@ -113,7 +113,6 @@ export interface ModelManagementProviderRow {
   stateLabel: string;
   baseUrlState: ModelMetadataState;
   secretState: ModelMetadataState;
-  secretEnvName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -239,7 +238,6 @@ export function buildModelsManagementViewModel(input: {
         ? metadataStates.configured
         : metadataStates.notConfigured,
       secretState: secretConfigured ? metadataStates.configured : metadataStates.notConfigured,
-      secretEnvName: secretEnvName?.trim() || undefined,
       createdAt: provider.createdAt,
       updatedAt: provider.updatedAt
     };

@@ -149,6 +149,128 @@ describe("skills management view model", () => {
     expect(toSkillManagementNotice("draft_created")).toBe("draft_created");
     expect(toSkillManagementNotice("RAW_SECRET")).toBeUndefined();
   });
+
+  it("derives disabled, validated, and published unbound lifecycle actions", () => {
+    const model = buildSkillsManagementViewModel({
+      copy,
+      skillCommands: [],
+      skillState: {
+        availableVersions: [
+          {
+            id: "skill_version_disabled",
+            skillId: "skill_deploy",
+            version: "1.0.0",
+            manifest: {
+              id: "skill_deploy",
+              name: "Deploy",
+              version: "1.0.0",
+              type: "deployment",
+              scope: "project",
+              description: "Deployment metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["deploy.md"],
+              reviewState: "published"
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "published",
+            createdAt: "2026-05-24T00:00:00.000Z"
+          },
+          {
+            id: "skill_version_validated",
+            skillId: "skill_brand",
+            version: "0.2.0",
+            manifest: {
+              id: "skill_brand",
+              name: "Brand",
+              version: "0.2.0",
+              type: "template",
+              scope: "project",
+              description: "Brand metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["brand.md"],
+              reviewState: "validated"
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "validated",
+            createdAt: "2026-05-24T00:01:00.000Z"
+          },
+          {
+            id: "skill_version_unbound",
+            skillId: "skill_unbound",
+            version: "1.0.0",
+            manifest: {
+              id: "skill_unbound",
+              name: "Unbound",
+              version: "1.0.0",
+              type: "workflow",
+              scope: "project",
+              description: "Workflow metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["workflow.md"],
+              reviewState: "published"
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "published",
+            createdAt: "2026-05-24T00:02:00.000Z"
+          }
+        ],
+        boundSkills: [
+          {
+            skill: {
+              id: "skill_deploy",
+              name: "Deploy",
+              type: "deployment",
+              scope: "project",
+              createdAt: "2026-05-24T00:00:00.000Z"
+            },
+            version: {
+              id: "skill_version_disabled",
+              skillId: "skill_deploy",
+              version: "1.0.0",
+              manifest: {
+                id: "skill_deploy",
+                name: "Deploy",
+                version: "1.0.0",
+                type: "deployment",
+                scope: "project",
+                description: "Deployment metadata",
+                permissions: [],
+                requiredSecrets: [],
+                entrypoints: ["deploy.md"],
+                reviewState: "published"
+              },
+              content: "hidden",
+              contentType: "text/markdown",
+              reviewState: "published",
+              createdAt: "2026-05-24T00:00:00.000Z"
+            },
+            binding: {
+              id: "binding_disabled",
+              skillVersionId: "skill_version_disabled",
+              scope: "project",
+              targetKey: "project_1",
+              projectId: "project_1",
+              enabled: false,
+              createdAt: "2026-05-24T00:03:00.000Z",
+              updatedAt: "2026-05-24T00:03:00.000Z"
+            }
+          }
+        ]
+      }
+    });
+
+    expect(model.versionRows.map((row) => [row.id, row.stage, row.nextAction])).toEqual([
+      ["skill_version_disabled", "disabled", "enable"],
+      ["skill_version_validated", "validated", "publish"],
+      ["skill_version_unbound", "published", "bind"]
+    ]);
+  });
 });
 
 describe("models management view model", () => {
@@ -247,10 +369,12 @@ describe("models management view model", () => {
       })
     );
     expect(JSON.stringify(model)).not.toContain("secret-provider.example.test");
-    expect(JSON.stringify(model)).not.toContain("OPENAI_API_KEY=");
+    expect(model.providerRows[0]).not.toHaveProperty("secretEnvName");
+    expect(JSON.stringify(model)).not.toContain("OPENAI_API_KEY");
+    expect(JSON.stringify(model)).not.toContain("ANTHROPIC_API_KEY");
   });
 
-  it("marks routes that point at disabled or missing providers as fail closed", () => {
+  it("marks routes that point at disabled, missing, or blank-model providers as fail closed", () => {
     const model = buildModelsManagementViewModel({
       copy,
       modelState: {
@@ -263,6 +387,17 @@ describe("models management view model", () => {
             provider: "custom",
             config: { api: "openai-completions", models: [{ id: "gpt-5.4" }] },
             enabled: false,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          },
+          {
+            id: "provider_enabled",
+            scope: "project",
+            targetKey: "project_1",
+            name: "Enabled",
+            provider: "custom",
+            config: { api: "openai-completions", models: [{ id: "gpt-5.4" }] },
+            enabled: true,
             createdAt: "2026-05-24T00:00:00.000Z",
             updatedAt: "2026-05-24T00:00:00.000Z"
           }
@@ -287,6 +422,16 @@ describe("models management view model", () => {
             model: "review-model",
             createdAt: "2026-05-24T00:02:00.000Z",
             updatedAt: "2026-05-24T00:02:00.000Z"
+          },
+          {
+            id: "route_deployer",
+            scope: "project",
+            targetKey: "project_1",
+            role: "deployer",
+            providerId: "provider_enabled",
+            model: "   ",
+            createdAt: "2026-05-24T00:03:00.000Z",
+            updatedAt: "2026-05-24T00:03:00.000Z"
           }
         ],
         resolvedPolicy: {
@@ -305,6 +450,9 @@ describe("models management view model", () => {
     );
     expect(model.routeRows.find((row) => row.role === "reviewer")).toEqual(
       expect.objectContaining({ state: "failClosed", diagnosticCode: "model_route_provider_invalid" })
+    );
+    expect(model.routeRows.find((row) => row.role === "deployer")).toEqual(
+      expect.objectContaining({ state: "failClosed", diagnosticCode: "model_id_required" })
     );
   });
 
