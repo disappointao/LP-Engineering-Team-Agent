@@ -3,7 +3,8 @@
 **Stage:** 46 - V1 Polished Alpha Completion Gate v0
 **Date:** 2026-05-24
 **Runtime mode:** deterministic default (`REAL_MODEL_RUNTIME=0`, `REAL_MODEL_PROVIDER_TEST=0`)
-**Decision:** `in_progress`
+**Gate commit:** `071601b`
+**Decision:** `needs_operator_trial`
 
 This note is the current evidence ledger for the local single-user V1 polished alpha candidate. It records safe summaries only. It does not include secrets, raw provider responses, raw SSE frames, full artifact contents, local absolute paths, raw worker/tool payloads, or raw stdout/stderr.
 
@@ -28,13 +29,13 @@ The candidate does not include:
 
 | Gate | Status | Safe summary |
 | --- | --- | --- |
-| `pnpm alpha:check` | `not_run` | Pending Stage 46 execution. |
-| `pnpm smoke` | `not_run` | Pending Stage 46 execution. |
-| `pnpm alpha:e2e` | `not_run` | Pending Stage 46 execution. |
-| `pnpm test` | `not_run` | Pending Stage 46 execution. |
-| `pnpm typecheck` | `not_run` | Pending Stage 46 execution. |
-| `pnpm build` | `not_run` | Pending Stage 46 execution. |
-| `git diff --check` | `not_run` | Pending Stage 46 execution. |
+| `pnpm alpha:check` | `passed` | 8 Vitest files and 144 tests passed. |
+| `pnpm smoke` | `passed` | 1 Vitest file and 2 tests passed. |
+| `pnpm alpha:e2e` | `passed` | 15 Playwright Chromium tests passed. |
+| `pnpm test` | `passed` | 59 Vitest files and 1160 tests passed; 2 files and 2 tests skipped. |
+| `pnpm typecheck` | `passed` | Workspace typecheck passed across 12 of 13 projects, including Next route type generation. |
+| `pnpm build` | `passed` | Workspace build passed; Next production build completed. |
+| `git diff --check` | `passed` | No whitespace errors. |
 
 ## Manual Acceptance
 
@@ -55,7 +56,7 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 | Smoke path | Status | Evidence |
 | --- | --- | --- |
-| Default no-key gate | `not_run` | Pending deterministic gate execution. |
+| Default no-key gate | `passed` | Deterministic gates passed with default no-key runtime mode; no real provider environment evidence recorded. |
 | Real provider opt-in smoke | `not_run` | No operator-provided real provider environment for this completion note. |
 
 ## Known Limitations Acknowledged
@@ -67,7 +68,7 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 ## Open Blockers
 
-- None recorded before Stage 46 gate execution.
+- No blockers recorded during Stage 46 gate execution.
 
 ## Accepted Follow-ups
 
@@ -89,6 +90,6 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 ## RC Decision
 
-- Decision: `in_progress`
-- Reasoning: Stage 46 gate has not completed yet.
-- Next routing decision: Continue Stage 46 gate execution.
+- Decision: `needs_operator_trial`
+- Reasoning: Full deterministic gates passed, no blockers were found, and no separate human operator trial or real provider smoke evidence was recorded in this completion note.
+- Next routing decision: Proceed to Stage 47 Internal RC Trial Feedback Batch v0 for operator trial feedback; use Stage 48 only if blockers appear.
