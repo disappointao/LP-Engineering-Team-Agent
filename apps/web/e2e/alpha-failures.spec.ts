@@ -74,7 +74,7 @@ test("shows model configuration errors without exposing provider secrets", async
 
 test("shows recovery errors without exposing raw diagnostics", async ({ page }) => {
   await page.goto(
-    "/?recoveryError=retry_failed&debug=RAW_MODEL_OUTPUT_SECRET&path=/Users/ao/Desktop/secret"
+    "/?recoveryError=retry_failed&debug=RAW_MODEL_OUTPUT_SECRET&path=/Users/ao/Desktop/secret&apiKeyEnv=OPENAI_API_KEY"
   );
 
   await expect(
@@ -83,6 +83,7 @@ test("shows recovery errors without exposing raw diagnostics", async ({ page }) 
   await expectNoVisibleTextLeaks(page, [
     "RAW_MODEL_OUTPUT_SECRET",
     "/Users/ao/Desktop/secret",
-    "Desktop/secret"
+    "Desktop/secret",
+    "OPENAI_API_KEY"
   ]);
 });

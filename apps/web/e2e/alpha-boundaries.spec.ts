@@ -65,12 +65,3 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
     "MCP_TOOL_SECRET"
   ]);
 });
-
-test("shows bounded recovery error display", async ({ page }) => {
-  await page.goto("/?recoveryError=retry_failed&debug=OPENAI_API_KEY");
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Recovery action could not be completed." })
-  ).toBeVisible();
-  await expect(page.getByText("RAW_MODEL_SECRET")).toHaveCount(0);
-  await expect(page.getByText("OPENAI_API_KEY")).toHaveCount(0);
-});
