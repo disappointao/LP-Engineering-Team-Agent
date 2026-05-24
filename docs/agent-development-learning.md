@@ -1065,6 +1065,10 @@ pnpm --filter @lp-agent/model-gateway test
 - `pnpm alpha:e2e` 要覆盖 Stage 41-44 后的 V1 Web surface：MCP hidden fallback、dedicated artifact workspace、run timeline / recovery diagnostics、Skills / Models management fail-closed 和轻量 visual contracts。
 - 默认 gate 继续不依赖真实 provider、MCP server、Postgres、真实部署或网络服务。
 
+当前计划：
+
+- [2026-05-24-browser-failure-visual-regression-expansion.md](./superpowers/plans/2026-05-24-browser-failure-visual-regression-expansion.md)
+
 学习重点：
 
 - Browser acceptance 是 Agent workflow 的用户可见 contract，不是新的事实来源。测试应回到 repository/API/runtime 已有事实，而不是在浏览器里创造第二套 Agent state。

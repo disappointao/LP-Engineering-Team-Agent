@@ -890,6 +890,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 45 implementation plan 已写入：计划按 TDD 分为 shared browser contracts / visual coverage、artifact workspace boundary、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、docs closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development。
 - 2026-05-24 Stage 45 设计已批准：Browser Failure and Visual Regression Expansion v0 采用 deterministic Playwright gate expansion，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
 - 2026-05-24 Stage 44 已完成 Skills and Models Client-side Management v0：Web-only management view-model 已覆盖 Skills lifecycle、runtime context summary、command queue hierarchy、Models provider/route/resolved summaries、real provider opt-in 和 fail-closed diagnostics；默认下一路由为 Stage 45 Browser Failure and Visual Regression Expansion v0。
 - 2026-05-24 Stage 44 implementation plan 已写入：计划按 TDD 分为 localized management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
