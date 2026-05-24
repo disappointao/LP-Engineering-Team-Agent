@@ -42,6 +42,10 @@ Stage 46 completion gate 的当前证据记录见 `docs/v1-polished-alpha-comple
    - `pnpm alpha:check`
    - `pnpm smoke`
    - `pnpm alpha:e2e`
+   - `pnpm test`
+   - `pnpm typecheck`
+   - `pnpm build`
+   - `git diff --check`
 3. 启动 Web：
    - `pnpm dev`
    - 打开 Next.js 输出的本地 URL。
