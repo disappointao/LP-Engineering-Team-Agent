@@ -4,6 +4,8 @@
 
 详细人工验收继续使用 `docs/web-v1-acceptance.md`。真实 provider 手动 smoke 继续使用 `docs/real-provider-alpha-smoke.md`。本文负责编排 go/no-go、试用脚本、反馈模板和 triage 分类；反馈进入 `docs/alpha-feedback-intake.md` 和 `docs/alpha-feedback-log.md`，由 Stage 40 之后的批次化流程维护。
 
+Stage 46 completion gate 的当前证据记录见 `docs/v1-polished-alpha-completion.md`。准备内部 RC 前，先看该文件的 automated gate、manual acceptance、optional real provider smoke、open blockers 和 RC decision，再按本文 trial script 执行新的 operator 试用。
+
 ## RC 定义
 
 当前 RC 的范围：
@@ -22,7 +24,7 @@
 | Gate | Go 标准 | No-go 条件 |
 | --- | --- | --- |
 | Environment | Node.js/pnpm 可用，`pnpm install` 完成，`.env.local` 默认 `REAL_MODEL_RUNTIME=0`、`REAL_MODEL_PROVIDER_TEST=0`。 | 依赖无法安装，默认环境必须依赖真实 key 才能启动。 |
-| Automated deterministic gates | `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 通过。 | 默认 gate 失败，或默认 gate 需要真实 provider、MCP、Postgres、真实部署。 |
+| Automated deterministic gates | `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e`、`pnpm test`、`pnpm typecheck`、`pnpm build` 通过。 | 默认 gate 失败，或默认 gate 需要真实 provider、MCP、Postgres、真实部署。 |
 | Manual acceptance | `docs/web-v1-acceptance.md` 主路径通过：普通聊天、LP live task、artifact preview/export/snippet、Skills、Models/MCP boundary。 | 主路径无法完成，或 failure display 泄漏 secret/raw provider/raw tool/raw artifact、本机路径。 |
 | Optional real provider smoke | 如需真实 provider 试用，按 `docs/real-provider-alpha-smoke.md` 完成普通聊天、LP Planner/Builder、usage metadata、missing key fail-closed。 | 真实 provider 成功路径不可用，或 fail-closed 泄漏 key、env value、raw provider response。 |
 | Known limitations | 试用者已知道 MCP、真实部署、auth/RBAC、billing/quota、production storage、真实 shell runner 后置。 | 试用目标依赖这些后置能力。 |
@@ -178,6 +180,10 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
   - pnpm alpha:check:
   - pnpm smoke:
   - pnpm alpha:e2e:
+  - pnpm test:
+  - pnpm typecheck:
+  - pnpm build:
+  - git diff --check:
 - Manual acceptance:
 - Optional real provider smoke:
 - Known limitations acknowledged:

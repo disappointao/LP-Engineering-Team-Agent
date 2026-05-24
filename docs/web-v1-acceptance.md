@@ -4,6 +4,8 @@
 
 准备内部 release candidate 时，go/no-go、试用脚本、反馈模板和 triage 分类以 `docs/alpha-release-candidate.md` 为入口；本文件只负责详细 UX 和能力边界检查。
 
+Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-completion.md`。本文件仍是人工验收的详细 checklist；completion note 只记录某一轮 gate / trial 的安全摘要和 go/no-go 状态。
+
 ## 准备
 
 - [ ] 已通过 `pnpm install` 安装依赖。

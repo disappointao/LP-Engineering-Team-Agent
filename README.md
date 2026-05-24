@@ -1,6 +1,6 @@
 # LP Engineering Team Agent
 
-LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能体式对话创建和管理落地页任务。当前第一版交付目标是 **Skill-only local alpha**：用户可以从大对话入口开始普通问答，发起 LP 复杂任务，看到流式聊天和 live task progress，生成框架无关静态 LP 产物，并通过项目 Skills 扩展上下文和安全命令流程。
+LP Engineering Team Agent 是一个轻量级 Web 工作台，用于通过智能体式对话创建和管理落地页任务。当前第一版交付目标是 **V1 polished alpha local RC candidate**：用户可以从大对话入口开始普通问答，发起 LP 复杂任务，看到流式聊天、live task progress、run timeline / recovery guidance，使用 artifact workspace、Skills 和 Models，并通过 deterministic gates 验证第一版 Web surface。
 
 生成的落地页产物必须是静态 HTML/CSS/JS。工作台本身是 Next.js 应用，但生成的 LP 输出不应该依赖 React、Vue、Angular、Vite、Next.js 或任何构建步骤。
 
@@ -149,6 +149,12 @@ pnpm typecheck
 
 ```bash
 pnpm build
+```
+
+查看当前 V1 polished alpha completion gate 结果：
+
+```text
+docs/v1-polished-alpha-completion.md
 ```
 
 验证 Prisma schema：
