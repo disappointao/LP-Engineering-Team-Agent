@@ -269,6 +269,46 @@ export async function expectNoVisibleTextLeaks(page: Page, values: string[]) {
   for (const value of values) {
     await expect(page.getByText(value, { exact: false })).toHaveCount(0);
   }
+
+  const formControlLeaks = await page
+    .locator("input, textarea, select")
+    .evaluateAll((controls, forbiddenValues) => {
+      const leaks: Array<{ tagName: string; value: string }> = [];
+      for (const control of controls) {
+        const style = window.getComputedStyle(control);
+        const box = control.getBoundingClientRect();
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          box.width === 0 ||
+          box.height === 0
+        ) {
+          continue;
+        }
+
+        const visibleValues: string[] = [];
+        if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+          visibleValues.push(control.value);
+        }
+        if (control instanceof HTMLSelectElement) {
+          visibleValues.push(control.value);
+          for (const option of Array.from(control.selectedOptions)) {
+            visibleValues.push(option.value, option.textContent ?? "");
+          }
+        }
+
+        for (const forbiddenValue of forbiddenValues as string[]) {
+          if (visibleValues.some((visibleValue) => visibleValue.includes(forbiddenValue))) {
+            leaks.push({
+              tagName: control.tagName.toLowerCase(),
+              value: forbiddenValue
+            });
+          }
+        }
+      }
+      return leaks;
+    }, values);
+  expect(formControlLeaks).toEqual([]);
 }
 
 export async function expectNoHorizontalOverflow(page: Page) {

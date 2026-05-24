@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { createProject, expectNoVisibleTextLeaks } from "./helpers";
 
+test("detects visible form control value leaks", async ({ page }) => {
+  await page.setContent(`
+    <label>input leak<input value="FORM_CONTROL_LEAK_SECRET" /></label>
+  `);
+
+  await expect(
+    expectNoVisibleTextLeaks(page, ["FORM_CONTROL_LEAK_SECRET"])
+  ).rejects.toThrow();
+});
+
 test("shows model provider fail-closed errors without leaking query details", async ({ page }) => {
   await createProject(page, "E2E Model Failure Project");
 

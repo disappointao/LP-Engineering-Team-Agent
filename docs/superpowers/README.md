@@ -476,7 +476,7 @@
 
 118. `plans/2026-05-24-browser-failure-visual-regression-expansion.md`
    - Stage 45 Browser Failure and Visual Regression Expansion v0 implementation plan（已实现，当前已完成）。
-   - 在 Stage 45 design 后阅读，用于按 TDD 扩展 Playwright helpers、artifact workspace boundaries、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、visual contracts、docs closeout 和最终验证。
+   - 在 Stage 45 design 后阅读，用于按 TDD 扩展 Playwright helpers、artifact workspace boundaries、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、visual contracts、scoped / atomic E2E state fixtures、docs closeout 和最终验证。
 
 ## 维护规则
 

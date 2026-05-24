@@ -176,6 +176,46 @@ export async function expectNoVisibleTextLeaks(page: Page, values: string[]) {
   for (const value of values) {
     await expect(page.getByText(value, { exact: false })).toHaveCount(0);
   }
+
+  const formControlLeaks = await page
+    .locator("input, textarea, select")
+    .evaluateAll((controls, forbiddenValues) => {
+      const leaks: Array<{ tagName: string; value: string }> = [];
+      for (const control of controls) {
+        const style = window.getComputedStyle(control);
+        const box = control.getBoundingClientRect();
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          box.width === 0 ||
+          box.height === 0
+        ) {
+          continue;
+        }
+
+        const visibleValues: string[] = [];
+        if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+          visibleValues.push(control.value);
+        }
+        if (control instanceof HTMLSelectElement) {
+          visibleValues.push(control.value);
+          for (const option of Array.from(control.selectedOptions)) {
+            visibleValues.push(option.value, option.textContent ?? "");
+          }
+        }
+
+        for (const forbiddenValue of forbiddenValues as string[]) {
+          if (visibleValues.some((visibleValue) => visibleValue.includes(forbiddenValue))) {
+            leaks.push({
+              tagName: control.tagName.toLowerCase(),
+              value: forbiddenValue
+            });
+          }
+        }
+      }
+      return leaks;
+    }, values);
+  expect(formControlLeaks).toEqual([]);
 }
 
 export async function expectNoHorizontalOverflow(page: Page) {
@@ -235,7 +275,7 @@ Modify imports at the top of `apps/web/e2e/alpha-lp-artifacts.spec.ts` to includ
 
 ```ts
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
@@ -245,7 +285,8 @@ import {
   expectSnippetFor,
   expectStaticLpArtifacts,
   expectWorkspaceSnippetFor,
-  submitPrompt
+  submitPrompt,
+  writeJsonFileAtomic
 } from "./helpers";
 
 const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
@@ -254,7 +295,11 @@ const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state
 In the existing `"runs an LP live task and exposes static artifacts"` test, after the final invalid `view=artifacts` assertions, add:
 
 ```ts
-  makeArtifactWorkspaceFileOversized("styles.css", "OVERSIZED_BROWSER_SNIPPET_SECRET");
+  makeArtifactWorkspaceFileOversized(
+    prompt,
+    "styles.css",
+    "OVERSIZED_BROWSER_SNIPPET_SECRET"
+  );
   await page.goto("/?view=artifacts&artifactPath=styles.css");
   await expect(
     page.getByText("Content is over the 8 KB preview limit.", { exact: true })
@@ -266,13 +311,25 @@ In the existing `"runs an LP live task and exposes static artifacts"` test, afte
 At the bottom of the file, add:
 
 ```ts
-function makeArtifactWorkspaceFileOversized(path: string, secret: string) {
-  const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
-    artifactWorkspaceFiles?: Array<Record<string, unknown>>;
-  };
-  const file = state.artifactWorkspaceFiles?.find((record) => record.path === path);
+type E2EState = {
+  artifactWorkspaceFiles?: Array<Record<string, unknown>>;
+  messages?: Array<Record<string, unknown>>;
+  pageVersions?: Array<Record<string, unknown>>;
+  taskSnapshots?: Array<Record<string, unknown>>;
+  tasks?: Array<Record<string, unknown>>;
+};
+
+function makeArtifactWorkspaceFileOversized(prompt: string, path: string, secret: string) {
+  const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as E2EState;
+  const taskId = getLatestLpTaskIdForPrompt(state, prompt);
+  const workspaceId = getArtifactWorkspaceIdForTask(state, taskId);
+  const file = state.artifactWorkspaceFiles?.find(
+    (record) => record.workspaceId === workspaceId && record.path === path
+  );
   if (!file) {
-    throw new Error(`Expected persisted E2E artifact file ${path} to exist.`);
+    throw new Error(
+      `Expected persisted E2E artifact file ${path} in workspace ${workspaceId} to exist.`
+    );
   }
 
   const content = `${secret}${"x".repeat(9000)}`;
@@ -280,7 +337,46 @@ function makeArtifactWorkspaceFileOversized(path: string, secret: string) {
   file.sizeBytes = Buffer.byteLength(content, "utf8");
   file.sha256 = createHash("sha256").update(content).digest("hex");
   file.updatedAt = "2026-05-24T00:00:00.000Z";
-  writeFileSync(e2eStateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  writeJsonFileAtomic(e2eStateFile, state);
+}
+
+function getLatestLpTaskIdForPrompt(state: E2EState, prompt: string): string {
+  const lpTaskIds = new Set(
+    (state.tasks ?? [])
+      .filter((record) => record.type === "lp_generation" && typeof record.id === "string")
+      .map((record) => String(record.id))
+  );
+  const message = (state.messages ?? [])
+    .filter(
+      (record) =>
+        record.role === "user" &&
+        record.content === prompt &&
+        typeof record.taskId === "string" &&
+        lpTaskIds.has(record.taskId)
+    )
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))[0];
+  if (!message || typeof message.taskId !== "string") {
+    throw new Error(`Expected a persisted LP user message for prompt: ${prompt}`);
+  }
+  return message.taskId;
+}
+
+function getArtifactWorkspaceIdForTask(state: E2EState, taskId: string): string {
+  const snapshot = state.taskSnapshots?.find((record) => record.taskId === taskId);
+  if (!snapshot || typeof snapshot.pageVersionId !== "string") {
+    throw new Error(`Expected a persisted task snapshot for task ${taskId}.`);
+  }
+
+  const pageVersion = state.pageVersions?.find(
+    (record) => record.id === snapshot.pageVersionId
+  );
+  if (!pageVersion || typeof pageVersion.artifactWorkspaceId !== "string") {
+    throw new Error(
+      `Expected page version ${snapshot.pageVersionId} to reference an artifact workspace.`
+    );
+  }
+
+  return pageVersion.artifactWorkspaceId;
 }
 ```
 
@@ -493,27 +589,31 @@ export async function expectRunTimeline(page: Page) {
 Create `apps/web/e2e/alpha-recovery-timeline.spec.ts` with:
 
 ```ts
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   expectNoVisibleTextLeaks,
   expectRunTimeline,
   expectStaticLpArtifacts,
-  submitPrompt
+  submitPrompt,
+  writeJsonFileAtomic
 } from "./helpers";
 
 const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
 
 test("shows timeline recovery guidance without leaking raw diagnostics", async ({ page }) => {
+  const prompt = "Generate a recovery timeline browser fixture LP";
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
-  await submitPrompt(page, "Generate a recovery timeline browser fixture LP");
+  await submitPrompt(page, prompt);
   await expectStaticLpArtifacts(page);
   await expectRunTimeline(page);
 
-  injectFailedBuilderRun("RECOVERY_BROWSER_SECRET", "/Users/ao/Desktop/recovery-secret");
+  const taskId = getLatestLpTaskId(prompt);
+  injectFailedBuilderRun(taskId, "RECOVERY_BROWSER_SECRET", "/Users/ao/Desktop/recovery-secret");
   await page.reload();
 
   await expectRunTimeline(page);
@@ -521,7 +621,7 @@ test("shows timeline recovery guidance without leaking raw diagnostics", async (
   await expect(recovery).toBeVisible();
   await expect(recovery.getByText("Builder", { exact: true })).toBeVisible();
   await expect(recovery.getByText("Run failed.", { exact: true })).toBeVisible();
-  await expect(recovery.getByText("Executable", { exact: true })).toBeVisible();
+  await expect(recovery.getByText("Actions", { exact: true })).toBeVisible();
   await expect(recovery.getByRole("button", { name: "Retry run" })).toBeVisible();
   await expectNoVisibleTextLeaks(page, [
     "RECOVERY_BROWSER_SECRET",
@@ -530,14 +630,29 @@ test("shows timeline recovery guidance without leaking raw diagnostics", async (
   ]);
 });
 
-function injectFailedBuilderRun(secret: string, localPath: string) {
+function getLatestLpTaskId(prompt: string): string {
+  const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
+    tasks?: Array<Record<string, unknown>>;
+  };
+  const task = (state.tasks ?? [])
+    .filter((record) => record.title === prompt && record.type === "lp_generation")
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))[0];
+  if (!task || typeof task.id !== "string") {
+    throw new Error(`Expected a persisted LP task for prompt: ${prompt}`);
+  }
+  return task.id;
+}
+
+function injectFailedBuilderRun(taskId: string, secret: string, localPath: string) {
   const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
     runs?: Array<Record<string, unknown>>;
     runEvents?: Array<Record<string, unknown>>;
   };
-  const builderRun = state.runs?.find((run) => run.role === "builder");
+  const builderRun = state.runs?.find(
+    (run) => run.role === "builder" && run.taskId === taskId
+  );
   if (!builderRun || typeof builderRun.id !== "string") {
-    throw new Error("Expected a persisted builder run in the E2E state.");
+    throw new Error(`Expected a persisted builder run for task ${taskId} in the E2E state.`);
   }
   if (typeof builderRun.projectId !== "string" || typeof builderRun.taskId !== "string") {
     throw new Error("Expected the builder run to include projectId and taskId.");
@@ -546,7 +661,9 @@ function injectFailedBuilderRun(secret: string, localPath: string) {
   builderRun.state = "failed";
   builderRun.completedAt = "2026-05-24T00:00:00.000Z";
 
-  const runEvents = state.runEvents ?? [];
+  const runEvents = (state.runEvents ?? []).filter(
+    (event) => event.runId !== builderRun.id || event.type !== "run.completed"
+  );
   const sequence =
     runEvents
       .filter((event) => event.runId === builderRun.id)
@@ -570,7 +687,7 @@ function injectFailedBuilderRun(secret: string, localPath: string) {
   });
   state.runEvents = runEvents;
 
-  writeFileSync(e2eStateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  writeJsonFileAtomic(e2eStateFile, state);
 }
 ```
 
@@ -762,7 +879,7 @@ git commit -m "document browser failure visual expansion"
 
 ## Final Verification
 
-- [ ] Run focused browser specs:
+- [x] Run focused browser specs:
 
 ```bash
 pnpm alpha:e2e -- apps/web/e2e/alpha-visual.spec.ts apps/web/e2e/alpha-lp-artifacts.spec.ts apps/web/e2e/alpha-boundaries.spec.ts apps/web/e2e/alpha-failures.spec.ts apps/web/e2e/alpha-recovery-timeline.spec.ts
@@ -770,7 +887,7 @@ pnpm alpha:e2e -- apps/web/e2e/alpha-visual.spec.ts apps/web/e2e/alpha-lp-artifa
 
 Expected: PASS.
 
-- [ ] Run the full browser gate:
+- [x] Run the full browser gate:
 
 ```bash
 pnpm alpha:e2e
@@ -778,7 +895,7 @@ pnpm alpha:e2e
 
 Expected: PASS. If the sandbox blocks local port binding, rerun the same command with approved escalation for `pnpm alpha:e2e`.
 
-- [ ] Run deterministic alpha checks:
+- [x] Run deterministic alpha checks:
 
 ```bash
 pnpm alpha:check
@@ -786,7 +903,7 @@ pnpm alpha:check
 
 Expected: PASS.
 
-- [ ] Run typecheck:
+- [x] Run typecheck:
 
 ```bash
 pnpm typecheck
@@ -794,7 +911,7 @@ pnpm typecheck
 
 Expected: PASS.
 
-- [ ] Run whitespace check:
+- [x] Run whitespace check:
 
 ```bash
 git diff --check
@@ -802,7 +919,7 @@ git diff --check
 
 Expected: no output.
 
-- [ ] Inspect final worktree status:
+- [x] Inspect final worktree status:
 
 ```bash
 git status --short --branch
