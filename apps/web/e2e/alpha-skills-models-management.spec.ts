@@ -1,10 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createProject,
   expectModelsManagementSurface,
-  expectSkillsManagementSurface
+  expectSkillsManagementSurface,
+  writeJsonFileAtomic
 } from "./helpers";
 
 const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
@@ -127,5 +128,5 @@ function disableProviderInE2eState(providerId: string) {
   }
   provider.enabled = false;
   provider.updatedAt = "2026-05-24T00:00:00.000Z";
-  writeFileSync(e2eStateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  writeJsonFileAtomic(e2eStateFile, state);
 }

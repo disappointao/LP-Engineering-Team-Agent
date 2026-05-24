@@ -1,9 +1,16 @@
+import { renameSync, writeFileSync } from "node:fs";
 import { expect, type Locator, type Page } from "@playwright/test";
 
 type VisibleBox = {
   box: NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
   label: string;
 };
+
+export function writeJsonFileAtomic(filePath: string, value: unknown) {
+  const tempFilePath = `${filePath}.${process.pid}.tmp`;
+  writeFileSync(tempFilePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  renameSync(tempFilePath, filePath);
+}
 
 export async function createProject(page: Page, projectName: string) {
   await page.goto("/");

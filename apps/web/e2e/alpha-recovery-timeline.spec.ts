@@ -1,11 +1,12 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   expectNoVisibleTextLeaks,
   expectRunTimeline,
   expectStaticLpArtifacts,
-  submitPrompt
+  submitPrompt,
+  writeJsonFileAtomic
 } from "./helpers";
 
 const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
@@ -95,5 +96,5 @@ function injectFailedBuilderRun(taskId: string, secret: string, localPath: strin
   });
   state.runEvents = runEvents;
 
-  writeFileSync(e2eStateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  writeJsonFileAtomic(e2eStateFile, state);
 }
