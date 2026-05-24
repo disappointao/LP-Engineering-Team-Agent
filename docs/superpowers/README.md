@@ -482,6 +482,10 @@
    - Stage 46 V1 Polished Alpha Completion Gate v0 design（已批准，当前推荐实施）。
    - 在 Stage 45 implementation plan 和当前 roadmap 后阅读，用于收口 V1 polished alpha：运行完整 deterministic gates、记录人工 acceptance / 可选真实 provider smoke 状态、更新 RC decision record、known limitations、completion note、roadmap 和后续 backlog routing；本阶段不新增功能、不修 blocker、不改变默认 no-key gate。
 
+120. `plans/2026-05-24-v1-polished-alpha-completion-gate.md`
+   - Stage 46 V1 Polished Alpha Completion Gate v0 implementation plan（已批准，待实施）。
+   - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
