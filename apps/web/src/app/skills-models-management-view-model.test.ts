@@ -271,6 +271,88 @@ describe("skills management view model", () => {
       ["skill_version_unbound", "published", "bind"]
     ]);
   });
+
+  it("keeps deprecated, archived, and unknown lifecycle states non-actionable", () => {
+    const model = buildSkillsManagementViewModel({
+      copy,
+      skillCommands: [],
+      skillState: {
+        availableVersions: [
+          {
+            id: "skill_version_deprecated",
+            skillId: "skill_deprecated",
+            version: "1.0.0",
+            manifest: {
+              id: "skill_deprecated",
+              name: "Deprecated",
+              version: "1.0.0",
+              type: "template",
+              scope: "project",
+              description: "Deprecated metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["deprecated.md"],
+              reviewState: "deprecated"
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "deprecated",
+            createdAt: "2026-05-24T00:00:00.000Z"
+          },
+          {
+            id: "skill_version_archived",
+            skillId: "skill_archived",
+            version: "1.0.0",
+            manifest: {
+              id: "skill_archived",
+              name: "Archived",
+              version: "1.0.0",
+              type: "template",
+              scope: "project",
+              description: "Archived metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["archived.md"],
+              reviewState: "archived"
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "archived",
+            createdAt: "2026-05-24T00:01:00.000Z"
+          },
+          {
+            id: "skill_version_unknown",
+            skillId: "skill_unknown",
+            version: "1.0.0",
+            manifest: {
+              id: "skill_unknown",
+              name: "Unknown",
+              version: "1.0.0",
+              type: "template",
+              scope: "project",
+              description: "Unknown metadata",
+              permissions: [],
+              requiredSecrets: [],
+              entrypoints: ["unknown.md"],
+              reviewState: "needs_review" as never
+            },
+            content: "hidden",
+            contentType: "text/markdown",
+            reviewState: "needs_review" as never,
+            createdAt: "2026-05-24T00:02:00.000Z"
+          }
+        ],
+        boundSkills: []
+      }
+    });
+
+    expect(model.versionRows.map((row) => [row.id, row.stage, row.nextAction])).toEqual([
+      ["skill_version_deprecated", "inactive", "none"],
+      ["skill_version_archived", "inactive", "none"],
+      ["skill_version_unknown", "inactive", "none"]
+    ]);
+    expect(model.versionRows.map((row) => row.stage)).not.toContain("published");
+  });
 });
 
 describe("models management view model", () => {

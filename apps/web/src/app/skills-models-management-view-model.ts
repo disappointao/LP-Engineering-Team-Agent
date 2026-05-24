@@ -36,9 +36,9 @@ export type SkillLifecycleStage =
   | "draft"
   | "validated"
   | "published"
-  | "bound"
   | "enabled"
-  | "disabled";
+  | "disabled"
+  | "inactive";
 
 export type SkillNextAction =
   | "validate"
@@ -342,7 +342,7 @@ function buildSkillVersionRow(input: {
     bindingId: input.boundSkill?.binding.id,
     bindingEnabled: input.boundSkill?.binding.enabled,
     stage,
-    stageLabel: input.copy.skillsView.management.lifecycleStages[stage],
+    stageLabel: getSkillStageLabel(stage, input.copy),
     nextAction,
     nextActionLabel: input.copy.skillsView.management.nextActions[nextAction]
   };
@@ -365,7 +365,14 @@ function getSkillLifecycleStage(
     return boundSkill.binding.enabled ? "enabled" : "disabled";
   }
 
-  return "published";
+  return "inactive";
+}
+
+function getSkillStageLabel(stage: SkillLifecycleStage, copy: WorkbenchCopy): string {
+  if (stage === "inactive") {
+    return copy.skillsView.management.nextActions.none;
+  }
+  return copy.skillsView.management.lifecycleStages[stage];
 }
 
 function getSkillNextAction(stage: SkillLifecycleStage): SkillNextAction {
