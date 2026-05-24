@@ -490,6 +490,10 @@
    - Stage 47 Internal RC Trial Feedback Batch v0 design（已批准，当前推荐实施）。
    - 在 Stage 46 completion gate 后阅读，用于执行 deterministic / no-key local operator trial，记录 safe manual acceptance evidence、feedback batch、RC decision 和 Stage 48 / Stage 49 路由；本阶段不修 blocker、不扩大 V1 功能范围。
 
+122. `plans/2026-05-24-internal-rc-trial-feedback-batch.md`
+   - Stage 47 Internal RC Trial Feedback Batch v0 implementation plan（已批准，待实施）。
+   - 在 Stage 47 design 后阅读，用于创建 operator trial evidence ledger、运行完整 deterministic gates、更新 completion note / feedback log / roadmap，并把无 blocker 的默认后续路由切到 Stage 49。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

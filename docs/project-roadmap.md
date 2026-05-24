@@ -794,7 +794,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### Stage 47：Internal RC Trial Feedback Batch v0
 
-**状态：** 当前推荐；设计已批准，待实施计划。
+**状态：** 当前推荐；设计和实施计划已批准，待实施。
 
 **为什么现在做：** Stage 46 的 deterministic gate 已通过，但 RC decision 是 `needs_operator_trial`；下一步需要按内部 RC script 采集安全人工验收证据和真实使用反馈，而不是继续凭自动 gate 推断可用性。
 
@@ -812,6 +812,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 不把 real provider smoke 变成必需项，除非 operator 明确 opt in。
 
 **设计：** `docs/superpowers/specs/2026-05-24-internal-rc-trial-feedback-batch-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-24-internal-rc-trial-feedback-batch.md`。
 
 ### Stage 48：RC Blocker Fix Batch v0
 
@@ -992,6 +994,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-24 Stage 47 implementation plan 已写入：计划分为 operator trial evidence ledger、完整 deterministic gate / trial result 记录、feedback batch / roadmap closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development，不在 trial batch 中临时修 blocker。
 - 2026-05-24 Stage 47 设计已批准：Internal RC Trial Feedback Batch v0 将执行 deterministic / no-key local operator trial，记录 safe manual acceptance evidence、feedback batch、RC decision 和 Stage 48 / Stage 49 路由；Codex 可作为本轮 local operator，但必须明确标注为 agent-operated trial，不得冒充外部真人试用；本阶段不修 blocker、不扩大 V1 功能范围。
 - 2026-05-24 Stage 46 已完成 V1 Polished Alpha Completion Gate v0：deterministic gates passed，未记录 blockers，RC decision 为 `needs_operator_trial`；默认下一路由为 Stage 47 Internal RC Trial Feedback Batch v0，Stage 48 RC Blocker Fix Batch v0 仅在 Stage 46/47 出现 blocker 时启用。
 - 2026-05-24 Stage 46 implementation plan 已写入：计划分为 completion ledger、RC / acceptance docs 链接、完整 deterministic gate 记录、roadmap / Superpowers closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development，不在 completion gate 中临时修 blocker。
