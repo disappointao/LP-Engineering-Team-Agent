@@ -330,7 +330,7 @@ describe("buildRunTimelineViewModel", () => {
     expect(model.activeStep?.runId).toBe("run_builder_latest");
   });
 
-  it("surfaces only safe unknown latest event labels", () => {
+  it("suppresses unknown latest event labels", () => {
     const copy = getWorkbenchCopy("en");
     const model = buildRunTimelineViewModel({
       payload: createPayload({
@@ -386,7 +386,7 @@ describe("buildRunTimelineViewModel", () => {
     const builder = model.steps.find((step) => step.role === "builder");
     const reviewer = model.steps.find((step) => step.role === "reviewer");
 
-    expect(builder?.lastEventLabel).toBe("worker.job.linked");
+    expect(builder?.lastEventLabel).toBeUndefined();
     expect(reviewer?.lastEventLabel).toBeUndefined();
     expect(JSON.stringify(model)).not.toContain("RAW_SECRET");
     expect(JSON.stringify(model)).not.toContain("<script>");

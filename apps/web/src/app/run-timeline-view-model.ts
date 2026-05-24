@@ -7,7 +7,6 @@ const attentionStates = new Set(["blocked", "failed"]);
 const stoppedStates = new Set(["cancelled"]);
 const executableActions = new Set(["resume_worker_finalization", "retry_run"]);
 const guidanceActions = new Set(["request_approval", "resolve_blocker", "inspect_manually"]);
-const safeUnknownEventTypePattern = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 const markerByEventType = {
   "model.output.repair_started": "repair_started",
@@ -241,7 +240,7 @@ function getLastEventLabel({
   if (kind) {
     return copy.chat.runTimelineMarkerLabels[kind];
   }
-  return safeUnknownEventTypePattern.test(latest.type) ? latest.type : undefined;
+  return undefined;
 }
 
 function buildActions({
