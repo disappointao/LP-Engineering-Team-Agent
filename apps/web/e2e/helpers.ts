@@ -124,6 +124,25 @@ export async function expectWorkspaceSnippetFor(page: Page, filePath: string) {
   await expect(snippetHeader.getByText(filePath, { exact: true })).toBeVisible();
 }
 
+export async function expectSkillsManagementSurface(page: Page) {
+  await page.getByRole("link", { name: "Skills" }).click();
+  await expect(page).toHaveURL(/[?&]view=skills(?:&|$)/);
+  await expect(page.getByRole("heading", { name: "Project skills", exact: true })).toBeVisible();
+  await expect(page.getByText("Runtime context", { exact: true })).toBeVisible();
+  await expect(page.getByText("Skill lifecycle", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved skill content is not echoed on this page.")).toBeVisible();
+}
+
+export async function expectModelsManagementSurface(page: Page) {
+  await page.getByRole("link", { name: "Models" }).click();
+  await expect(page).toHaveURL(/[?&]view=models(?:&|$)/);
+  await expect(page.getByRole("heading", { name: "Project models", exact: true })).toBeVisible();
+  await expect(page.getByText("Project model summary", { exact: true })).toBeVisible();
+  await expect(page.getByText("Provider configuration", { exact: true })).toBeVisible();
+  await expect(page.getByText("Role routing", { exact: true })).toBeVisible();
+  await expect(page.getByText("Secret values are never shown")).toBeVisible();
+}
+
 export async function expectWorkbenchLayoutContract(page: Page) {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
