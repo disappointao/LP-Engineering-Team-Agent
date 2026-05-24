@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+type VisibleBox = {
+  box: NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+  label: string;
+};
+
 export async function createProject(page: Page, projectName: string) {
   await page.goto("/");
   await page.getByLabel("Project name").fill(projectName);
@@ -214,23 +219,40 @@ export async function expectManagementLayoutContract(page: Page, surface: "skill
   const header = root.locator(surface === "skills" ? ".skillsHeader" : ".modelsHeader");
   const summary = root.locator(".managementSummary");
   const primaryForm = surface === "skills" ? root.locator("form.skillEditor") : root.locator("form.modelEditor");
-  const firstList = surface === "skills" ? root.locator(".skillsList").first() : root.locator(".modelsList").first();
 
   const rootBox = await getRequiredBox(root, `${surface} management surface`);
-  const headerBox = await getRequiredBox(header, `${surface} management header`);
-  const summaryBox = await getRequiredBox(summary, `${surface} management summary`);
-  const formBox = await getRequiredBox(primaryForm, `${surface} management form`);
-  const listBox = await getRequiredBox(firstList, `${surface} management list`);
+  const checkedSections = [
+    {
+      box: await getRequiredBox(header, `${surface} management header`),
+      label: `${surface} management header`
+    },
+    {
+      box: await getRequiredBox(summary, `${surface} management summary`),
+      label: `${surface} management summary`
+    },
+    {
+      box: await getRequiredBox(primaryForm, `${surface} management form`),
+      label: `${surface} management form`
+    },
+    ...(surface === "skills"
+      ? [
+          ...(await getVisibleBoxes(root.locator(".skillsList"), "skills management list")),
+          ...(await getVisibleBoxes(root.locator(".localWorkerPanel"), "skills local worker panel"))
+        ]
+      : await getVisibleBoxes(root.locator(".modelsList"), "models management list"))
+  ];
 
-  for (const childBox of [headerBox, summaryBox, formBox, listBox]) {
+  let previousBottom = rootBox.y;
+  for (const { box: childBox, label } of checkedSections) {
     expect(childBox.x).toBeGreaterThanOrEqual(rootBox.x);
     expect(childBox.x + childBox.width).toBeLessThanOrEqual(rootBox.x + rootBox.width + 1);
     expect(childBox.width).toBeGreaterThan(260);
+    expect(childBox.y, `${label} should not overlap earlier sections`).toBeGreaterThanOrEqual(
+      previousBottom - 1
+    );
+    previousBottom = Math.max(previousBottom, childBox.y + childBox.height);
   }
 
-  expect(headerBox.y).toBeLessThan(summaryBox.y);
-  expect(summaryBox.y).toBeLessThan(formBox.y);
-  expect(summaryBox.y).toBeLessThan(listBox.y);
   await expectNoHorizontalOverflow(page);
 }
 
@@ -260,4 +282,24 @@ async function getRequiredBox(
   const box = await locator.boundingBox();
   expect(box, `${label} should have a bounding box`).not.toBeNull();
   return box!;
+}
+
+async function getVisibleBoxes(
+  locator: Locator,
+  label: string
+): Promise<VisibleBox[]> {
+  const boxes: VisibleBox[] = [];
+  const count = await locator.count();
+
+  for (let index = 0; index < count; index += 1) {
+    const child = locator.nth(index);
+    if (await child.isVisible()) {
+      boxes.push({
+        box: await getRequiredBox(child, `${label} ${index + 1}`),
+        label: `${label} ${index + 1}`
+      });
+    }
+  }
+
+  return boxes;
 }
