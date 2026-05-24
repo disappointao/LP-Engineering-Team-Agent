@@ -351,6 +351,11 @@ describe("skills management view model", () => {
       ["skill_version_archived", "inactive", "none"],
       ["skill_version_unknown", "inactive", "none"]
     ]);
+    expect(model.versionRows.map((row) => row.stageLabel)).toEqual([
+      "Inactive",
+      "Inactive",
+      "Inactive"
+    ]);
     expect(model.versionRows.map((row) => row.stage)).not.toContain("published");
   });
 });

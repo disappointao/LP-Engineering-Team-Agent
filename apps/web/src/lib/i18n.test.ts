@@ -193,9 +193,11 @@ describe("web i18n", () => {
     expect(en.skillsView.management.notices.draft_created).toBe("Skill draft saved.");
     expect(en.skillsView.management.pending.createDraft).toBe("Saving draft...");
     expect(en.skillsView.management.lifecycleStages.enabled).toBe("Enabled");
+    expect(en.skillsView.management.lifecycleStages.inactive).toBe("Inactive");
     expect(en.skillsView.management.policyItems.join(" ")).toContain("Published and enabled");
     expect(zh.skillsView.management.runtimeSummaryTitle).toBe("运行上下文");
     expect(zh.skillsView.management.notices.command_queued).toBe("技能命令已入队。");
+    expect(zh.skillsView.management.lifecycleStages.inactive).toBe("已停用/归档");
 
     expect(en.modelsView.management.projectSummaryTitle).toBe("Project model summary");
     expect(en.modelsView.management.notices.provider_created).toBe("Model provider saved.");

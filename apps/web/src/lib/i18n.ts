@@ -143,7 +143,7 @@ export interface WorkbenchCopy {
       noRawContentNotice: string;
       runtimeSummary: (activeCount: number, commandCount: number) => string;
       lifecycleStages: Record<
-        "draft" | "validated" | "published" | "bound" | "enabled" | "disabled",
+        "draft" | "validated" | "published" | "enabled" | "disabled" | "inactive",
         string
       >;
       nextActions: Record<
@@ -651,9 +651,9 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
           draft: "Draft",
           validated: "Validated",
           published: "Published",
-          bound: "Bound",
           enabled: "Enabled",
-          disabled: "Disabled"
+          disabled: "Disabled",
+          inactive: "Inactive"
         },
         nextActions: {
           validate: "Validate next",
@@ -1259,9 +1259,9 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
           draft: "草稿",
           validated: "已验证",
           published: "已发布",
-          bound: "已绑定",
           enabled: "已启用",
-          disabled: "已停用"
+          disabled: "已停用",
+          inactive: "已停用/归档"
         },
         nextActions: {
           validate: "下一步验证",

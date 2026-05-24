@@ -369,9 +369,6 @@ function getSkillLifecycleStage(
 }
 
 function getSkillStageLabel(stage: SkillLifecycleStage, copy: WorkbenchCopy): string {
-  if (stage === "inactive") {
-    return copy.skillsView.management.nextActions.none;
-  }
   return copy.skillsView.management.lifecycleStages[stage];
 }
 
