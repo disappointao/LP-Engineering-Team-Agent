@@ -945,10 +945,6 @@ button {
   color: #8b5e16;
 }
 
-button[data-pending-label] {
-  position: relative;
-}
-
 .mcpEditor h2,
 .mcpList h2,
 .skillEditor h2,
@@ -1056,6 +1052,15 @@ button[data-pending-label] {
 .skillEditor button,
 .modelEditor button {
   justify-self: start;
+}
+
+.managementSubmitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.managementSubmitButton[aria-busy="true"] {
+  cursor: progress;
 }
 
 .modelEditor small {

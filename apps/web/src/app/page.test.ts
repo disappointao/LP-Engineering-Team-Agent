@@ -183,7 +183,11 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
   }
   if (typeof node === "object" && "type" in node && "props" in node) {
     const element = node as { type?: unknown; props?: { children?: unknown } };
-    if (typeof element.type === "function" && element.type.name === "InterruptSubmitButton") {
+    if (
+      typeof element.type === "function" &&
+      (element.type.name === "InterruptSubmitButton" ||
+        element.type.name === "ManagementSubmitButton")
+    ) {
       return collectElements(
         (element.type as (props: Record<string, unknown>) => unknown)(
           element.props as Record<string, unknown>

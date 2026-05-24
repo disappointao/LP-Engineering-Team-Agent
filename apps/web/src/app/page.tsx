@@ -44,6 +44,7 @@ import {
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
 import { InterruptSubmitButton } from "./interrupt-submit-button";
 import { LiveTaskPanel } from "./live-task-panel";
+import { ManagementSubmitButton } from "./management-submit-button";
 import {
   buildRunTimelineViewModel,
   type RunTimelineStepView
@@ -480,12 +481,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         <option value="text/plain">{copy.skillsView.plainText}</option>
                       </select>
                       <p className="formHint">{copy.skillsView.management.noRawContentNotice}</p>
-                      <button
-                        type="submit"
-                        data-pending-label={copy.skillsView.management.pending.createDraft}
+                      <ManagementSubmitButton
+                        pendingLabel={copy.skillsView.management.pending.createDraft}
                       >
                         {copy.skillsView.createDraft}
-                      </button>
+                      </ManagementSubmitButton>
                     </form>
 
                     <section className="skillsList" aria-labelledby="skill-versions-title">
@@ -514,35 +514,32 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               {version.reviewState === "draft" ? (
                                 <form action={validateSkillVersionAction}>
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button
-                                    type="submit"
-                                    data-pending-label={copy.skillsView.management.pending.validate}
+                                  <ManagementSubmitButton
+                                    pendingLabel={copy.skillsView.management.pending.validate}
                                   >
                                     {copy.skillsView.validate}
-                                  </button>
+                                  </ManagementSubmitButton>
                                 </form>
                               ) : null}
                               {version.reviewState === "validated" ? (
                                 <form action={publishSkillVersionAction}>
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button
-                                    type="submit"
-                                    data-pending-label={copy.skillsView.management.pending.publish}
+                                  <ManagementSubmitButton
+                                    pendingLabel={copy.skillsView.management.pending.publish}
                                   >
                                     {copy.skillsView.publish}
-                                  </button>
+                                  </ManagementSubmitButton>
                                 </form>
                               ) : null}
                               {version.reviewState === "published" && !boundSkillVersionIds.has(version.id) ? (
                                 <form action={bindSkillVersionAction}>
                                   <input name="projectId" type="hidden" value={activeProject.id} />
                                   <input name="skillVersionId" type="hidden" value={version.id} />
-                                  <button
-                                    type="submit"
-                                    data-pending-label={copy.skillsView.management.pending.bind}
+                                  <ManagementSubmitButton
+                                    pendingLabel={copy.skillsView.management.pending.bind}
                                   >
                                     {copy.skillsView.bind}
-                                  </button>
+                                  </ManagementSubmitButton>
                                 </form>
                               ) : null}
                             </div>
@@ -584,9 +581,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   type="hidden"
                                   value={boundSkill.binding.enabled ? "false" : "true"}
                                 />
-                                <button
-                                  type="submit"
-                                  data-pending-label={
+                                <ManagementSubmitButton
+                                  pendingLabel={
                                     boundSkill.binding.enabled
                                       ? copy.skillsView.management.pending.disable
                                       : copy.skillsView.management.pending.enable
@@ -595,7 +591,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   {boundSkill.binding.enabled
                                     ? copy.skillsView.disable
                                     : copy.skillsView.enable}
-                                </button>
+                                </ManagementSubmitButton>
                               </form>
                             </div>
                           </div>
@@ -656,12 +652,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 {pageState.kind === "task_ready" ? (
                                   <input name="taskId" type="hidden" value={pageState.task.id} />
                                 ) : null}
-                                <button
-                                  type="submit"
-                                  data-pending-label={copy.skillsView.management.pending.queueCommand}
+                                <ManagementSubmitButton
+                                  pendingLabel={copy.skillsView.management.pending.queueCommand}
                                 >
                                   {copy.skillsView.approveAndQueue}
-                                </button>
+                                </ManagementSubmitButton>
                               </form>
                             </div>
                           ))}
@@ -679,12 +674,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         </div>
                         <form action={runLocalWorkerOnceAction}>
                           <input type="hidden" name="projectId" value={activeProject.id} />
-                          <button
-                            type="submit"
-                            data-pending-label={copy.skillsView.management.pending.runWorker}
+                          <ManagementSubmitButton
+                            pendingLabel={copy.skillsView.management.pending.runWorker}
                           >
                             {copy.skillsView.runLocalWorkerOnce}
-                          </button>
+                          </ManagementSubmitButton>
                         </form>
                       </div>
 
@@ -841,12 +835,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       <input id="modelId" name="modelId" aria-describedby="model-id-example" />
                       <small id="model-id-example">glm-5.1</small>
 
-                      <button
-                        type="submit"
-                        data-pending-label={copy.modelsView.management.pending.createProvider}
+                      <ManagementSubmitButton
+                        pendingLabel={copy.modelsView.management.pending.createProvider}
                       >
                         {copy.modelsView.createProvider}
-                      </button>
+                      </ManagementSubmitButton>
                     </form>
 
                     <section className="modelsList" aria-labelledby="model-providers-title">
@@ -890,9 +883,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 type="hidden"
                                 value={provider.enabled ? "false" : "true"}
                               />
-                              <button
-                                type="submit"
-                                data-pending-label={
+                              <ManagementSubmitButton
+                                pendingLabel={
                                   provider.enabled
                                     ? copy.modelsView.management.pending.disable
                                     : copy.modelsView.management.pending.enable
@@ -901,7 +893,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 {provider.enabled
                                   ? copy.modelsView.disable
                                   : copy.modelsView.enable}
-                              </button>
+                              </ManagementSubmitButton>
                             </form>
                           </div>
                         ))
@@ -960,13 +952,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               name="model"
                               defaultValue={route?.model ?? resolvedRoute.model}
                             />
-                            <button
-                              type="submit"
+                            <ManagementSubmitButton
                               disabled={enabledProviders.length === 0}
-                              data-pending-label={copy.modelsView.management.pending.saveRoute}
+                              pendingLabel={copy.modelsView.management.pending.saveRoute}
                             >
                               {copy.modelsView.saveRoute}
-                            </button>
+                            </ManagementSubmitButton>
                           </form>
                         );
                       })}
