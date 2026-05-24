@@ -4,7 +4,8 @@
 **Date:** 2026-05-24
 **Runtime mode:** deterministic default (`REAL_MODEL_RUNTIME=0`, `REAL_MODEL_PROVIDER_TEST=0`)
 **Gate commit:** `071601b`
-**Decision:** `needs_operator_trial`
+**Latest operator trial:** Stage 47 local operator trial at `docs/v1-polished-alpha-operator-trial.md`
+**Decision:** `go_for_internal_rc`
 
 This note is the current evidence ledger for the local single-user V1 polished alpha candidate. It records safe summaries only. It does not include secrets, raw provider responses, raw SSE frames, full artifact contents, local absolute paths, raw worker/tool payloads, or raw stdout/stderr.
 
@@ -43,12 +44,12 @@ Detailed checklist: `docs/web-v1-acceptance.md`.
 
 | Area | Status | Evidence |
 | --- | --- | --- |
-| Ordinary chat | `not_run` | No separate operator trial evidence in this completion note yet. |
-| LP live task and run timeline | `not_run` | No separate operator trial evidence in this completion note yet. |
-| Artifact workspace | `not_run` | No separate operator trial evidence in this completion note yet. |
-| Skills | `not_run` | No separate operator trial evidence in this completion note yet. |
-| Models / MCP boundary | `not_run` | No separate operator trial evidence in this completion note yet. |
-| Failure display / non-leakage spot-check | `not_run` | Covered by deterministic browser gate when `pnpm alpha:e2e` passes; no separate manual spot-check evidence yet. |
+| Ordinary chat | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
+| LP live task and run timeline | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
+| Artifact workspace | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
+| Skills | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
+| Models / MCP boundary | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
+| Failure display / non-leakage spot-check | `passed` | Stage 47 local operator trial evidence recorded in `docs/v1-polished-alpha-operator-trial.md`. |
 
 ## Optional Real Provider Smoke
 
@@ -68,7 +69,7 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 ## Open Blockers
 
-- No blockers recorded during Stage 46 gate execution.
+- No blockers recorded during Stage 46 gate execution or Stage 47 local operator trial.
 
 ## Accepted Follow-ups
 
@@ -90,6 +91,6 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 ## RC Decision
 
-- Decision: `needs_operator_trial`
-- Reasoning: Full deterministic gates passed, no blockers were found, and no separate human operator trial or real provider smoke evidence was recorded in this completion note.
-- Next routing decision: Proceed to Stage 47 Internal RC Trial Feedback Batch v0 for operator trial feedback; use Stage 48 only if blockers appear.
+- Decision: `go_for_internal_rc`
+- Reasoning: Full deterministic gates and Stage 47 local operator trial evidence passed with no blockers. Real provider opt-in smoke was not run and remains optional.
+- Next routing decision: Proceed to Stage 49 Post-V1 Backlog Prioritization v0; use Stage 48 only if a blocker is later found.
