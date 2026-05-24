@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   expectDedicatedArtifactWorkspace,
+  expectRunTimeline,
   expectSnippetFor,
   expectStaticLpArtifacts,
   expectWorkspaceSnippetFor,
@@ -28,6 +29,7 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
     await expect(page.getByText(role, { exact: true }).first()).toBeVisible();
   }
 
+  await expectRunTimeline(page);
   await expectStaticLpArtifacts(page);
   await expectSnippetFor(page, "index.html");
   await expectSnippetFor(page, "styles.css");

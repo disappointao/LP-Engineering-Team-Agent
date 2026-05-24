@@ -49,6 +49,7 @@
 5. LP 复杂任务：
    - 提交 `生成一个春季电商活动的静态 HTML 落地页`。
    - 确认 live task panel 展示 Planner、Builder、Reviewer、Deployer progress。
+   - 确认 Stage 43 run timeline 展示 Planner、Builder、Reviewer、Deployer 和 handoff marker；当 bounded recovery / repair / retry guidance 出现时，operator 不需要 raw run event 或 provider payload 才能判断当前状态。
    - 确认 artifact workspace 包含 `index.html`、`styles.css`、`script.js`。
 6. Artifact 检查：
    - 打开 preview/export。
@@ -157,8 +158,8 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 - Stage 40（已完成）：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
 - Stage 41（已完成）：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
 - Stage 42（已完成）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
-- Stage 43（当前推荐）：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
-- Stage 44：Skills / Models client-side management，继续排除 MCP management。
+- Stage 43（已完成）：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
+- Stage 44（当前推荐）：Skills / Models client-side management，继续排除 MCP management。
 - Stage 45：Browser failure injection 和轻量视觉回归扩展。
 - Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。
 - Backlog：MCP management、production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。

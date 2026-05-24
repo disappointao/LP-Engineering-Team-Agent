@@ -455,12 +455,12 @@
    - 在 Stage 42 design 后阅读，用于按 TDD 实现 `view=artifacts` navigation、dedicated artifact workspace UI、browser acceptance、manual acceptance docs 和 roadmap closeout。
 
 113. `specs/2026-05-23-run-timeline-recovery-ux-polish-design.md`
-   - Stage 43 Run Timeline and Recovery UX Polish v0 design（已批准，等待 implementation plan）。
+   - Stage 43 Run Timeline and Recovery UX Polish v0 design（已批准，已实现）。
    - 在 Stage 42 implementation plan 和当前 roadmap 后阅读，用于理解 Web-only timeline / recovery view-model polish：从现有 `LiveTaskStatePayload`、`RunLifecycleView` 和 safe run events 派生 Planner / Builder / Reviewer / Deployer lifecycle、repair/retry hints、handoff/recovery hierarchy 和 transient progress affordance；本阶段不改变 run event schema 或 recovery action contract。
 
 114. `plans/2026-05-23-run-timeline-recovery-ux-polish.md`
-   - Stage 43 Run Timeline and Recovery UX Polish v0 implementation plan（已写入，等待执行）。
-   - 在 Stage 43 design 后阅读，用于按 TDD 实现 Web-only run timeline view model、localized active role summary、timeline/recovery rendering、browser acceptance 和 roadmap closeout。
+   - Stage 43 Run Timeline and Recovery UX Polish v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 43 design 后阅读，用于审计已实现的 Web-only run timeline view model、localized active role summary、timeline/recovery rendering、browser acceptance 和 roadmap closeout。
 
 ## 维护规则
 

@@ -51,6 +51,28 @@ export async function expectStaticLpArtifacts(page: Page) {
   await expect(page.getByLabel("Static LP preview")).toBeVisible();
 }
 
+export async function expectRunTimeline(page: Page) {
+  const runTimeline = page.getByLabel("Run timeline");
+  await expect(runTimeline).toBeVisible();
+  await expect(runTimeline.getByText("Run timeline", { exact: true })).toBeVisible();
+
+  for (const role of ["Planner", "Builder", "Reviewer", "Deployer"]) {
+    await expect(runTimeline.getByText(role, { exact: true })).toBeVisible();
+  }
+
+  await expect(
+    runTimeline
+      .locator(
+        [
+          '[data-marker="handoff_ready"]',
+          '[data-marker="handoff_consumed"]',
+          '[data-marker="handoff_blocked"]'
+        ].join(", ")
+      )
+      .first()
+  ).toBeVisible();
+}
+
 export async function expectSnippetFor(page: Page, filePath: string) {
   const artifactChanges = page.getByLabel("Artifact changes");
   await artifactChanges

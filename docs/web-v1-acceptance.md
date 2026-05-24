@@ -52,6 +52,7 @@
 - [ ] 提交 LP prompt，例如 `生成一个春季电商活动的静态 HTML 落地页`。
 - [ ] 任务被识别为 LP generation task。
 - [ ] 页面不需要手动刷新，即可通过 live task panel 看到 Planner、Builder、Reviewer、Deployer progress。
+- [ ] Stage 43 run timeline 可见，并在同一 timeline 中展示 Planner、Builder、Reviewer、Deployer、handoff marker；当 repair/retry/recovery 提示出现时，应保持安全层级且不需要查看 raw event payload，页面不得展示 raw provider response、raw tool output、完整 artifact 内容、本机路径或 secret。
 - [ ] 结果包含 artifact workspace，文件为 `index.html`、`styles.css`、`script.js`。
 - [ ] 生成的 artifact 可以本地 preview/export。
 - [ ] 生成的 LP artifact 不依赖 React、Vue、Angular、Next.js、Vite 或其它前端框架构建步骤。
