@@ -487,12 +487,12 @@
    - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing；完成记录见 `docs/v1-polished-alpha-completion.md`。
 
 121. `specs/2026-05-24-internal-rc-trial-feedback-batch-design.md`
-   - Stage 47 Internal RC Trial Feedback Batch v0 design（已批准，当前推荐实施）。
-   - 在 Stage 46 completion gate 后阅读，用于执行 deterministic / no-key local operator trial，记录 safe manual acceptance evidence、feedback batch、RC decision 和 Stage 48 / Stage 49 路由；本阶段不修 blocker、不扩大 V1 功能范围。
+   - Stage 47 Internal RC Trial Feedback Batch v0 design（已实现，当前已完成）。
+   - 在 Stage 46 completion gate 后阅读，用于理解 deterministic / no-key local operator trial、safe manual acceptance evidence、feedback batch、RC decision 和 Stage 48 / Stage 49 路由；本阶段不修 blocker、不扩大 V1 功能范围。完成记录见 `docs/v1-polished-alpha-operator-trial.md`。
 
 122. `plans/2026-05-24-internal-rc-trial-feedback-batch.md`
-   - Stage 47 Internal RC Trial Feedback Batch v0 implementation plan（已批准，待实施）。
-   - 在 Stage 47 design 后阅读，用于创建 operator trial evidence ledger、运行完整 deterministic gates、更新 completion note / feedback log / roadmap，并把无 blocker 的默认后续路由切到 Stage 49。
+   - Stage 47 Internal RC Trial Feedback Batch v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 47 design 后阅读，用于复核 operator trial evidence ledger、完整 deterministic gates、completion note / feedback log / roadmap closeout，以及无 blocker 后默认后续路由切到 Stage 49 的依据；trial evidence 见 `docs/v1-polished-alpha-operator-trial.md`。
 
 ## 维护规则
 

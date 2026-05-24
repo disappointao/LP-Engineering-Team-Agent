@@ -16,6 +16,21 @@
 | `rejected_out_of_scope` | 明确不属于 V1 polished alpha。 |
 | `done` | 已由后续 commit 或文档更新关闭。 |
 
+## Batch: 2026-05-24 Stage 47 internal RC trial feedback batch
+
+- Batch id: `batch_2026_05_24_stage_47_internal_rc_trial`
+- Date range: 2026-05-24
+- Operator: Codex local operator
+- Source trial: Stage 47 deterministic local operator trial
+- Automated gates summary: `pnpm alpha:check`, `pnpm smoke`, `pnpm alpha:e2e`, `pnpm test`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed; see `docs/v1-polished-alpha-operator-trial.md`.
+- Manual acceptance summary: ordinary chat, LP live task and run timeline, artifact workspace, Skills, Models / MCP boundary, and failure display / non-leakage passed via Stage 47 local operator trial evidence.
+- Optional real provider smoke: `not_run`; no operator-provided real provider environment was used.
+- New items count: 0
+- Blockers: none
+- Accepted follow-ups: Stage 49 Post-V1 Backlog Prioritization v0.
+- Rejected/out-of-scope items: none in this trial.
+- Next routing decision: proceed to Stage 49; use Stage 48 only if a blocker is later found.
+
 ## Batch: 2026-05-23 V1 polished alpha planning batch
 
 - Batch id: `batch_2026_05_23_v1_polished_alpha_planning`
@@ -166,10 +181,10 @@
 
 ## Next Review
 
-- Next batch trigger: after first internal V1 polished alpha trial, or after Stage 41 produces navigation-related feedback.
+- Next batch trigger: after Stage 49 post-V1 backlog prioritization, or immediately if a later blocker requires Stage 48.
 - Required review inputs:
   - `docs/alpha-release-candidate.md` feedback template submissions.
   - Safe command summaries.
   - Browser acceptance output summaries.
   - Manual artifact quality rubric summaries when relevant.
-- Default next route: Stage 41 Web Surface Pruning and V1 Navigation v0.
+- Default next route: Stage 49 Post-V1 Backlog Prioritization v0 after Stage 47; Stage 48 RC Blocker Fix Batch v0 is conditional only if a blocker is later found.

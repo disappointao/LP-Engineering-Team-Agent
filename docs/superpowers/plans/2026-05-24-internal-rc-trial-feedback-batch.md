@@ -321,11 +321,11 @@ In the Stage 47 spec and plan files:
 Run:
 
 ```bash
-rg -n "Stage 47|Stage 48|Stage 49|go_for_internal_rc|v1-polished-alpha-operator-trial|batch_2026_05_24_stage_47|当前推荐|待实施" docs/alpha-feedback-log.md docs/project-roadmap.md docs/superpowers/README.md docs/superpowers/specs/2026-05-24-internal-rc-trial-feedback-batch-design.md docs/superpowers/plans/2026-05-24-internal-rc-trial-feedback-batch.md docs/v1-polished-alpha-completion.md docs/v1-polished-alpha-operator-trial.md
+rg -n "Stage 47|Stage 48|Stage 49|go_for_internal_rc|v1-polished-alpha-operator-trial|batch_2026_05_24_stage_47|recommended status|pending status" docs/alpha-feedback-log.md docs/project-roadmap.md docs/superpowers/README.md docs/superpowers/specs/2026-05-24-internal-rc-trial-feedback-batch-design.md docs/superpowers/plans/2026-05-24-internal-rc-trial-feedback-batch.md docs/v1-polished-alpha-completion.md docs/v1-polished-alpha-operator-trial.md
 git diff --check
 ```
 
-Expected: Stage 47 is complete, Stage 49 is the default next route, Stage 48 remains conditional, no stale Stage 47 `当前推荐` / `待实施` remains except historical plan instructions if clearly not a status line. `git diff --check` exits 0.
+Expected: Stage 47 is complete, Stage 49 is the default next route, Stage 48 remains conditional, and no stale Stage 47 recommended/pending status wording remains outside historical plan instructions. `git diff --check` exits 0.
 
 Commit:
 
