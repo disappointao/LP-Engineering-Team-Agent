@@ -21,6 +21,10 @@ import {
   setCurrentProjectId,
   setCurrentTaskId
 } from "../lib/workbench-session";
+import type {
+  ModelManagementNotice,
+  SkillManagementNotice
+} from "./skills-models-management-view-model";
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
@@ -46,6 +50,14 @@ function redirectToSkillsWithWorkerError(error: WorkerQueueFlowErrorCode): never
 
 function redirectToModelsWithError(error: ModelFlowErrorCode): never {
   redirect(`/?view=models&modelError=${encodeURIComponent(error)}`);
+}
+
+function redirectToSkillsWithNotice(notice: SkillManagementNotice): never {
+  redirect(`/?view=skills&skillNotice=${encodeURIComponent(notice)}`);
+}
+
+function redirectToModelsWithNotice(notice: ModelManagementNotice): never {
+  redirect(`/?view=models&modelNotice=${encodeURIComponent(notice)}`);
 }
 
 function redirectToMCPWithError(error: MCPFlowErrorCode): never {
@@ -331,7 +343,7 @@ export async function createSkillDraftAction(formData: FormData): Promise<void> 
     redirectToSkillsWithError(result.error);
   }
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("draft_created");
 }
 
 export async function validateSkillVersionAction(formData: FormData): Promise<void> {
@@ -343,7 +355,7 @@ export async function validateSkillVersionAction(formData: FormData): Promise<vo
     redirectToSkillsWithError(result.error);
   }
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("validated");
 }
 
 export async function publishSkillVersionAction(formData: FormData): Promise<void> {
@@ -355,7 +367,7 @@ export async function publishSkillVersionAction(formData: FormData): Promise<voi
     redirectToSkillsWithError(result.error);
   }
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("published");
 }
 
 export async function bindSkillVersionAction(formData: FormData): Promise<void> {
@@ -370,7 +382,7 @@ export async function bindSkillVersionAction(formData: FormData): Promise<void> 
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("bound");
 }
 
 export async function setSkillBindingEnabledAction(formData: FormData): Promise<void> {
@@ -389,7 +401,7 @@ export async function setSkillBindingEnabledAction(formData: FormData): Promise<
     await setCurrentProjectId(projectId);
   }
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice(result.value.enabled ? "enabled" : "disabled");
 }
 
 export async function executeSkillCommandAction(formData: FormData): Promise<void> {
@@ -414,7 +426,7 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
 
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("command_queued");
 }
 
 export async function runLocalWorkerOnceAction(formData: FormData): Promise<void> {
@@ -429,7 +441,7 @@ export async function runLocalWorkerOnceAction(formData: FormData): Promise<void
     await setCurrentProjectId(projectId);
   }
   revalidatePath("/");
-  redirect("/?view=skills");
+  redirectToSkillsWithNotice("worker_ran");
 }
 
 export async function createModelProviderAction(formData: FormData): Promise<void> {
@@ -455,7 +467,7 @@ export async function createModelProviderAction(formData: FormData): Promise<voi
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=models");
+  redirectToModelsWithNotice("provider_created");
 }
 
 export async function setModelProviderEnabledAction(formData: FormData): Promise<void> {
@@ -475,7 +487,7 @@ export async function setModelProviderEnabledAction(formData: FormData): Promise
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=models");
+  redirectToModelsWithNotice(result.value.enabled ? "provider_enabled" : "provider_disabled");
 }
 
 export async function upsertProjectModelRouteAction(formData: FormData): Promise<void> {
@@ -497,7 +509,7 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=models");
+  redirectToModelsWithNotice("route_saved");
 }
 
 export async function createMCPConnectorAction(formData: FormData): Promise<void> {

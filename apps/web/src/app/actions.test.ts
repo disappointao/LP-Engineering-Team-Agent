@@ -636,7 +636,7 @@ describe("submitPromptAction", () => {
           contentType: "text/markdown"
         })
       ),
-      "/?view=skills"
+      "/?view=skills&skillNotice=draft_created"
     );
 
     expect(mocks.createSkillDraft).toHaveBeenCalledWith({
@@ -662,7 +662,10 @@ describe("submitPromptAction", () => {
       type: "text/markdown"
     }));
 
-    await expectRedirect(createSkillDraftAction(formData), "/?view=skills");
+    await expectRedirect(
+      createSkillDraftAction(formData),
+      "/?view=skills&skillNotice=draft_created"
+    );
 
     expect(mocks.createSkillDraft).toHaveBeenCalledWith({
       manifestJson: brandSkillManifestJson(),
@@ -770,7 +773,7 @@ describe("submitPromptAction", () => {
   it("validates a skill version and redirects to the skills view", async () => {
     await expectRedirect(
       validateSkillVersionAction(buildSkillForm({ skillVersionId: "skill_version_1" })),
-      "/?view=skills"
+      "/?view=skills&skillNotice=validated"
     );
 
     expect(mocks.validateSkillVersion).toHaveBeenCalledWith("skill_version_1");
@@ -780,7 +783,7 @@ describe("submitPromptAction", () => {
   it("publishes a skill version and redirects to the skills view", async () => {
     await expectRedirect(
       publishSkillVersionAction(buildSkillForm({ skillVersionId: "skill_version_1" })),
-      "/?view=skills"
+      "/?view=skills&skillNotice=published"
     );
 
     expect(mocks.publishSkillVersion).toHaveBeenCalledWith("skill_version_1");
@@ -795,7 +798,7 @@ describe("submitPromptAction", () => {
           skillVersionId: "skill_version_1"
         })
       ),
-      "/?view=skills"
+      "/?view=skills&skillNotice=bound"
     );
 
     expect(mocks.bindSkillVersionToProject).toHaveBeenCalledWith({
@@ -804,6 +807,40 @@ describe("submitPromptAction", () => {
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects skill binding enable and disable actions with notice codes", async () => {
+    mocks.setProjectSkillBindingEnabled.mockResolvedValueOnce({
+      ok: true,
+      value: { id: "skill_binding_1", enabled: true }
+    });
+
+    await expectRedirect(
+      setSkillBindingEnabledAction(
+        buildSkillForm({
+          projectId: "project_1",
+          bindingId: "binding_1",
+          enabled: "true"
+        })
+      ),
+      "/?view=skills&skillNotice=enabled"
+    );
+
+    mocks.setProjectSkillBindingEnabled.mockResolvedValueOnce({
+      ok: true,
+      value: { id: "skill_binding_1", enabled: false }
+    });
+
+    await expectRedirect(
+      setSkillBindingEnabledAction(
+        buildSkillForm({
+          projectId: "project_1",
+          bindingId: "binding_1",
+          enabled: "false"
+        })
+      ),
+      "/?view=skills&skillNotice=disabled"
+    );
   });
 
   it("redirects bind skill errors without changing project state", async () => {
@@ -835,7 +872,10 @@ describe("submitPromptAction", () => {
       }
     });
 
-    await expectRedirect(executeSkillCommandAction(buildSkillCommandForm()), "/?view=skills");
+    await expectRedirect(
+      executeSkillCommandAction(buildSkillCommandForm()),
+      "/?view=skills&skillNotice=command_queued"
+    );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
       projectId: "project_2",
@@ -858,7 +898,7 @@ describe("submitPromptAction", () => {
 
     await expectRedirect(
       executeSkillCommandAction(buildSkillCommandForm({ pageVersionId: "" })),
-      "/?view=skills"
+      "/?view=skills&skillNotice=command_queued"
     );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
@@ -879,7 +919,7 @@ describe("submitPromptAction", () => {
 
     await expectRedirect(
       executeSkillCommandAction(buildSkillCommandForm({ taskId: " task_1 " })),
-      "/?view=skills"
+      "/?view=skills&skillNotice=command_queued"
     );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
@@ -902,7 +942,7 @@ describe("submitPromptAction", () => {
 
     await expectRedirect(
       executeSkillCommandAction(buildSkillCommandForm({ taskId: "   " })),
-      "/?view=skills"
+      "/?view=skills&skillNotice=command_queued"
     );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
@@ -920,7 +960,10 @@ describe("submitPromptAction", () => {
     });
     formData.set("approvedByUserId", "attacker");
 
-    await expectRedirect(executeSkillCommandAction(formData), "/?view=skills");
+    await expectRedirect(
+      executeSkillCommandAction(formData),
+      "/?view=skills&skillNotice=command_queued"
+    );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
       projectId: "project_2",
@@ -965,7 +1008,10 @@ describe("submitPromptAction", () => {
     const formData = new FormData();
     formData.set("projectId", "project_1");
 
-    await expectRedirect(runLocalWorkerOnceAction(formData), "/?view=skills");
+    await expectRedirect(
+      runLocalWorkerOnceAction(formData),
+      "/?view=skills&skillNotice=worker_ran"
+    );
 
     expect(mocks.runLocalWorkerOnce).toHaveBeenCalledWith({ projectId: "project_1" });
   });
@@ -981,7 +1027,10 @@ describe("submitPromptAction", () => {
     const formData = new FormData();
     formData.set("projectId", "project_1");
 
-    await expectRedirect(runLocalWorkerOnceAction(formData), "/?view=skills");
+    await expectRedirect(
+      runLocalWorkerOnceAction(formData),
+      "/?view=skills&skillNotice=worker_ran"
+    );
 
     expect(mocks.runLocalWorkerOnce).toHaveBeenCalledWith({ projectId: "project_2" });
   });
@@ -1018,7 +1067,7 @@ describe("submitPromptAction", () => {
           secretEnvName: "OPENAI_API_KEY"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=provider_created"
     );
 
     expect(mocks.createModelProvider).toHaveBeenCalledWith({
@@ -1053,7 +1102,7 @@ describe("submitPromptAction", () => {
           modelId: "glm-5.1"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=provider_created"
     );
 
     expect(mocks.createModelProvider).toHaveBeenCalledWith({
@@ -1087,7 +1136,7 @@ describe("submitPromptAction", () => {
           secretEnvName: "OPENAI_API_KEY"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=provider_created"
     );
 
     expect(mocks.createModelProvider).toHaveBeenCalledWith({
@@ -1108,7 +1157,7 @@ describe("submitPromptAction", () => {
     mocks.currentProjectId = "project_1";
     mocks.setModelProviderEnabled.mockResolvedValue({
       ok: true,
-      value: { id: "provider_openai" }
+      value: { id: "provider_openai", enabled: true }
     });
 
     await expectRedirect(
@@ -1118,7 +1167,7 @@ describe("submitPromptAction", () => {
           enabled: "true"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=provider_enabled"
     );
 
     expect(mocks.setModelProviderEnabled).toHaveBeenCalledWith({
@@ -1132,7 +1181,7 @@ describe("submitPromptAction", () => {
     mocks.currentProjectId = undefined;
     mocks.setModelProviderEnabled.mockResolvedValue({
       ok: true,
-      value: { id: "provider_openai" }
+      value: { id: "provider_openai", enabled: false }
     });
 
     await expectRedirect(
@@ -1143,7 +1192,7 @@ describe("submitPromptAction", () => {
           enabled: "false"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=provider_disabled"
     );
 
     expect(mocks.setModelProviderEnabled).toHaveBeenCalledWith({
@@ -1169,7 +1218,7 @@ describe("submitPromptAction", () => {
           model: "gpt-5.4"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=route_saved"
     );
 
     expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
@@ -1188,7 +1237,10 @@ describe("submitPromptAction", () => {
     formData.set("providerId", "provider_openai");
     formData.set("model", "gpt-5.4");
 
-    await expectRedirect(upsertProjectModelRouteAction(formData), "/?view=models");
+    await expectRedirect(
+      upsertProjectModelRouteAction(formData),
+      "/?view=models&modelNotice=route_saved"
+    );
 
     expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
       projectId: "project_1",
@@ -1214,7 +1266,7 @@ describe("submitPromptAction", () => {
           model: "gpt-5.4"
         })
       ),
-      "/?view=models"
+      "/?view=models&modelNotice=route_saved"
     );
 
     expect(mocks.upsertProjectModelRoute).toHaveBeenCalledWith({
@@ -1245,9 +1297,14 @@ describe("submitPromptAction", () => {
   });
 
   it.each([
-    ["true", true],
-    ["false", false]
-  ])("sets a skill binding enabled=%s and redirects to the skills view", async (rawValue, enabled) => {
+    ["true", true, "/?view=skills&skillNotice=enabled"],
+    ["false", false, "/?view=skills&skillNotice=disabled"]
+  ])("sets a skill binding enabled=%s and redirects to the skills view", async (rawValue, enabled, url) => {
+    mocks.setProjectSkillBindingEnabled.mockResolvedValue({
+      ok: true,
+      value: { id: "skill_binding_1", enabled }
+    });
+
     await expectRedirect(
       setSkillBindingEnabledAction(
         buildSkillForm({
@@ -1255,7 +1312,7 @@ describe("submitPromptAction", () => {
           enabled: rawValue
         })
       ),
-      "/?view=skills"
+      url
     );
 
     expect(mocks.setProjectSkillBindingEnabled).toHaveBeenCalledWith({
