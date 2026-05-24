@@ -1028,6 +1028,23 @@ pnpm --filter @lp-agent/model-gateway test
 - `ToolObservationRecord` 是工具执行事实边界，不是 raw output 仓库。保存摘要而不是原文，后续模型上下文再通过显式 summarization 读取。
 - Stage 20 v0 证明了 MCP execution 不等同于“直接调用外部工具”：即使第一版 executor 是 deterministic local executor，也必须先经过 project/role/permission/approval/read-only 校验，再通过 run event 和 `ToolObservationRecord` 保存可审计、安全摘要。
 
+### 阶段 44：Skills and Models Client-side Management v0
+
+当前设计：
+
+- [2026-05-24-skills-models-client-management-design.md](./superpowers/specs/2026-05-24-skills-models-client-management-design.md)
+- 这一阶段只做 Web client-side management polish：用 view-model 从 repository-backed Skills / Models facts 派生 lifecycle/status、pending/success/error affordance、safe runtime summary 和 fail-closed diagnostics。
+- Skills 页面要让用户理解 `draft -> validated -> published -> bound -> enabled` 的差异；只有 published + enabled + project-bound skill metadata 会进入 runtime context。
+- Models 页面要让用户理解 provider config、role route、resolved route、deterministic mock fallback 和真实 provider opt-in 的差异；真实 provider 仍需要 `REAL_MODEL_RUNTIME=1` 和环境变量。
+- Stage 44 不改变 Agent runtime、Context Pack、model gateway、skill command runner、worker queue 或 repository schema，也不恢复 MCP management。
+
+学习重点：
+
+- Client-side pending state 只能改善交互反馈，不能成为 Agent fact source。action 完成后必须回到 server action / API service / repository fact。
+- Skills 是上下文数据和受控 command metadata，不是任意代码执行入口；页面不应为了“可管理”而回显 raw skill content 或扩大 command approval。
+- Models UI 保存的是 provider / model metadata 和 secret reference，不保存 secret 值；错误诊断必须通过 stable error code 和 bounded copy 表达。
+- “会进入 runtime context 的是什么”应在 UI 中讲清：bounded skill/model metadata 可以展示，raw content、secret、raw provider response、完整 base URL、本机路径和完整 artifact 内容不应扩散。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。
