@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectNoVisibleTextLeaks } from "./helpers";
 
 test("shows Skill-only alpha boundary views", async ({ page }) => {
   await page.goto("/");
@@ -44,7 +45,9 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
 
   await expect(navigation.getByRole("link", { name: "MCP" })).toHaveCount(0);
 
-  await page.goto("/?view=mcp");
+  await page.goto(
+    "/?view=mcp&debug=MCP_BROWSER_SECRET&connectorJson=MCP_CONNECTOR_SECRET&toolArguments=MCP_TOOL_SECRET"
+  );
   await expect(
     page.getByRole("heading", { name: "What can I help you build?" })
   ).toBeVisible();
@@ -56,6 +59,11 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("link", { name: "MCP" })
   ).toHaveCount(0);
+  await expectNoVisibleTextLeaks(page, [
+    "MCP_BROWSER_SECRET",
+    "MCP_CONNECTOR_SECRET",
+    "MCP_TOOL_SECRET"
+  ]);
 });
 
 test("shows bounded recovery error display", async ({ page }) => {
