@@ -484,7 +484,7 @@
 
 120. `plans/2026-05-24-v1-polished-alpha-completion-gate.md`
    - Stage 46 V1 Polished Alpha Completion Gate v0 implementation plan（已实现，当前已完成）。
-   - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing。
+   - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing；完成记录见 `docs/v1-polished-alpha-completion.md`。
 
 ## 维护规则
 

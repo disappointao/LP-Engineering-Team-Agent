@@ -382,14 +382,14 @@ In `docs/superpowers/README.md`, after the Stage 46 spec entry, add:
 ```md
 120. `plans/2026-05-24-v1-polished-alpha-completion-gate.md`
    - Stage 46 V1 Polished Alpha Completion Gate v0 implementation plan（已实现，当前已完成）。
-   - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing。
+   - 在 Stage 46 design 后阅读，用于创建 completion ledger、运行完整 deterministic gates、记录 honest manual / real provider smoke 状态、更新 RC docs、roadmap closeout 和后续 routing；完成记录见 `docs/v1-polished-alpha-completion.md`。
 ```
 
 - [ ] **Step 2: Update roadmap Stage 46 status and next queue**
 
 In `docs/project-roadmap.md`:
 
-- Change Stage 46 status from `当前推荐` to `已实现` if Task 3 passed all default gates.
+- Confirm Stage 46 status is `已实现` after Task 3 passed all default gates.
 - Add implementation summary bullets:
   - completion ledger created at `docs/v1-polished-alpha-completion.md`
   - full deterministic gates recorded
