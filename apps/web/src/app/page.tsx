@@ -52,6 +52,7 @@ import {
 import {
   buildModelsManagementViewModel,
   buildSkillsManagementViewModel,
+  type ModelManagementRouteRow,
   modelManagementRoleOrder,
   toModelManagementNotice,
   toSkillManagementNotice
@@ -821,7 +822,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                       <label htmlFor="baseUrl">{copy.modelsView.baseUrlLabel}</label>
                       <input id="baseUrl" name="baseUrl" aria-describedby="base-url-example" />
-                      <small id="base-url-example">https://api.openai.com/v1</small>
+                      <small id="base-url-example">Provider endpoint from docs</small>
 
                       <label htmlFor="apiKeyEnv">{copy.modelsView.apiKeyEnvLabel}</label>
                       <input
@@ -927,7 +928,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               );
                               return routeRow ? (
                                 <small className={`managementState routeState-${routeRow.state}`}>
-                                  {routeRow.stateLabel} · {routeRow.resolvedLabel}
+                                  <span>
+                                    {routeRow.stateLabel} · {getModelRouteTargetLabel(routeRow)}
+                                  </span>
+                                  {routeRow.diagnosticMessage ? (
+                                    <span className="routeDiagnostic">
+                                      {routeRow.diagnosticMessage}
+                                    </span>
+                                  ) : null}
                                 </small>
                               ) : null;
                             })()}
@@ -1735,6 +1743,21 @@ function createArtifactPreviewHref(searchParams: URLSearchParams, artifactPath: 
   const nextSearchParams = new URLSearchParams(searchParams);
   nextSearchParams.set("artifactPath", artifactPath);
   return `/?${nextSearchParams.toString()}`;
+}
+
+function getModelRouteTargetLabel(routeRow: ModelManagementRouteRow): string {
+  if (routeRow.state !== "failClosed") {
+    return routeRow.resolvedLabel;
+  }
+
+  const configuredModel = routeRow.model?.trim();
+  if (routeRow.providerId && configuredModel) {
+    return `${routeRow.providerId}/${configuredModel}`;
+  }
+  if (routeRow.providerId) {
+    return routeRow.providerId;
+  }
+  return routeRow.resolvedLabel;
 }
 
 function toSkillFlowError(value: string | undefined): SkillFlowErrorCode | undefined {

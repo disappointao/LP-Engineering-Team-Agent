@@ -1,9 +1,13 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createProject,
   expectModelsManagementSurface,
   expectSkillsManagementSurface
 } from "./helpers";
+
+const e2eStateFile = resolve("test-results", "alpha-e2e-state", "workbench-state.json");
 
 test("manages skills and models with safe client-side feedback", async ({ page }) => {
   await createProject(page, "Stage 44 Management");
@@ -85,6 +89,15 @@ test("manages skills and models with safe client-side feedback", async ({ page }
     page.getByLabel("Role routing").getByText(/Deterministic fallback · mock-/).first()
   ).toBeVisible();
 
+  disableProviderInE2eState("provider_stage44");
+  await page.reload();
+  await expect(plannerRouteForm.getByText("Fail closed · provider_stage44/stage-44-model")).toBeVisible();
+  await expect(
+    plannerRouteForm.getByText("Enable the provider before routing a role to it.", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText("https://secret-provider.example.test/v1")).toHaveCount(0);
+  await expect(page.getByText("STAGE44_API_KEY")).toHaveCount(0);
+
   await page.getByLabel("Provider key").fill("provider_stage44_invalid");
   await page.getByLabel("Display name").fill("Stage 44 Invalid Provider");
   await page.getByLabel("Provider type").selectOption("custom");
@@ -103,3 +116,16 @@ test("manages skills and models with safe client-side feedback", async ({ page }
   await expect(page.getByText("STAGE44_API_KEY=RAW_SECRET_ASSIGNMENT")).toHaveCount(0);
   await expect(page.getByLabel("API key env var")).toHaveValue("");
 });
+
+function disableProviderInE2eState(providerId: string) {
+  const state = JSON.parse(readFileSync(e2eStateFile, "utf8")) as {
+    modelProviders?: Array<Record<string, unknown>>;
+  };
+  const provider = state.modelProviders?.find((record) => record.id === providerId);
+  if (!provider) {
+    throw new Error(`Expected persisted E2E provider ${providerId} to exist.`);
+  }
+  provider.enabled = false;
+  provider.updatedAt = "2026-05-24T00:00:00.000Z";
+  writeFileSync(e2eStateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+}

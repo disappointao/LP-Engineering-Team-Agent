@@ -1731,6 +1731,65 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("OPENAI_API_KEY=");
   });
 
+  it("renders fail-closed model route diagnostics without provider secrets", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: {
+              api: "openai-completions",
+              baseUrl: "https://secret-provider.example.test/v1",
+              apiKeyEnv: "OPENAI_API_KEY",
+              models: [{ id: "gpt-5.4" }]
+            },
+            enabled: false,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:02:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "route_planner",
+            scope: "project",
+            targetKey: "project_1",
+            role: "planner",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:01:00.000Z",
+            updatedAt: "2026-05-24T00:01:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        },
+        resolutionError: "model_provider_disabled"
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Fail closed");
+    expect(text).toContain("provider_openai/gpt-5.4");
+    expect(text).toContain("Enable the provider before routing a role to it.");
+    expect(text).not.toContain("https://secret-provider.example.test/v1");
+    expect(text).not.toContain("https://api.openai.com/v1");
+    expect(text).not.toContain("OPENAI_API_KEY");
+  });
+
   it("renders real provider opt-in and fail-closed guidance in the models view", async () => {
     setActiveEmptyProjectState();
 

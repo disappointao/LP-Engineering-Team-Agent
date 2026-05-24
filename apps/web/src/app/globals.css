@@ -941,6 +941,12 @@ button {
   color: var(--danger);
 }
 
+.routeDiagnostic {
+  display: block;
+  margin-top: 2px;
+  font-weight: 650;
+}
+
 .routeState-fallback {
   color: #8b5e16;
 }
