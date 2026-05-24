@@ -181,6 +181,66 @@ export async function expectWorkbenchLayoutContract(page: Page) {
     );
   }
 
+  await expectNoHorizontalOverflow(page);
+}
+
+export async function expectArtifactWorkspaceLayoutContract(page: Page) {
+  const workspace = page.getByLabel("Artifact workspace");
+  const hero = workspace.locator(".artifactWorkspaceHero");
+  const manifest = workspace.getByLabel("File manifest");
+  const preview = workspace.getByLabel("Static LP preview");
+  const exports = workspace.getByLabel("Exports");
+
+  const workspaceBox = await getRequiredBox(workspace, "artifact workspace");
+  const heroBox = await getRequiredBox(hero, "artifact workspace hero");
+  const manifestBox = await getRequiredBox(manifest, "artifact manifest");
+  const previewBox = await getRequiredBox(preview, "artifact preview");
+  const exportBox = await getRequiredBox(exports, "artifact exports");
+
+  for (const childBox of [heroBox, manifestBox, previewBox, exportBox]) {
+    expect(childBox.x).toBeGreaterThanOrEqual(workspaceBox.x);
+    expect(childBox.x + childBox.width).toBeLessThanOrEqual(workspaceBox.x + workspaceBox.width + 1);
+    expect(childBox.width).toBeGreaterThan(280);
+  }
+
+  expect(heroBox.y).toBeLessThan(manifestBox.y);
+  expect(manifestBox.y).toBeLessThan(previewBox.y);
+  expect(previewBox.y).toBeLessThan(exportBox.y);
+  await expectNoHorizontalOverflow(page);
+}
+
+export async function expectManagementLayoutContract(page: Page, surface: "skills" | "models") {
+  const root = surface === "skills" ? page.locator("section.skillsView") : page.locator("section.modelsView");
+  const header = root.locator(surface === "skills" ? ".skillsHeader" : ".modelsHeader");
+  const summary = root.locator(".managementSummary");
+  const primaryForm = surface === "skills" ? root.locator("form.skillEditor") : root.locator("form.modelEditor");
+  const firstList = surface === "skills" ? root.locator(".skillsList").first() : root.locator(".modelsList").first();
+
+  const rootBox = await getRequiredBox(root, `${surface} management surface`);
+  const headerBox = await getRequiredBox(header, `${surface} management header`);
+  const summaryBox = await getRequiredBox(summary, `${surface} management summary`);
+  const formBox = await getRequiredBox(primaryForm, `${surface} management form`);
+  const listBox = await getRequiredBox(firstList, `${surface} management list`);
+
+  for (const childBox of [headerBox, summaryBox, formBox, listBox]) {
+    expect(childBox.x).toBeGreaterThanOrEqual(rootBox.x);
+    expect(childBox.x + childBox.width).toBeLessThanOrEqual(rootBox.x + rootBox.width + 1);
+    expect(childBox.width).toBeGreaterThan(260);
+  }
+
+  expect(headerBox.y).toBeLessThan(summaryBox.y);
+  expect(summaryBox.y).toBeLessThan(formBox.y);
+  expect(summaryBox.y).toBeLessThan(listBox.y);
+  await expectNoHorizontalOverflow(page);
+}
+
+export async function expectNoVisibleTextLeaks(page: Page, values: string[]) {
+  for (const value of values) {
+    await expect(page.getByText(value, { exact: false })).toHaveCount(0);
+  }
+}
+
+export async function expectNoHorizontalOverflow(page: Page) {
   const metrics = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth
