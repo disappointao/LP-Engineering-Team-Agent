@@ -25,7 +25,7 @@ Stage 46 completion gate 的当前证据记录见 `docs/v1-polished-alpha-comple
 | Gate | Go 标准 | No-go 条件 |
 | --- | --- | --- |
 | Environment | Node.js/pnpm 可用，`pnpm install` 完成，`.env.local` 默认 `REAL_MODEL_RUNTIME=0`、`REAL_MODEL_PROVIDER_TEST=0`。 | 依赖无法安装，默认环境必须依赖真实 key 才能启动。 |
-| Automated deterministic gates | `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e`、`pnpm test`、`pnpm typecheck`、`pnpm build` 通过。 | 默认 gate 失败，或默认 gate 需要真实 provider、真实 MCP server、Postgres、真实部署。 |
+| Automated deterministic gates | Stage50 已完成 browser platform / visual baseline planning；RC default gate 仍只要求 deterministic local Chromium-only `pnpm alpha:e2e`，并通过 `pnpm alpha:check`、`pnpm smoke`、`pnpm test`、`pnpm typecheck`、`pnpm build`。 | 默认 gate 失败，或默认 gate 需要真实 provider、真实 MCP server、Postgres、真实部署；RC 不要求 cross-browser matrix、remote browser farm 或 pixel screenshot baseline。 |
 | Manual acceptance | `docs/web-v1-acceptance.md` 主路径通过：普通聊天、LP live task、artifact preview/export/snippet、Skills、Models/MCP boundary。 | 主路径无法完成，或 failure display 泄漏 secret/raw provider/raw tool/raw artifact、本机路径。 |
 | Optional real provider smoke | 如需真实 provider 试用，按 `docs/real-provider-alpha-smoke.md` 完成普通聊天、LP Planner/Builder、usage metadata、missing key fail-closed。 | 真实 provider 成功路径不可用，或 fail-closed 泄漏 key、env value、raw provider response。 |
 | Known limitations | 试用者已知道 MCP management 不属于 RC 主路径依赖，真实 MCP SDK / write tools / worker execution、真实部署、auth/RBAC、billing/quota、production storage、真实 shell runner 后置。 | 试用目标依赖这些后置能力。 |
@@ -153,13 +153,14 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | Sta
 这些限制不默认阻塞 RC，除非本次试用目标明确依赖它们：
 
 - Stage54 MCP management surface 已完成为 post-V1 safe metadata / read-only management surface；RC 主路径仍不依赖 MCP 配置，当前不要求真实 MCP server / SDK、write tools 或 MCP worker execution。
+- Stage50 browser platform / visual baseline planning 已完成；RC default gate 仍只要求 deterministic local Chromium-only `pnpm alpha:e2e`，不要求 cross-browser matrix、remote browser farm 或 pixel screenshot baseline。
 - 真实部署编排后置；当前 deployment skill command 仍是受控 queue / safe observation 路径。
 - Auth/RBAC、邀请、团队审批队列和 hosted deployment 后置。
 - Postgres 仍是显式 opt-in；production migrations、object storage 和 artifact content migration 后置。
 - 真实 shell runner、强 sandbox、OS-level isolation 和 raw stdout/stderr streaming 后置。
 - Billing/quota/cost ledger 和 automatic fallback provider execution 后置。
 - LP structured output token-level UI 后置；Planner / Builder 仍完整 buffer 后 parse / repair。
-- 远端 browser farm、跨浏览器矩阵和 pixel-perfect screenshot baseline 后置。
+- Firefox/WebKit compatibility smoke、remote browser farm 和 pixel screenshot baseline 仍是 backlog；Stage50 planning complete，不代表已实现这些 browser platform / visual baseline 能力。
 
 ## Follow-up Routing
 
@@ -171,7 +172,7 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | Sta
 - Stage 45（已完成）：Browser failure injection、recovery/timeline diagnostics non-leakage 和轻量视觉回归扩展。
 - Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。
 - Stage 54（已完成）：post-V1 MCP management surface，只展示 safe connector/tool metadata 和 read-only checks，不接真实 MCP SDK/write tools/worker execution。
-- Backlog：production auth/RBAC、真实部署、真实 MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
+- Backlog：production auth/RBAC、真实部署、真实 MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability、Firefox/WebKit compatibility smoke、remote browser farm、pixel screenshot baseline。
 
 ## RC Decision Record
 

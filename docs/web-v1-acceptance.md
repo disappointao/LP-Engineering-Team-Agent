@@ -20,6 +20,9 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 
 - [ ] 首次运行 Playwright browser gate 前，执行 `pnpm alpha:e2e:install` 安装本地 Chromium browser。
 - [ ] 执行 `pnpm alpha:e2e`，确认 browser-level alpha acceptance 通过。
+- [ ] Stage50 browser platform planning 已完成；默认 `pnpm alpha:e2e` 仍是 Chromium-only local deterministic gate。
+- [ ] cross-browser matrix、remote browser farm 和 pixel screenshot baseline 不进入默认 gate。
+- [ ] 未来 browser compatibility smoke 应保持 opt-in，且不得要求真实 provider key、MCP server、Postgres、真实部署、network service 或 production credentials。
 - [ ] 自动验收覆盖普通聊天 streaming。
 - [ ] 自动验收覆盖 LP live task。
 - [ ] 自动验收覆盖 artifact workspace happy path、invalid path、oversized snippet 和安全 unavailable copy。
@@ -121,7 +124,7 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 
 ## 已知后续工作
 
-- [ ] Stage 45 Browser failure / visual regression expansion 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
+- [ ] Stage50 Browser Platform / Visual Baseline Planning v0 已完成；Firefox/WebKit compatibility smoke、remote browser farm 和 pixel screenshot baseline 仍是 future discovery / opt-in implementation candidates。
 - [ ] Stage 35 Provider token delta streaming 已完成普通聊天 `assistant` role；LP structured output token-level UI、billing/cost ledger 仍是后续工作。
 - [ ] Stage54 MCP management surface v0 已完成；真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。
