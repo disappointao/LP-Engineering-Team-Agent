@@ -27,9 +27,9 @@
 - Optional real provider smoke: `not_run`; no operator-provided real provider environment was used.
 - New items count: 0
 - Blockers: none
-- Accepted follow-ups: Stage 49 Post-V1 Backlog Prioritization v0.
+- Accepted follow-ups: Stage 49 Post-V1 Backlog Prioritization v0 handled by `docs/post-v1-backlog-prioritization.md`; default to Stage 51 MCP Management Surface v0 Spec Kickoff next, use Stage 48 only if a blocker is later found, and keep Stage 50 as optional browser platform / visual baseline planning.
 - Rejected/out-of-scope items: none in this trial.
-- Next routing decision: proceed to Stage 49; use Stage 48 only if a blocker is later found.
+- Next routing decision: proceed to Stage 51 by default; use Stage 48 only if a blocker is later found; keep Stage 50 optional.
 
 ## Batch: 2026-05-23 V1 polished alpha planning batch
 
@@ -181,10 +181,10 @@
 
 ## Next Review
 
-- Next batch trigger: after Stage 49 post-V1 backlog prioritization, or immediately if a later blocker requires Stage 48.
+- Next batch trigger: after Stage 51 MCP Management Surface v0 Spec Kickoff, or immediately if a later blocker requires Stage 48; Stage 50 may run as an optional browser platform / visual baseline planning track.
 - Required review inputs:
   - `docs/alpha-release-candidate.md` feedback template submissions.
   - Safe command summaries.
   - Browser acceptance output summaries.
   - Manual artifact quality rubric summaries when relevant.
-- Default next route: Stage 49 Post-V1 Backlog Prioritization v0 after Stage 47; Stage 48 RC Blocker Fix Batch v0 is conditional only if a blocker is later found.
+- Default next route: Stage 51 MCP Management Surface v0 Spec Kickoff; Stage 48 RC Blocker Fix Batch v0 is conditional only if a blocker is later found; Stage 50 Browser Platform / Visual Baseline Planning v0 remains optional.

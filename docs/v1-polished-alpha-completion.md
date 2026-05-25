@@ -73,9 +73,11 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 ## Accepted Follow-ups
 
-- Stage 47: Internal RC Trial Feedback Batch v0.
-- Stage 48: RC Blocker Fix Batch v0, only if Stage 46 or Stage 47 finds blockers.
-- Stage 49: Post-V1 Backlog Prioritization v0.
+- Stage 47: Internal RC Trial Feedback Batch v0, completed with no blockers.
+- Stage 49: Post-V1 Backlog Prioritization v0, completed by `docs/post-v1-backlog-prioritization.md`.
+- Stage 51: MCP Management Surface v0 Spec Kickoff, default next product/platform slice.
+- Stage 48: RC Blocker Fix Batch v0, conditional only if a blocker is accepted later.
+- Stage 50: Browser Platform / Visual Baseline Planning v0, optional planning track.
 
 ## Rejected Or Out Of Scope For V1
 
@@ -93,4 +95,4 @@ Detailed checklist: `docs/real-provider-alpha-smoke.md`.
 
 - Decision: `go_for_internal_rc`
 - Reasoning: Full deterministic gates and Stage 47 local operator trial evidence passed with no blockers. Real provider opt-in smoke was not run and remains optional.
-- Next routing decision: Proceed to Stage 49 Post-V1 Backlog Prioritization v0; use Stage 48 only if a blocker is later found.
+- Next routing decision: Proceed to Stage 51 MCP Management Surface v0 Spec Kickoff by default; use Stage 48 only if a blocker is later found; keep Stage 50 as an optional browser platform / visual baseline planning track.
