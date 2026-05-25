@@ -836,6 +836,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **设计：** `docs/superpowers/specs/2026-05-25-post-v1-backlog-prioritization-design.md`。
 
+**实施计划：** `docs/superpowers/plans/2026-05-25-post-v1-backlog-prioritization.md`。
+
 ### Stage 48：RC Blocker Fix Batch v0
 
 **状态：** 条件触发；仅当后续发现 accepted blockers 时启用。
@@ -1013,6 +1015,8 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 确认 `docs/superpowers/README.md` 和 `docs/agent-development-learning.md` 是否也因本阶段变化需要同步更新。
 
 ## 决策记录
+
+- 2026-05-25 Stage 49 implementation plan 已写入：计划使用隔离 worktree 和 subagent-driven development 创建 `docs/post-v1-backlog-prioritization.md` scoring ledger，同步 completion / feedback routing、roadmap 和 Superpowers README；最终验证为 `git diff --check`、`pnpm alpha:check` 和 `pnpm smoke`。
 
 - 2026-05-25 Stage 49 设计已批准：Post-V1 Backlog Prioritization v0 将把 V1 completion、operator trial evidence、feedback batch、known limitations 和 roadmap backlog 转成可复核排序；默认候选为 Stage 51 MCP Management Surface v0 Spec Kickoff，Stage 48 继续只在 blocker 出现时启用，Stage 50 保持 browser platform / visual baseline 可选规划路径；本阶段不实现 runtime、Web、MCP、provider、deployment、auth、storage 或 browser platform 功能。
 

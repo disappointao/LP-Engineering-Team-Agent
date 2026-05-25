@@ -498,6 +498,10 @@
    - Stage 49 Post-V1 Backlog Prioritization v0 design（已批准，待实施计划）。
    - 在 Stage 47 implementation plan 和当前 roadmap 后阅读，用于把 V1 polished alpha completion、operator trial evidence、feedback batch、known limitations 和较长 post-V1 backlog 转成可复核的优先级模型，并默认把 Stage 51 收窄为 MCP Management Surface v0 Spec Kickoff；本阶段不实现 runtime、Web、MCP、provider、deployment、auth、storage 或 browser platform 功能。
 
+124. `plans/2026-05-25-post-v1-backlog-prioritization.md`
+   - Stage 49 Post-V1 Backlog Prioritization v0 implementation plan（已批准，待执行）。
+   - 在 Stage 49 design 后阅读，用于创建 `docs/post-v1-backlog-prioritization.md` scoring ledger、更新 V1 completion / feedback routing、同步 roadmap 下一阶段队列，并验证 docs-only 阶段没有改变 runtime 默认 gate。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
