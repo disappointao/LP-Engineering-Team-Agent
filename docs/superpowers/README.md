@@ -515,8 +515,8 @@
    - 在 Stage 51 design / docs-only closeout 后阅读，用于审计已实现的 post-V1 单一 Web MCP management view、safe view-model、navigation re-entry、server action raw-argument boundary、browser acceptance 和 docs closeout；本阶段不接 remote MCP SDK/server adapter、不做 write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不创建 raw MCP output / raw arguments 通道。完成记录见 `docs/mcp-management-surface-v0-implementation.md`。
 
 128. `plans/2026-05-25-browser-platform-visual-baseline-planning.md`
-   - Stage 50 Browser Platform / Visual Baseline Planning v0 implementation plan（当前计划已写入，执行中）。
-   - 在 Stage 45 browser failure / visual regression expansion、Stage 47 operator trial、Stage 49 backlog prioritization 和 Stage 54 MCP management implementation 后阅读，用于执行 docs-only browser platform planning：current Chromium deterministic baseline、cross-browser matrix tiers、remote browser farm assumptions、visual baseline decision、artifact retention、failure triage 和 baseline update policy；本阶段不修改 Playwright config/specs/scripts，不引入 remote browser farm，不提交 screenshot baseline，也不改变默认 deterministic `pnpm alpha:e2e` gate。
+   - Stage 50 Browser Platform / Visual Baseline Planning v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 45 browser failure / visual regression expansion、Stage 47 operator trial、Stage 49 backlog prioritization 和 Stage 54 MCP management implementation 后阅读，用于审计 docs-only browser platform planning：current Chromium deterministic baseline、cross-browser matrix tiers、remote browser farm assumptions、visual baseline decision、artifact retention、failure triage 和 baseline update policy；本阶段不修改 Playwright config/specs/scripts，不引入 remote browser farm，不提交 screenshot baseline，也不改变默认 deterministic `pnpm alpha:e2e` gate。完成记录见 `docs/browser-platform-visual-baseline-planning.md`。
 
 ## 维护规则
 
