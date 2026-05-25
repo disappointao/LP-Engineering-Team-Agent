@@ -502,6 +502,10 @@
    - Stage 49 Post-V1 Backlog Prioritization v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 49 design 后阅读，用于创建 `docs/post-v1-backlog-prioritization.md` scoring ledger、更新 V1 completion / feedback routing、同步 roadmap 下一阶段队列，并验证 docs-only 阶段没有改变 runtime 默认 gate。
 
+125. `specs/2026-05-25-mcp-management-surface-v0-design.md`
+   - Stage 51 MCP Management Surface v0 design（已批准进入 implementation planning；当前未标记完成）。
+   - 在 Stage 49 implementation plan 和当前 roadmap 后阅读，用于定义 post-V1 Web MCP management surface：project-scoped connector metadata、visible tools、approval summaries、deterministic/local health、safe read-only execution affordance、failure diagnostics 和 navigation re-entry；本阶段不实现 runtime、Web、backend、worker、MCP SDK、tool execution code，不接 remote MCP SDK/server adapter、write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不把 MCP 加回 V1 alpha。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
