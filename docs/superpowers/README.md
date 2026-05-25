@@ -472,7 +472,7 @@
 
 117. `specs/2026-05-24-browser-failure-visual-regression-expansion-design.md`
    - Stage 45 Browser Failure and Visual Regression Expansion v0 design（已实现，当前已完成）。
-   - 在 Stage 44 implementation plan 和当前 roadmap 后阅读，用于扩展 deterministic `pnpm alpha:e2e`：覆盖 MCP hidden fallback、artifact workspace failure / snippet boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；本阶段不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
+   - 在 Stage 44 implementation plan 和当前 roadmap 后阅读，用于扩展 deterministic `pnpm alpha:e2e`：覆盖当时的 MCP route fallback、artifact workspace failure / snippet boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；本阶段不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
 
 118. `plans/2026-05-24-browser-failure-visual-regression-expansion.md`
    - Stage 45 Browser Failure and Visual Regression Expansion v0 implementation plan（已实现，当前已完成）。
@@ -511,8 +511,8 @@
    - 在 Stage 51 design 后阅读，用于执行 docs-only closeout：复核 design commit `3319143`、写入本 implementation plan、同步 Superpowers README / roadmap，并为后续 completion note 和 Stage 54 default implementation route 保留清晰边界；本计划不修改 runtime、Web、backend、worker、MCP SDK、tool execution code 或 tests。完成记录见 `docs/mcp-management-surface-v0-kickoff.md`。
 
 127. `plans/2026-05-25-mcp-management-surface-v0-implementation.md`
-   - Stage 54 MCP Management Surface v0 implementation plan（当前执行依据）。
-   - 在 Stage 51 design / docs-only closeout 后阅读，用于按 TDD 实现 post-V1 单一 Web MCP management view、safe view-model、navigation re-entry、server action raw-argument boundary、browser acceptance 和 docs closeout；本阶段不接 remote MCP SDK/server adapter、不做 write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不创建 raw MCP output / raw arguments 通道。
+   - Stage 54 MCP Management Surface v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 51 design / docs-only closeout 后阅读，用于审计已实现的 post-V1 单一 Web MCP management view、safe view-model、navigation re-entry、server action raw-argument boundary、browser acceptance 和 docs closeout；本阶段不接 remote MCP SDK/server adapter、不做 write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不创建 raw MCP output / raw arguments 通道。完成记录见 `docs/mcp-management-surface-v0-implementation.md`。
 
 ## 维护规则
 

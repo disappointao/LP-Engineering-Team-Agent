@@ -323,7 +323,7 @@ Stage 38 的学习点是：streaming failure classification 仍然属于 Agent �
 - Stage 35 Provider Token Delta Streaming v0 已实现：普通聊天 `assistant` role 在真实 provider route 支持时会通过 `ModelGateway.stream()` 消费 provider SSE delta，Web/API 只展示 transient `assistant.delta`，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer parse / repair。
 - Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 已实现：真实 provider 手动 smoke 已整理到 operator 文档，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider usage metadata 和 missing-key fail-closed 脱敏边界。
 - V1 polished alpha 的 Web surface 决策是：MCP backend registry / read-only execution / Context Pack 边界可以继续存在，但 MCP 管理和 MCP tab / sidebar / top-level Web 入口不属于第一版可见 UI。第一版优先把 Chat、LP task、artifact workspace、Skills 和 Models 做完整；旧 MCP URL 或 query 入口应安全降级，不能展示 connector、tool approval 或 execution form。这是产品 surface 边界，不是删除 MCP runtime 能力。Stage 41 已把该决策落实到 Web navigation、`view=mcp` fallback、first-viewport copy、manual acceptance 和 deterministic browser E2E。
-- Stage 51 MCP Management Surface v0 的学习点是把 MCP 重新进入产品面时仍然当作安全投影，而不是 runtime 扩权。它应该投影 existing MCP registry、read-only execution 和 safe `ToolObservationRecord`：展示 connector metadata、visible tools、approval summaries、deterministic/local health、safe read-only execution affordance 和 failure diagnostics；它不是新的 MCP SDK、remote server adapter、write tool、MCP worker execution、secret storage、auth/RBAC 或 raw output 通道。任何后续 Web 管理面都必须继续禁止 raw MCP output、raw arguments、secret、full artifact、本机绝对路径和未脱敏异常进入 UI、message、timeline 或 model context。Stage 54 implementation plan 进一步把这个边界落实到 Web：MCP management view 可以展示 connector/tool/approval/read-only metadata，但 browser action 不接收 raw argument JSON，只提交后端可审计的空 argument object 给既有 read-only execution use case。这样 UI affordance 和 API execution 都仍围绕同一个 `ToolObservationRecord` 安全摘要闭环，而不是开一条把 raw tool payload 带进页面的捷径。
+- Stage 51 MCP Management Surface v0 的学习点是把 MCP 重新进入产品面时仍然当作安全投影，而不是 runtime 扩权。它应该投影 existing MCP registry、read-only execution 和 safe `ToolObservationRecord`：展示 connector metadata、visible tools、approval summaries、deterministic/local health、safe read-only execution affordance 和 failure diagnostics；它不是新的 MCP SDK、remote server adapter、write tool、MCP worker execution、secret storage、auth/RBAC 或 raw output 通道。任何后续 Web 管理面都必须继续禁止 raw MCP output、raw arguments、secret、full artifact、本机绝对路径和未脱敏异常进入 UI、message、timeline 或 model context。Stage 54 implementation 已把这个边界落实到 Web：MCP management view 可以展示 connector/tool/approval/read-only metadata，view-model 对 malformed connector、malformed tool、visible tool lookup 和 approval 缺失 fail closed；server action 忽略 browser raw `argumentsJson`，只提交后端可审计的 `{}` 给既有 read-only execution use case。这样 UI affordance 和 API execution 都仍围绕同一个 `ToolObservationRecord` 安全摘要闭环，而不是开一条把 raw tool payload 带进页面的捷径。真实 remote MCP SDK、write tools 和 MCP worker execution 仍后置。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
 
 ### 还没做
@@ -1063,7 +1063,7 @@ pnpm --filter @lp-agent/model-gateway test
 
 - [2026-05-24-browser-failure-visual-regression-expansion-design.md](./superpowers/specs/2026-05-24-browser-failure-visual-regression-expansion-design.md)
 - 这一阶段只扩展 deterministic browser acceptance，不新增 Agent runtime 能力。
-- `pnpm alpha:e2e` 要覆盖 Stage 41-44 后的 V1 Web surface：MCP hidden fallback、dedicated artifact workspace、run timeline / recovery diagnostics、Skills / Models management fail-closed 和轻量 visual contracts。
+- `pnpm alpha:e2e` 当时要覆盖 Stage 41-44 后的 V1 Web surface：MCP route fallback、dedicated artifact workspace、run timeline / recovery diagnostics、Skills / Models management fail-closed 和轻量 visual contracts。
 - 默认 gate 继续不依赖真实 provider、MCP server、Postgres、真实部署或网络服务。
 
 当前计划：
@@ -1073,7 +1073,7 @@ pnpm --filter @lp-agent/model-gateway test
 当前实现状态：
 
 - Stage 45 v0 已实现 deterministic browser acceptance expansion。
-- 新增覆盖保持在 browser-visible contract：MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和 geometry visual contracts。
+- 新增覆盖当时保持在 browser-visible contract：MCP route fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和 geometry visual contracts。
 - 没有改变 Agent runtime、model gateway、artifact policy、skill command execution、MCP backend 或 recovery action contract。
 
 学习重点：

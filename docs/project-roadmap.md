@@ -39,17 +39,18 @@
 - Provider usage metadata v0：Stage 32 已实现 provider-reported / estimated usage metadata、duration、attempt、streaming capability summary，并把安全摘要从 model gateway 传到 runtime/API run event 和 Web timeline。
 - Manual alpha UX tightening v0：Stage 33 已让 sidebar new task / project / task 入口真实可操作，entry chips 和 task suggestions 可直接提交 prompt，并用真实空状态替代伪任务占位。
 - Browser failure injection / visual contract v0：Stage 34 已把 `pnpm alpha:e2e` 扩展到 provider fail-closed、artifact invalid path、worker queue bounded error 和空首页 layout contract，并保留诊断 screenshot artifact。
-- Browser failure / visual regression expansion v0：Stage 45 已把 `pnpm alpha:e2e` 扩展到 Stage 41-44 V1 Web surface，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 visual contracts。
+- Browser failure / visual regression expansion v0：Stage 45 已把 `pnpm alpha:e2e` 扩展到 Stage 41-44 V1 Web surface，覆盖当时的 MCP route fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 visual contracts。
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 - LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
 - Run timeline and recovery UX polish v0：Stage 43 已实现 Web-only run timeline view model、localized active role summary、handoff / repair / retry markers、recovery action hierarchy 和 browser acceptance 覆盖；runtime schemas/contracts 不变。
-- Skills and Models client-side management v0：Stage 44 已实现 Web-only Skills / Models management view-model，覆盖 Skills lifecycle / runtime context / command queue hierarchy 和 Models provider / route / resolved runtime summary；MCP management 继续隐藏。
+- Skills and Models client-side management v0：Stage 44 已实现 Web-only Skills / Models management view-model，覆盖 Skills lifecycle / runtime context / command queue hierarchy 和 Models provider / route / resolved runtime summary；当时 MCP management 仍在 V1 可见范围之外。
 - V1 polished alpha completion gate v0：Stage 46 已创建 `docs/v1-polished-alpha-completion.md` completion note；Gate commit `071601b` 的完整 deterministic gates 均通过，当时 RC decision 为 `needs_operator_trial`，后续已由 Stage 47 operator trial 更新为 `go_for_internal_rc`。
 - Internal RC trial feedback batch v0：Stage 47 已完成 `docs/v1-polished-alpha-operator-trial.md` operator trial evidence 和 `docs/alpha-feedback-log.md` feedback batch；Trial commit `002cbbc` 的 deterministic gates 和 local operator manual acceptance 均通过，real provider opt-in smoke 为 `not_run`，未记录 blockers，completion decision 已更新为 `go_for_internal_rc`。
-- Post-V1 backlog prioritization v0：Stage 49 已完成 docs-only backlog scoring；Stage 51 MCP Management Surface v0 Spec Kickoff 已完成 docs-only design / plan / closeout，并把 MCP Management Surface 定义为 existing MCP registry / read-only execution / `ToolObservationRecord` 的安全产品投影；Stage 54 MCP Management Surface v0 Implementation plan 已写入，当前进入独立 worktree + subagent-driven implementation。Stage 48 保持 blocker 条件触发，Stage 50 保持 browser platform / visual baseline 可选规划路径。
+- Post-V1 backlog prioritization v0：Stage 49 已完成 docs-only backlog scoring；Stage 51 MCP Management Surface v0 Spec Kickoff 已完成 docs-only design / plan / closeout，并把 MCP Management Surface 定义为 existing MCP registry / read-only execution / `ToolObservationRecord` 的安全产品投影。
+- MCP Management Surface v0：Stage 54 已实现 post-V1 单一 `MCP` management view、safe view-model、action raw-argument boundary 和 browser acceptance；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed 已完成，仍不依赖真实 MCP server、真实 provider、Postgres 或真实部署。
 
 ## 第一版可用闭环目标
 
@@ -61,22 +62,22 @@
 - Skill 是第一版主要扩展机制：已发布、已绑定的 project skills 能进入上下文；受控 skill command 继续走 approval、worker、run event 和 observation 边界。
 - Web 页面无需手动刷新即可看到任务状态、细粒度 run timeline、artifact progress、失败诊断、handoff/recovery 状态和可用恢复动作。
 - Artifact workspace 是第一版可见工作区：支持文件 manifest、preview、bounded snippet、export 和安全失败状态。
-- Skills / Models client-side management 进入第一版 Web 范围；MCP management 和 MCP tab / sidebar / top-level Web 入口后置。
+- Skills / Models client-side management 进入第一版 Web 范围；MCP management 在 V1 历史上后置，post-V1 Stage54 已引入受限 `MCP` management view；真实 MCP SDK、write tools 和 worker execution 仍后置。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户 **V1 polished alpha** 的 deterministic completion gate、Stage 47 local operator trial、Stage 49 post-V1 backlog prioritization 和 Stage 51 MCP Management Surface v0 Spec Kickoff 均已完成；`docs/v1-polished-alpha-completion.md` 记录 Gate commit `071601b`、Trial commit `002cbbc`、完整 deterministic gates passed、manual acceptance passed、real provider opt-in smoke `not_run`，RC decision 已更新为 `go_for_internal_rc`。Stage 51 已完成 docs-only design / plan / closeout，明确 MCP Management Surface 是现有 MCP registry / read-only execution / observation 的安全产品投影，不是新的 MCP SDK、write tool、worker execution 或 raw output 通道；Stage 54 MCP Management Surface v0 Implementation plan 已写入，当前默认路线是执行该实现阶段。Stage 48 仅在后续发现 accepted blockers 时启用，Stage 50 Browser Platform / Visual Baseline Planning v0 保持可选规划路径，Stage 52 / Stage 53 分别作为后续 real deployment runner 和 model gateway cost / fallback discovery candidate。
+按当前代码基础，面向本地/单用户 **V1 polished alpha** 的 deterministic completion gate、Stage 47 local operator trial、Stage 49 post-V1 backlog prioritization、Stage 51 MCP Management Surface v0 Spec Kickoff 和 Stage 54 MCP Management Surface v0 Implementation 均已完成；`docs/v1-polished-alpha-completion.md` 记录 Gate commit `071601b`、Trial commit `002cbbc`、完整 deterministic gates passed、manual acceptance passed、real provider opt-in smoke `not_run`，RC decision 已更新为 `go_for_internal_rc`。Stage 54 已把 MCP Management Surface 落实为现有 MCP registry / read-only execution / observation 的安全 Web 投影，不是新的 MCP SDK、write tool、worker execution 或 raw output 通道；当前默认下一阶段建议转为 Stage 50 Browser Platform / Visual Baseline Planning v0。Stage 48 仅在后续发现 accepted blockers 时启用，Stage 52 / Stage 53 分别作为后续 real deployment runner 和 model gateway cost / fallback discovery candidate，Stage 55 可作为 Remote MCP SDK / Write Tool Discovery v0 的后续 discovery candidate。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider opt-in smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。Stage 45 已完成 browser failure / visual regression expansion。Stage 46 已完成 V1 polished alpha completion gate。Stage 47 已完成 internal RC trial feedback batch，记录 deterministic local operator trial passed、manual acceptance passed、no blockers 和 `go_for_internal_rc` decision。Stage 49 已完成 Post-V1 Backlog Prioritization v0。Stage 51 已完成 MCP Management Surface v0 docs-only kickoff；当前下一步路由收敛为：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider opt-in smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要；当时 MCP management 继续后置。Stage 45 已完成 browser failure / visual regression expansion。Stage 46 已完成 V1 polished alpha completion gate。Stage 47 已完成 internal RC trial feedback batch，记录 deterministic local operator trial passed、manual acceptance passed、no blockers 和 `go_for_internal_rc` decision。Stage 49 已完成 Post-V1 Backlog Prioritization v0。Stage 51 已完成 MCP Management Surface v0 docs-only kickoff。Stage 54 已完成 MCP Management Surface v0 Implementation；当前下一步路由收敛为：
 
-- Stage 54 MCP Management Surface v0 Implementation 作为默认推荐实现阶段，implementation plan 已写入，当前未完成。
+- Stage 50 Browser Platform / Visual Baseline Planning v0 作为默认推荐规划阶段。
 - Stage 48 仅在后续发现 accepted blockers 时启用。
-- Stage 50 Browser Platform / Visual Baseline Planning v0 可作为可选规划阶段。
 - Stage 52 Real Deployment Runner Discovery v0 和 Stage 53 Model Gateway Cost / Fallback Policy Discovery v0 分别作为后续 discovery candidate。
+- Stage 55 Remote MCP SDK / Write Tool Discovery v0 可作为后续 discovery candidate。
 
 当前仍明确后置：
 
 - 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement、provider cost ledger，以及 LP structured output token-level UI。
-- Stage 54 implementation 之后的真实 MCP SDK / remote MCP server adapter、write tools、MCP worker execution、secret storage、auth/RBAC 和 raw MCP output 通道；Stage 54 只能实现 Stage 51 定义的安全 Web 管理面。
+- 真实 MCP SDK / remote MCP server adapter、write tools、MCP worker execution、secret storage、auth/RBAC 和 raw MCP output 通道；Stage54 只完成了 Stage51 定义的安全 Web 管理面。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
@@ -639,7 +640,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - Web sidebar / top-level navigation 只展示 Workbench、Skills、Models；active nav 使用 `aria-current="page"`。
 - `view=mcp` 会回到 workbench surface，artifact snippet / preview links 不保留 legacy `view=mcp`。
 - First-viewport action chips 不再展示 `Check MCP` / `检查 MCP`。
-- `docs/web-v1-acceptance.md`、`docs/alpha-release-candidate.md` 和 browser E2E 已改为验证 MCP hidden / legacy route fallback。
+- `docs/web-v1-acceptance.md`、`docs/alpha-release-candidate.md` 和 browser E2E 当时已改为验证 MCP route fallback。
 - `pnpm alpha:e2e` shell / boundary tests 现在一致断言 MCP nav 不可见。
 
 未实现范围：
@@ -717,7 +718,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 - Skills 页面现在展示 runtime context summary、lifecycle state、success notice、pending affordance、binding enabled/disabled state 和 command queue hierarchy。
 - Models 页面现在展示 provider summary、route summary、resolved runtime routes、real provider opt-in note 和 fail-closed diagnostics。
-- 新增 Web-only Skills / Models management view-model 和 browser acceptance；runtime schemas/contracts、real provider opt-in 默认关闭策略和 MCP hidden surface 不变。
+- 新增 Web-only Skills / Models management view-model 和 browser acceptance；runtime schemas/contracts、real provider opt-in 默认关闭策略和当时的 MCP route fallback surface 不变。
 
 **建议范围：**
 
@@ -740,7 +741,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **实现摘要：**
 
-- `pnpm alpha:e2e` 现在覆盖 MCP hidden / legacy route safe fallback。
+- `pnpm alpha:e2e` 当时覆盖 MCP route safe fallback。
 - Artifact workspace browser coverage 已包含 happy path、invalid path、oversized snippet 和安全 unavailable copy。
 - Timeline / recovery coverage 已包含 handoff marker、recovery executable guidance 和 diagnostics non-leakage。
 - Skills / Models browser coverage 已包含 invalid manifest、worker queue error、provider fail-closed、invalid provider config 和 secret/base URL non-leakage。
@@ -876,23 +877,26 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **完成记录：** `docs/mcp-management-surface-v0-kickoff.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 54：MCP Management Surface v0 Implementation
 
-**状态：** 当前默认推荐实现阶段；implementation plan 已写入，执行 worktree / subagent implementation 进行中，未完成。
+**状态：** 已实现，当前已完成。
 
-**为什么现在做：** Stage 51 design 已把 MCP management 收窄为 post-V1 Web 产品面：复用现有 MCP registry、read-only execution 和 safe `ToolObservationRecord`，只实现安全可见管理和 deterministic/local evidence，不扩展 MCP runtime。
+**为什么现在做：** Stage 51 已把 MCP management 收窄为 post-V1 Web 产品面：复用现有 MCP registry、read-only execution 和 safe `ToolObservationRecord`，只实现安全可见管理和 deterministic/local evidence，不扩展 MCP runtime。
 
-**当前执行依据：** `docs/superpowers/plans/2026-05-25-mcp-management-surface-v0-implementation.md`。
+**实现摘要：**
 
-**建议范围：**
+- 已实现单一 `MCP` management view 和 navigation re-entry，展示 project-scoped connector metadata、visible tools、approval summaries、deterministic/local health 和 read-only eligibility。
+- 已实现 safe view-model，malformed connector、malformed tool、visible tool lookup 和 approval 缺失都 fail closed，只输出 bounded diagnostics。
+- 已收紧 server action raw-argument boundary：browser 提交的 raw `argumentsJson` 会被忽略，read-only check 只向既有 execution use case 提交 `{}`。
+- 已更新 MCP management copy 和中文文案，页面不展示 raw MCP output、raw arguments、secret、本机路径、未脱敏异常或 malformed raw JSON。
+- 已新增 deterministic Browser E2E，覆盖 MCP management navigation re-entry、connector metadata、safe read-only affordance 和 legacy query non-leakage。
 
-- 实现单一 Web MCP management view 和 navigation re-entry。
-- 展示 project-scoped connector metadata、visible tools、role / permission / approval summaries 和 deterministic/local health。
-- 为 visible read-only eligible tools 提供 safe execution affordance，只提交 allowlisted metadata。
-- 覆盖 malformed connector records、approval missing、not read-only、executor unavailable 和 observation failure 的 fail-closed diagnostics。
-- 增加 unit/browser/docs gates，验证 raw MCP output、raw arguments、secret、full artifact、local absolute path 和 unredacted exception 不泄漏。
+**验证：**
+
+- Focused Vitest：safe view-model、server action boundary 和 page rendering 覆盖通过。
+- `pnpm typecheck`：workspace typecheck 通过。
+- `pnpm alpha:e2e`：16 passed。
+- 以上验证不依赖真实 MCP server、真实 provider、Postgres 或真实部署。
 
 **非目标：**
 
@@ -900,6 +904,32 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 不做 write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform。
 - 不把 raw MCP output 注入 message、timeline、model context 或 Web UI。
 - 不依赖真实 MCP server、真实 provider、Postgres、deployment provider、remote browser farm、network service 或 production credentials。
+
+**设计：** `docs/superpowers/specs/2026-05-25-mcp-management-surface-v0-design.md`。
+
+**实施计划：** `docs/superpowers/plans/2026-05-25-mcp-management-surface-v0-implementation.md`。
+
+**完成记录：** `docs/mcp-management-surface-v0-implementation.md`。
+
+## 推荐下一阶段队列
+
+### Stage 50：Browser Platform / Visual Baseline Planning v0
+
+**状态：** 默认推荐下一阶段。
+
+**为什么现在做：** Stage 45 已有轻量 visual contracts，Stage 47 后可以规划更系统的 browser platform 策略；该阶段应先定义成本、保留策略和适用范围，再决定是否实施。
+
+**建议范围：**
+
+- 规划 cross-browser matrix、remote browser farm 和 visual baseline 的最小可维护方案。
+- 决定 screenshot artifact retention、failure triage 和 baseline update 流程。
+- 评估哪些 visual checks 应保持 lightweight geometry，哪些值得升级为 baseline。
+
+**非目标：**
+
+- 不在规划阶段搭建 remote browser farm。
+- 不引入 pixel-perfect baseline 作为默认 gate。
+- 不回改 Stage54 MCP management scope 或 Stage48 blocker 条件触发规则。
 
 ### Stage 48：RC Blocker Fix Batch v0
 
@@ -917,27 +947,9 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 **非目标：**
 
 - 不实现 backlog features。
-- 不恢复或扩展 MCP management。
+- 不扩展 Stage54 MCP management 到真实 SDK、write tools 或 worker execution。
 - 不做 production deployment、auth/RBAC 或 cross-browser farm。
 - 不把低优先级 polish 合并进 blocker 修复批次。
-
-### Stage 50：Browser Platform / Visual Baseline Planning v0
-
-**状态：** 可选近期规划阶段。
-
-**为什么现在做：** Stage 45 已有轻量 visual contracts，Stage 47 后可以规划更系统的 browser platform 策略；该阶段应先定义成本、保留策略和适用范围，再决定是否实施。
-
-**建议范围：**
-
-- 规划 cross-browser matrix、remote browser farm 和 visual baseline 的最小可维护方案。
-- 决定 screenshot artifact retention、failure triage 和 baseline update 流程。
-- 评估哪些 visual checks 应保持 lightweight geometry，哪些值得升级为 baseline。
-
-**非目标：**
-
-- 不在规划阶段搭建 remote browser farm。
-- 不引入 pixel-perfect baseline 作为默认 gate。
-- 不改变 Stage 54 默认实现路由或 Stage 48 blocker 条件触发规则。
 
 ### Stage 52：Real Deployment Runner Discovery v0
 
@@ -975,6 +987,24 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 不实现 billing enforcement、quota enforcement 或生产 cost accounting。
 - 不改变 provider adapters、runtime routing、MCP tools、deployment 或 auth/storage。
 
+### Stage 55：Remote MCP SDK / Write Tool Discovery v0
+
+**状态：** 后续 discovery candidate。
+
+**为什么现在做：** Stage54 只完成 safe metadata / read-only management surface；接入真实 remote MCP SDK、write tools 或 worker-backed execution 会引入 credential、approval、side effect、timeout、cancellation 和 raw output redaction 边界，必须先 discovery。
+
+**建议范围：**
+
+- 梳理 remote MCP SDK/server adapter boundary、credential assumptions、connector health 和 timeout/cancellation mapping。
+- 定义 write tool approval、side-effect audit、rollback/retry guidance 和 `ToolObservationRecord` redaction 的最小 discovery 输出。
+- 明确 deterministic fake MCP evidence、operator opt-in smoke 和后续实现风险。
+
+**非目标：**
+
+- 不实现 remote MCP SDK/server adapter。
+- 不启用 write tools、MCP worker execution、secret storage 或 production credential flow。
+- 不改变 Stage54 Web management surface、Models/Skills 主路径、deployment runner 或 auth/RBAC。
+
 ## Backlog 分组
 
 ### Agent Runtime / Run Lifecycle
@@ -1007,7 +1037,6 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ### MCP
 
-- MCP Web management 和 tab / sidebar / top-level entry。
 - Real MCP SDK / remote MCP server adapter。
 - MCP execution through worker runtime。
 - MCP Write Tools with Approval v0。
@@ -1097,9 +1126,11 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-25 Stage 54 MCP Management Surface v0 implementation 已完成：Web 已重新引入单一 `MCP` management view，safe view-model 对 malformed connector/tool/visible tool/approval fail closed，server action 忽略 browser raw `argumentsJson` 并向既有 read-only execution use case 提交 `{}`；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed，且不依赖真实 MCP server、真实 provider、Postgres 或真实部署。完成记录见 `docs/mcp-management-surface-v0-implementation.md`。当前推荐下一阶段转为 Stage 50 Browser Platform / Visual Baseline Planning v0；Stage 48 conditional、Stage 52 / Stage 53 discovery 和 Stage 55 Remote MCP SDK / Write Tool Discovery v0 保留。
+
 - 2026-05-25 Stage 54 MCP Management Surface v0 implementation plan 已写入：`docs/superpowers/plans/2026-05-25-mcp-management-surface-v0-implementation.md` 将 Stage 51 design 拆成 safe view-model、Web navigation/page wiring、server action raw-argument boundary、browser acceptance 和 docs closeout；执行方式为独立 worktree + subagent-driven development。Stage 54 此时未完成，Stage 48 conditional、Stage 50 optional、Stage 52 / Stage 53 discovery 保留。
 
-- 2026-05-25 Stage 51 MCP Management Surface v0 closeout 已完成：`docs/mcp-management-surface-v0-kickoff.md` 记录 design commit `3319143`、plan commit `962775e`、closeout commit subject `complete mcp management surface kickoff`、docs-only scope、baseline `pnpm alpha:check` 8 files / 144 tests passed 和 `pnpm smoke` 1 file / 2 tests passed；本次 closeout 计划/实际 docs checks 为 `rg -n "Stage 51|Stage 54|MCP Management Surface|docs-only|ToolObservationRecord|completed" docs/mcp-management-surface-v0-kickoff.md docs/project-roadmap.md docs/superpowers/README.md`、`git diff --check` 和 `git status --short`。Stage 54 现在是默认下一阶段且未完成，Stage 48 conditional、Stage 50 optional、Stage 52 / Stage 53 discovery 保留。
+- 2026-05-25 Stage 51 MCP Management Surface v0 closeout 已完成：`docs/mcp-management-surface-v0-kickoff.md` 记录 design commit `3319143`、plan commit `962775e`、closeout commit subject `complete mcp management surface kickoff`、docs-only scope、baseline `pnpm alpha:check` 8 files / 144 tests passed 和 `pnpm smoke` 1 file / 2 tests passed；本次 closeout 计划/实际 docs checks 为 `rg -n "Stage 51|Stage 54|MCP Management Surface|docs-only|ToolObservationRecord|completed" docs/mcp-management-surface-v0-kickoff.md docs/project-roadmap.md docs/superpowers/README.md`、`git diff --check` 和 `git status --short`。当时 Stage 54 是默认下一阶段且未完成，Stage 48 conditional、Stage 50 optional、Stage 52 / Stage 53 discovery 保留。
 
 - 2026-05-25 Stage 51 MCP Management Surface v0 implementation plan 已写入：`docs/superpowers/plans/2026-05-25-mcp-management-surface-v0.md` 把 kickoff 收口为 docs-only closeout，明确当前任务只同步 plan、Superpowers README 和 roadmap，不修改 runtime/Web/backend/test code；当时 Stage 51 仍未标记 completed，后续 closeout 已创建 `docs/mcp-management-surface-v0-kickoff.md` completion note，并保持 Stage 54 default、Stage 48 conditional、Stage 50 optional、Stage 52 / Stage 53 discovery 队列。
 
@@ -1117,9 +1148,9 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - 2026-05-24 Stage 46 已完成 V1 Polished Alpha Completion Gate v0：deterministic gates passed，未记录 blockers，RC decision 为 `needs_operator_trial`；默认下一路由为 Stage 47 Internal RC Trial Feedback Batch v0，Stage 48 RC Blocker Fix Batch v0 仅在 Stage 46/47 出现 blocker 时启用。
 - 2026-05-24 Stage 46 implementation plan 已写入：计划分为 completion ledger、RC / acceptance docs 链接、完整 deterministic gate 记录、roadmap / Superpowers closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development，不在 completion gate 中临时修 blocker。
 - 2026-05-24 Stage 46 设计已批准：V1 Polished Alpha Completion Gate v0 将完整 deterministic gates、人工 acceptance 状态、可选真实 provider smoke 状态、known limitations、open blockers、RC decision record 和后续 routing 汇总到 completion note；本阶段不新增功能、不修 blocker，不改变默认 no-key gate。
-- 2026-05-24 Stage 45 已完成 Browser Failure and Visual Regression Expansion v0：deterministic Playwright gate 已覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed、non-leakage 和轻量 V1 visual contracts；默认下一路由为 Stage 46 V1 Polished Alpha Completion Gate v0。
+- 2026-05-24 Stage 45 已完成 Browser Failure and Visual Regression Expansion v0：deterministic Playwright gate 已覆盖当时的 MCP route fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed、non-leakage 和轻量 V1 visual contracts；默认下一路由为 Stage 46 V1 Polished Alpha Completion Gate v0。
 - 2026-05-24 Stage 45 implementation plan 已写入：计划按 TDD 分为 shared browser contracts / visual coverage、artifact workspace boundary、MCP / Skills / Models / recovery non-leakage、recovery timeline fixture、docs closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development。
-- 2026-05-24 Stage 45 设计已批准：Browser Failure and Visual Regression Expansion v0 采用 deterministic Playwright gate expansion，覆盖 MCP hidden fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
+- 2026-05-24 Stage 45 设计已批准：Browser Failure and Visual Regression Expansion v0 采用 deterministic Playwright gate expansion，覆盖当时的 MCP route fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 V1 visual contracts；不引入真实 provider、MCP、Postgres、真实部署、网络依赖、跨浏览器矩阵或 pixel-perfect screenshot baseline。
 - 2026-05-24 Stage 44 已完成 Skills and Models Client-side Management v0：Web-only management view-model 已覆盖 Skills lifecycle、runtime context summary、command queue hierarchy、Models provider/route/resolved summaries、real provider opt-in 和 fail-closed diagnostics；默认下一路由为 Stage 45 Browser Failure and Visual Regression Expansion v0。
 - 2026-05-24 Stage 44 implementation plan 已写入：计划按 TDD 分为 localized management copy、Web-only Skills / Models management view-model、server action notice redirects、page rendering、browser acceptance 和 docs closeout；执行时应先创建隔离 worktree，再按计划逐任务提交。
 - 2026-05-24 Stage 44 设计已批准：Skills and Models Client-side Management v0 采用 Web-only client management view-model 和 progressive form affordance，收紧 Skills lifecycle、binding、command queue、Models provider config、route assignment、real provider opt-in 和 fail-closed diagnostics；不改变 Agent runtime/model gateway/skill command contract，不恢复 MCP management。

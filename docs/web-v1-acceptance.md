@@ -1,6 +1,8 @@
 # Skill-Only Alpha 验收清单
 
-在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次详细人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 应通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。MCP 在本 alpha 中后置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+在把当前 Web workbench 视为本地单用户 alpha 前，使用本清单做一次详细人工验收。默认人工验收使用 `REAL_MODEL_RUNTIME=0` deterministic 路径，不依赖真实 provider key、MCP server、Postgres 或真实部署；Browser E2E 应通过 `pnpm alpha:e2e` 作为单独的 deterministic 自动验收运行。普通聊天、LP、Artifacts、Skills 和 Models 主路径不依赖 MCP 配置；当前主路径只依赖 Web/API、LP 固定链路和项目 Skills。
+
+Post-V1 note：Stage54 已重新引入单一 `MCP` management view，用于 safe connector/tool metadata 和 read-only checks。该 view 是受限管理面，不改变普通聊天、LP、Artifacts、Skills、Models 不依赖 MCP 的边界。
 
 准备内部 release candidate 时，go/no-go、试用脚本、反馈模板和 triage 分类以 `docs/alpha-release-candidate.md` 为入口；本文件只负责详细 UX 和能力边界检查。
 
@@ -21,7 +23,7 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 - [ ] 自动验收覆盖普通聊天 streaming。
 - [ ] 自动验收覆盖 LP live task。
 - [ ] 自动验收覆盖 artifact workspace happy path、invalid path、oversized snippet 和安全 unavailable copy。
-- [ ] 自动验收覆盖 MCP hidden navigation 和 legacy `/?view=mcp` safe fallback。
+- [ ] 自动验收覆盖 MCP management navigation re-entry、connector metadata、safe read-only affordance 和 legacy query non-leakage。
 - [ ] 自动验收覆盖 provider fail-closed、Skills invalid manifest、worker queue bounded error、Models invalid config 和 recovery error display。
 - [ ] 自动验收覆盖 timeline / recovery diagnostics non-leakage，不展示 raw model output、provider secret、worker raw detail、本机路径或 query debug values。
 - [ ] 自动验收覆盖空首页、artifact workspace、Skills 和 Models surface 的轻量 layout visual contract，并在失败 artifact 中保留诊断截图。
@@ -95,10 +97,11 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 - [ ] Models view 明确真实 provider 是 opt-in；默认 alpha check 不需要 API key。
 - [ ] 缺失 provider、disabled provider 或 route 指向不可用 provider 时，页面显示 bounded fail-closed 提示。
 - [ ] 可选真实 provider smoke：按 `docs/real-provider-alpha-smoke.md` 设置 `REAL_MODEL_RUNTIME=1`，配置 provider、`apiKeyEnv`、`assistant` / `planner` / `builder` routes，然后手动验证普通聊天 streaming、LP prompt、usage metadata 和 missing key fail-closed。
-- [ ] 确认 sidebar / top-level navigation 不展示 `MCP` 入口。
-- [ ] 直接访问 `/?view=mcp`，确认页面安全降级到 workbench 或只读 deferred surface，不展示 MCP connector、tool approval 或 execution form。
-- [ ] 不配置 MCP connector 的情况下，普通聊天和 LP 任务仍可完成。
-- [ ] 当前 alpha 不要求真实 MCP server、write tools、真实 shell execution 或真实部署。
+- [ ] 点击 sidebar 中的 `MCP`，确认 management view 能打开，并且是 Stage54 post-V1 safe metadata / read-only management surface。
+- [ ] 不配置 MCP connector 的情况下，普通聊天、LP、Artifacts、Skills 和 Models 主路径仍可完成。
+- [ ] MCP connector 页面只展示 bounded connector metadata、visible tool metadata、approval summary、health / diagnostic summary 和 read-only eligibility，不展示 raw MCP output、raw arguments、secret、本机路径、未脱敏异常或 malformed raw JSON。
+- [ ] visible read-only tool 展示 `Run read-only check` affordance；页面没有 raw argument textarea，也不要求 operator 输入 raw argument JSON。
+- [ ] 当前 alpha 不要求真实 MCP server、remote MCP SDK、write tools、MCP worker execution、真实 shell execution 或真实部署。
 
 ### Stage 44：Skills / Models client-side management
 
@@ -106,7 +109,7 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 - [ ] 创建 skill draft 后不会回显 raw skill content；validate、publish、bind、enable/disable 后回到 repository fact。
 - [ ] Models 页面展示 provider summary、route summary、resolved runtime routes、real provider opt-in 提示和 fail-closed diagnostics。
 - [ ] Provider summary 只显示 provider/model/API protocol/env var configured state 等 bounded metadata，不展示 secret 值、raw provider response 或完整 base URL。
-- [ ] MCP management 仍隐藏；旧 `/?view=mcp` 仍安全降级到 Workbench。
+- [ ] Stage54 post-V1 MCP management 已可见，但仍限制为 metadata / read-only-only surface；Stage44 Skills / Models bounded metadata 和 fail-closed diagnostics 不因此扩大到 raw MCP output、raw arguments 或 write tools。
 
 ## 回归命令
 
@@ -120,6 +123,6 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 
 - [ ] Stage 45 Browser failure / visual regression expansion 已完成；远端 browser farm、跨浏览器矩阵和 pixel-perfect 截图基线仍是后续工作。
 - [ ] Stage 35 Provider token delta streaming 已完成普通聊天 `assistant` role；LP structured output token-level UI、billing/cost ledger 仍是后续工作。
-- [ ] Web UI 中的真实 MCP SDK / remote MCP server adapter 仍是后续工作。
+- [ ] Stage54 MCP management surface v0 已完成；真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution 仍是后续工作。
 - [ ] Production auth/RBAC、Postgres production rollout 和 object storage 仍是后续工作。
 - [ ] 真实 shell runner、真实部署编排和 Desktop packaging 仍是后续工作。

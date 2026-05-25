@@ -17,17 +17,18 @@ Stage 46 completion gate 的当前证据记录见 `docs/v1-polished-alpha-comple
 - 生成 artifact 必须是框架无关静态 `index.html`、`styles.css`、`script.js`。
 - Project Skills 是第一版主要扩展机制。
 - 真实 provider 是显式 opt-in：`REAL_MODEL_RUNTIME=1` + project Models route + 本地 `.env.local` key。
-- MCP、真实部署、auth/RBAC、production Postgres rollout、真实 shell runner 和 hosted observability 都不属于 RC 必需路径。
+- MCP management 已作为 post-V1 safe metadata / read-only management surface 可见，但不是 RC 主路径依赖。
+- 真实 MCP server / SDK、write tools、MCP worker execution、真实部署、auth/RBAC、production Postgres rollout、真实 shell runner 和 hosted observability 都不属于 RC 必需路径。
 
 ## Go/No-go Gates
 
 | Gate | Go 标准 | No-go 条件 |
 | --- | --- | --- |
 | Environment | Node.js/pnpm 可用，`pnpm install` 完成，`.env.local` 默认 `REAL_MODEL_RUNTIME=0`、`REAL_MODEL_PROVIDER_TEST=0`。 | 依赖无法安装，默认环境必须依赖真实 key 才能启动。 |
-| Automated deterministic gates | `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e`、`pnpm test`、`pnpm typecheck`、`pnpm build` 通过。 | 默认 gate 失败，或默认 gate 需要真实 provider、MCP、Postgres、真实部署。 |
+| Automated deterministic gates | `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e`、`pnpm test`、`pnpm typecheck`、`pnpm build` 通过。 | 默认 gate 失败，或默认 gate 需要真实 provider、真实 MCP server、Postgres、真实部署。 |
 | Manual acceptance | `docs/web-v1-acceptance.md` 主路径通过：普通聊天、LP live task、artifact preview/export/snippet、Skills、Models/MCP boundary。 | 主路径无法完成，或 failure display 泄漏 secret/raw provider/raw tool/raw artifact、本机路径。 |
 | Optional real provider smoke | 如需真实 provider 试用，按 `docs/real-provider-alpha-smoke.md` 完成普通聊天、LP Planner/Builder、usage metadata、missing key fail-closed。 | 真实 provider 成功路径不可用，或 fail-closed 泄漏 key、env value、raw provider response。 |
-| Known limitations | 试用者已知道 MCP、真实部署、auth/RBAC、billing/quota、production storage、真实 shell runner 后置。 | 试用目标依赖这些后置能力。 |
+| Known limitations | 试用者已知道 MCP management 不属于 RC 主路径依赖，真实 MCP SDK / write tools / worker execution、真实部署、auth/RBAC、billing/quota、production storage、真实 shell runner 后置。 | 试用目标依赖这些后置能力。 |
 | Feedback readiness | 试用者使用本文反馈模板；operator 按 `docs/alpha-feedback-intake.md` 脱敏、分类并记录到 `docs/alpha-feedback-log.md`。 | 反馈需要收集 secret、完整 artifact、raw provider body、本机路径或不可脱敏日志。 |
 
 ## Operator Trial Script
@@ -69,9 +70,10 @@ Stage 46 completion gate 的当前证据记录见 `docs/v1-polished-alpha-comple
    - 确认普通聊天或 LP task 展示安全 context summary，而不是 raw skill content。
 8. Models / MCP 边界：
    - 打开 Models view，确认真实 provider 是 opt-in。
-   - 确认 sidebar / top-level navigation 不展示 MCP 入口。
-   - 直接访问 `/?view=mcp`，确认页面安全降级，不展示 MCP connector、tool approval 或 execution form。
-   - 不配置 MCP 仍可完成普通聊天和 LP task。
+   - 打开 MCP management view，确认它只展示 connector/tool/approval/read-only metadata 和 bounded diagnostics。
+   - 确认可见 read-only tool 只有 `Run read-only check` affordance，没有 raw argument textarea 或 raw argument JSON 输入。
+   - 确认页面不展示 raw MCP output、raw arguments、secret、本机路径、未脱敏异常或 malformed raw JSON。
+   - 不配置 MCP 仍可完成普通聊天、LP task、Artifacts、Skills 和 Models 主路径。
 9. Failure display：
    - 确认 provider fail-closed、Skills invalid manifest、Models invalid config、artifact invalid path / oversized snippet、worker queue bounded error、recovery/timeline diagnostics non-leakage 由 `pnpm alpha:e2e` 覆盖。
    - 人工 spot-check 页面不泄漏 secret、raw provider response、raw tool output、本机路径或完整 artifact 内容。
@@ -132,7 +134,7 @@ blocker | high | medium | low
 
 ### Suggested Routing
 
-Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | backlog | needs_immediate_fix
+Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | Stage 54 | backlog | needs_immediate_fix
 ```
 
 ## Triage Categories
@@ -144,13 +146,13 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 | `provider_config_issue` | 真实 provider opt-in 配置或排错不清楚。 | `apiKeyEnv` 填写误解；protocol mismatch 不知道怎么恢复。 | Stage 44 或 `docs/real-provider-alpha-smoke.md`。 |
 | `artifact_quality_issue` | LP artifact 生成成功，但质量、响应式、copy、CTA 或可访问性不达预期。 | 首屏层级弱；移动端拥挤；CTA 不明确。 | `docs/lp-artifact-quality.md` + Stage 42/43。 |
 | `docs_gap` | 文档缺少步骤、命令、前置条件或边界说明。 | 不知道先跑 `pnpm alpha:e2e:install`；不清楚如何 reset deterministic。 | Stage 40 或当前阶段文档补丁。 |
-| `future_feature` | 明确超出当前 RC 的能力需求。 | 团队登录、真实部署、MCP management/write tools、billing、远端 observability。 | Backlog，不阻塞 RC。 |
+| `future_feature` | 明确超出当前 RC 的能力需求。 | 团队登录、真实部署、真实 MCP SDK/write tools、billing、远端 observability。 | Backlog，不阻塞 RC。 |
 
 ## Known Limitations
 
 这些限制不默认阻塞 RC，除非本次试用目标明确依赖它们：
 
-- MCP 不属于第一版必需路径；当前不要求真实 MCP server、write tools 或 MCP worker execution。
+- Stage54 MCP management surface 已完成为 post-V1 safe metadata / read-only management surface；RC 主路径仍不依赖 MCP 配置，当前不要求真实 MCP server / SDK、write tools 或 MCP worker execution。
 - 真实部署编排后置；当前 deployment skill command 仍是受控 queue / safe observation 路径。
 - Auth/RBAC、邀请、团队审批队列和 hosted deployment 后置。
 - Postgres 仍是显式 opt-in；production migrations、object storage 和 artifact content migration 后置。
@@ -162,13 +164,14 @@ Stage 40 | Stage 41 | Stage 42 | Stage 43 | Stage 44 | Stage 45 | Stage 46 | bac
 ## Follow-up Routing
 
 - Stage 40（已完成）：反馈 intake/triage loop，把本文模板变成批次化 issue review、known issues 和修复优先级。
-- Stage 41（已完成）：Web surface pruning，隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
+- Stage 41（已完成）：Web surface pruning，当时隐藏 MCP management 和 MCP tab/sidebar/top-level 入口，收紧 V1 navigation。
 - Stage 42（已完成）：Dedicated artifact workspace，覆盖 manifest、preview、bounded snippet、export 和安全失败状态。
 - Stage 43（已完成）：Run timeline、handoff、recovery UX polish 和 progress visual hierarchy。
-- Stage 44（已完成）：Skills / Models client-side management，继续排除 MCP management。
+- Stage 44（已完成）：Skills / Models client-side management，当时仍排除 MCP management。
 - Stage 45（已完成）：Browser failure injection、recovery/timeline diagnostics non-leakage 和轻量视觉回归扩展。
 - Stage 46：V1 polished alpha completion gate、RC decision record 和最终验收。
-- Backlog：MCP management、production auth/RBAC、真实部署、MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
+- Stage 54（已完成）：post-V1 MCP management surface，只展示 safe connector/tool metadata 和 read-only checks，不接真实 MCP SDK/write tools/worker execution。
+- Backlog：production auth/RBAC、真实部署、真实 MCP SDK/write tools、object storage、billing/quota、真实 shell runner、hosted observability。
 
 ## RC Decision Record
 
