@@ -23,7 +23,7 @@ Stage50 是 docs/planning only。该阶段只整理当前 browser acceptance 事
 | Tier 2 | remote browser farm / CI matrix discovery，用于跨 runner 和远程 artifact 策略验证 | 后续 discovery candidate | 不进入默认本地 gate |
 | Tier 3 | pixel screenshot baseline discovery，用于少量稳定高影响 surfaces 的截图基线评估 | 后续 discovery candidate | explicit review 后 opt-in |
 
-Tier 1、Tier 2 和 Tier 3 都不应默认要求真实 provider key、MCP server、Postgres、deployment、remote farm、network 或 production credentials。任何升级都应保持 no-key deterministic state，并明确 operator ownership、artifact retention 和 failure triage policy。
+Tier 1 和 Tier 3 不应默认要求真实 provider key、MCP server、Postgres、deployment、remote farm、network 或 production credentials。Tier 2 的定义包含 remote browser farm / CI matrix discovery，因此它可以在 explicit opt-in discovery 或 CI run 中使用 remote farm 和 network；但这不能改变 Tier 0 默认本地 gate，默认 local gate 仍保持 no-farm、no-network、no-credentials。任何升级都应明确 no-key deterministic state 的边界、operator ownership、artifact retention 和 failure triage policy。
 
 ## Cross-Browser Matrix Recommendation
 
@@ -68,14 +68,18 @@ Tier 3 pixel screenshot baseline 只适合 stable/high impact/low flake surfaces
 - baseline update 有 reviewer、变更理由和 focused browser command 证据。
 - screenshot 不包含 user data、secret、raw tool output、raw provider response、raw MCP output、raw artifact full content 或本机路径。
 
-当前应继续使用 geometry/layout contract 的 areas：
+Current geometry coverage：
 
 - Workbench shell 的 sidebar、workspace、composer 基础布局。
-- Ordinary chat streaming 的消息容器、输入区和状态提示位置。
 - LP live task/artifacts 的 manifest、preview、export controls 和 panel visibility。
+- 已有 visual geometry contracts 中的 no horizontal scroll、button/input containment 和 critical panel visibility。
+
+Future geometry candidates to keep as geometry rather than pixel baseline：
+
+- Ordinary chat streaming 的消息容器、输入区和状态提示位置。
 - Skills/Models/MCP management 的列表、详情、empty/error states 和 non-leakage diagnostics。
 - failure/non-leakage states 的安全提示、红线 copy 和 diagnostic containment。
-- visual geometry contracts 的 no horizontal scroll、button/input containment 和 critical panel visibility。
+- 后续扩展 visual geometry contracts 时仍优先使用 semantic / geometry assertions，而不是 pixel screenshot baseline。
 
 暂不建议进入 pixel baseline 的 areas：
 
@@ -128,9 +132,10 @@ Browser failure 先按以下 Failure Triage categories 分类：
 - Stage57 Visual Baseline Candidate Discovery v0：只评估少量 stable/high impact/low flake surfaces 是否值得 pixel screenshot baseline，并定义 baseline update review policy。
 - Stage58 Remote Browser Farm Discovery v0：定义 CI/farm provider、browser project matrix、artifact retention、network/no-key policy、failure triage ownership 和 operator docs 要求。
 
-## Validation Evidence
+## Validation Plan
 
 - Stage50 是 docs/planning only，默认 browser gate 不变。
+- 本节记录推荐 validation plan，不表示这些命令已经在本文档中记录为执行结果。
 - 默认 validation 应运行 `pnpm alpha:check`、`pnpm smoke`、`git diff --check` 和 docs consistency `rg`。
 - Task 1 docs consistency command：
 
