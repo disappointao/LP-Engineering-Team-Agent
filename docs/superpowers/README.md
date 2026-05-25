@@ -506,6 +506,10 @@
    - Stage 51 MCP Management Surface v0 design（已批准进入 implementation planning；当前未标记完成）。
    - 在 Stage 49 implementation plan 和当前 roadmap 后阅读，用于定义 post-V1 Web MCP management surface：project-scoped connector metadata、visible tools、approval summaries、deterministic/local health、safe read-only execution affordance、failure diagnostics 和 navigation re-entry；本阶段不实现 runtime、Web、backend、worker、MCP SDK、tool execution code，不接 remote MCP SDK/server adapter、write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不把 MCP 加回 V1 alpha。
 
+126. `plans/2026-05-25-mcp-management-surface-v0.md`
+   - Stage 51 MCP Management Surface v0 implementation plan（docs-only closeout plan；当前未标记完成）。
+   - 在 Stage 51 design 后阅读，用于执行 docs-only closeout：复核 design commit `3319143`、写入本 implementation plan、同步 Superpowers README / roadmap，并为后续 completion note 和 Stage 54 default implementation route 保留清晰边界；本计划不修改 runtime、Web、backend、worker、MCP SDK、tool execution code 或 tests。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
