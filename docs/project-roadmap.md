@@ -50,7 +50,7 @@
 - V1 polished alpha completion gate v0：Stage 46 已创建 `docs/v1-polished-alpha-completion.md` completion note；Gate commit `071601b` 的完整 deterministic gates 均通过，当时 RC decision 为 `needs_operator_trial`，后续已由 Stage 47 operator trial 更新为 `go_for_internal_rc`。
 - Internal RC trial feedback batch v0：Stage 47 已完成 `docs/v1-polished-alpha-operator-trial.md` operator trial evidence 和 `docs/alpha-feedback-log.md` feedback batch；Trial commit `002cbbc` 的 deterministic gates 和 local operator manual acceptance 均通过，real provider opt-in smoke 为 `not_run`，未记录 blockers，completion decision 已更新为 `go_for_internal_rc`。
 - Post-V1 backlog prioritization v0：Stage 49 已完成 docs-only backlog scoring；Stage 51 MCP Management Surface v0 Spec Kickoff 已完成 docs-only design / plan / closeout，并把 MCP Management Surface 定义为 existing MCP registry / read-only execution / `ToolObservationRecord` 的安全产品投影。
-- MCP Management Surface v0：Stage 54 已实现 post-V1 单一 `MCP` management view、safe view-model、action raw-argument boundary 和 browser acceptance；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed 已完成，仍不依赖真实 MCP server、真实 provider、Postgres 或真实部署。
+- MCP Management Surface v0：Stage 54 已实现 post-V1 单一 `MCP` management view、safe view-model、unsafe display metadata redaction、stale visible tool fail-closed execution affordance、action raw-argument boundary 和 browser acceptance；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed 已完成，仍不依赖真实 MCP server、真实 provider、Postgres 或真实部署。
 
 ## 第一版可用闭环目标
 
@@ -1126,7 +1126,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
-- 2026-05-25 Stage 54 MCP Management Surface v0 implementation 已完成：Web 已重新引入单一 `MCP` management view，safe view-model 对 malformed connector/tool/visible tool/approval fail closed，server action 忽略 browser raw `argumentsJson` 并向既有 read-only execution use case 提交 `{}`；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed，且不依赖真实 MCP server、真实 provider、Postgres 或真实部署。完成记录见 `docs/mcp-management-surface-v0-implementation.md`。当前推荐下一阶段转为 Stage 50 Browser Platform / Visual Baseline Planning v0；Stage 48 conditional、Stage 52 / Stage 53 discovery 和 Stage 55 Remote MCP SDK / Write Tool Discovery v0 保留。
+- 2026-05-25 Stage 54 MCP Management Surface v0 implementation 已完成：Web 已重新引入单一 `MCP` management view，safe view-model 对 malformed connector/tool/visible tool/approval fail closed，并额外 redacts unsafe connector/tool display metadata、让 stale visible tool 不显示 read-only execution affordance；server action 忽略 browser raw `argumentsJson` 并向既有 read-only execution use case 提交 `{}`；focused Vitest、`pnpm typecheck` 和 `pnpm alpha:e2e` 16 passed，且不依赖真实 MCP server、真实 provider、Postgres 或真实部署。完成记录见 `docs/mcp-management-surface-v0-implementation.md`。当前推荐下一阶段转为 Stage 50 Browser Platform / Visual Baseline Planning v0；Stage 48 conditional、Stage 52 / Stage 53 discovery 和 Stage 55 Remote MCP SDK / Write Tool Discovery v0 保留。
 
 - 2026-05-25 Stage 54 MCP Management Surface v0 implementation plan 已写入：`docs/superpowers/plans/2026-05-25-mcp-management-surface-v0-implementation.md` 将 Stage 51 design 拆成 safe view-model、Web navigation/page wiring、server action raw-argument boundary、browser acceptance 和 docs closeout；执行方式为独立 worktree + subagent-driven development。Stage 54 此时未完成，Stage 48 conditional、Stage 50 optional、Stage 52 / Stage 53 discovery 保留。
 

@@ -7,6 +7,8 @@ Stage54 已完成 post-V1 MCP Management Surface v0 implementation。该阶段�
 - 实现单一 `MCP` navigation re-entry 和 management view。
 - 从 existing MCP registry、visible tools、approval state、read-only execution 和 safe `ToolObservationRecord` 派生 Web-safe view-model。
 - 对 malformed connector、malformed tool、visible tool lookup miss、approval miss 和 read-only ineligible tool fail closed。
+- 对 connector/tool display metadata 做 unsafe content redaction，避免 secret-like values、本机绝对路径或 raw diagnostics 进入 Web projection。
+- visible tools 的 read-only execution affordance 必须同时经过 valid connector、enabled state、role visibility 和 approval state 校验；stale visible record 不显示可执行。
 - 收紧 action raw-argument boundary：browser raw `argumentsJson` 不进入 execution，read-only check 只提交 `{}`。
 - 新增 Browser E2E 覆盖 MCP navigation re-entry、connector metadata、safe read-only affordance 和 legacy query non-leakage。
 
@@ -20,10 +22,14 @@ Stage54 已完成 post-V1 MCP Management Surface v0 implementation。该阶段�
 - `3657acf polish mcp management copy`
 - `0e32090 fix mcp management zh copy`
 - `57e187c cover mcp management browser acceptance`
+- `6debd20 complete mcp management surface docs`
+- `a159ef4 clarify mcp management learning note`
+- `c06508c harden mcp management surface projection`
 
 ## Validation Evidence
 
 - Focused Vitest covered safe view-model, server action boundary and page rendering.
+- Post-review regression coverage verifies unsafe display metadata redaction, stale visible tool fail-closed execution status and malformed approval row handling.
 - `pnpm typecheck` passed.
 - `pnpm alpha:e2e` passed with 16 Playwright Chromium tests.
 - The deterministic gates did not require real MCP server, real provider, Postgres, deployment provider, network service or production credentials.
