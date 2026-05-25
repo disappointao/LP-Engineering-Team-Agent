@@ -1431,12 +1431,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         summary: (summary) =>
           `${summary.connectorCount} 个连接器 · ${summary.visibleToolCount} 个可见工具 · ${summary.executionEligibleToolCount} 个只读检查`,
         runtimeSummary: (summary) =>
-          `${summary.enabledConnectorCount} 个已启用连接器会根据当前项目 Skill、角色权限、批准状态和只读策略进入评估。`,
+          `${summary.enabledConnectorCount} 个已启用连接器会根据当前项目技能、角色权限、批准状态和只读策略进入评估。`,
         toolCount: (count) => `${count} 个工具`,
         policyItems: [
           "可见工具由后端角色、权限、批准状态和连接器状态共同决定。",
           "只读检查不会提交浏览器侧原始参数 JSON。",
-          "失败会显示稳定诊断，并以 fail closed 方式处理。"
+          "失败会显示稳定诊断，并以关闭保护方式处理。"
         ],
         statusLabels: {
           configured: "已配置",
@@ -1444,7 +1444,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
           invalid_definition: "定义无效",
           approval_required: "需要批准",
           no_visible_tools: "无可见工具",
-          execution_not_available: "不可执行"
+          execution_not_available: "执行不可用"
         },
         approvalStates: {
           not_required: "无需批准",

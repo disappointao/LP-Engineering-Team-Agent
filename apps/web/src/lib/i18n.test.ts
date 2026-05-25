@@ -124,6 +124,7 @@ describe("web i18n", () => {
     expect(zh.mcpView.argumentsLabel).toBe("参数 JSON");
     expect(zh.mcpView.management.runtimeSummaryTitle).toBe("MCP 运行时投影");
     expect(zh.mcpView.management.statusLabels.configured).toBe("已配置");
+    expect(zh.mcpView.management.statusLabels.execution_not_available).toBe("执行不可用");
     expect(zh.mcpView.management.approvalStates.pending).toBe("等待批准");
     expect(zh.mcpView.management.pending.execute).toBe("正在运行检查...");
     expect(zh.mcpView.management.summary({
@@ -132,6 +133,19 @@ describe("web i18n", () => {
       visibleToolCount: 2,
       executionEligibleToolCount: 1
     })).toBe("1 个连接器 · 2 个可见工具 · 1 个只读检查");
+    expect(zh.mcpView.management.runtimeSummary({
+      connectorCount: 1,
+      enabledConnectorCount: 1,
+      visibleToolCount: 2,
+      executionEligibleToolCount: 1
+    })).toBe(
+      "1 个已启用连接器会根据当前项目技能、角色权限、批准状态和只读策略进入评估。"
+    );
+    expect(zh.mcpView.management.policyItems).toContain(
+      "失败会显示稳定诊断，并以关闭保护方式处理。"
+    );
+    expect(JSON.stringify(zh.mcpView.management)).not.toContain("Skill");
+    expect(JSON.stringify(zh.mcpView.management)).not.toContain("fail closed");
     expect(zh.mcpView.management.toolCount(1)).toBe("1 个工具");
     expect(zh.mcpView.errors.mcp_tool_execution_not_read_only).toBe(
       "当前阶段只能执行只读 MCP 工具。"
