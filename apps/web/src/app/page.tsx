@@ -793,6 +793,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <li>{copy.modelsView.management.safeMetadataNote}</li>
                     <li>{copy.modelsView.management.optInRuntimeNote}</li>
                   </ul>
+                  <div className="modelLocalRunChecklist">
+                    <h3>{modelsManagement.localRunChecklist.title}</h3>
+                    <ul>
+                      {modelsManagement.localRunChecklist.items.map((item) => (
+                        <li key={item.key} data-ready={item.ready ? "true" : "false"}>
+                          <strong>{item.label}</strong>
+                          <span>{item.stateLabel}</span>
+                          <small>{item.detail}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </section>
 
                 <div className="modelsProjectContext">
@@ -854,7 +866,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         name="apiKeyEnv"
                         aria-describedby="api-key-env-example"
                       />
-                      <small id="api-key-env-example">ANTHROPIC_API_KEY</small>
+                      <small id="api-key-env-example">
+                        {copy.modelsView.management.secretReferenceHint}
+                      </small>
 
                       <label htmlFor="modelId">{copy.modelsView.providerModelIdLabel}</label>
                       <input id="modelId" name="modelId" aria-describedby="model-id-example" />

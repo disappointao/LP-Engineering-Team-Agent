@@ -461,6 +461,153 @@ describe("models management view model", () => {
     expect(JSON.stringify(model)).not.toContain("ANTHROPIC_API_KEY");
   });
 
+  it("derives a safe local real-provider run checklist from project model state", () => {
+    const model = buildModelsManagementViewModel({
+      copy,
+      modelState: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: {
+              api: "openai-completions",
+              baseUrl: "https://secret-provider.example.test/v1",
+              apiKeyEnv: "OPENAI_API_KEY",
+              models: [{ id: "gpt-5.4" }]
+            },
+            enabled: true,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "route_assistant",
+            scope: "project",
+            targetKey: "project_1",
+            role: "assistant",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:01:00.000Z",
+            updatedAt: "2026-05-24T00:01:00.000Z"
+          },
+          {
+            id: "route_planner",
+            scope: "project",
+            targetKey: "project_1",
+            role: "planner",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:02:00.000Z",
+            updatedAt: "2026-05-24T00:02:00.000Z"
+          },
+          {
+            id: "route_builder",
+            scope: "project",
+            targetKey: "project_1",
+            role: "builder",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:03:00.000Z",
+            updatedAt: "2026-05-24T00:03:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          assistant: { provider: "provider_openai", model: "gpt-5.4" },
+          planner: { provider: "provider_openai", model: "gpt-5.4" },
+          builder: { provider: "provider_openai", model: "gpt-5.4" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    });
+
+    expect(model.localRunChecklist.chatReady).toBe(true);
+    expect(model.localRunChecklist.lpReady).toBe(true);
+    expect(model.localRunChecklist.items.map((item) => [item.key, item.ready])).toEqual([
+      ["realProvider", true],
+      ["chatRoute", true],
+      ["lpRoutes", true]
+    ]);
+    expect(JSON.stringify(model.localRunChecklist)).not.toContain("secret-provider.example.test");
+    expect(JSON.stringify(model.localRunChecklist)).not.toContain("OPENAI_API_KEY");
+  });
+
+  it("blocks local real-provider checklist readiness for incomplete provider metadata or missing required routes", () => {
+    const model = buildModelsManagementViewModel({
+      copy,
+      modelState: {
+        providers: [
+          {
+            id: "provider_incomplete",
+            scope: "project",
+            targetKey: "project_1",
+            name: "Incomplete",
+            provider: "anthropic",
+            config: {
+              api: "anthropic-messages",
+              baseUrl: "https://secret-provider.example.test/v1",
+              apiKeyEnv: "ANTHROPIC_API_KEY",
+              models: []
+            },
+            enabled: true,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          },
+          {
+            id: "provider_disabled",
+            scope: "project",
+            targetKey: "project_1",
+            name: "Disabled",
+            provider: "openai",
+            config: {
+              api: "openai-completions",
+              baseUrl: "https://other-secret-provider.example.test/v1",
+              apiKeyEnv: "OPENAI_API_KEY",
+              models: [{ id: "gpt-5.4" }]
+            },
+            enabled: false,
+            createdAt: "2026-05-24T00:01:00.000Z",
+            updatedAt: "2026-05-24T00:01:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "route_assistant",
+            scope: "project",
+            targetKey: "project_1",
+            role: "assistant",
+            providerId: "provider_disabled",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:02:00.000Z",
+            updatedAt: "2026-05-24T00:02:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    });
+
+    expect(model.localRunChecklist.chatReady).toBe(false);
+    expect(model.localRunChecklist.lpReady).toBe(false);
+    expect(model.localRunChecklist.items.map((item) => [item.key, item.ready])).toEqual([
+      ["realProvider", false],
+      ["chatRoute", false],
+      ["lpRoutes", false]
+    ]);
+    expect(JSON.stringify(model.localRunChecklist)).not.toContain("secret-provider.example.test");
+    expect(JSON.stringify(model.localRunChecklist)).not.toContain("ANTHROPIC_API_KEY");
+    expect(JSON.stringify(model.localRunChecklist)).not.toContain("OPENAI_API_KEY");
+  });
+
   it("marks routes that point at disabled, missing, or blank-model providers as fail closed", () => {
     const model = buildModelsManagementViewModel({
       copy,

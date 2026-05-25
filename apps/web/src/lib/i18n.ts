@@ -276,9 +276,17 @@ export interface WorkbenchCopy {
     errors: Record<ModelFlowErrorCode, string>;
     management: {
       projectSummaryTitle: string;
+      localRunChecklistTitle: string;
+      localRunChecklistItems: Record<"realProvider" | "chatRoute" | "lpRoutes", string>;
+      localRunChecklistStates: Record<"ready" | "blocked", string>;
+      localRunChecklistDetails: Record<
+        "realProvider" | "chatRoute" | "lpRoutes",
+        Record<"ready" | "blocked", string>
+      >;
       providerSummaryTitle: string;
       routeSummaryTitle: string;
       resolvedSummaryTitle: string;
+      secretReferenceHint: string;
       safeMetadataNote: string;
       optInRuntimeNote: string;
       providerCount: (enabledCount: number, totalCount: number) => string;
@@ -906,9 +914,34 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       },
       management: {
         projectSummaryTitle: "Project model summary",
+        localRunChecklistTitle: "Local real-provider run checklist",
+        localRunChecklistItems: {
+          realProvider: "Provider ready",
+          chatRoute: "Chat ready",
+          lpRoutes: "LP generation ready"
+        },
+        localRunChecklistStates: {
+          ready: "Ready",
+          blocked: "Not ready"
+        },
+        localRunChecklistDetails: {
+          realProvider: {
+            ready: "An enabled real provider has endpoint metadata, a secret reference, and at least one model.",
+            blocked: "Add an enabled real provider with endpoint metadata, a secret reference, and at least one model."
+          },
+          chatRoute: {
+            ready: "The assistant route points at a ready real provider.",
+            blocked: "Route assistant to a ready real provider for local chat."
+          },
+          lpRoutes: {
+            ready: "Planner and builder routes point at ready real providers; reviewer and deployer may stay deterministic.",
+            blocked: "Route planner and builder to ready real providers for local LP runs."
+          }
+        },
         providerSummaryTitle: "Provider configuration",
         routeSummaryTitle: "Role routing",
         resolvedSummaryTitle: "Resolved runtime routes",
+        secretReferenceHint: "Environment variable reference",
         safeMetadataNote:
           "Secret values are never shown. The page stores provider metadata and environment variable names only.",
         optInRuntimeNote:
@@ -1550,9 +1583,34 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       },
       management: {
         projectSummaryTitle: "项目模型摘要",
+        localRunChecklistTitle: "本地真实 provider 运行检查",
+        localRunChecklistItems: {
+          realProvider: "Provider 就绪",
+          chatRoute: "聊天就绪",
+          lpRoutes: "LP 生成就绪"
+        },
+        localRunChecklistStates: {
+          ready: "就绪",
+          blocked: "未就绪"
+        },
+        localRunChecklistDetails: {
+          realProvider: {
+            ready: "已有启用的真实 provider，且包含 endpoint metadata、secret reference 和至少一个模型。",
+            blocked: "请添加启用的真实 provider，并配置 endpoint metadata、secret reference 和至少一个模型。"
+          },
+          chatRoute: {
+            ready: "assistant 路由已指向就绪的真实 provider。",
+            blocked: "请将 assistant 路由到就绪的真实 provider，以启用本地聊天。"
+          },
+          lpRoutes: {
+            ready: "planner 和 builder 路由已指向就绪的真实 provider；reviewer 和 deployer 可继续使用 deterministic 路由。",
+            blocked: "请将 planner 和 builder 路由到就绪的真实 provider，以启用本地 LP 运行。"
+          }
+        },
         providerSummaryTitle: "Provider 配置",
         routeSummaryTitle: "角色路由",
         resolvedSummaryTitle: "已解析运行路由",
+        secretReferenceHint: "环境变量引用",
         safeMetadataNote: "页面只保存 provider metadata 和环境变量名，不展示 secret 值。",
         optInRuntimeNote: "真实 provider 调用仍需要 REAL_MODEL_RUNTIME=1 和已配置的环境变量。",
         providerCount: (enabledCount, totalCount) =>

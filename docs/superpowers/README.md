@@ -518,6 +518,14 @@
    - Stage 50 Browser Platform / Visual Baseline Planning v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 45 browser failure / visual regression expansion、Stage 47 operator trial、Stage 49 backlog prioritization 和 Stage 54 MCP management implementation 后阅读，用于审计 docs-only browser platform planning：current Chromium deterministic baseline、cross-browser matrix tiers、remote browser farm assumptions、visual baseline decision、artifact retention、failure triage 和 baseline update policy；本阶段不修改 Playwright config/specs/scripts，不引入 remote browser farm，不提交 screenshot baseline，也不改变默认 deterministic `pnpm alpha:e2e` gate。完成记录见 `docs/browser-platform-visual-baseline-planning.md`。
 
+129. `specs/2026-05-25-real-provider-local-run-polish-design.md`
+   - Stage 57 Real Provider Local Run Polish v0 design（已批准，已实现）。
+   - 在 Stage 36 real provider smoke docs、Stage 44 Models management 和当前 roadmap 后阅读，用于理解本地 `.env.local` 真实 provider 试跑打磨：新增无网络 env doctor、Models 本地运行 checklist、operator smoke 状态语言，同时保持默认 deterministic / no-key gates 不变。
+
+130. `plans/2026-05-25-real-provider-local-run-polish.md`
+   - Stage 57 Real Provider Local Run Polish v0 implementation plan（已实现，当前已完成）。
+   - 在 Stage 57 design 后阅读，用于按 TDD 实现 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models checklist、真实 provider operator docs、roadmap 和 Agent 学习笔记同步；本阶段不做 secret storage、默认真实 provider gate、provider marketplace、真实部署或 real MCP 扩展。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。

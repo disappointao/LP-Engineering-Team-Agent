@@ -129,7 +129,7 @@ Browser failure 先按以下 Failure Triage categories 分类：
 ## Recommended Follow-Up Candidates
 
 - Stage56 Browser Compatibility Smoke Discovery v0：设计 opt-in Firefox/WebKit/local compatibility smoke，不改变默认 gate，不引入 remote browser farm。
-- Stage57 Visual Baseline Candidate Discovery v0：只评估少量 stable/high impact/low flake surfaces 是否值得 pixel screenshot baseline，并定义 baseline update review policy。
+- Future Visual Baseline Candidate Discovery v0：只评估少量 stable/high impact/low flake surfaces 是否值得 pixel screenshot baseline，并定义 baseline update review policy。
 - Stage58 Remote Browser Farm Discovery v0：定义 CI/farm provider、browser project matrix、artifact retention、network/no-key policy、failure triage ownership 和 operator docs 要求。
 
 ## Validation Plan

@@ -133,6 +133,23 @@ export interface ModelManagementRouteRow {
   updatedAt?: string;
 }
 
+export type ModelLocalRunChecklistKey = "realProvider" | "chatRoute" | "lpRoutes";
+
+export interface ModelLocalRunChecklistItem {
+  key: ModelLocalRunChecklistKey;
+  label: string;
+  ready: boolean;
+  stateLabel: string;
+  detail: string;
+}
+
+export interface ModelLocalRunChecklist {
+  title: string;
+  chatReady: boolean;
+  lpReady: boolean;
+  items: ModelLocalRunChecklistItem[];
+}
+
 export interface ModelsManagementViewModel {
   notice?: ModelManagementNotice;
   noticeMessage?: string;
@@ -142,6 +159,7 @@ export interface ModelsManagementViewModel {
   totalRouteCount: number;
   providerSummary: string;
   routeSummary: string;
+  localRunChecklist: ModelLocalRunChecklist;
   providerRows: ModelManagementProviderRow[];
   routeRows: ModelManagementRouteRow[];
 }
@@ -296,6 +314,10 @@ export function buildModelsManagementViewModel(input: {
   });
   const enabledProviderCount = input.modelState.providers.filter((provider) => provider.enabled).length;
   const configuredRouteCount = routeRows.filter((route) => route.state === "configured").length;
+  const localRunChecklist = buildModelLocalRunChecklist({
+    copy: input.copy,
+    modelState: input.modelState
+  });
 
   return {
     notice,
@@ -312,9 +334,101 @@ export function buildModelsManagementViewModel(input: {
       configuredRouteCount,
       modelManagementRoleOrder.length
     ),
+    localRunChecklist,
     providerRows,
     routeRows
   };
+}
+
+function buildModelLocalRunChecklist(input: {
+  copy: WorkbenchCopy;
+  modelState: WebProjectModelState;
+}): ModelLocalRunChecklist {
+  const providersById = new Map(input.modelState.providers.map((provider) => [provider.id, provider]));
+  const routesByRole = new Map(input.modelState.routes.map((route) => [route.role, route]));
+  const readyProviderIds = new Set(
+    input.modelState.providers
+      .filter((provider) => isRealProviderReady(provider))
+      .map((provider) => provider.id)
+  );
+  const hasReadyRealProvider = readyProviderIds.size > 0;
+  const assistantReady = isRoleRoutedToReadyRealProvider("assistant", {
+    providersById,
+    readyProviderIds,
+    routesByRole
+  });
+  const lpReady =
+    isRoleRoutedToReadyRealProvider("planner", {
+      providersById,
+      readyProviderIds,
+      routesByRole
+    }) &&
+    isRoleRoutedToReadyRealProvider("builder", {
+      providersById,
+      readyProviderIds,
+      routesByRole
+    });
+
+  const items = [
+    buildModelLocalRunChecklistItem("realProvider", hasReadyRealProvider, input.copy),
+    buildModelLocalRunChecklistItem("chatRoute", assistantReady, input.copy),
+    buildModelLocalRunChecklistItem("lpRoutes", lpReady, input.copy)
+  ];
+
+  return {
+    title: input.copy.modelsView.management.localRunChecklistTitle,
+    chatReady: assistantReady,
+    lpReady,
+    items
+  };
+}
+
+function buildModelLocalRunChecklistItem(
+  key: ModelLocalRunChecklistKey,
+  ready: boolean,
+  copy: WorkbenchCopy
+): ModelLocalRunChecklistItem {
+  const state = ready ? "ready" : "blocked";
+
+  return {
+    key,
+    label: copy.modelsView.management.localRunChecklistItems[key],
+    ready,
+    stateLabel: copy.modelsView.management.localRunChecklistStates[state],
+    detail: copy.modelsView.management.localRunChecklistDetails[key][state]
+  };
+}
+
+function isRoleRoutedToReadyRealProvider(
+  role: AgentRole,
+  input: {
+    providersById: Map<string, WebProjectModelState["providers"][number]>;
+    readyProviderIds: Set<string>;
+    routesByRole: Map<AgentRole, WebProjectModelState["routes"][number]>;
+  }
+): boolean {
+  const route = input.routesByRole.get(role);
+  if (!route || !route.model.trim() || !input.readyProviderIds.has(route.providerId)) {
+    return false;
+  }
+
+  const provider = input.providersById.get(route.providerId);
+  return Boolean(provider && isRealProvider(provider));
+}
+
+function isRealProviderReady(provider: WebProjectModelState["providers"][number]): boolean {
+  const secretEnvName = provider.config.apiKeyEnv ?? provider.config.secretEnvName;
+  return (
+    provider.enabled &&
+    isRealProvider(provider) &&
+    Boolean(provider.config.baseUrl?.trim()) &&
+    Boolean(secretEnvName?.trim()) &&
+    (provider.config.models?.length ?? 0) > 0
+  );
+}
+
+function isRealProvider(provider: WebProjectModelState["providers"][number]): boolean {
+  return provider.provider !== "mock" && provider.config.api !== "mock";
 }
 
 function buildSkillVersionRow(input: {

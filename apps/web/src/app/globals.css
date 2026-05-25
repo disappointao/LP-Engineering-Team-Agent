@@ -935,6 +935,47 @@ button {
   line-height: 1.45;
 }
 
+.modelLocalRunChecklist {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.modelLocalRunChecklist h3 {
+  margin: 0;
+  color: #25292e;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.modelLocalRunChecklist ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.modelLocalRunChecklist li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.modelLocalRunChecklist li[data-ready="true"] span {
+  color: #137333;
+}
+
+.modelLocalRunChecklist li[data-ready="false"] span {
+  color: #8a4b00;
+}
+
+.modelLocalRunChecklist small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .managementState {
   display: block;
   margin-top: 4px;
