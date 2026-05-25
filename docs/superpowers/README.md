@@ -495,11 +495,11 @@
    - 在 Stage 47 design 后阅读，用于复核 operator trial evidence ledger、完整 deterministic gates、completion note / feedback log / roadmap closeout，以及无 blocker 后默认后续路由切到 Stage 49 的依据；trial evidence 见 `docs/v1-polished-alpha-operator-trial.md`。
 
 123. `specs/2026-05-25-post-v1-backlog-prioritization-design.md`
-   - Stage 49 Post-V1 Backlog Prioritization v0 design（已批准，待实施计划）。
+   - Stage 49 Post-V1 Backlog Prioritization v0 design（已实现，当前已完成）。
    - 在 Stage 47 implementation plan 和当前 roadmap 后阅读，用于把 V1 polished alpha completion、operator trial evidence、feedback batch、known limitations 和较长 post-V1 backlog 转成可复核的优先级模型，并默认把 Stage 51 收窄为 MCP Management Surface v0 Spec Kickoff；本阶段不实现 runtime、Web、MCP、provider、deployment、auth、storage 或 browser platform 功能。
 
 124. `plans/2026-05-25-post-v1-backlog-prioritization.md`
-   - Stage 49 Post-V1 Backlog Prioritization v0 implementation plan（已批准，待执行）。
+   - Stage 49 Post-V1 Backlog Prioritization v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 49 design 后阅读，用于创建 `docs/post-v1-backlog-prioritization.md` scoring ledger、更新 V1 completion / feedback routing、同步 roadmap 下一阶段队列，并验证 docs-only 阶段没有改变 runtime 默认 gate。
 
 ## 维护规则

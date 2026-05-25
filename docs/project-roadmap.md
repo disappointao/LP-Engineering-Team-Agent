@@ -49,6 +49,7 @@
 - Skills and Models client-side management v0：Stage 44 已实现 Web-only Skills / Models management view-model，覆盖 Skills lifecycle / runtime context / command queue hierarchy 和 Models provider / route / resolved runtime summary；MCP management 继续隐藏。
 - V1 polished alpha completion gate v0：Stage 46 已创建 `docs/v1-polished-alpha-completion.md` completion note；Gate commit `071601b` 的完整 deterministic gates 均通过，当时 RC decision 为 `needs_operator_trial`，后续已由 Stage 47 operator trial 更新为 `go_for_internal_rc`。
 - Internal RC trial feedback batch v0：Stage 47 已完成 `docs/v1-polished-alpha-operator-trial.md` operator trial evidence 和 `docs/alpha-feedback-log.md` feedback batch；Trial commit `002cbbc` 的 deterministic gates 和 local operator manual acceptance 均通过，real provider opt-in smoke 为 `not_run`，未记录 blockers，completion decision 已更新为 `go_for_internal_rc`。
+- Post-V1 backlog prioritization v0：Stage 49 已完成 docs-only backlog scoring，默认下一阶段为 Stage 51 MCP Management Surface v0 Spec Kickoff；Stage 48 保持 blocker 条件触发，Stage 50 保持 browser platform / visual baseline 可选规划路径。
 
 ## 第一版可用闭环目标
 
@@ -63,19 +64,19 @@
 - Skills / Models client-side management 进入第一版 Web 范围；MCP management 和 MCP tab / sidebar / top-level Web 入口后置。
 - 生成 LP 产物继续保持框架无关静态 HTML/CSS/JS，并支持 preview/export。
 
-按当前代码基础，面向本地/单用户 **V1 polished alpha** 的 deterministic completion gate 和 Stage 47 local operator trial 均已完成；`docs/v1-polished-alpha-completion.md` 记录 Gate commit `071601b`、Trial commit `002cbbc`、完整 deterministic gates passed、manual acceptance passed、real provider opt-in smoke `not_run`，RC decision 已更新为 `go_for_internal_rc`。默认下一路由为 Stage 49 Post-V1 Backlog Prioritization v0；Stage 48 仅在后续发现 blocker 时启用。
+按当前代码基础，面向本地/单用户 **V1 polished alpha** 的 deterministic completion gate、Stage 47 local operator trial 和 Stage 49 post-V1 backlog prioritization 均已完成；`docs/v1-polished-alpha-completion.md` 记录 Gate commit `071601b`、Trial commit `002cbbc`、完整 deterministic gates passed、manual acceptance passed、real provider opt-in smoke `not_run`，RC decision 已更新为 `go_for_internal_rc`。Stage 49 已通过 docs-only scoring ledger 选择 Stage 51 MCP Management Surface v0 Spec Kickoff 作为默认下一路由；Stage 48 仅在后续发现 accepted blockers 时启用，Stage 50 Browser Platform / Visual Baseline Planning v0 保持可选规划路径，Stage 52 / Stage 53 分别作为后续 real deployment runner 和 model gateway cost / fallback discovery candidate。
 
-Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider alpha smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。Stage 45 已完成 browser failure / visual regression expansion。Stage 46 已完成 V1 polished alpha completion gate。Stage 47 已完成 internal RC trial feedback batch，记录 deterministic local operator trial passed、manual acceptance passed、no blockers 和 `go_for_internal_rc` decision。下一步路由为：
+Stage 30 已完成 Skill-only alpha hardening、manual acceptance、`pnpm alpha:check`、真实 provider opt-in 说明和 fail-closed 提示整理。Stage 31 已完成 deterministic Browser E2E acceptance，`pnpm alpha:e2e` 覆盖第一版浏览器可见闭环。Stage 32 已完成 provider usage metadata 和 streaming capability 可见性。Stage 33 已完成 Manual alpha UX tightening，处理 sidebar navigation、quick prompt、空状态和人工 alpha 高频文案摩擦。Stage 34 已完成 browser failure injection 和轻量 visual layout contract。Stage 35 已完成普通聊天 provider token delta streaming。Stage 36 已完成真实 provider opt-in smoke matrix 和 operator docs。Stage 37 已完成 Skill-only alpha release candidate checklist。Stage 38 已完成 ordinary chat streaming failure UX hardening。Stage 39 已完成 LP artifact quality baseline 和 Planner / Builder prompt hardening。Stage 40 已完成 alpha feedback intake / triage loop，把 RC 模板变成可重复的反馈批次和修复优先级。Stage 41 已完成 Web surface pruning，隐藏 MCP management 和 MCP tab / sidebar / top-level Web 入口。Stage 42 已完成 Dedicated Artifact Workspace v0，新增 `Artifacts` navigation、三文件 manifest、bounded snippet、preview/export 和安全失败状态。Stage 43 已完成 Run Timeline and Recovery UX Polish v0，LP live task 现在有固定角色 timeline、handoff marker、repair/retry hints 和 recovery action hierarchy。Stage 44 已完成 Skills and Models Client-side Management v0，Skills / Models 管理页现在展示 bounded lifecycle、runtime 和 provider/route 摘要，MCP management 继续后置。Stage 45 已完成 browser failure / visual regression expansion。Stage 46 已完成 V1 polished alpha completion gate。Stage 47 已完成 internal RC trial feedback batch，记录 deterministic local operator trial passed、manual acceptance passed、no blockers 和 `go_for_internal_rc` decision。Stage 49 已完成 Post-V1 Backlog Prioritization v0，记录 scoring ledger 并把下一步路由收敛为：
 
-- Stage 49 Post-V1 Backlog Prioritization v0（设计已批准，正在进入实施计划）。
+- Stage 51 MCP Management Surface v0 Spec Kickoff 作为当前默认推荐下一阶段。
 - Stage 48 仅在后续发现 accepted blockers 时启用。
 - Stage 50 Browser Platform / Visual Baseline Planning v0 可作为可选规划阶段。
-- Stage 51 作为 post-V1 candidate/spec planning placeholder，不作为当前执行阶段。
+- Stage 52 Real Deployment Runner Discovery v0 和 Stage 53 Model Gateway Cost / Fallback Policy Discovery v0 分别作为后续 discovery candidate。
 
 当前仍明确后置：
 
 - 真实 fallback provider execution、tool-call protocol conversion、billing / quota enforcement、provider cost ledger，以及 LP structured output token-level UI。
-- MCP management、MCP tab / sidebar / top-level Web 入口、真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
+- MCP management implementation beyond Stage 51 spec kickoff、MCP tab / sidebar / top-level Web 入口恢复、真实 MCP SDK / remote MCP server adapter、write tools 和 MCP worker execution。
 - Streaming stdout/stderr summaries。
 - 真实 shell runner、强 sandbox、OS-level isolation。
 - 真实部署编排。
@@ -800,7 +801,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 **实现摘要：**
 
 - `docs/v1-polished-alpha-operator-trial.md` 已记录 Trial commit `002cbbc`、deterministic gates passed、manual acceptance passed、real provider opt-in smoke `not_run` 和无 blockers 结论。
-- `docs/v1-polished-alpha-completion.md` 已更新为 `go_for_internal_rc`，并把默认下一路由设为 Stage 49，Stage 48 仅在后续发现 blocker 时启用。
+- `docs/v1-polished-alpha-completion.md` 已更新为 `go_for_internal_rc`；当时将后续 follow-up 路由到 Stage 49，且 Stage 49 现已完成处理；Stage 48 仅在后续发现 blocker 时启用。
 - `docs/alpha-feedback-log.md` 已新增 `batch_2026_05_24_stage_47_internal_rc_trial`，记录 new items count `0`、blockers `none`、accepted follow-up 为 Stage 49。
 
 **非目标：**
@@ -813,30 +814,58 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **实施计划：** `docs/superpowers/plans/2026-05-24-internal-rc-trial-feedback-batch.md`。
 
-## 推荐下一阶段队列
-
 ### Stage 49：Post-V1 Backlog Prioritization v0
 
-**状态：** 当前默认执行阶段；设计已批准，待实施计划。若后续发现 blocker 并触发 Stage 48，则在 blocker 修复后继续执行。
+**状态：** 已实现，当前已完成。
 
-**为什么现在做：** Stage 46/47 后已经有 completion note、operator trial evidence、feedback batch、known limitations 和较长 backlog；需要先分类和排序，选择下一条 product 或 platform slice，再写 spec/plan。
+**为什么现在做：** Stage 46/47 后已经有 completion note、operator trial evidence、feedback batch、known limitations 和较长 backlog；Stage 49 负责把这些输入转成可复核的 docs-only scoring ledger，并选出下一条窄范围 post-V1 slice。
 
-**建议范围：**
+**实现摘要：**
 
-- 分类 Stage 46/47 和后续 Stage 48（如触发）留下的 accepted follow-ups、known limitations 和 backlog。
-- 选择下一条 product 或 platform slice。
-- 产出对应 Superpowers spec / implementation plan，并同步 roadmap。
-- 明确哪些项目继续后置到 MCP、provider、deployment、auth、storage、observability 或 browser platform backlog。
+- 已创建 `docs/post-v1-backlog-prioritization.md`，记录 evidence inputs、prioritization model、candidate scores、default Stage 51 scope 和推荐下一阶段队列。
+- 已选择 Stage 51 MCP Management Surface v0 Spec Kickoff 作为默认下一阶段；Stage 48 继续只在 accepted blockers 出现时启用，Stage 50 保持 browser platform / visual baseline optional planning。
+- 已把 Stage 52 Real Deployment Runner Discovery v0 和 Stage 53 Model Gateway Cost / Fallback Policy Discovery v0 保留为后续 discovery candidate。
+
+**已完成范围：**
+
+- 汇总 V1 polished alpha completion、operator trial evidence、feedback log、known limitations 和 roadmap backlog。
+- 以 `0` 到 `3` 的五维评分模型排序 post-V1 backlog candidates。
+- 明确 Stage 51 kickoff 只写 MCP Management Surface v0 的 Superpowers spec / implementation plan 和安全边界。
+- 同步 roadmap、Superpowers README 和完成记录，保持 docs-only 阶段不改变 runtime 默认 gate。
 
 **非目标：**
 
-- 不一次实现大量 backlog items。
-- 不把产品 polish、平台能力、生产部署和 MCP management 混成一个阶段。
-- 不绕过 spec/plan 直接开做大范围实现。
+- 不实现 runtime、Web、MCP、provider、deployment、auth、storage、browser platform 或 test code changes。
+- 不恢复 MCP management 到 V1 polished alpha，也不启用 remote MCP SDK、write tools 或 MCP worker execution。
+- 不把 deployment runner、model gateway cost/fallback、auth/RBAC、storage 或 browser platform 多方向合并进同一实现阶段。
 
 **设计：** `docs/superpowers/specs/2026-05-25-post-v1-backlog-prioritization-design.md`。
 
 **实施计划：** `docs/superpowers/plans/2026-05-25-post-v1-backlog-prioritization.md`。
+
+**完成记录：** `docs/post-v1-backlog-prioritization.md`。
+
+## 推荐下一阶段队列
+
+### Stage 51：MCP Management Surface v0 Spec Kickoff
+
+**状态：** 当前默认推荐下一阶段。
+
+**为什么现在做：** Stage 49 scoring ledger 已把 MCP Management Surface v0 选为最高置信度的 post-V1 slice；先写窄范围 spec / implementation plan 和安全边界，可以让 MCP management 在不混入 runtime 实现的前提下重新进入产品规划。
+
+**建议范围：**
+
+- 写 MCP Management Surface v0 的 Superpowers spec 和 implementation plan。
+- 定义 Web 管理面需要覆盖的 connector metadata、visible tools、approval state、connector health、read-only execution affordance 和 failure diagnostics。
+- 明确 V1 hidden MCP boundary 如何在 post-V1 阶段重新进入 navigation。
+- 写清 deterministic/local evidence、non-leakage rules、safe diagnostics 和后续实现验收边界。
+
+**非目标：**
+
+- 不实现 runtime、Web、backend、worker、MCP SDK 或 tool execution code。
+- 不接入 remote MCP SDK、write tools 或 MCP worker execution。
+- 不实现 auth/RBAC、secret storage、deployment/provider changes。
+- 不把 provider fallback、real deployment runner、browser platform 或 auth/storage 多方向混入 Stage 51 kickoff。
 
 ### Stage 48：RC Blocker Fix Batch v0
 
@@ -874,25 +903,43 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 - 不在规划阶段搭建 remote browser farm。
 - 不引入 pixel-perfect baseline 作为默认 gate。
-- 不改变 Stage 49 backlog prioritization 默认路由或 Stage 48 blocker 条件触发规则。
+- 不改变 Stage 51 默认路由或 Stage 48 blocker 条件触发规则。
 
-### Stage 51：Post-V1 Product Slice Spec Kickoff v0
+### Stage 52：Real Deployment Runner Discovery v0
 
-**状态：** Post-V1 candidate / planning placeholder；不作为当前执行阶段。
+**状态：** 后续 discovery candidate。
 
-**为什么现在做：** Stage 49 完成 backlog sorting 后，需要把被选中的下一条 product 或 platform slice 转成窄范围 spec/plan，避免直接把多个 backlog 方向合并成一个大阶段。
+**为什么现在做：** 真实部署是 post-V1 关键能力，但它牵涉 adapter boundary、credentials、approval、status polling、rollback 和失败模型；在实现前需要先做 discovery，避免把真实部署和 MCP management 混成一个阶段。
 
 **建议范围：**
 
-- 接收 Stage 49 选出的单一近期优先级。
-- 写清目标、非目标、验收证据、安全边界和验证命令。
-- 同步 `docs/superpowers/README.md`、roadmap 和必要的 acceptance / backlog docs。
+- 梳理 deployment runner boundary、deployment adapter contract、credential assumptions 和 approval gates。
+- 定义 deployment status / polling / rollback / failure event model 的最小 discovery 输出。
+- 明确 deterministic validation 可以覆盖的 fake deployment evidence 和仍需人工/真实环境 opt-in 的部分。
 
 **非目标：**
 
-- 不在占位阶段直接改 runtime/code/config/test implementation。
-- 不把 MCP management、provider fallback、deployment、auth/storage 或 browser platform 多方向混成一个阶段。
-- 不绕过 Stage 49 的排序结果提前启动实现。
+- 不实现真实部署 runner 或 provider integration。
+- 不存储真实 credentials，不引入 secret storage。
+- 不改变 worker execution、MCP management、auth/RBAC 或 production deployment docs。
+
+### Stage 53：Model Gateway Cost / Fallback Policy Discovery v0
+
+**状态：** 后续 discovery candidate。
+
+**为什么现在做：** Model gateway 已有 provider-neutral runtime 和 fallback metadata，但真实 cost / fallback policy 会影响预算、可靠性和 operator trust；在启用自动行为或 billing enforcement 前需要先做 discovery。
+
+**建议范围：**
+
+- 梳理 cost ledger、provider capability、timeout、quota 和 fallback policy 的最小边界。
+- 明确 fallback availability metadata 与 future automatic fallback 的安全区分。
+- 定义 deterministic fake-provider evidence、operator-visible cost summary 和后续实现风险。
+
+**非目标：**
+
+- 不启用自动真实 fallback execution。
+- 不实现 billing enforcement、quota enforcement 或生产 cost accounting。
+- 不改变 provider adapters、runtime routing、MCP tools、deployment 或 auth/storage。
 
 ## Backlog 分组
 
@@ -1016,11 +1063,13 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 ## 决策记录
 
+- 2026-05-25 Stage 49 已完成 Post-V1 Backlog Prioritization v0：docs-only scoring ledger 选择 Stage 51 MCP Management Surface v0 Spec Kickoff 作为默认下一阶段；Stage 48 继续仅在 blocker 出现时启用，Stage 50 保持 optional browser platform planning，Stage 52 / Stage 53 分别保留 real deployment runner 和 model gateway cost / fallback discovery。
+
 - 2026-05-25 Stage 49 implementation plan 已写入：计划使用隔离 worktree 和 subagent-driven development 创建 `docs/post-v1-backlog-prioritization.md` scoring ledger，同步 completion / feedback routing、roadmap 和 Superpowers README；最终验证为 `git diff --check`、`pnpm alpha:check` 和 `pnpm smoke`。
 
 - 2026-05-25 Stage 49 设计已批准：Post-V1 Backlog Prioritization v0 将把 V1 completion、operator trial evidence、feedback batch、known limitations 和 roadmap backlog 转成可复核排序；默认候选为 Stage 51 MCP Management Surface v0 Spec Kickoff，Stage 48 继续只在 blocker 出现时启用，Stage 50 保持 browser platform / visual baseline 可选规划路径；本阶段不实现 runtime、Web、MCP、provider、deployment、auth、storage 或 browser platform 功能。
 
-- 2026-05-24 Stage 47 已完成 Internal RC Trial Feedback Batch v0：deterministic local operator trial passed，未记录 blockers，completion note decision 更新为 `go_for_internal_rc`；默认下一路由为 Stage 49 Post-V1 Backlog Prioritization v0，Stage 48 仅在后续发现 blocker 时启用。
+- 2026-05-24 Stage 47 已完成 Internal RC Trial Feedback Batch v0：deterministic local operator trial passed，未记录 blockers，completion note decision 更新为 `go_for_internal_rc`；当时将后续 follow-up 路由到 Stage 49 Post-V1 Backlog Prioritization v0，且 Stage 49 现已完成处理；Stage 48 仅在后续发现 blocker 时启用。
 - 2026-05-24 Stage 47 implementation plan 已写入：计划分为 operator trial evidence ledger、完整 deterministic gate / trial result 记录、feedback batch / roadmap closeout 和最终验证；执行时使用隔离 worktree 和 subagent-driven development，不在 trial batch 中临时修 blocker。
 - 2026-05-24 Stage 47 设计已批准：Internal RC Trial Feedback Batch v0 将执行 deterministic / no-key local operator trial，记录 safe manual acceptance evidence、feedback batch、RC decision 和 Stage 48 / Stage 49 路由；Codex 可作为本轮 local operator，但必须明确标注为 agent-operated trial，不得冒充外部真人试用；本阶段不修 blocker、不扩大 V1 功能范围。
 - 2026-05-24 Stage 46 已完成 V1 Polished Alpha Completion Gate v0：deterministic gates passed，未记录 blockers，RC decision 为 `needs_operator_trial`；默认下一路由为 Stage 47 Internal RC Trial Feedback Batch v0，Stage 48 RC Blocker Fix Batch v0 仅在 Stage 46/47 出现 blocker 时启用。
