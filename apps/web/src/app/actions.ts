@@ -580,7 +580,7 @@ export async function executeMCPToolAction(formData: FormData): Promise<void> {
     connectorId: String(formData.get("connectorId") ?? ""),
     toolName: String(formData.get("toolName") ?? ""),
     role: String(formData.get("role") ?? ""),
-    argumentsJson: String(formData.get("argumentsJson") ?? "")
+    argumentsJson: "{}"
   });
   if (!result.ok) {
     redirectToMCPWithError(result.error);

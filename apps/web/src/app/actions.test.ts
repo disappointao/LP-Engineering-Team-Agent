@@ -1629,7 +1629,7 @@ describe("submitPromptAction", () => {
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
   });
 
-  it("executes MCP tools from form data", async () => {
+  it("executes MCP tools without forwarding browser-provided arguments", async () => {
     mocks.executeMCPTool.mockResolvedValue({
       ok: true,
       value: {
@@ -1651,37 +1651,9 @@ describe("submitPromptAction", () => {
       connectorId: "connector_assets",
       toolName: "searchAssets",
       role: "builder",
-      argumentsJson: "{\"query\":\"SECRET_PRODUCT\"}"
+      argumentsJson: "{}"
     });
     expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_1");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
-  });
-
-  it("redirects MCP tool execution errors to the mcp view", async () => {
-    mocks.executeMCPTool.mockResolvedValue({
-      ok: false,
-      error: "mcp_tool_arguments_invalid"
-    });
-    const formData = new FormData();
-    formData.set("projectId", "project_1");
-    formData.set("connectorId", "connector_assets");
-    formData.set("toolName", "searchAssets");
-    formData.set("role", "builder");
-    formData.set("argumentsJson", "{\"query\":");
-
-    await expectRedirect(
-      executeMCPToolAction(formData),
-      "/?view=mcp&mcpError=mcp_tool_arguments_invalid"
-    );
-
-    expect(mocks.executeMCPTool).toHaveBeenCalledWith({
-      projectId: "project_1",
-      connectorId: "connector_assets",
-      toolName: "searchAssets",
-      role: "builder",
-      argumentsJson: "{\"query\":"
-    });
-    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 });

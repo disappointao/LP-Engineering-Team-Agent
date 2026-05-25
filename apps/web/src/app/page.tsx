@@ -2,7 +2,9 @@ import React from "react";
 import { headers } from "next/headers";
 import {
   bindSkillVersionAction,
+  createMCPConnectorAction,
   createProjectAction,
+  executeMCPToolAction,
   executeRunRecoveryAction,
   executeSkillCommandAction,
   runLocalWorkerOnceAction,
@@ -12,6 +14,8 @@ import {
   selectTaskAction,
   publishSkillVersionAction,
   interruptCurrentTaskAction,
+  setMCPConnectorEnabledAction,
+  setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
   startNewTaskAction,
@@ -32,7 +36,9 @@ import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
 import {
   getWebWorkbenchStore,
   type InterruptFlowErrorCode,
+  type MCPFlowErrorCode,
   type ModelFlowErrorCode,
+  type ProjectMCPState,
   type ProjectFlowErrorCode,
   type RunRecoveryFlowErrorCode,
   type SkillFlowErrorCode,
@@ -45,6 +51,7 @@ import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session"
 import { InterruptSubmitButton } from "./interrupt-submit-button";
 import { LiveTaskPanel } from "./live-task-panel";
 import { ManagementSubmitButton } from "./management-submit-button";
+import { buildMCPManagementViewModel } from "./mcp-management-view-model";
 import {
   buildRunTimelineViewModel,
   type RunTimelineStepView
@@ -65,6 +72,28 @@ type PageSearchParams = Record<string, PageSearchParamValue>;
 interface HomePageProps {
   searchParams?: Promise<PageSearchParams>;
 }
+
+type MCPManagementViewModel = ReturnType<typeof buildMCPManagementViewModel>;
+type MCPManagementSummary = MCPManagementViewModel["summary"];
+type MCPManagementStatus =
+  | MCPManagementViewModel["connectors"][number]["status"]
+  | MCPManagementViewModel["connectors"][number]["tools"][number]["status"]
+  | MCPManagementViewModel["visibleToolGroups"][number]["tools"][number]["status"];
+type MCPManagementApprovalState =
+  MCPManagementViewModel["connectors"][number]["tools"][number]["approvalState"];
+
+type MCPManagementPageCopy = {
+  runtimeSummaryTitle: string;
+  safeProjectionNotice: string;
+  connectorDefinitionHint: string;
+  summary: (summary: MCPManagementSummary) => string;
+  runtimeSummary: (summary: MCPManagementSummary) => string;
+  toolCount: (count: number) => string;
+  policyItems: string[];
+  statusLabels: Record<MCPManagementStatus, string>;
+  approvalStates: Record<MCPManagementApprovalState, string>;
+  pending: Record<"create" | "enable" | "disable" | "approval" | "execute", string>;
+};
 
 function QuickPromptForm({
   className,
@@ -99,10 +128,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         ? "skills"
         : view === "models"
           ? "models"
-          : "workbench";
+          : view === "mcp"
+            ? "mcp"
+            : "workbench";
   const errorCode = toProjectFlowError(getFirstSearchParam(params?.error));
   const skillError = toSkillFlowError(getFirstSearchParam(params?.skillError));
   const modelError = toModelFlowError(getFirstSearchParam(params?.modelError));
+  const mcpError = toMCPFlowError(getFirstSearchParam(params?.mcpError));
   const interruptError = toInterruptFlowError(getFirstSearchParam(params?.interruptError));
   const recoveryError = toRunRecoveryFlowError(getFirstSearchParam(params?.recoveryError));
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
@@ -128,6 +160,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     artifactPath
   });
   const modelState = getPageModelState(pageState);
+  const mcpState = getPageMCPState(pageState);
+  const mcpManagement = buildMCPManagementViewModel({ copy, mcpState });
+  const mcpManagementCopy = getMCPManagementPageCopy(copy);
   const activeTask = pageState.kind === "task_ready" ? pageState.task : undefined;
   const activeProject =
     pageState.kind === "task_ready" && pageState.snapshot
@@ -139,6 +174,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const workerErrorMessage = workerError
     ? copy.skillsView.workerErrors[workerError]
     : undefined;
+  const mcpErrorMessage = mcpError ? copy.mcpView.errors[mcpError] : undefined;
   const modelErrorMessage = modelError
     ? copy.modelsView.errors[modelError]
     : modelState.resolutionError
@@ -295,6 +331,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           >
             {copy.nav.models}
           </a>
+          <a
+            aria-current={activeView === "mcp" ? "page" : undefined}
+            className={activeView === "mcp" ? "navItem navItemActive" : "navItem"}
+            href="/?view=mcp"
+          >
+            {copy.nav.mcp}
+          </a>
         </nav>
 
         <div className="sidebarSection">
@@ -380,7 +423,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             ? copy.nav.skills
             : activeView === "models"
               ? copy.nav.models
-              : copy.nav.workbench
+              : activeView === "mcp"
+                ? copy.nav.mcp
+                : copy.nav.workbench
         }
       >
         <header className="topBar">
@@ -990,6 +1035,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </section>
             ) : null}
 
+            {activeView === "mcp"
+              ? MCPManagementView({
+                  activeProject,
+                  copy,
+                  errorMessage: mcpErrorMessage,
+                  management: mcpManagement,
+                  managementCopy: mcpManagementCopy
+                })
+              : null}
+
             </div>
           </div>
         ) : (
@@ -1212,6 +1267,30 @@ function toProjectFlowError(value: string | undefined): ProjectFlowErrorCode | u
   return undefined;
 }
 
+function toMCPFlowError(value: string | undefined): MCPFlowErrorCode | undefined {
+  if (
+    value === "project_not_found" ||
+    value === "mcp_connector_json_invalid" ||
+    value === "mcp_connector_validation_failed" ||
+    value === "mcp_connector_scope_unsupported" ||
+    value === "mcp_connector_already_exists" ||
+    value === "mcp_connector_not_found" ||
+    value === "mcp_tool_not_found" ||
+    value === "mcp_tool_approval_not_required" ||
+    value === "mcp_tool_not_visible" ||
+    value === "mcp_tool_execution_not_read_only" ||
+    value === "mcp_tool_execution_approval_required" ||
+    value === "mcp_tool_execution_rejected" ||
+    value === "mcp_tool_execution_failed" ||
+    value === "mcp_tool_arguments_invalid" ||
+    value === "mcp_executor_not_configured" ||
+    value === "mcp_operation_failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 function toInterruptFlowError(value: string | undefined): InterruptFlowErrorCode | undefined {
   if (
     value === "task_not_found" ||
@@ -1260,6 +1339,20 @@ function getPageModelState(pageState: { models?: WebProjectModelState }): WebPro
       builder: { provider: "mock-anthropic", model: "code-model" },
       reviewer: { provider: "mock-openai", model: "review-model" },
       deployer: { provider: "mock-local", model: "tool-model" }
+    }
+  };
+}
+
+function getPageMCPState(pageState: { mcp?: ProjectMCPState }): ProjectMCPState {
+  return pageState.mcp ?? {
+    connectors: [],
+    approvals: [],
+    visibleToolsByRole: {
+      assistant: [],
+      planner: [],
+      builder: [],
+      reviewer: [],
+      deployer: []
     }
   };
 }
@@ -1457,6 +1550,263 @@ function RecoveryBlock({
       </div>
     </section>
   );
+}
+
+function MCPManagementView({
+  activeProject,
+  copy,
+  errorMessage,
+  management,
+  managementCopy
+}: {
+  activeProject: WorkbenchPageState["projects"][number] | undefined;
+  copy: ReturnType<typeof getWorkbenchCopy>;
+  errorMessage?: string;
+  management: MCPManagementViewModel;
+  managementCopy: MCPManagementPageCopy;
+}) {
+  return (
+    <section className="mcpView" aria-labelledby="mcp-title">
+      <header className="mcpHeader">
+        <div>
+          <h1 id="mcp-title">{copy.mcpView.title}</h1>
+          <p>{copy.mcpView.subtitle}</p>
+          <p className="alphaBoundaryNote">{managementCopy.safeProjectionNotice}</p>
+        </div>
+        <span>{managementCopy.summary(management.summary)}</span>
+      </header>
+
+      {errorMessage ? <div className="formError" role="alert">{errorMessage}</div> : null}
+
+      <section className="managementSummary" aria-labelledby="mcp-summary-title">
+        <div>
+          <h2 id="mcp-summary-title">{managementCopy.runtimeSummaryTitle}</h2>
+          <p>{managementCopy.runtimeSummary(management.summary)}</p>
+        </div>
+        <ul>
+          {managementCopy.policyItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
+
+      <div className="mcpProjectContext">
+        <span>{copy.mcpView.activeProjectLabel}</span>
+        <strong>{activeProject?.name ?? copy.mcpView.noProject}</strong>
+      </div>
+
+      {activeProject ? (
+        <>
+          <form action={createMCPConnectorAction} className="mcpEditor">
+            <input name="projectId" type="hidden" value={activeProject.id} />
+            <h2>{copy.mcpView.createTitle}</h2>
+            <label htmlFor="definitionJson">{copy.mcpView.definitionLabel}</label>
+            <textarea
+              id="definitionJson"
+              name="definitionJson"
+              placeholder={copy.mcpView.definitionPlaceholder}
+            />
+            <p className="formHint">{managementCopy.connectorDefinitionHint}</p>
+            <ManagementSubmitButton pendingLabel={managementCopy.pending.create}>
+              {copy.mcpView.createConnector}
+            </ManagementSubmitButton>
+          </form>
+
+          <section className="mcpList" aria-labelledby="mcp-connectors-title">
+            <h2 id="mcp-connectors-title">{copy.mcpView.connectorsTitle}</h2>
+            {management.connectors.length > 0 ? (
+              management.connectors.map((connector) => (
+                <div className="mcpConnectorRow" key={connector.id}>
+                  <div>
+                    <strong>{connector.name}</strong>
+                    {connector.description ? <p>{connector.description}</p> : null}
+                    <span>
+                      {connector.enabled ? copy.mcpView.enabled : copy.mcpView.disabled}
+                      {" · "}
+                      {connector.statusLabel}
+                      {" · "}
+                      {managementCopy.toolCount(connector.toolCount)}
+                    </span>
+                  </div>
+                  <form action={setMCPConnectorEnabledAction}>
+                    <input name="projectId" type="hidden" value={activeProject.id} />
+                    <input name="connectorId" type="hidden" value={connector.id} />
+                    <input
+                      name="enabled"
+                      type="hidden"
+                      value={connector.enabled ? "false" : "true"}
+                    />
+                    <ManagementSubmitButton
+                      pendingLabel={
+                        connector.enabled
+                          ? managementCopy.pending.disable
+                          : managementCopy.pending.enable
+                      }
+                    >
+                      {connector.enabled ? copy.mcpView.disable : copy.mcpView.enable}
+                    </ManagementSubmitButton>
+                  </form>
+                  <div className="mcpToolGrid" aria-label={copy.mcpView.toolsTitle}>
+                    {connector.tools.length > 0 ? (
+                      connector.tools.map((tool) => (
+                        <div className="mcpToolCard" key={`${connector.id}:${tool.name}`}>
+                          <strong>{tool.name}</strong>
+                          {tool.description ? <p>{tool.description}</p> : null}
+                          <span>{copy.mcpView.permissionSummary(tool.permission)}</span>
+                          <span>{copy.mcpView.rolesSummary(tool.roleLabels)}</span>
+                          <span>
+                            {tool.requiresApproval
+                              ? copy.mcpView.approvalRequired
+                              : copy.mcpView.approvalNotRequired}
+                            {" · "}
+                            {managementCopy.approvalStates[tool.approvalState]}
+                          </span>
+                          <small>{managementCopy.statusLabels[tool.status]}</small>
+                          {tool.requiresApproval ? (
+                            <form action={setMCPToolApprovalAction}>
+                              <input name="projectId" type="hidden" value={activeProject.id} />
+                              <input name="connectorId" type="hidden" value={connector.id} />
+                              <input name="toolName" type="hidden" value={tool.name} />
+                              <input
+                                name="approved"
+                                type="hidden"
+                                value={tool.approvalState === "approved" ? "false" : "true"}
+                              />
+                              <ManagementSubmitButton
+                                pendingLabel={managementCopy.pending.approval}
+                              >
+                                {tool.approvalState === "approved"
+                                  ? copy.mcpView.revoke
+                                  : copy.mcpView.approve}
+                              </ManagementSubmitButton>
+                            </form>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <p>{copy.mcpView.emptyVisibleTools}</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p>{copy.mcpView.emptyConnectors}</p>
+            )}
+          </section>
+
+          <section className="mcpList" aria-labelledby="mcp-visible-tools-title">
+            <h2 id="mcp-visible-tools-title">{copy.mcpView.visibleToolsTitle}</h2>
+            {management.visibleToolGroups.map((group) => (
+              <div className="mcpVisibleRole" key={group.role}>
+                <strong>{group.label}</strong>
+                {group.tools.length > 0 ? (
+                  group.tools.map((tool) => (
+                    <div
+                      className="mcpToolCard"
+                      key={`${group.role}:${tool.connectorId}:${tool.name}`}
+                    >
+                      <strong>{tool.name}</strong>
+                      <span>{tool.connectorId}</span>
+                      <span>{copy.mcpView.permissionSummary(tool.permission)}</span>
+                      <small>{managementCopy.statusLabels[tool.status]}</small>
+                      {tool.executionAvailable ? (
+                        <form action={executeMCPToolAction} className="mcpExecutionForm">
+                          <input name="projectId" type="hidden" value={activeProject.id} />
+                          <input name="connectorId" type="hidden" value={tool.connectorId} />
+                          <input name="toolName" type="hidden" value={tool.name} />
+                          <input name="role" type="hidden" value={group.role} />
+                          <input name="argumentsJson" type="hidden" value="{}" />
+                          <ManagementSubmitButton pendingLabel={managementCopy.pending.execute}>
+                            {copy.mcpView.executeReadOnly}
+                          </ManagementSubmitButton>
+                        </form>
+                      ) : (
+                        <small>{copy.mcpView.writeToolUnavailable}</small>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <span>{copy.mcpView.emptyVisibleTools}</span>
+                )}
+              </div>
+            ))}
+          </section>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+type OptionalMCPManagementPageCopy = Partial<
+  Omit<MCPManagementPageCopy, "approvalStates" | "pending" | "statusLabels">
+> & {
+  approvalStates?: Partial<Record<MCPManagementApprovalState, string>>;
+  pending?: Partial<MCPManagementPageCopy["pending"]>;
+  statusLabels?: Partial<Record<MCPManagementStatus, string>>;
+};
+
+const fallbackMCPStatusLabels: Record<MCPManagementStatus, string> = {
+  configured: "Configured",
+  disabled: "Disabled",
+  invalid_definition: "Invalid definition",
+  approval_required: "Approval required",
+  no_visible_tools: "No visible tools",
+  execution_not_available: "Execution unavailable"
+};
+
+const fallbackMCPApprovalStates: Record<MCPManagementApprovalState, string> = {
+  not_required: "No approval required",
+  pending: "Pending approval",
+  approved: "Approved"
+};
+
+const fallbackMCPPendingLabels: MCPManagementPageCopy["pending"] = {
+  create: "Saving connector...",
+  enable: "Enabling...",
+  disable: "Disabling...",
+  approval: "Updating approval...",
+  execute: "Running check..."
+};
+
+function getMCPManagementPageCopy(copy: ReturnType<typeof getWorkbenchCopy>): MCPManagementPageCopy {
+  const management =
+    (copy.mcpView as { management?: OptionalMCPManagementPageCopy }).management ?? {};
+
+  return {
+    runtimeSummaryTitle: management.runtimeSummaryTitle ?? "MCP runtime projection",
+    safeProjectionNotice:
+      management.safeProjectionNotice ??
+      "MCP management shows bounded connector and tool metadata. Raw outputs and raw arguments stay outside the Web surface.",
+    connectorDefinitionHint:
+      management.connectorDefinitionHint ??
+      "Connector definitions should contain project-scoped metadata and tool policy only.",
+    summary:
+      management.summary ??
+      ((summary) =>
+        `${summary.connectorCount} connectors · ${summary.visibleToolCount} visible tools · ${summary.executionEligibleToolCount} read-only checks`),
+    runtimeSummary:
+      management.runtimeSummary ??
+      ((summary) =>
+        `${summary.enabledConnectorCount} enabled connectors are evaluated against current project skills, role permissions, approvals, and read-only policy.`),
+    toolCount: management.toolCount ?? ((count) => `${count} tools`),
+    policyItems: management.policyItems ?? [
+      "Visible tools come from backend role, permission, approval, and connector state.",
+      "Read-only checks submit no browser-provided raw argument JSON.",
+      "Failures render stable diagnostics and fail closed."
+    ],
+    statusLabels: {
+      ...fallbackMCPStatusLabels,
+      ...management.statusLabels
+    },
+    approvalStates: {
+      ...fallbackMCPApprovalStates,
+      ...management.approvalStates
+    },
+    pending: {
+      ...fallbackMCPPendingLabels,
+      ...management.pending
+    }
+  };
 }
 
 function ArtifactDiffBlock({
@@ -1695,7 +2045,7 @@ function createArtifactPreviewSearchParams({
   skillError,
   workerError
 }: {
-  activeView: "artifacts" | "skills" | "models" | "workbench";
+  activeView: "artifacts" | "skills" | "models" | "mcp" | "workbench";
   errorCode?: ProjectFlowErrorCode;
   interruptError?: InterruptFlowErrorCode;
   modelError?: ModelFlowErrorCode;

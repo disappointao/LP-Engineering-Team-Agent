@@ -515,7 +515,7 @@ const deploymentBoundSkill = {
   }
 };
 
-function setActiveEmptyProjectState() {
+function setActiveEmptyProjectState(overrides: Record<string, unknown> = {}) {
   pageMocks.currentProjectId = "project_1";
   pageMocks.pageState = {
     kind: "empty",
@@ -555,7 +555,8 @@ function setActiveEmptyProjectState() {
         deployer: []
       }
     },
-    workerQueue: emptyWorkerQueue
+    workerQueue: emptyWorkerQueue,
+    ...overrides
   };
 }
 
@@ -1806,7 +1807,7 @@ describe("HomePage project flow errors", () => {
     );
   });
 
-  it("hides MCP navigation from the V1 web surface", async () => {
+  it("renders MCP navigation as a post-V1 management view", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({})
     });
@@ -1814,51 +1815,95 @@ describe("HomePage project flow errors", () => {
     const linkLabels = links.map((link) => collectText(link.props?.children).join(""));
 
     expect(linkLabels).toContain("Workbench");
+    expect(linkLabels).toContain("Artifacts");
     expect(linkLabels).toContain("Skills");
     expect(linkLabels).toContain("Models");
-    expect(linkLabels).not.toContain("MCP");
-    expect(
-      links.some(
-        (link) =>
-          link.props?.href === "/?view=mcp" ||
-          collectText(link.props?.children).join("") === "MCP"
-      )
-    ).toBe(false);
+    expect(linkLabels).toContain("MCP");
+    expect(links.some((link) => link.props?.href === "/?view=mcp")).toBe(true);
   });
 
-  it("downgrades the legacy mcp view to the workbench without rendering MCP forms", async () => {
-    setActiveEmptyProjectState();
+  it("renders the MCP management view without raw argument controls", async () => {
+    setActiveEmptyProjectState({
+      mcp: {
+        connectors: [
+          {
+            id: "connector_assets",
+            projectId: "project_1",
+            targetKey: "project_1_SECRET_PRODUCT",
+            scope: "project",
+            name: "Assets",
+            description: "Approved asset search.",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_assets",
+              name: "searchAssets",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
 
     const page = await HomePage({
-      searchParams: Promise.resolve({ view: "mcp", mcpError: "mcp_connector_json_invalid" })
+      searchParams: Promise.resolve({
+        view: "mcp",
+        debug: "MCP_BROWSER_SECRET",
+        toolArguments: "MCP_TOOL_SECRET"
+      })
     });
     const text = collectText(page).join(" ");
     const links = collectElements(page, "a");
     const textareas = collectElements(page, "textarea");
+    const inputs = collectElements(page, "input");
 
-    expect(text).toContain("What can I help you build?");
-    expect(text).not.toContain("Project MCP");
-    expect(text).not.toContain("Connector JSON");
-    expect(text).not.toContain("Visible tools");
-    expect(text).not.toContain("Run read-only check");
-    expect(text).not.toContain("Enter a valid connector JSON.");
-    expect(text).not.toContain("请输入有效的连接器 JSON。");
-    expect(textareas.some((textarea) => textarea.props?.name === "definitionJson")).toBe(false);
+    expect(text).toContain("Project MCP");
+    expect(text).toContain("Assets");
+    expect(text).toContain("searchAssets");
+    expect(text).toContain("Run read-only check");
+    expect(text).not.toContain("MCP_BROWSER_SECRET");
+    expect(text).not.toContain("MCP_TOOL_SECRET");
+    expect(text).not.toContain("SECRET_PRODUCT");
+    expect(textareas.some((textarea) => textarea.props?.name === "argumentsJson")).toBe(false);
     expect(
-      links.some(
-        (link) =>
-          link.props?.href === "/" &&
-          link.props?.["aria-current"] === "page" &&
-          collectText(link.props?.children).join("") === "Workbench"
+      inputs.some(
+        (input) =>
+          input.props?.type === "hidden" &&
+          input.props?.name === "argumentsJson" &&
+          input.props?.value === "{}"
       )
     ).toBe(true);
     expect(
       links.some(
         (link) =>
-          link.props?.href === "/?view=mcp" ||
+          link.props?.href === "/?view=mcp" &&
+          link.props?.["aria-current"] === "page" &&
           collectText(link.props?.children).join("") === "MCP"
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps the workbench page from rendering MCP forms", async () => {
@@ -3533,8 +3578,10 @@ describe("HomePage project flow errors", () => {
       })
     });
     const text = collectText(page).join(" ");
-    const links = collectElements(page, "a");
-    const hrefs = links.map((link) => String(link.props?.href));
+    const snippetLinks = collectElements(page, "a").filter(
+      (link) => collectText(link.props?.children).join("") === "Preview snippet"
+    );
+    const snippetHrefs = snippetLinks.map((link) => String(link.props?.href));
 
     expect(text).toContain("Artifact workspace");
     expect(text).toContain("Completed LP");
@@ -3550,9 +3597,9 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("index.single.html");
     expect(text).not.toContain("<!doctype html>");
     expect(text).not.toContain("window.lpAgent");
-    expect(hrefs).toContainEqual(expect.stringContaining("view=artifacts"));
-    expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
-    expect(hrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
+    expect(snippetHrefs).toContainEqual(expect.stringContaining("view=artifacts"));
+    expect(snippetHrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
+    expect(snippetHrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
   });
 
   it("renders sanitized artifact workspace failure states without leaking invalid paths", async () => {
@@ -3841,7 +3888,7 @@ describe("HomePage project flow errors", () => {
     expect(href.match(/artifactPath=/g)).toHaveLength(1);
   });
 
-  it("does not preserve legacy mcp view in artifact preview snippet links", async () => {
+  it("does not preserve MCP query diagnostics in artifact preview snippet links", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState({
@@ -3882,7 +3929,9 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({
       searchParams: Promise.resolve({
-        view: "mcp",
+        view: "artifacts",
+        mcpError: "mcp_connector_json_invalid",
+        debug: "MCP_BROWSER_SECRET",
         interruptError: "interrupt_failed",
         artifactPath: "styles.css"
       })
@@ -3894,6 +3943,8 @@ describe("HomePage project flow errors", () => {
 
     expect(hrefs.length).toBeGreaterThan(0);
     expect(hrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
+    expect(hrefs).not.toContainEqual(expect.stringContaining("mcpError"));
+    expect(hrefs).not.toContainEqual(expect.stringContaining("MCP_BROWSER_SECRET"));
     expect(hrefs).toContainEqual(expect.stringContaining("interruptError=interrupt_failed"));
     expect(hrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
   });
