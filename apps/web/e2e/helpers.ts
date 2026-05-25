@@ -157,6 +157,13 @@ export async function expectModelsManagementSurface(page: Page) {
   await expect(page.getByText("Secret values are never shown")).toBeVisible();
 }
 
+export async function expectMCPManagementSurface(page: Page) {
+  await page.getByRole("link", { name: "MCP", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]view=mcp(?:&|$)/);
+  await expect(page.getByRole("heading", { name: "Project MCP", exact: true })).toBeVisible();
+  await expect(page.getByText("MCP runtime projection", { exact: true })).toBeVisible();
+}
+
 export async function expectWorkbenchLayoutContract(page: Page) {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { expectNoVisibleTextLeaks } from "./helpers";
+import { expectMCPManagementSurface, expectNoVisibleTextLeaks } from "./helpers";
 
-test("shows Skill-only alpha boundary views", async ({ page }) => {
+test("shows alpha boundary views", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Project name").fill("E2E Alpha Project");
   await page.getByRole("button", { name: "Create project" }).click();
@@ -43,22 +43,22 @@ test("shows Skill-only alpha boundary views", async ({ page }) => {
     )
   ).toBeVisible();
 
-  await expect(navigation.getByRole("link", { name: "MCP" })).toHaveCount(0);
+  await expect(navigation.getByRole("link", { name: "MCP" })).toBeVisible();
+  await expectMCPManagementSurface(page);
 
   await page.goto(
     "/?view=mcp&debug=MCP_BROWSER_SECRET&connectorJson=MCP_CONNECTOR_SECRET&toolArguments=MCP_TOOL_SECRET"
   );
-  await expect(
-    page.getByRole("heading", { name: "What can I help you build?" })
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { exact: true, name: "Project MCP" })).toHaveCount(0);
-  await expect(page.getByText("Connector JSON")).toHaveCount(0);
-  await expect(page.getByText("Run read-only check")).toHaveCount(0);
+  await expect(page).toHaveURL(/[?&]view=mcp(?:&|$)/);
+  await expect(page.getByRole("heading", { exact: true, name: "Project MCP" })).toBeVisible();
+  await expect(page.getByText("MCP runtime projection", { exact: true })).toBeVisible();
+  await expect(page.getByText("Connector JSON", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What can I help you build?" })).toHaveCount(0);
   await expect(
     page
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("link", { name: "MCP" })
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expectNoVisibleTextLeaks(page, [
     "MCP_BROWSER_SECRET",
     "MCP_CONNECTOR_SECRET",
