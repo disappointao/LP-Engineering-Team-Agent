@@ -334,10 +334,19 @@ function toSafeTool(tool: unknown): SafeMCPTool | undefined {
 
   const name = normalizeDisplayString(tool.name);
   const permission = normalizeDisplayString(tool.permission);
-  const roles = Array.isArray(tool.roles) ? tool.roles.filter(isMCPAgentRole) : [];
+  const roles = tool.roles;
   const description = normalizeDisplayString(tool.description);
 
-  if (!name || !permission || roles.length === 0 || typeof tool.requiresApproval !== "boolean") {
+  if (
+    !name ||
+    !permission ||
+    !Array.isArray(roles) ||
+    roles.length === 0 ||
+    !roles.every(isMCPAgentRole) ||
+    typeof tool.requiresApproval !== "boolean" ||
+    (hasOwn(tool, "readOnly") && typeof tool.readOnly !== "boolean") ||
+    (hasOwn(tool, "sideEffect") && tool.sideEffect !== "read" && tool.sideEffect !== "write")
+  ) {
     return undefined;
   }
 
@@ -380,4 +389,8 @@ function normalizeDisplayString(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }

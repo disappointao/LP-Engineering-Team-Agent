@@ -324,6 +324,117 @@ describe("buildMCPManagementViewModel", () => {
     expect(JSON.stringify(viewModel)).not.toContain("RAW_APPROVAL_SECRET");
     expect(JSON.stringify(viewModel)).not.toContain("RAW_PARTIAL_UPDATED_SECRET");
   });
+
+  it("fails closed for tool definitions with mixed valid and invalid roles", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_roles_SECRET",
+            targetKey: "project_1",
+            scope: "project",
+            name: "RAW_ROLES_CONNECTOR_SECRET",
+            description: "RAW_ROLES_DESCRIPTION_SECRET",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                description: "RAW_ROLES_TOOL_DESCRIPTION_SECRET",
+                permission: "assets:read",
+                roles: ["planner", "RAW_ROLE_SECRET"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "RAW_ROLES_UPDATED_SECRET"
+          } as never
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]).toEqual({
+      id: "connector_invalid_1",
+      name: "Invalid connector",
+      enabled: false,
+      toolCount: 0,
+      status: "invalid_definition",
+      statusLabel: "Invalid definition",
+      tools: []
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("connector_roles_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_ROLES_CONNECTOR_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_ROLES_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_ROLES_TOOL_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_ROLE_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_ROLES_UPDATED_SECRET");
+  });
+
+  it("fails closed for tool definitions with malformed optional fields", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_optional_SECRET",
+            targetKey: "project_1",
+            scope: "project",
+            name: "RAW_OPTIONAL_CONNECTOR_SECRET",
+            description: "RAW_OPTIONAL_DESCRIPTION_SECRET",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                description: "RAW_OPTIONAL_TOOL_DESCRIPTION_SECRET",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: "RAW_READ_ONLY_SECRET",
+                sideEffect: "RAW_SIDE_EFFECT_SECRET"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "RAW_OPTIONAL_UPDATED_SECRET"
+          } as never
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]).toEqual({
+      id: "connector_invalid_1",
+      name: "Invalid connector",
+      enabled: false,
+      toolCount: 0,
+      status: "invalid_definition",
+      statusLabel: "Invalid definition",
+      tools: []
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("connector_optional_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_OPTIONAL_CONNECTOR_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_OPTIONAL_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_OPTIONAL_TOOL_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_READ_ONLY_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_SIDE_EFFECT_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_OPTIONAL_UPDATED_SECRET");
+  });
 });
 
 describe("isReadOnlyVisibleMCPTool", () => {
