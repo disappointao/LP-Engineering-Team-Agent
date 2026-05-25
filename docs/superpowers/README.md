@@ -494,6 +494,10 @@
    - Stage 47 Internal RC Trial Feedback Batch v0 implementation plan（已实现，当前已完成）。
    - 在 Stage 47 design 后阅读，用于复核 operator trial evidence ledger、完整 deterministic gates、completion note / feedback log / roadmap closeout，以及无 blocker 后默认后续路由切到 Stage 49 的依据；trial evidence 见 `docs/v1-polished-alpha-operator-trial.md`。
 
+123. `specs/2026-05-25-post-v1-backlog-prioritization-design.md`
+   - Stage 49 Post-V1 Backlog Prioritization v0 design（已批准，待实施计划）。
+   - 在 Stage 47 implementation plan 和当前 roadmap 后阅读，用于把 V1 polished alpha completion、operator trial evidence、feedback batch、known limitations 和较长 post-V1 backlog 转成可复核的优先级模型，并默认把 Stage 51 收窄为 MCP Management Surface v0 Spec Kickoff；本阶段不实现 runtime、Web、MCP、provider、deployment、auth、storage 或 browser platform 功能。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
