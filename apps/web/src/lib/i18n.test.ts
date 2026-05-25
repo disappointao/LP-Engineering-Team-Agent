@@ -236,10 +236,16 @@ describe("web i18n", () => {
     expect(zh.skillsView.management.lifecycleStages.inactive).toBe("已停用/归档");
 
     expect(en.modelsView.management.projectSummaryTitle).toBe("Project model summary");
+    expect(en.modelsView.management.localRunChecklistTitle).toBe("Local real-provider run checklist");
+    expect(en.modelsView.management.localRunChecklistItems.chatRoute).toBe("Chat ready");
+    expect(en.modelsView.management.localRunChecklistStates.ready).toBe("Ready");
     expect(en.modelsView.management.notices.provider_created).toBe("Model provider saved.");
     expect(en.modelsView.management.routeStates.failClosed).toBe("Fail closed");
     expect(en.modelsView.management.safeMetadataNote).toContain("Secret values are never shown");
     expect(zh.modelsView.management.projectSummaryTitle).toBe("项目模型摘要");
+    expect(zh.modelsView.management.localRunChecklistTitle).toBe("本地真实 provider 运行检查");
+    expect(zh.modelsView.management.localRunChecklistItems.lpRoutes).toBe("LP 生成就绪");
+    expect(zh.modelsView.management.localRunChecklistStates.blocked).toBe("未就绪");
     expect(zh.modelsView.management.notices.route_saved).toBe("模型路由已保存。");
   });
 

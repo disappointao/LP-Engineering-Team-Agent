@@ -53,9 +53,18 @@ REAL_MODEL_RUNTIME=0
 REAL_MODEL_PROVIDER_TEST=0
 ```
 
-真实 provider 集成测试需要单独开启：设置 `REAL_MODEL_PROVIDER_TEST=1`，并填写对应 adapter 的 provider 变量。Web/API 真实 runtime 实验也需要单独开启：设置 `REAL_MODEL_RUNTIME=1`，并填写 provider 变量。
+真实 provider smoke 是可选 operator 路径；默认本地开发、CI-ish checks 和 alpha gates 不需要 key，也不会触发真实 provider。只有 operator 本机提供 key 并显式设置 `REAL_MODEL_RUNTIME=1` 时才运行。
 
-无论使用哪条 opt-in 路径，只填写你本地要验证的 provider 区块。OpenAI-compatible adapter 按 `.env.example` 风格配置：
+本地真实 provider 试跑可从专用模板开始：
+
+```bash
+cp .env.real-provider.example .env.local
+pnpm real-provider:doctor
+```
+
+`pnpm real-provider:doctor` 是无网络 preflight：它检查 `.env.local`、提示 Web Models 字段，但不发起真实模型调用、不打印 API key 值。真实 provider 集成测试仍需要单独设置 `REAL_MODEL_PROVIDER_TEST=1`。
+
+无论使用哪条 opt-in 路径，只填写你本地要验证的 provider 区块。OpenAI-compatible adapter 按 `.env.real-provider.example` 风格配置：
 
 ```env
 OPENAI_COMPATIBLE_BASE_URL=https://open.bigmodel.cn/api/paas/v4
@@ -67,7 +76,7 @@ OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 
 真实 provider 本地 smoke 的最小路径见 [docs/real-provider-alpha-smoke.md](docs/real-provider-alpha-smoke.md)。简要流程：
 
-1. 在 `.env.local` 设置 `REAL_MODEL_RUNTIME=1`。
+1. 运行 `pnpm real-provider:doctor`，确认 `.env.local` 已设置 `REAL_MODEL_RUNTIME=1` 且至少一个 provider profile ready。
 2. 在 Web 的 Models view 创建 provider，选择 `anthropic-messages` 或 `openai-completions`。
 3. 使用 `apiKeyEnv` 引用本地环境变量名，不在 UI 或文档中填写真实 key。
 4. 为 `assistant`、`planner` 和 `builder` 保存 route。

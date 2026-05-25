@@ -1732,6 +1732,94 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("OPENAI_API_KEY=");
   });
 
+  it("renders the safe Models local real-provider run checklist near the project summary", async () => {
+    setActiveEmptyProjectState();
+    pageMocks.pageState = {
+      ...(pageMocks.pageState as Record<string, unknown>),
+      models: {
+        providers: [
+          {
+            id: "provider_openai",
+            scope: "project",
+            targetKey: "project_1",
+            name: "OpenAI",
+            provider: "openai",
+            config: {
+              api: "openai-completions",
+              baseUrl: "https://secret-provider.example.test/v1",
+              apiKeyEnv: "OPENAI_API_KEY",
+              models: [{ id: "gpt-5.4" }]
+            },
+            enabled: true,
+            createdAt: "2026-05-24T00:00:00.000Z",
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          }
+        ],
+        routes: [
+          {
+            id: "route_assistant",
+            scope: "project",
+            targetKey: "project_1",
+            role: "assistant",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:01:00.000Z",
+            updatedAt: "2026-05-24T00:01:00.000Z"
+          },
+          {
+            id: "route_planner",
+            scope: "project",
+            targetKey: "project_1",
+            role: "planner",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:02:00.000Z",
+            updatedAt: "2026-05-24T00:02:00.000Z"
+          },
+          {
+            id: "route_builder",
+            scope: "project",
+            targetKey: "project_1",
+            role: "builder",
+            providerId: "provider_openai",
+            model: "gpt-5.4",
+            createdAt: "2026-05-24T00:03:00.000Z",
+            updatedAt: "2026-05-24T00:03:00.000Z"
+          }
+        ],
+        resolvedPolicy: {
+          assistant: { provider: "provider_openai", model: "gpt-5.4" },
+          planner: { provider: "provider_openai", model: "gpt-5.4" },
+          builder: { provider: "provider_openai", model: "gpt-5.4" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "models" })
+    });
+    const text = collectText(page).join(" ");
+    const orderedText = collectRenderOrderText(page).join(" ");
+
+    expect(text).toContain("Project model summary");
+    expect(text).toContain("Local real-provider run checklist");
+    expect(text).toContain("Provider ready");
+    expect(text).toContain("Chat ready");
+    expect(text).toContain("LP generation ready");
+    expect(text).toContain("Ready");
+    expect(orderedText.indexOf("Project model summary")).toBeLessThan(
+      orderedText.indexOf("Provider configuration")
+    );
+    expect(orderedText.indexOf("Local real-provider run checklist")).toBeLessThan(
+      orderedText.indexOf("Provider configuration")
+    );
+    expect(text).not.toContain("secret-provider.example.test");
+    expect(text).not.toContain("OPENAI_API_KEY");
+    expect(text).not.toContain("ANTHROPIC_API_KEY");
+  });
+
   it("renders fail-closed model route diagnostics without provider secrets", async () => {
     setActiveEmptyProjectState();
     pageMocks.pageState = {

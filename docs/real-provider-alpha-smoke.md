@@ -9,13 +9,28 @@
 - 排查问题时不要粘贴 raw provider response、真实 key、完整内部 base URL、本机路径或完整 artifact 内容。
 - 如果需要分享日志，只分享 bounded run event、UI 错误码、provider api 类型、model id 和是否配置了 base URL / key env。
 
+## 快速本地路径
+
+默认先运行 deterministic gates；真实 provider smoke 不是 release gate。只有 operator 本机提供 key，并明确 opt in `REAL_MODEL_RUNTIME=1` 时，才运行真实 provider smoke。
+
+```bash
+cp .env.real-provider.example .env.local
+pnpm real-provider:doctor
+```
+
+`pnpm real-provider:doctor` 只帮助 operator 检查本机 env profile 和安全边界；route readiness 继续在 Web `Models` checklist 中确认。没有 `REAL_MODEL_RUNTIME=1` 和本机 key 时，它应保持 checklist / skip 语义，不触网、不回退成假成功。需要把 preflight 作为本机严格检查时可运行：
+
+```bash
+pnpm real-provider:doctor -- --strict
+```
+
 ## 准备环境
 
 先安装依赖并复制本地 env 文件：
 
 ```bash
 pnpm install
-cp .env.example .env.local
+cp .env.real-provider.example .env.local
 ```
 
 默认本地开发保持：
@@ -86,6 +101,7 @@ Models view 中创建 provider：
 | ID | 场景 | 设置 | 操作 | 期望结果 |
 | --- | --- | --- | --- | --- |
 | S0 | 默认无 key gate | `REAL_MODEL_RUNTIME=0`、`REAL_MODEL_PROVIDER_TEST=0` | 运行 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` | 全部不需要真实 provider key，不触发真实 provider 调用。 |
+| S0.5 | Local smoke checklist | 复制 `.env.real-provider.example`，只填写本机要验证的 provider key | 运行 `pnpm real-provider:doctor` | 输出 provider profile readiness 和 Web Models 字段提示；不打印 key 值、不发起网络请求；缺 key 时仍是 checklist / skip 状态。 |
 | S1 | Missing key fail-closed | `REAL_MODEL_RUNTIME=1`，配置 provider route，但 `.env.local` 不填 key 值 | 提交普通聊天 prompt | 生成失败为 bounded error；timeline 不泄漏 env var 名称、secret、完整 base URL 或 raw provider response。 |
 | S2 | 普通聊天 streaming | `REAL_MODEL_RUNTIME=1`，配置 `assistant` route 和 key | 提交 `请用三点总结这个产品首页应该表达什么` | UI 出现流式 assistant delta，完成后持久化完整 assistant message。 |
 | S3 | LP Planner structured output | 同上，并配置 `planner` route | 提交 `生成一个春季电商活动的静态 HTML 落地页` | Planner run 完成，`model.output.parsed` 显示 `LPBriefSchema`，不展示 raw model JSON。 |
@@ -160,6 +176,8 @@ pnpm exec vitest run packages/model-gateway/src/anthropic-messages.integration.t
 REAL_MODEL_RUNTIME=0
 REAL_MODEL_PROVIDER_TEST=0
 ```
+
+如果本次使用了 `.env.real-provider.example`，收尾时确认真实 key 仍只存在于本机 `.env.local`，不要把 `.env.local`、terminal 输出中的内部 endpoint、raw provider body 或完整 artifact 内容提交到反馈记录。
 
 重新运行默认 deterministic gate：
 

@@ -157,7 +157,7 @@ pixel baseline update 如果未来启用，必须在 PR 描述或 closeout 中�
 ## Recommended Follow-Up Candidates
 
 - Stage56 Browser Compatibility Smoke Discovery v0：设计 opt-in Firefox/WebKit/local compatibility smoke，不改变默认 gate。
-- Stage57 Visual Baseline Candidate Discovery v0：只评估少量稳定 surfaces 是否值得 pixel baseline。
+- Future Visual Baseline Candidate Discovery v0：只评估少量稳定 surfaces 是否值得 pixel baseline。
 - Stage58 Remote Browser Farm Discovery v0：定义 CI/farm provider、artifact retention、network/no-key policy 和 triage ownership。
 
 ## Validation Evidence

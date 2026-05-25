@@ -98,8 +98,9 @@ Stage 46 completion gate 的本轮执行结果记录在 `docs/v1-polished-alpha-
 
 - [ ] 点击 sidebar 中的 `Models`，确认 view 能打开，并展示 deterministic/mock resolved routes 和真实 provider 配置表单字段。
 - [ ] Models view 明确真实 provider 是 opt-in；默认 alpha check 不需要 API key。
+- [ ] 真实 provider smoke 未运行也不阻塞本清单；除非本次 operator 明确提供 key 并 opt in，否则保持 `REAL_MODEL_RUNTIME=0`。
 - [ ] 缺失 provider、disabled provider 或 route 指向不可用 provider 时，页面显示 bounded fail-closed 提示。
-- [ ] 可选真实 provider smoke：按 `docs/real-provider-alpha-smoke.md` 设置 `REAL_MODEL_RUNTIME=1`，配置 provider、`apiKeyEnv`、`assistant` / `planner` / `builder` routes，然后手动验证普通聊天 streaming、LP prompt、usage metadata 和 missing key fail-closed。
+- [ ] 可选真实 provider smoke：先按 `docs/real-provider-alpha-smoke.md` 的 `.env.real-provider.example` / `pnpm real-provider:doctor` 准备，再配置 provider、`apiKeyEnv`、`assistant` / `planner` / `builder` routes，然后手动验证普通聊天 streaming、LP prompt、usage metadata 和 missing key fail-closed。
 - [ ] 点击 sidebar 中的 `MCP`，确认 management view 能打开，并且是 Stage54 post-V1 safe metadata / read-only management surface。
 - [ ] 不配置 MCP connector 的情况下，普通聊天、LP、Artifacts、Skills 和 Models 主路径仍可完成。
 - [ ] MCP connector 页面只展示 bounded connector metadata、visible tool metadata、approval summary、health / diagnostic summary 和 read-only eligibility，不展示 raw MCP output、raw arguments、secret、本机路径、未脱敏异常或 malformed raw JSON。
