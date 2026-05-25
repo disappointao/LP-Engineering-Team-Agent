@@ -378,6 +378,61 @@ describe("buildMCPManagementViewModel", () => {
     expect(JSON.stringify(viewModel)).not.toContain("/private/tmp");
   });
 
+  it("redacts broader local paths and lowercase secret-like display metadata", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_local_paths",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Local paths",
+            description: "Reads /etc/passwd and /Volumes/team/private.json",
+            enabled: true,
+            tools: [
+              {
+                name: "inspectLocal",
+                description: "Uses /opt/work/cache and secret-token in debug output",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_local_paths",
+              name: "inspectLocal",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]?.description).toBeUndefined();
+    expect(viewModel.connectors[0]?.tools[0]?.description).toBeUndefined();
+    expect(JSON.stringify(viewModel)).not.toContain("/etc/passwd");
+    expect(JSON.stringify(viewModel)).not.toContain("/Volumes/team");
+    expect(JSON.stringify(viewModel)).not.toContain("/opt/work");
+    expect(JSON.stringify(viewModel)).not.toContain("secret-token");
+  });
+
   it("does not mark stale visible tools executable without valid connector approval state", () => {
     const viewModel = buildMCPManagementViewModel({
       copy,

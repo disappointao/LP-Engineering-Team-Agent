@@ -541,9 +541,12 @@ function normalizeDisplayString(value: unknown): string {
 
 function containsUnsafeDisplayContent(value: string): boolean {
   return (
-    /\/(?:Users|home|private|tmp|var)\//i.test(value) ||
+    /(?:^|[\s("'`])\/(?!\/)[A-Za-z0-9._~/-]+/.test(value) ||
     /[A-Za-z]:[\\/]/.test(value) ||
     /\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)[A-Z0-9_]*\b/.test(
+      value
+    ) ||
+    /\b(?:secret|token|password|passwd|api[_-]?key|private[_-]?key|credential)(?:[_-](?:secret|token|key|value))?\b/i.test(
       value
     ) ||
     /\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)[A-Z0-9_]*\s*[:=]/i.test(
