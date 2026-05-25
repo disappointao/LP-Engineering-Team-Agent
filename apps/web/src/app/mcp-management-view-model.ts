@@ -74,14 +74,6 @@ type MCPManagementInputState = Omit<ProjectMCPState, "visibleToolsByRole"> & {
     Partial<Record<"assistant", ProjectMCPVisibleTool[]>>;
 };
 
-type MCPManagementCopy = WorkbenchCopy & {
-  mcpView: WorkbenchCopy["mcpView"] & {
-    management?: {
-      statusLabels?: Partial<Record<MCPManagementStatus, string>>;
-    };
-  };
-};
-
 type SafeMCPConnector = {
   id: string;
   name: string;
@@ -104,15 +96,6 @@ type SafeMCPTool = {
 
 type MCPApprovalState = Extract<MCPManagementToolRow["approvalState"], "pending" | "approved">;
 type MCPVisibleToolIndex = Map<MCPAgentRole, Map<string, Set<string>>>;
-
-const fallbackMCPManagementStatusLabels: Record<MCPManagementStatus, string> = {
-  configured: "Configured",
-  disabled: "Disabled",
-  invalid_definition: "Invalid definition",
-  approval_required: "Approval required",
-  no_visible_tools: "No visible tools",
-  execution_not_available: "Execution unavailable"
-};
 
 export function buildMCPManagementViewModel(input: {
   copy: WorkbenchCopy;
@@ -473,11 +456,7 @@ function getMCPManagementStatusLabel(
   copy: WorkbenchCopy,
   status: MCPManagementStatus
 ): string {
-  const copyWithManagement = copy as MCPManagementCopy;
-  return (
-    copyWithManagement.mcpView.management?.statusLabels?.[status] ??
-    fallbackMCPManagementStatusLabels[status]
-  );
+  return copy.mcpView.management.statusLabels[status];
 }
 
 function normalizeDisplayString(value: unknown): string {

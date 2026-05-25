@@ -1906,6 +1906,64 @@ describe("HomePage project flow errors", () => {
     ).toBe(true);
   });
 
+  it("renders localized MCP management copy for Chinese without English fallbacks", async () => {
+    setActiveEmptyProjectState({
+      mcp: {
+        connectors: [
+          {
+            id: "connector_assets",
+            projectId: "project_1",
+            targetKey: "project_1_SECRET_PRODUCT",
+            scope: "project",
+            name: "素材连接器",
+            description: "已批准素材搜索。",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_assets",
+              name: "searchAssets",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    const html = await renderHomePage({
+      searchParams: Promise.resolve({ view: "mcp" }),
+      acceptLanguage: "zh-CN,zh;q=0.9"
+    });
+
+    expect(html).toContain("MCP 运行时投影");
+    expect(html).toContain("1 个连接器 · 1 个可见工具 · 1 个只读检查");
+    expect(html).toContain("已配置");
+    expect(html).not.toContain("MCP runtime projection");
+    expect(html).not.toContain("Configured");
+  });
+
   it("keeps the workbench page from rendering MCP forms", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({})

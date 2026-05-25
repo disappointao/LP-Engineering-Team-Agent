@@ -668,6 +668,7 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mcpHeader > span,
 .skillsHeader span,
 .skillRuntimeChip,
 .modelRuntimeChip {
@@ -682,6 +683,13 @@ button {
   font-size: 0.76rem;
   font-weight: 820;
   white-space: nowrap;
+}
+
+.mcpHeader > span {
+  max-width: min(100%, 430px);
+  padding: 6px 10px;
+  line-height: 1.3;
+  white-space: normal;
 }
 
 .skillRuntimeChip,

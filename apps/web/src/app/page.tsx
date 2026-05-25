@@ -74,26 +74,6 @@ interface HomePageProps {
 }
 
 type MCPManagementViewModel = ReturnType<typeof buildMCPManagementViewModel>;
-type MCPManagementSummary = MCPManagementViewModel["summary"];
-type MCPManagementStatus =
-  | MCPManagementViewModel["connectors"][number]["status"]
-  | MCPManagementViewModel["connectors"][number]["tools"][number]["status"]
-  | MCPManagementViewModel["visibleToolGroups"][number]["tools"][number]["status"];
-type MCPManagementApprovalState =
-  MCPManagementViewModel["connectors"][number]["tools"][number]["approvalState"];
-
-type MCPManagementPageCopy = {
-  runtimeSummaryTitle: string;
-  safeProjectionNotice: string;
-  connectorDefinitionHint: string;
-  summary: (summary: MCPManagementSummary) => string;
-  runtimeSummary: (summary: MCPManagementSummary) => string;
-  toolCount: (count: number) => string;
-  policyItems: string[];
-  statusLabels: Record<MCPManagementStatus, string>;
-  approvalStates: Record<MCPManagementApprovalState, string>;
-  pending: Record<"create" | "enable" | "disable" | "approval" | "execute", string>;
-};
 
 function QuickPromptForm({
   className,
@@ -162,7 +142,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const modelState = getPageModelState(pageState);
   const mcpState = getPageMCPState(pageState);
   const mcpManagement = buildMCPManagementViewModel({ copy, mcpState });
-  const mcpManagementCopy = getMCPManagementPageCopy(copy);
   const activeTask = pageState.kind === "task_ready" ? pageState.task : undefined;
   const activeProject =
     pageState.kind === "task_ready" && pageState.snapshot
@@ -1040,8 +1019,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   activeProject,
                   copy,
                   errorMessage: mcpErrorMessage,
-                  management: mcpManagement,
-                  managementCopy: mcpManagementCopy
+                  management: mcpManagement
                 })
               : null}
 
@@ -1556,15 +1534,15 @@ function MCPManagementView({
   activeProject,
   copy,
   errorMessage,
-  management,
-  managementCopy
+  management
 }: {
   activeProject: WorkbenchPageState["projects"][number] | undefined;
   copy: ReturnType<typeof getWorkbenchCopy>;
   errorMessage?: string;
   management: MCPManagementViewModel;
-  managementCopy: MCPManagementPageCopy;
 }) {
+  const managementCopy = copy.mcpView.management;
+
   return (
     <section className="mcpView" aria-labelledby="mcp-title">
       <header className="mcpHeader">
@@ -1735,78 +1713,6 @@ function MCPManagementView({
       ) : null}
     </section>
   );
-}
-
-type OptionalMCPManagementPageCopy = Partial<
-  Omit<MCPManagementPageCopy, "approvalStates" | "pending" | "statusLabels">
-> & {
-  approvalStates?: Partial<Record<MCPManagementApprovalState, string>>;
-  pending?: Partial<MCPManagementPageCopy["pending"]>;
-  statusLabels?: Partial<Record<MCPManagementStatus, string>>;
-};
-
-const fallbackMCPStatusLabels: Record<MCPManagementStatus, string> = {
-  configured: "Configured",
-  disabled: "Disabled",
-  invalid_definition: "Invalid definition",
-  approval_required: "Approval required",
-  no_visible_tools: "No visible tools",
-  execution_not_available: "Execution unavailable"
-};
-
-const fallbackMCPApprovalStates: Record<MCPManagementApprovalState, string> = {
-  not_required: "No approval required",
-  pending: "Pending approval",
-  approved: "Approved"
-};
-
-const fallbackMCPPendingLabels: MCPManagementPageCopy["pending"] = {
-  create: "Saving connector...",
-  enable: "Enabling...",
-  disable: "Disabling...",
-  approval: "Updating approval...",
-  execute: "Running check..."
-};
-
-function getMCPManagementPageCopy(copy: ReturnType<typeof getWorkbenchCopy>): MCPManagementPageCopy {
-  const management =
-    (copy.mcpView as { management?: OptionalMCPManagementPageCopy }).management ?? {};
-
-  return {
-    runtimeSummaryTitle: management.runtimeSummaryTitle ?? "MCP runtime projection",
-    safeProjectionNotice:
-      management.safeProjectionNotice ??
-      "MCP management shows bounded connector and tool metadata. Raw outputs and raw arguments stay outside the Web surface.",
-    connectorDefinitionHint:
-      management.connectorDefinitionHint ??
-      "Connector definitions should contain project-scoped metadata and tool policy only.",
-    summary:
-      management.summary ??
-      ((summary) =>
-        `${summary.connectorCount} connectors · ${summary.visibleToolCount} visible tools · ${summary.executionEligibleToolCount} read-only checks`),
-    runtimeSummary:
-      management.runtimeSummary ??
-      ((summary) =>
-        `${summary.enabledConnectorCount} enabled connectors are evaluated against current project skills, role permissions, approvals, and read-only policy.`),
-    toolCount: management.toolCount ?? ((count) => `${count} tools`),
-    policyItems: management.policyItems ?? [
-      "Visible tools come from backend role, permission, approval, and connector state.",
-      "Read-only checks submit no browser-provided raw argument JSON.",
-      "Failures render stable diagnostics and fail closed."
-    ],
-    statusLabels: {
-      ...fallbackMCPStatusLabels,
-      ...management.statusLabels
-    },
-    approvalStates: {
-      ...fallbackMCPApprovalStates,
-      ...management.approvalStates
-    },
-    pending: {
-      ...fallbackMCPPendingLabels,
-      ...management.pending
-    }
-  };
 }
 
 function ArtifactDiffBlock({

@@ -10,6 +10,25 @@ import type {
 
 export type Locale = "en" | "zh-CN";
 
+type MCPManagementCopySummary = {
+  connectorCount: number;
+  enabledConnectorCount: number;
+  visibleToolCount: number;
+  executionEligibleToolCount: number;
+};
+
+type MCPManagementStatusCopyKey =
+  | "configured"
+  | "disabled"
+  | "invalid_definition"
+  | "approval_required"
+  | "no_visible_tools"
+  | "execution_not_available";
+
+type MCPManagementApprovalStateCopyKey = "not_required" | "pending" | "approved";
+
+type MCPManagementPendingCopyKey = "create" | "enable" | "disable" | "approval" | "execute";
+
 export interface ExportLabels {
   handoff: string;
   singleHtml: string;
@@ -208,6 +227,18 @@ export interface WorkbenchCopy {
     emptyConnectors: string;
     emptyVisibleTools: string;
     roleLabels: Record<"assistant" | "planner" | "builder" | "reviewer" | "deployer", string>;
+    management: {
+      runtimeSummaryTitle: string;
+      safeProjectionNotice: string;
+      connectorDefinitionHint: string;
+      summary: (summary: MCPManagementCopySummary) => string;
+      runtimeSummary: (summary: MCPManagementCopySummary) => string;
+      toolCount: (count: number) => string;
+      policyItems: string[];
+      statusLabels: Record<MCPManagementStatusCopyKey, string>;
+      approvalStates: Record<MCPManagementApprovalStateCopyKey, string>;
+      pending: Record<MCPManagementPendingCopyKey, string>;
+    };
     errors: Record<MCPFlowErrorCode, string>;
   };
   modelsView: {
@@ -693,8 +724,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     mcpView: {
       title: "Project MCP",
-      subtitle: "Register project connectors and expose only approved, permission-scoped tools to the runtime.",
-      deferredNotice: "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors.",
+      subtitle: "Register project connectors, review tool visibility, and run approved read-only checks from one bounded surface.",
+      deferredNotice: "MCP management is available for bounded connector metadata, approvals, and read-only checks; chat and LP generation still work without connectors.",
       activeProjectLabel: "Active project",
       noProject: "No active project",
       createTitle: "Create connector",
@@ -746,6 +777,43 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         builder: "Builder",
         reviewer: "Reviewer",
         deployer: "Deployer"
+      },
+      management: {
+        runtimeSummaryTitle: "MCP runtime projection",
+        safeProjectionNotice:
+          "MCP management shows bounded connector and tool metadata. Raw outputs and raw arguments stay outside the Web surface.",
+        connectorDefinitionHint:
+          "Connector definitions should contain project-scoped metadata and tool policy only.",
+        summary: (summary) =>
+          `${summary.connectorCount} ${summary.connectorCount === 1 ? "connector" : "connectors"} · ${summary.visibleToolCount} ${summary.visibleToolCount === 1 ? "visible tool" : "visible tools"} · ${summary.executionEligibleToolCount} ${summary.executionEligibleToolCount === 1 ? "read-only check" : "read-only checks"}`,
+        runtimeSummary: (summary) =>
+          `${summary.enabledConnectorCount} ${summary.enabledConnectorCount === 1 ? "enabled connector is" : "enabled connectors are"} evaluated against current project skills, role permissions, approvals, and read-only policy.`,
+        toolCount: (count) => `${count} ${count === 1 ? "tool" : "tools"}`,
+        policyItems: [
+          "Visible tools come from backend role, permission, approval, and connector state.",
+          "Read-only checks submit no browser-provided raw argument JSON.",
+          "Failures render stable diagnostics and fail closed."
+        ],
+        statusLabels: {
+          configured: "Configured",
+          disabled: "Disabled",
+          invalid_definition: "Invalid definition",
+          approval_required: "Approval required",
+          no_visible_tools: "No visible tools",
+          execution_not_available: "Execution unavailable"
+        },
+        approvalStates: {
+          not_required: "No approval required",
+          pending: "Pending approval",
+          approved: "Approved"
+        },
+        pending: {
+          create: "Saving connector...",
+          enable: "Enabling...",
+          disable: "Disabling...",
+          approval: "Updating approval...",
+          execute: "Running check..."
+        }
       },
       errors: {
         project_not_found: "The selected project is no longer available.",
@@ -1301,8 +1369,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     },
     mcpView: {
       title: "项目 MCP",
-      subtitle: "注册项目连接器，并仅向运行时暴露已批准且权限受限的工具。",
-      deferredNotice: "MCP 在本 alpha 中后置；不配置连接器也可以完成聊天和 LP 生成。",
+      subtitle: "注册项目连接器，审查工具可见性，并在受限页面中执行已批准的只读检查。",
+      deferredNotice: "MCP 管理页用于受限的连接器元数据、批准和只读检查；不配置连接器也可以继续聊天和生成 LP。",
       activeProjectLabel: "当前项目",
       noProject: "暂无当前项目",
       createTitle: "创建连接器",
@@ -1354,6 +1422,42 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         builder: "构建员",
         reviewer: "审核员",
         deployer: "部署员"
+      },
+      management: {
+        runtimeSummaryTitle: "MCP 运行时投影",
+        safeProjectionNotice:
+          "MCP 管理页只展示受限的连接器和工具元数据；原始输出和原始参数不会出现在 Web 页面中。",
+        connectorDefinitionHint: "连接器定义应只包含项目范围元数据和工具策略。",
+        summary: (summary) =>
+          `${summary.connectorCount} 个连接器 · ${summary.visibleToolCount} 个可见工具 · ${summary.executionEligibleToolCount} 个只读检查`,
+        runtimeSummary: (summary) =>
+          `${summary.enabledConnectorCount} 个已启用连接器会根据当前项目 Skill、角色权限、批准状态和只读策略进入评估。`,
+        toolCount: (count) => `${count} 个工具`,
+        policyItems: [
+          "可见工具由后端角色、权限、批准状态和连接器状态共同决定。",
+          "只读检查不会提交浏览器侧原始参数 JSON。",
+          "失败会显示稳定诊断，并以 fail closed 方式处理。"
+        ],
+        statusLabels: {
+          configured: "已配置",
+          disabled: "已停用",
+          invalid_definition: "定义无效",
+          approval_required: "需要批准",
+          no_visible_tools: "无可见工具",
+          execution_not_available: "不可执行"
+        },
+        approvalStates: {
+          not_required: "无需批准",
+          pending: "等待批准",
+          approved: "已批准"
+        },
+        pending: {
+          create: "正在保存连接器...",
+          enable: "正在启用...",
+          disable: "正在停用...",
+          approval: "正在更新批准...",
+          execute: "正在运行检查..."
+        }
       },
       errors: {
         project_not_found: "当前项目已经不可用。",

@@ -106,11 +106,33 @@ describe("web i18n", () => {
     expect(en.collaboration.roleLabels.owner).toBe("Owner");
     expect(en.mcpView.executeReadOnly).toBe("Run read-only check");
     expect(en.mcpView.argumentsLabel).toBe("Arguments JSON");
+    expect(en.mcpView.management.runtimeSummaryTitle).toBe("MCP runtime projection");
+    expect(en.mcpView.management.statusLabels.configured).toBe("Configured");
+    expect(en.mcpView.management.approvalStates.pending).toBe("Pending approval");
+    expect(en.mcpView.management.pending.execute).toBe("Running check...");
+    expect(en.mcpView.management.summary({
+      connectorCount: 1,
+      enabledConnectorCount: 1,
+      visibleToolCount: 2,
+      executionEligibleToolCount: 1
+    })).toBe("1 connector · 2 visible tools · 1 read-only check");
+    expect(en.mcpView.management.toolCount(1)).toBe("1 tool");
     expect(en.mcpView.errors.mcp_tool_execution_not_read_only).toBe(
       "Only read-only MCP tools can run in this stage."
     );
     expect(zh.mcpView.executeReadOnly).toBe("执行只读检查");
     expect(zh.mcpView.argumentsLabel).toBe("参数 JSON");
+    expect(zh.mcpView.management.runtimeSummaryTitle).toBe("MCP 运行时投影");
+    expect(zh.mcpView.management.statusLabels.configured).toBe("已配置");
+    expect(zh.mcpView.management.approvalStates.pending).toBe("等待批准");
+    expect(zh.mcpView.management.pending.execute).toBe("正在运行检查...");
+    expect(zh.mcpView.management.summary({
+      connectorCount: 1,
+      enabledConnectorCount: 1,
+      visibleToolCount: 2,
+      executionEligibleToolCount: 1
+    })).toBe("1 个连接器 · 2 个可见工具 · 1 个只读检查");
+    expect(zh.mcpView.management.toolCount(1)).toBe("1 个工具");
     expect(zh.mcpView.errors.mcp_tool_execution_not_read_only).toBe(
       "当前阶段只能执行只读 MCP 工具。"
     );
@@ -256,7 +278,7 @@ describe("web i18n", () => {
       "If a provider or route is missing, the runtime fails closed instead of silently treating a real call as successful."
     );
     expect(en.mcpView.deferredNotice).toBe(
-      "MCP is deferred for this alpha. Chat and LP generation work without configuring connectors."
+      "MCP management is available for bounded connector metadata, approvals, and read-only checks; chat and LP generation still work without connectors."
     );
 
     expect(zh.skillsView.alphaNotice).toBe(
@@ -272,7 +294,7 @@ describe("web i18n", () => {
       "provider 或路由缺失时，runtime 会 fail closed，不会把真实调用静默当作成功。"
     );
     expect(zh.mcpView.deferredNotice).toBe(
-      "MCP 在本 alpha 中后置；不配置连接器也可以完成聊天和 LP 生成。"
+      "MCP 管理页用于受限的连接器元数据、批准和只读检查；不配置连接器也可以继续聊天和生成 LP。"
     );
   });
 
