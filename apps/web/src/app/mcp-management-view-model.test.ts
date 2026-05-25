@@ -218,6 +218,112 @@ describe("buildMCPManagementViewModel", () => {
     expect(JSON.stringify(viewModel)).not.toContain("RAW_MALFORMED_SECRET");
     expect(JSON.stringify(viewModel)).not.toContain("RAW_UPDATED_SECRET");
   });
+
+  it("fails closed for connector records with empty tool definitions", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_empty_SECRET",
+            targetKey: "project_1",
+            scope: "project",
+            name: "RAW_EMPTY_CONNECTOR_SECRET",
+            description: "RAW_EMPTY_DESCRIPTION_SECRET",
+            enabled: true,
+            tools: [],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "RAW_EMPTY_UPDATED_SECRET"
+          } as never
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]).toEqual({
+      id: "connector_invalid_1",
+      name: "Invalid connector",
+      enabled: false,
+      toolCount: 0,
+      status: "invalid_definition",
+      statusLabel: "Invalid definition",
+      tools: []
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("connector_empty_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_EMPTY_CONNECTOR_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_EMPTY_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_EMPTY_UPDATED_SECRET");
+  });
+
+  it("fails closed for connector records with malformed tool definitions", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_partial_SECRET",
+            targetKey: "project_1",
+            scope: "project",
+            name: "RAW_PARTIAL_CONNECTOR_SECRET",
+            description: "RAW_PARTIAL_DESCRIPTION_SECRET",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                description: "Search public assets.",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              },
+              {
+                name: "RAW_TOOL_SECRET",
+                description: "RAW_TOOL_DESCRIPTION_SECRET",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: "RAW_APPROVAL_SECRET"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "RAW_PARTIAL_UPDATED_SECRET"
+          } as never
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]).toEqual({
+      id: "connector_invalid_1",
+      name: "Invalid connector",
+      enabled: false,
+      toolCount: 0,
+      status: "invalid_definition",
+      statusLabel: "Invalid definition",
+      tools: []
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("connector_partial_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_PARTIAL_CONNECTOR_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_PARTIAL_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_TOOL_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_TOOL_DESCRIPTION_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_APPROVAL_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_PARTIAL_UPDATED_SECRET");
+  });
 });
 
 describe("isReadOnlyVisibleMCPTool", () => {

@@ -82,6 +82,26 @@ type MCPManagementCopy = WorkbenchCopy & {
   };
 };
 
+type SafeMCPConnector = {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  updatedAt?: string;
+  tools: SafeMCPTool[];
+  valid: boolean;
+};
+
+type SafeMCPTool = {
+  name: string;
+  description?: string;
+  permission: string;
+  roles: MCPAgentRole[];
+  requiresApproval: boolean;
+  readOnly?: boolean;
+  sideEffect?: "read" | "write";
+};
+
 const fallbackMCPManagementStatusLabels: Record<MCPManagementStatus, string> = {
   configured: "Configured",
   disabled: "Disabled",
@@ -264,37 +284,23 @@ function toSafeConnector(
   connector: unknown,
   index: number,
   fallbackName: string
-): {
-  id: string;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  updatedAt?: string;
-  tools: Array<{
-    name: string;
-    description?: string;
-    permission: string;
-    roles: MCPAgentRole[];
-    requiresApproval: boolean;
-    readOnly?: boolean;
-    sideEffect?: "read" | "write";
-  }>;
-  valid: boolean;
-} {
+): SafeMCPConnector {
   const source = isRecord(connector) ? connector : {};
   const sourceTools = source.tools;
   const id = normalizeDisplayString(source.id);
   const name = normalizeDisplayString(source.name);
-  const valid = Boolean(id) && Boolean(name) && Array.isArray(sourceTools);
 
-  if (!valid) {
-    return {
-      id: `connector_invalid_${index + 1}`,
-      name: fallbackName,
-      enabled: false,
-      tools: [],
-      valid: false
-    };
+  if (!id || !name || !Array.isArray(sourceTools) || sourceTools.length === 0) {
+    return toInvalidConnector(index, fallbackName);
+  }
+
+  const tools: SafeMCPTool[] = [];
+  for (const tool of sourceTools) {
+    const safeTool = toSafeTool(tool);
+    if (!safeTool) {
+      return toInvalidConnector(index, fallbackName);
+    }
+    tools.push(safeTool);
   }
 
   const description = normalizeDisplayString(source.description);
@@ -306,22 +312,24 @@ function toSafeConnector(
     ...(description ? { description } : {}),
     enabled: source.enabled === true,
     ...(updatedAt ? { updatedAt } : {}),
-    tools: sourceTools.flatMap(toSafeTool),
+    tools,
     valid: true
   };
 }
 
-function toSafeTool(tool: unknown): Array<{
-  name: string;
-  description?: string;
-  permission: string;
-  roles: MCPAgentRole[];
-  requiresApproval: boolean;
-  readOnly?: boolean;
-  sideEffect?: "read" | "write";
-}> {
+function toInvalidConnector(index: number, fallbackName: string): SafeMCPConnector {
+  return {
+    id: `connector_invalid_${index + 1}`,
+    name: fallbackName,
+    enabled: false,
+    tools: [],
+    valid: false
+  };
+}
+
+function toSafeTool(tool: unknown): SafeMCPTool | undefined {
   if (!isRecord(tool)) {
-    return [];
+    return undefined;
   }
 
   const name = normalizeDisplayString(tool.name);
@@ -330,22 +338,20 @@ function toSafeTool(tool: unknown): Array<{
   const description = normalizeDisplayString(tool.description);
 
   if (!name || !permission || roles.length === 0 || typeof tool.requiresApproval !== "boolean") {
-    return [];
+    return undefined;
   }
 
-  return [
-    {
-      name,
-      ...(description ? { description } : {}),
-      permission,
-      roles,
-      requiresApproval: tool.requiresApproval,
-      ...(typeof tool.readOnly === "boolean" ? { readOnly: tool.readOnly } : {}),
-      ...(tool.sideEffect === "read" || tool.sideEffect === "write"
-        ? { sideEffect: tool.sideEffect }
-        : {})
-    }
-  ];
+  return {
+    name,
+    ...(description ? { description } : {}),
+    permission,
+    roles,
+    requiresApproval: tool.requiresApproval,
+    ...(typeof tool.readOnly === "boolean" ? { readOnly: tool.readOnly } : {}),
+    ...(tool.sideEffect === "read" || tool.sideEffect === "write"
+      ? { sideEffect: tool.sideEffect }
+      : {})
+  };
 }
 
 function isMCPAgentRole(value: unknown): value is MCPAgentRole {
