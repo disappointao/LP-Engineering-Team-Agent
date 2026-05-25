@@ -510,6 +510,10 @@
    - Stage 51 MCP Management Surface v0 implementation plan（docs-only closeout plan；当前已完成）。
    - 在 Stage 51 design 后阅读，用于执行 docs-only closeout：复核 design commit `3319143`、写入本 implementation plan、同步 Superpowers README / roadmap，并为后续 completion note 和 Stage 54 default implementation route 保留清晰边界；本计划不修改 runtime、Web、backend、worker、MCP SDK、tool execution code 或 tests。完成记录见 `docs/mcp-management-surface-v0-kickoff.md`。
 
+127. `plans/2026-05-25-mcp-management-surface-v0-implementation.md`
+   - Stage 54 MCP Management Surface v0 implementation plan（当前执行依据）。
+   - 在 Stage 51 design / docs-only closeout 后阅读，用于按 TDD 实现 post-V1 单一 Web MCP management view、safe view-model、navigation re-entry、server action raw-argument boundary、browser acceptance 和 docs closeout；本阶段不接 remote MCP SDK/server adapter、不做 write tools、MCP worker execution、secret storage、auth/RBAC、deployment/provider/browser platform，也不创建 raw MCP output / raw arguments 通道。
+
 ## 维护规则
 
 每当 Superpowers workflow 创建、重命名、替换或实质更新 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 下的 spec/plan 时，必须在同一个变更中更新本索引。
