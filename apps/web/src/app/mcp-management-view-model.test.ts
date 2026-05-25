@@ -318,6 +318,170 @@ describe("buildMCPManagementViewModel", () => {
     expect(JSON.stringify(viewModel)).not.toContain("RAW_EXTRA_SECRET");
   });
 
+  it("redacts unsafe connector and tool display metadata before rendering", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_assets",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Assets",
+            description: "Uses SECRET_TOKEN=abc123 from /Users/ao/Desktop/private.env",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                description: "Reads /private/tmp/raw-output and API_KEY=abc123",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_assets",
+              name: "searchAssets",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]).toMatchObject({
+      id: "connector_assets",
+      name: "Assets",
+      status: "configured"
+    });
+    expect(viewModel.connectors[0]?.description).toBeUndefined();
+    expect(viewModel.connectors[0]?.tools[0]?.description).toBeUndefined();
+    expect(JSON.stringify(viewModel)).not.toContain("SECRET_TOKEN");
+    expect(JSON.stringify(viewModel)).not.toContain("API_KEY");
+    expect(JSON.stringify(viewModel)).not.toContain("/Users/ao/Desktop");
+    expect(JSON.stringify(viewModel)).not.toContain("/private/tmp");
+  });
+
+  it("does not mark stale visible tools executable without valid connector approval state", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_pending",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Pending connector",
+            enabled: true,
+            tools: [
+              {
+                name: "inspectAsset",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: true,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          },
+          {
+            id: "connector_disabled",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Disabled connector",
+            enabled: false,
+            tools: [
+              {
+                name: "searchAssets",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_pending",
+              name: "inspectAsset",
+              permission: "assets:read",
+              requiresApproval: true,
+              readOnly: true,
+              sideEffect: "read"
+            },
+            {
+              connectorId: "connector_disabled",
+              name: "searchAssets",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            },
+            {
+              connectorId: "connector_missing",
+              name: "staleVisibleTool",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.summary.visibleToolCount).toBe(3);
+    expect(viewModel.summary.executionEligibleToolCount).toBe(0);
+    expect(viewModel.visibleToolGroups[0]?.tools).toEqual([
+      expect.objectContaining({
+        connectorId: "connector_pending",
+        name: "inspectAsset",
+        executionAvailable: false,
+        status: "approval_required"
+      }),
+      expect.objectContaining({
+        connectorId: "connector_disabled",
+        name: "searchAssets",
+        executionAvailable: false,
+        status: "disabled"
+      }),
+      expect.objectContaining({
+        connectorId: "connector_missing",
+        name: "staleVisibleTool",
+        executionAvailable: false,
+        status: "execution_not_available"
+      })
+    ]);
+  });
+
   it("treats malformed approval states as pending without leaking raw state", () => {
     const viewModel = buildMCPManagementViewModel({
       copy,
@@ -380,6 +544,85 @@ describe("buildMCPManagementViewModel", () => {
       status: "approval_required"
     });
     expect(JSON.stringify(viewModel)).not.toContain("RAW_APPROVAL_SECRET");
+  });
+
+  it("ignores malformed approval rows without promoting approval state", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_approval_shape",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Approval shape",
+            enabled: true,
+            tools: [
+              {
+                name: "inspectAsset",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: true,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [
+          null,
+          {
+            id: "approval_bad_connector",
+            projectId: "project_1",
+            connectorId: 123,
+            toolName: "inspectAsset",
+            state: "approved",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          },
+          {
+            id: "approval_bad_tool",
+            projectId: "project_1",
+            connectorId: "connector_approval_shape",
+            toolName: { raw: "RAW_TOOL_SECRET" },
+            state: "approved",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ] as never,
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_approval_shape",
+              name: "inspectAsset",
+              permission: "assets:read",
+              requiresApproval: true,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]?.tools[0]).toMatchObject({
+      name: "inspectAsset",
+      approvalState: "pending",
+      executionAvailable: false,
+      status: "approval_required"
+    });
+    expect(viewModel.visibleToolGroups[0]?.tools[0]).toMatchObject({
+      name: "inspectAsset",
+      executionAvailable: false,
+      status: "approval_required"
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_TOOL_SECRET");
   });
 
   it("fails closed for malformed connector records without leaking raw values", () => {

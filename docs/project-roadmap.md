@@ -1074,7 +1074,7 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 - Stage 41-46 完成后的 advanced workspace personalization。
 - Stage 41-46 完成后的更高级跨任务 navigation 和 saved views。
 - Stage 45 之后的跨浏览器矩阵、远端 browser farm 和更系统的 visual baseline。
-- V1 之后的 MCP client-side management。
+- Stage54 之后的 remote MCP SDK / write tools / worker execution discovery。
 
 ### Desktop
 

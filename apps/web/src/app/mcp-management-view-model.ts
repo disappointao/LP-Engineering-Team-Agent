@@ -96,6 +96,10 @@ type SafeMCPTool = {
 
 type MCPApprovalState = Extract<MCPManagementToolRow["approvalState"], "pending" | "approved">;
 type MCPVisibleToolIndex = Map<MCPAgentRole, Map<string, Set<string>>>;
+type MCPVisibleToolExecutionIndex = Map<
+  MCPAgentRole,
+  Map<string, Map<string, Pick<MCPManagementToolRow, "executionAvailable" | "status">>>
+>;
 
 export function buildMCPManagementViewModel(input: {
   copy: WorkbenchCopy;
@@ -103,17 +107,17 @@ export function buildMCPManagementViewModel(input: {
 }): MCPManagementViewModel {
   const approvalsByConnector = buildApprovalIndex(input.mcpState.approvals);
   const visibleToolIndex = createVisibleToolIndex();
-  const visibleToolGroups = mcpManagementRoleOrder.map((role) => ({
-    role,
-    label: input.copy.mcpView.roleLabels[role],
-    tools: (input.mcpState.visibleToolsByRole[role] ?? []).flatMap((tool) => {
+  const visibleToolExecutionIndex = createVisibleToolExecutionIndex();
+  const visibleToolsByRole = new Map<MCPAgentRole, ProjectMCPVisibleTool[]>();
+
+  for (const role of mcpManagementRoleOrder) {
+    const tools = (input.mcpState.visibleToolsByRole[role] ?? []).flatMap((tool) => {
       const safe = toSafeVisibleTool(tool);
       if (!safe) {
         return [];
       }
 
       addVisibleTool(visibleToolIndex, role, safe.connectorId, safe.name);
-      const executionAvailable = isReadOnlyVisibleMCPTool(safe);
 
       return [
         {
@@ -124,13 +128,13 @@ export function buildMCPManagementViewModel(input: {
           ...(typeof safe.readOnly === "boolean" ? { readOnly: safe.readOnly } : {}),
           ...(safe.sideEffect === "read" || safe.sideEffect === "write"
             ? { sideEffect: safe.sideEffect }
-            : {}),
-          executionAvailable,
-          status: executionAvailable ? "configured" : "execution_not_available"
+            : {})
         }
       ];
-    })
-  })) satisfies MCPManagementVisibleToolGroup[];
+    });
+
+    visibleToolsByRole.set(role, tools);
+  }
 
   const connectors = input.mcpState.connectors.map((connector, index) => {
     const safe = toSafeConnector(connector, index, input.copy.mcpView.invalidConnectorName);
@@ -138,7 +142,7 @@ export function buildMCPManagementViewModel(input: {
       const approvalState = tool.requiresApproval
         ? getApprovalState(approvalsByConnector, safe.id, tool.name) ?? "pending"
         : "not_required";
-      const visibleForAnyRole = mcpManagementRoleOrder.some((role) =>
+      const visibleForAnyRole = tool.roles.some((role) =>
         isVisibleTool(visibleToolIndex, role, safe.id, tool.name)
       );
       const readOnlyEligible = isReadOnlyVisibleMCPTool(tool);
@@ -150,6 +154,17 @@ export function buildMCPManagementViewModel(input: {
         readOnlyEligible,
         approvalState
       });
+
+      for (const role of tool.roles) {
+        if (!isVisibleTool(visibleToolIndex, role, safe.id, tool.name)) {
+          continue;
+        }
+
+        setVisibleToolExecution(visibleToolExecutionIndex, role, safe.id, tool.name, {
+          executionAvailable,
+          status
+        });
+      }
 
       return {
         connectorId: safe.id,
@@ -182,6 +197,24 @@ export function buildMCPManagementViewModel(input: {
       tools
     } satisfies MCPManagementConnectorRow;
   });
+
+  const visibleToolGroups = mcpManagementRoleOrder.map((role) => ({
+    role,
+    label: input.copy.mcpView.roleLabels[role],
+    tools: (visibleToolsByRole.get(role) ?? []).map((tool) => {
+      const execution =
+        getVisibleToolExecution(visibleToolExecutionIndex, role, tool.connectorId, tool.name) ?? {
+          executionAvailable: false,
+          status: "execution_not_available" as const
+        };
+
+      return {
+        ...tool,
+        executionAvailable: execution.executionAvailable,
+        status: execution.status
+      };
+    })
+  })) satisfies MCPManagementVisibleToolGroup[];
 
   return {
     summary: {
@@ -233,14 +266,20 @@ function buildApprovalIndex(
   const approvalsByConnector = new Map<string, Map<string, MCPApprovalState>>();
 
   for (const approval of approvals) {
-    const state = toApprovalState(approval.state);
-    if (!state) {
+    if (!isRecord(approval)) {
       continue;
     }
 
-    const toolsByName = approvalsByConnector.get(approval.connectorId) ?? new Map();
-    toolsByName.set(approval.toolName, state);
-    approvalsByConnector.set(approval.connectorId, toolsByName);
+    const state = toApprovalState(approval.state);
+    const connectorId = normalizeDisplayString(approval.connectorId);
+    const toolName = normalizeDisplayString(approval.toolName);
+    if (!state || !connectorId || !toolName) {
+      continue;
+    }
+
+    const toolsByName = approvalsByConnector.get(connectorId) ?? new Map();
+    toolsByName.set(toolName, state);
+    approvalsByConnector.set(connectorId, toolsByName);
   }
 
   return approvalsByConnector;
@@ -262,6 +301,10 @@ function createVisibleToolIndex(): MCPVisibleToolIndex {
   return new Map();
 }
 
+function createVisibleToolExecutionIndex(): MCPVisibleToolExecutionIndex {
+  return new Map();
+}
+
 function addVisibleTool(
   visibleToolIndex: MCPVisibleToolIndex,
   role: MCPAgentRole,
@@ -276,6 +319,25 @@ function addVisibleTool(
   visibleToolIndex.set(role, toolsByConnector);
 }
 
+function setVisibleToolExecution(
+  visibleToolExecutionIndex: MCPVisibleToolExecutionIndex,
+  role: MCPAgentRole,
+  connectorId: string,
+  toolName: string,
+  execution: Pick<MCPManagementToolRow, "executionAvailable" | "status">
+): void {
+  const toolsByConnector =
+    visibleToolExecutionIndex.get(role) ??
+    new Map<string, Map<string, Pick<MCPManagementToolRow, "executionAvailable" | "status">>>();
+  const toolsByName =
+    toolsByConnector.get(connectorId) ??
+    new Map<string, Pick<MCPManagementToolRow, "executionAvailable" | "status">>();
+
+  toolsByName.set(toolName, execution);
+  toolsByConnector.set(connectorId, toolsByName);
+  visibleToolExecutionIndex.set(role, toolsByConnector);
+}
+
 function isVisibleTool(
   visibleToolIndex: MCPVisibleToolIndex,
   role: MCPAgentRole,
@@ -283,6 +345,15 @@ function isVisibleTool(
   toolName: string
 ): boolean {
   return visibleToolIndex.get(role)?.get(connectorId)?.has(toolName) ?? false;
+}
+
+function getVisibleToolExecution(
+  visibleToolExecutionIndex: MCPVisibleToolExecutionIndex,
+  role: MCPAgentRole,
+  connectorId: string,
+  toolName: string
+): Pick<MCPManagementToolRow, "executionAvailable" | "status"> | undefined {
+  return visibleToolExecutionIndex.get(role)?.get(connectorId)?.get(toolName);
 }
 
 function toSafeVisibleTool(tool: unknown): ProjectMCPVisibleTool | undefined {
@@ -460,7 +531,26 @@ function getMCPManagementStatusLabel(
 }
 
 function normalizeDisplayString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  return trimmed && !containsUnsafeDisplayContent(trimmed) ? trimmed : "";
+}
+
+function containsUnsafeDisplayContent(value: string): boolean {
+  return (
+    /\/(?:Users|home|private|tmp|var)\//i.test(value) ||
+    /[A-Za-z]:[\\/]/.test(value) ||
+    /\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)[A-Z0-9_]*\b/.test(
+      value
+    ) ||
+    /\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)[A-Z0-9_]*\s*[:=]/i.test(
+      value
+    ) ||
+    /\b(?:sk|pk|rk|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/i.test(value)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
