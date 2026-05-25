@@ -102,6 +102,9 @@ type SafeMCPTool = {
   sideEffect?: "read" | "write";
 };
 
+type MCPApprovalState = Extract<MCPManagementToolRow["approvalState"], "pending" | "approved">;
+type MCPVisibleToolIndex = Map<MCPAgentRole, Map<string, Set<string>>>;
+
 const fallbackMCPManagementStatusLabels: Record<MCPManagementStatus, string> = {
   configured: "Configured",
   disabled: "Disabled",
@@ -115,28 +118,45 @@ export function buildMCPManagementViewModel(input: {
   copy: WorkbenchCopy;
   mcpState: MCPManagementInputState;
 }): MCPManagementViewModel {
-  const approvals = new Map(
-    input.mcpState.approvals.map((approval) => [
-      `${approval.connectorId}:${approval.toolName}`,
-      approval.state
-    ])
-  );
-  const visibleToolKeys = new Set(
-    mcpManagementRoleOrder.flatMap((role) =>
-      (input.mcpState.visibleToolsByRole[role] ?? []).map(
-        (tool) => `${role}:${tool.connectorId}:${tool.name}`
-      )
-    )
-  );
+  const approvalsByConnector = buildApprovalIndex(input.mcpState.approvals);
+  const visibleToolIndex = createVisibleToolIndex();
+  const visibleToolGroups = mcpManagementRoleOrder.map((role) => ({
+    role,
+    label: input.copy.mcpView.roleLabels[role],
+    tools: (input.mcpState.visibleToolsByRole[role] ?? []).flatMap((tool) => {
+      const safe = toSafeVisibleTool(tool);
+      if (!safe) {
+        return [];
+      }
+
+      addVisibleTool(visibleToolIndex, role, safe.connectorId, safe.name);
+      const executionAvailable = isReadOnlyVisibleMCPTool(safe);
+
+      return [
+        {
+          connectorId: safe.connectorId,
+          name: safe.name,
+          permission: safe.permission,
+          requiresApproval: safe.requiresApproval,
+          ...(typeof safe.readOnly === "boolean" ? { readOnly: safe.readOnly } : {}),
+          ...(safe.sideEffect === "read" || safe.sideEffect === "write"
+            ? { sideEffect: safe.sideEffect }
+            : {}),
+          executionAvailable,
+          status: executionAvailable ? "configured" : "execution_not_available"
+        }
+      ];
+    })
+  })) satisfies MCPManagementVisibleToolGroup[];
 
   const connectors = input.mcpState.connectors.map((connector, index) => {
     const safe = toSafeConnector(connector, index, input.copy.mcpView.invalidConnectorName);
     const tools = safe.tools.map((tool) => {
       const approvalState = tool.requiresApproval
-        ? approvals.get(`${safe.id}:${tool.name}`) ?? "pending"
+        ? getApprovalState(approvalsByConnector, safe.id, tool.name) ?? "pending"
         : "not_required";
       const visibleForAnyRole = mcpManagementRoleOrder.some((role) =>
-        visibleToolKeys.has(`${role}:${safe.id}:${tool.name}`)
+        isVisibleTool(visibleToolIndex, role, safe.id, tool.name)
       );
       const readOnlyEligible = isReadOnlyVisibleMCPTool(tool);
       const executionAvailable =
@@ -180,19 +200,6 @@ export function buildMCPManagementViewModel(input: {
     } satisfies MCPManagementConnectorRow;
   });
 
-  const visibleToolGroups = mcpManagementRoleOrder.map((role) => ({
-    role,
-    label: input.copy.mcpView.roleLabels[role],
-    tools: (input.mcpState.visibleToolsByRole[role] ?? []).map((tool) => {
-      const executionAvailable = isReadOnlyVisibleMCPTool(tool);
-      return {
-        ...tool,
-        executionAvailable,
-        status: executionAvailable ? "configured" : "execution_not_available"
-      };
-    })
-  })) satisfies MCPManagementVisibleToolGroup[];
-
   return {
     summary: {
       connectorCount: connectors.length,
@@ -235,6 +242,96 @@ export function isReadOnlyVisibleMCPTool(tool: {
   }
 
   return permission.endsWith(":read");
+}
+
+function buildApprovalIndex(
+  approvals: MCPManagementInputState["approvals"]
+): Map<string, Map<string, MCPApprovalState>> {
+  const approvalsByConnector = new Map<string, Map<string, MCPApprovalState>>();
+
+  for (const approval of approvals) {
+    const state = toApprovalState(approval.state);
+    if (!state) {
+      continue;
+    }
+
+    const toolsByName = approvalsByConnector.get(approval.connectorId) ?? new Map();
+    toolsByName.set(approval.toolName, state);
+    approvalsByConnector.set(approval.connectorId, toolsByName);
+  }
+
+  return approvalsByConnector;
+}
+
+function getApprovalState(
+  approvalsByConnector: Map<string, Map<string, MCPApprovalState>>,
+  connectorId: string,
+  toolName: string
+): MCPApprovalState | undefined {
+  return approvalsByConnector.get(connectorId)?.get(toolName);
+}
+
+function toApprovalState(state: unknown): MCPApprovalState | undefined {
+  return state === "pending" || state === "approved" ? state : undefined;
+}
+
+function createVisibleToolIndex(): MCPVisibleToolIndex {
+  return new Map();
+}
+
+function addVisibleTool(
+  visibleToolIndex: MCPVisibleToolIndex,
+  role: MCPAgentRole,
+  connectorId: string,
+  toolName: string
+): void {
+  const toolsByConnector = visibleToolIndex.get(role) ?? new Map<string, Set<string>>();
+  const toolsByName = toolsByConnector.get(connectorId) ?? new Set<string>();
+
+  toolsByName.add(toolName);
+  toolsByConnector.set(connectorId, toolsByName);
+  visibleToolIndex.set(role, toolsByConnector);
+}
+
+function isVisibleTool(
+  visibleToolIndex: MCPVisibleToolIndex,
+  role: MCPAgentRole,
+  connectorId: string,
+  toolName: string
+): boolean {
+  return visibleToolIndex.get(role)?.get(connectorId)?.has(toolName) ?? false;
+}
+
+function toSafeVisibleTool(tool: unknown): ProjectMCPVisibleTool | undefined {
+  if (!isRecord(tool)) {
+    return undefined;
+  }
+
+  const connectorId = normalizeDisplayString(tool.connectorId);
+  const name = normalizeDisplayString(tool.name);
+  const permission = normalizeDisplayString(tool.permission);
+  const readOnly = tool.readOnly;
+  const sideEffect = tool.sideEffect;
+
+  if (
+    !connectorId ||
+    !name ||
+    !permission ||
+    typeof tool.requiresApproval !== "boolean" ||
+    (hasOwn(tool, "readOnly") && typeof readOnly !== "boolean") ||
+    (hasOwn(tool, "sideEffect") && sideEffect !== "read" && sideEffect !== "write")
+  ) {
+    return undefined;
+  }
+
+  return {
+    connectorId,
+    name,
+    permission,
+    requiresApproval: tool.requiresApproval,
+    ...(typeof readOnly === "boolean" ? { readOnly } : {}),
+    ...(sideEffect === "read" || sideEffect === "write" ? { sideEffect } : {})
+  };
 }
 
 function toConnectorStatus(input: {

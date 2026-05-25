@@ -169,6 +169,219 @@ describe("buildMCPManagementViewModel", () => {
     expect(JSON.stringify(viewModel)).not.toContain("SECRET_ASSISTANT_TOOL");
   });
 
+  it("keeps approval and visibility lookups separate when ids contain delimiters", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "a:b",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Delimited approved",
+            enabled: true,
+            tools: [
+              {
+                name: "c",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: true,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          },
+          {
+            id: "a",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Delimited pending",
+            enabled: true,
+            tools: [
+              {
+                name: "b:c",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: true,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [
+          {
+            id: "approval_delimited",
+            projectId: "project_1",
+            connectorId: "a:b",
+            toolName: "c",
+            state: "approved",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "a:b",
+              name: "c",
+              permission: "assets:read",
+              requiresApproval: true,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]?.tools[0]).toMatchObject({
+      connectorId: "a:b",
+      name: "c",
+      approvalState: "approved",
+      executionAvailable: true,
+      status: "configured"
+    });
+    expect(viewModel.connectors[1]?.tools[0]).toMatchObject({
+      connectorId: "a",
+      name: "b:c",
+      approvalState: "pending",
+      executionAvailable: false,
+      status: "approval_required"
+    });
+  });
+
+  it("drops malformed visible tool records without leaking raw fields", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_visible",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Visible tools",
+            enabled: true,
+            tools: [
+              {
+                name: "searchAssets",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: false,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_visible",
+              name: "searchAssets",
+              permission: "assets:read",
+              requiresApproval: false,
+              readOnly: "RAW_READ_ONLY_SECRET",
+              sideEffect: "RAW_SIDE_EFFECT_SECRET",
+              extra: "RAW_EXTRA_SECRET"
+            } as never
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.summary.visibleToolCount).toBe(0);
+    expect(viewModel.summary.executionEligibleToolCount).toBe(0);
+    expect(viewModel.visibleToolGroups[0]?.tools).toEqual([]);
+    expect(viewModel.connectors[0]?.tools[0]).toMatchObject({
+      name: "searchAssets",
+      executionAvailable: false,
+      status: "no_visible_tools"
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_READ_ONLY_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_SIDE_EFFECT_SECRET");
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_EXTRA_SECRET");
+  });
+
+  it("treats malformed approval states as pending without leaking raw state", () => {
+    const viewModel = buildMCPManagementViewModel({
+      copy,
+      mcpState: {
+        connectors: [
+          {
+            id: "connector_approval",
+            targetKey: "project_1",
+            scope: "project",
+            name: "Approval",
+            enabled: true,
+            tools: [
+              {
+                name: "inspectAsset",
+                permission: "assets:read",
+                roles: ["planner"],
+                requiresApproval: true,
+                readOnly: true,
+                sideEffect: "read"
+              }
+            ],
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          }
+        ],
+        approvals: [
+          {
+            id: "approval_raw",
+            projectId: "project_1",
+            connectorId: "connector_approval",
+            toolName: "inspectAsset",
+            state: "RAW_APPROVAL_SECRET",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z"
+          } as never
+        ],
+        visibleToolsByRole: {
+          assistant: [],
+          planner: [
+            {
+              connectorId: "connector_approval",
+              name: "inspectAsset",
+              permission: "assets:read",
+              requiresApproval: true,
+              readOnly: true,
+              sideEffect: "read"
+            }
+          ],
+          builder: [],
+          reviewer: [],
+          deployer: []
+        }
+      }
+    });
+
+    expect(viewModel.connectors[0]?.tools[0]).toMatchObject({
+      name: "inspectAsset",
+      approvalState: "pending",
+      executionAvailable: false,
+      status: "approval_required"
+    });
+    expect(JSON.stringify(viewModel)).not.toContain("RAW_APPROVAL_SECRET");
+  });
+
   it("fails closed for malformed connector records without leaking raw values", () => {
     const viewModel = buildMCPManagementViewModel({
       copy,
