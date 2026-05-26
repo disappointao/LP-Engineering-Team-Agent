@@ -2322,7 +2322,12 @@ export class DemoWorkbenchService {
     try {
       const project = await this.getProjectOrThrow(input.projectId);
       const taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
-      const currentTask = sanitizeTaskIntentCurrentTask(input, project.id, taskId);
+      const currentTask = await sanitizeTaskIntentCurrentTask(
+        this.repositories,
+        input,
+        project.id,
+        taskId
+      );
       if (currentTask === null) {
         return normalizeTaskInputIntentOutput("");
       }
@@ -2330,7 +2335,7 @@ export class DemoWorkbenchService {
         toTaskInputIntentPromptInput(input, taskId, currentTask)
       );
       runId = await reserveRepositoryId(this.repositories, "run_task_intent", async () =>
-        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+        (await this.repositories.runs.listAll()).map((run) => run.id)
       );
 
       const { result } = await runAgentStep({
@@ -2370,7 +2375,7 @@ export class DemoWorkbenchService {
         toTaskFollowupSuggestionsPromptInput(input, taskId)
       );
       runId = await reserveRepositoryId(this.repositories, "run_task_followups", async () =>
-        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+        (await this.repositories.runs.listAll()).map((run) => run.id)
       );
 
       const { result } = await runAgentStep({
@@ -4806,16 +4811,21 @@ function toTaskInputIntentPromptInput(
   };
 }
 
-function sanitizeTaskIntentCurrentTask(
+async function sanitizeTaskIntentCurrentTask(
+  repositories: WorkbenchRepositories,
   input: RouteTaskInputIntentInput,
   projectId: string,
   taskId: string | undefined
-): RouteTaskInputIntentInput["currentTask"] | null {
+): Promise<RouteTaskInputIntentInput["currentTask"] | null> {
   const currentTask = input.currentTask;
   if (!currentTask) {
     return undefined;
   }
   if (currentTask.projectId !== undefined && currentTask.projectId !== projectId) {
+    return null;
+  }
+  const task = await repositories.tasks.getById(currentTask.id);
+  if (!task || task.projectId !== projectId) {
     return null;
   }
   if (taskId !== undefined && currentTask.id !== taskId) {
