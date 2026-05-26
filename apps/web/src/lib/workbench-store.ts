@@ -3067,11 +3067,15 @@ async function completePreparedLpTaskPrompt(input: {
       projectId: input.projectId
     };
   } catch {
+    const failureMessage = await resolveLpGenerationFailureMessage({
+      repositories: input.repositories,
+      taskId: input.task.id
+    });
     await appendTaskMessage({
       repositories: input.repositories,
       taskId: input.task.id,
       role: "assistant",
-      content: "LP generation failed. Open recovery details for the failed run."
+      content: failureMessage
     });
     await refreshLpTaskFollowupSuggestionCache({
       repositories: input.repositories,
@@ -3088,6 +3092,26 @@ async function completePreparedLpTaskPrompt(input: {
       projectId: input.projectId
     };
   }
+}
+
+const lpGenerationFailureMessage =
+  "LP generation failed. Open recovery details for the failed run.";
+const lpGenerationModelTimeoutFailureMessage =
+  "Model provider timed out while planning the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow.";
+
+async function resolveLpGenerationFailureMessage(input: {
+  repositories: WorkbenchRepositories;
+  taskId: string;
+}): Promise<string> {
+  const events = await input.repositories.runEvents.listForTask(input.taskId);
+  return events.some((event) => getRunEventErrorCode(event) === "model_provider_request_timeout")
+    ? lpGenerationModelTimeoutFailureMessage
+    : lpGenerationFailureMessage;
+}
+
+function getRunEventErrorCode(event: RunEventRecord): string | undefined {
+  const errorCode = event.payload.errorCode;
+  return typeof errorCode === "string" && errorCode.trim().length > 0 ? errorCode : undefined;
 }
 
 async function saveTaskThread(input: {

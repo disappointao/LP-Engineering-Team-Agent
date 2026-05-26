@@ -1632,6 +1632,15 @@ button {
   background: #f59e0b;
 }
 
+.taskProgressIcon[data-status="failed"] {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.taskProgressIcon[data-status="failed"] span {
+  background: #dc2626;
+}
+
 .taskProgressMain {
   min-width: 0;
   display: grid;

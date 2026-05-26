@@ -47,4 +47,23 @@ describe("task progress view model", () => {
       status: "complete"
     });
   });
+
+  it("does not mark failed terminal tasks complete without artifacts", () => {
+    expect(
+      buildTaskProgressViewModel({
+        taskType: "lp_generation",
+        payload: {
+          isTerminal: true,
+          runs: [{ role: "planner", state: "failed" }],
+          taskId: "task_1"
+        }
+      })
+    ).toMatchObject({
+      activeStepIndex: 1,
+      currentLabel: "规划页面结构和内容",
+      progressLabel: "2 / 4",
+      status: "failed",
+      statusLabel: "失败"
+    });
+  });
 });

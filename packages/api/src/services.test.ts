@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createStaticArtifactWorkspaceFiles,
   type StaticArtifacts
@@ -2810,6 +2810,96 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("OPENAI_COMPATIBLE_API_KEY");
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
+  });
+
+  it("uses a longer default timeout for local real provider runtime", async () => {
+    vi.useFakeTimers();
+    try {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+      const fakeFetch: ModelFetch = async (input, init) => {
+        fetchCalls.push({ input, init });
+        return new Promise<Response>((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+          }
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        });
+      };
+      const service = new DemoWorkbenchService({
+        repositories,
+        now: fixedClock(),
+        env: {
+          REAL_MODEL_RUNTIME: "1",
+          OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+        },
+        modelFetch: fakeFetch
+      });
+      const project = await service.createProject({ name: "Project" });
+      const provider = await service.createModelProvider({
+        projectId: project.id,
+        providerId: "zhipu_openai",
+        name: "智谱 OpenAI Compatible",
+        provider: "custom",
+        api: "openai-completions",
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+        apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+        modelId: "glm-5.1"
+      });
+      await service.upsertProjectModelRoute({
+        projectId: project.id,
+        role: "planner",
+        providerId: provider.id,
+        model: "glm-5.1"
+      });
+
+      let outcome: "pending" | "fulfilled" | "rejected" = "pending";
+      const request = service
+        .createBriefFromPrompt({
+          projectId: project.id,
+          prompt: "Generate a landing page brief."
+        })
+        .then(
+          () => {
+            outcome = "fulfilled";
+          },
+          () => {
+            outcome = "rejected";
+          }
+        );
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(outcome).toBe("pending");
+      expect(fetchCalls).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(outcome).toBe("pending");
+      expect(fetchCalls).toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      await request;
+      expect(outcome).toBe("rejected");
+      expect(fetchCalls).toHaveLength(2);
+
+      const events = await repositories.runEvents.listForProject(project.id);
+      expect(events.find((event) => event.type === "model.retry.exhausted")).toMatchObject({
+        payload: expect.objectContaining({
+          errorCode: "model_provider_request_timeout"
+        })
+      });
+      expect(events.find((event) => event.type === "run.failed")).toMatchObject({
+        payload: expect.objectContaining({
+          errorCode: "model_provider_request_timeout"
+        })
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("repairs invalid Planner structured output once before saving the brief", async () => {

@@ -70,6 +70,7 @@ pnpm real-provider:doctor
 OPENAI_COMPATIBLE_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_COMPATIBLE_API_KEY=
 OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
+LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS=120000
 ```
 
 提交到仓库的模板中保持 secret 为空，只在本地 `.env.local` 填写真实值。
@@ -79,7 +80,8 @@ OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 1. 运行 `pnpm real-provider:doctor`，确认 `.env.local` 已设置 `REAL_MODEL_RUNTIME=1` 且至少一个 provider profile ready。
 2. 运行 `pnpm dev`。当 `.env.local` 中 `REAL_MODEL_RUNTIME=1` 且 OpenAI-compatible 或 Anthropic-compatible profile ready 时，Web 会自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes。
 3. 直接提交一个普通聊天 prompt 或 LP prompt；成功的普通聊天应流式显示，成功的 `model.completed` timeline entry 应显示 bounded usage/duration/streaming summary，失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
-4. 如需改用其他 provider 或模型，再进入 Web 的 Models view 手动调整；UI 只保存 `apiKeyEnv` 变量名，不保存真实 key。
+4. 如果真实 provider 的 LP Planner / Builder 响应经常超过默认 120 秒/attempt，可在 `.env.local` 调高 `LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS`，最大 300000。
+5. 如需改用其他 provider 或模型，再进入 Web 的 Models view 手动调整；UI 只保存 `apiKeyEnv` 变量名，不保存真实 key。
 
 默认 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和 `pnpm test` 不会触发真实 provider 调用。
 

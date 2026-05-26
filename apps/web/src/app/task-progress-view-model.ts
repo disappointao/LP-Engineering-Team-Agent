@@ -20,7 +20,7 @@ type TaskProgressPayload = Omit<
   runs?: TaskProgressRun[];
 };
 
-export type TaskProgressStatus = "idle" | "running" | "complete" | "stopping";
+export type TaskProgressStatus = "idle" | "running" | "complete" | "failed" | "stopping";
 
 export interface TaskProgressViewModel {
   activeStepIndex: number;
@@ -45,6 +45,7 @@ const activeRunStates = new Set([
   "waiting_for_approval",
   "cancelling"
 ]);
+const failedRunStates = new Set(["failed", "blocked"]);
 
 export function buildTaskProgressViewModel({
   taskType,
@@ -58,15 +59,19 @@ export function buildTaskProgressViewModel({
   }
 
   const artifactProgress = payload?.artifactProgress;
-  const activeRun = payload?.runs?.find((run) => activeRunStates.has(String(run.state)));
+  const runs = payload?.runs ?? [];
+  const activeRun = runs.find((run) => activeRunStates.has(String(run.state)));
+  const failedRun = [...runs].reverse().find((run) => failedRunStates.has(String(run.state)));
+  const currentRun = activeRun ?? failedRun;
   const activeStepIndex = getActiveStepIndex({
-    activeRun: Boolean(activeRun),
+    hasCurrentRun: Boolean(currentRun),
     hasArtifacts: Boolean(artifactProgress?.artifactWorkspaceId),
     isTerminal: payload?.isTerminal,
-    role: activeRun?.role
+    role: currentRun?.role
   });
   const status = getTaskProgressStatus({
     activeRun,
+    failedRun,
     hasArtifacts: Boolean(artifactProgress?.artifactWorkspaceId),
     isTerminal: payload?.isTerminal
   });
@@ -82,12 +87,12 @@ export function buildTaskProgressViewModel({
 }
 
 function getActiveStepIndex({
-  activeRun,
+  hasCurrentRun,
   hasArtifacts,
   isTerminal,
   role
 }: {
-  activeRun: boolean;
+  hasCurrentRun: boolean;
   hasArtifacts: boolean;
   isTerminal?: boolean;
   role?: string;
@@ -101,7 +106,7 @@ function getActiveStepIndex({
   if (role === "reviewer" || role === "deployer") {
     return 3;
   }
-  if (hasArtifacts || isTerminal || activeRun) {
+  if (hasArtifacts || isTerminal || hasCurrentRun) {
     return 3;
   }
   return 0;
@@ -109,10 +114,12 @@ function getActiveStepIndex({
 
 function getTaskProgressStatus({
   activeRun,
+  failedRun,
   hasArtifacts,
   isTerminal
 }: {
   activeRun?: TaskProgressRun;
+  failedRun?: TaskProgressRun;
   hasArtifacts: boolean;
   isTerminal?: boolean;
 }): TaskProgressStatus {
@@ -121,6 +128,9 @@ function getTaskProgressStatus({
   }
   if (activeRun) {
     return "running";
+  }
+  if (failedRun && !hasArtifacts) {
+    return "failed";
   }
   if (hasArtifacts || isTerminal) {
     return "complete";
@@ -132,6 +142,8 @@ function getTaskProgressStatusLabel(status: TaskProgressStatus): string {
   switch (status) {
     case "complete":
       return "已完成";
+    case "failed":
+      return "失败";
     case "running":
       return "处理中";
     case "stopping":

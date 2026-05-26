@@ -3826,6 +3826,69 @@ describe("web workbench store", () => {
     });
   });
 
+  it("saves a helpful LP failure message when the model provider times out", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const plannerRuntime: AgentRuntimeAdapter = {
+      async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+        return {
+          runId: request.runId,
+          projectId: request.projectId,
+          role: request.role,
+          state: "failed",
+          events: [
+            {
+              type: "run.started",
+              message: `${request.role} run started.`,
+              runId: request.runId,
+              role: request.role
+            },
+            {
+              type: "model.retry.exhausted",
+              message: `${request.role} model retry exhausted`,
+              runId: request.runId,
+              role: request.role,
+              attempts: 2,
+              errorCode: "model_provider_request_timeout"
+            },
+            {
+              type: "run.failed",
+              message: `${request.role} model provider failed`,
+              runId: request.runId,
+              role: request.role,
+              state: "failed",
+              errorName: "ModelProviderRequestError",
+              errorCode: "model_provider_request_timeout"
+            }
+          ]
+        };
+      }
+    };
+    const store = createWebWorkbenchStore({ repositories, plannerRuntime });
+
+    const result = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "generation_failed",
+      taskType: "lp_generation"
+    });
+    await expect(repositories.messages.listForTask("task_1")).resolves.toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "Create a landing page for a spring sale"
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content:
+          "Model provider timed out while planning the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow."
+      })
+    ]);
+  });
+
   it("returns a failed LP task with recovery facts when Planner fails", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const store = createWebWorkbenchStore({

@@ -283,7 +283,7 @@ Stage 35 在这个边界上补了 provider token delta streaming，但只用于�
 
 Stage 36 的学习点是把真实 provider alpha smoke 当成 operator opt-in 流程，而不是默认 readiness gate。`REAL_MODEL_RUNTIME=1`、provider route 和本地 key 可以用于少数内部手动 smoke；`pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和普通 `pnpm test` 仍必须保持 deterministic/no-key。真实 provider operator 文档应该说明 missing key、disabled provider、protocol mismatch、structured output parse failure 和 usage metadata 解读，但不能要求默认开发流程触网或泄漏 key/base URL/raw provider response。
 
-Stage57 的补充学习点是把真实 provider 本地运行做成 operator-friendly preflight，而不是把它提升为默认 Agent readiness gate。`.env.real-provider.example` 和 `pnpm real-provider:doctor` 降低本机配置摩擦；本地 `pnpm dev` 现在会在 `REAL_MODEL_RUNTIME=1` 且 env profile ready 时自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes，让单用户第一版可以直接试普通聊天和 LP 链路。这个自动引导仍只读本机 env、只保存 env var name 和 provider config，不保存真实 key；缺 key 时应 skip 或 fail closed，不应触网、不应回退成假成功，也不应记录 secret、完整 base URL、raw provider response 或完整 artifact 内容。
+Stage57 的补充学习点是把真实 provider 本地运行做成 operator-friendly preflight，而不是把它提升为默认 Agent readiness gate。`.env.real-provider.example` 和 `pnpm real-provider:doctor` 降低本机配置摩擦；本地 `pnpm dev` 现在会在 `REAL_MODEL_RUNTIME=1` 且 env profile ready 时自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes，让单用户第一版可以直接试普通聊天和 LP 链路。真实 provider local runtime 的模型调用默认 timeout 是 `LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS=120000`，慢模型可显式调高到最多 `300000`，但超时仍必须形成 bounded `model_provider_request_timeout` 诊断和安全失败消息。这个自动引导仍只读本机 env、只保存 env var name 和 provider config，不保存真实 key；缺 key 时应 skip 或 fail closed，不应触网、不应回退成假成功，也不应记录 secret、完整 base URL、raw provider response 或完整 artifact 内容。
 
 ### 2.17 Streaming failure UX 也要分清 transient 和事实
 

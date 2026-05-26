@@ -3768,6 +3768,9 @@ function selectModelAttemptEvents(events: RuntimeEvent[]): RuntimeEvent[] {
   );
 }
 
+const DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS = 120_000;
+const MAX_LOCAL_REAL_PROVIDER_TIMEOUT_MS = 300_000;
+
 function createLocalRuntimeAdapter(
   input?: LocalRuntimeAdapterFactoryInput
 ): LocalAgentRuntimeAdapter {
@@ -3781,12 +3784,27 @@ function createLocalRuntimeAdapter(
         providers: createRepositoryModelProviderResolver(input.repositories),
         ...(input.fetch ? { fetch: input.fetch } : {}),
         env,
+        timeoutMs: resolveLocalRealProviderTimeoutMs(env),
         allowMockRoutes: false
       })
     );
   }
 
   return new LocalAgentRuntimeAdapter(new InMemoryModelGateway(policy));
+}
+
+function resolveLocalRealProviderTimeoutMs(env: RuntimeEnvironment): number {
+  const rawValue = env.LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS?.trim();
+  if (!rawValue) {
+    return DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS;
+  }
+
+  return Math.min(parsed, MAX_LOCAL_REAL_PROVIDER_TIMEOUT_MS);
 }
 
 function createRepositoryModelProviderResolver(
