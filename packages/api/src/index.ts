@@ -154,6 +154,14 @@ import {
   type WorkbenchUserIdentity
 } from "./collaboration";
 import { assembleContextPack } from "./context-assembler";
+import {
+  buildTaskFollowupSuggestionsPrompt,
+  buildTaskInputIntentPrompt,
+  normalizeTaskFollowupSuggestionsOutput,
+  normalizeTaskInputIntentOutput,
+  type TaskFollowupSuggestion,
+  type TaskInputIntent
+} from "./task-intent-routing";
 
 export {
   ArtifactReaderError,
@@ -266,6 +274,44 @@ export interface WorkbenchSnapshot {
   brief?: BriefRecord;
   currentPageVersion?: PageVersionRecord;
   deployment?: DeploymentHandoff;
+}
+
+export interface TaskIntentRecentMessage {
+  role: string;
+  content: string;
+}
+
+export interface TaskIntentArtifactSummaryFile {
+  path: string;
+  summary?: string;
+}
+
+export interface TaskIntentArtifactSummary {
+  hasPreview: boolean;
+  files: TaskIntentArtifactSummaryFile[];
+}
+
+export interface RouteTaskInputIntentInput {
+  projectId: string;
+  taskId?: string;
+  prompt: string;
+  currentTask?: {
+    id: string;
+    type: "general_chat" | "lp_generation" | "project_setup";
+    projectId?: string;
+    status: string;
+  };
+  recentMessages: TaskIntentRecentMessage[];
+  artifactSummary?: TaskIntentArtifactSummary;
+}
+
+export interface GenerateTaskFollowupSuggestionsInput {
+  projectId: string;
+  taskId?: string;
+  taskTitle: string;
+  taskStatus: string;
+  recentMessages: TaskIntentRecentMessage[];
+  artifactSummary?: TaskIntentArtifactSummary;
 }
 
 export interface CreateProjectInput {
@@ -2269,6 +2315,74 @@ export class DemoWorkbenchService {
     await this.getProjectOrThrow(input.projectId);
     const role = normalizeAgentRole(input.role);
     return this.createRuntimeContext(input.projectId, role, input.pageVersionId);
+  }
+
+  async routeTaskInputIntent(input: RouteTaskInputIntentInput): Promise<TaskInputIntent> {
+    let runId: string | undefined;
+    try {
+      const project = await this.getProjectOrThrow(input.projectId);
+      const taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
+      const prompt = buildTaskInputIntentPrompt(toTaskInputIntentPromptInput(input, taskId));
+      runId = await reserveRepositoryId(this.repositories, "run_task_intent", async () =>
+        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+      );
+
+      const { result } = await runAgentStep({
+        repositories: this.repositories,
+        service: this,
+        runtime: this.assistantRuntime,
+        runId,
+        projectId: project.id,
+        taskId,
+        role: "assistant",
+        input: { prompt },
+        now: this.now
+      });
+
+      return normalizeTaskInputIntentOutput(result.modelOutputText ?? "");
+    } catch {
+      return normalizeTaskInputIntentOutput("");
+    } finally {
+      if (runId) {
+        releaseRepositoryId(this.repositories, runId);
+      }
+    }
+  }
+
+  async generateTaskFollowupSuggestions(
+    input: GenerateTaskFollowupSuggestionsInput
+  ): Promise<TaskFollowupSuggestion[]> {
+    let runId: string | undefined;
+    try {
+      const project = await this.getProjectOrThrow(input.projectId);
+      const taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
+      const prompt = buildTaskFollowupSuggestionsPrompt(
+        toTaskFollowupSuggestionsPromptInput(input, taskId)
+      );
+      runId = await reserveRepositoryId(this.repositories, "run_task_followups", async () =>
+        (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+      );
+
+      const { result } = await runAgentStep({
+        repositories: this.repositories,
+        service: this,
+        runtime: this.assistantRuntime,
+        runId,
+        projectId: project.id,
+        taskId,
+        role: "assistant",
+        input: { prompt },
+        now: this.now
+      });
+
+      return normalizeTaskFollowupSuggestionsOutput(result.modelOutputText ?? "");
+    } catch {
+      return [];
+    } finally {
+      if (runId) {
+        releaseRepositoryId(this.repositories, runId);
+      }
+    }
   }
 
   async runAssistantChat(input: RunAssistantChatInput): Promise<RunAssistantChatResult> {
@@ -4658,6 +4772,50 @@ function createAssistantChatGenerationFailure(
     ...(runId !== undefined ? { runId } : {}),
     ...(contextSummary !== undefined ? { contextSummary } : {})
   };
+}
+
+function toTaskInputIntentPromptInput(
+  input: RouteTaskInputIntentInput,
+  taskId: string | undefined
+) {
+  return {
+    userPrompt: input.prompt,
+    task: {
+      id: input.currentTask?.id ?? taskId ?? "",
+      type: input.currentTask?.type ?? "general_chat",
+      status: input.currentTask?.status ?? "unknown",
+      projectId: input.currentTask?.projectId ?? input.projectId
+    },
+    messages: input.recentMessages,
+    artifacts: toTaskIntentPromptArtifacts(input.artifactSummary)
+  };
+}
+
+function toTaskFollowupSuggestionsPromptInput(
+  input: GenerateTaskFollowupSuggestionsInput,
+  taskId: string | undefined
+) {
+  return {
+    userPrompt: input.taskTitle,
+    task: {
+      id: taskId ?? "",
+      type: "lp_generation",
+      status: input.taskStatus,
+      projectId: input.projectId
+    },
+    messages: input.recentMessages,
+    artifacts: toTaskIntentPromptArtifacts(input.artifactSummary)
+  };
+}
+
+function toTaskIntentPromptArtifacts(summary: TaskIntentArtifactSummary | undefined) {
+  return (
+    summary?.files.map((file) => ({
+      filePath: file.path,
+      summary: file.summary,
+      hasPreview: summary.hasPreview
+    })) ?? []
+  );
 }
 
 function createAssistantChatFailureForError(

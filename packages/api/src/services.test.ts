@@ -4370,6 +4370,219 @@ describe("demo workbench service", () => {
     expect(assistantRuntime.requests[0]?.input.prompt).toContain("# Brand Voice");
   });
 
+  it("routes task input intent through the assistant runtime with bounded context", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: JSON.stringify({
+        type: "chat_in_task",
+        confidence: 0.91,
+        reason: "The user is asking a contextual question about the current task."
+      })
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Buyer answer",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const result = await service.routeTaskInputIntent({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Can you explain the current hero copy?",
+      currentTask: {
+        id: "task_1",
+        type: "general_chat",
+        projectId: project.id,
+        status: "running"
+      },
+      recentMessages: [
+        { role: "user", content: "Make this LP sharper." },
+        { role: "assistant", content: "I updated the headline direction." }
+      ],
+      artifactSummary: {
+        hasPreview: true,
+        files: [{ path: "index.html", summary: "Hero and CTA section." }]
+      }
+    });
+
+    expect(result).toEqual({
+      type: "chat_in_task",
+      confidence: 0.91,
+      reason: "The user is asking a contextual question about the current task."
+    });
+    expect(assistantRuntime.requests[0]).toMatchObject({
+      role: "assistant",
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    expect(assistantRuntime.requests[0]?.input.prompt).toContain("Return strict JSON");
+    expect(assistantRuntime.requests[0]?.input.prompt).toContain("Hero and CTA section.");
+  });
+
+  it("fails closed to clarify when assistant intent output is invalid", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "chat with the user"
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    const result = await service.routeTaskInputIntent({
+      projectId: project.id,
+      prompt: "What is this task doing?",
+      recentMessages: []
+    });
+
+    expect(result.type).toBe("clarify");
+  });
+
+  it("generates sanitized LP follow-up suggestions through assistant runtime", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: JSON.stringify([
+        {
+          id: "explain",
+          intent: "chat_in_task",
+          prompt: "Explain the current LP strategy."
+        },
+        {
+          id: "continue",
+          intent: "agent_continue",
+          prompt: "Apply the next recommended LP improvement."
+        }
+      ])
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Generate LP",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const result = await service.generateTaskFollowupSuggestions({
+      projectId: project.id,
+      taskId: "task_1",
+      taskTitle: "Generate LP",
+      taskStatus: "complete",
+      recentMessages: [{ role: "assistant", content: "The LP is ready for review." }],
+      artifactSummary: {
+        hasPreview: true,
+        files: [{ path: "index.html", summary: "Completed ecommerce LP." }]
+      }
+    });
+
+    expect(result).toEqual([
+      {
+        id: "explain",
+        intent: "chat_in_task",
+        prompt: "Explain the current LP strategy."
+      },
+      {
+        id: "continue",
+        intent: "agent_continue",
+        prompt: "Apply the next recommended LP improvement."
+      }
+    ]);
+    expect(assistantRuntime.requests[0]).toMatchObject({
+      role: "assistant",
+      projectId: project.id,
+      taskId: "task_1"
+    });
+    expect(assistantRuntime.requests[0]?.input.prompt).toContain("Return strict JSON array");
+  });
+
+  it("returns no follow-up suggestions when assistant output is invalid", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "try asking about the LP"
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    const result = await service.generateTaskFollowupSuggestions({
+      projectId: project.id,
+      taskTitle: "Generate LP",
+      taskStatus: "complete",
+      recentMessages: []
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it("fails closed when task id does not belong to project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: JSON.stringify({
+        type: "agent_continue",
+        confidence: 0.95,
+        reason: "Should not run."
+      })
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const projectA = await service.createProject({ name: "Project A" });
+    const projectB = await service.createProject({ name: "Project B" });
+    await repositories.tasks.save({
+      id: "task_project_a",
+      title: "Project A LP",
+      type: "lp_generation",
+      status: "complete",
+      projectId: projectA.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const intent = await service.routeTaskInputIntent({
+      projectId: projectB.id,
+      taskId: "task_project_a",
+      prompt: "Continue it.",
+      recentMessages: []
+    });
+    const followups = await service.generateTaskFollowupSuggestions({
+      projectId: projectB.id,
+      taskId: "task_project_a",
+      taskTitle: "Project A LP",
+      taskStatus: "running",
+      recentMessages: []
+    });
+
+    expect(intent.type).toBe("clarify");
+    expect(followups).toEqual([]);
+    expect(assistantRuntime.requests).toEqual([]);
+  });
+
   it("streams assistant chat deltas without persisting token chunks as run events", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new StreamingRuntime(["Use ", "streaming."], "Use streaming.");
