@@ -12,6 +12,10 @@
   - 在 Manus-style task experience design / plan 后阅读。
   - 定义 Stage59：LP-only AI 推荐追问、普通聊天不显示推荐追问，以及 LP task 内每次输入先由 AI intent router 判定普通问答 / 继续执行 / 新复杂任务 / 澄清；deterministic router 只作为 no-key 测试和安全兜底。
 
+- `plans/2026-05-26-task-intent-routing-ai-followups.md`
+  - Stage59 实施计划。
+  - 实现或审计 task intent parser、assistant runtime router、LP-only follow-up provider、Web store submit routing、suggestion UI 和 browser-visible contracts 时阅读。
+
 - `specs/2026-05-26-manus-style-task-experience-design.md`
   - 在 `2026-05-25-real-provider-local-run-polish-design.md` 和上一轮 Web chat polish 之后阅读。
   - 定义 Manus 风格任务体验：普通聊天保持干净，LP 复杂任务显示用户语言的执行步骤，内部 run timeline / recovery 默认折叠。
