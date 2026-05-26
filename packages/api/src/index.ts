@@ -201,6 +201,17 @@ export {
   type TaskInterruptView,
   type TaskInterruptWorkerRuntime
 } from "./task-interrupts";
+export {
+  TASK_INPUT_INTENT_CONFIDENCE_THRESHOLD,
+  buildTaskFollowupSuggestionsPrompt,
+  buildTaskInputIntentPrompt,
+  normalizeTaskFollowupSuggestionsOutput,
+  normalizeTaskInputIntentOutput,
+  type TaskFollowupSuggestion,
+  type TaskFollowupSuggestionIntent,
+  type TaskInputIntent,
+  type TaskInputIntentType
+} from "./task-intent-routing";
 export * from "./run-lifecycle";
 export * from "./run-recovery";
 export {
