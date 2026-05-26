@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-25
+最后更新：2026-05-26
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -43,6 +43,7 @@
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
 - Real Provider Local Run Polish v0：Stage57 已新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models 本地真实 provider checklist 和 `pnpm dev` 本地自动引导；当 `.env.local` 已 opt in 且 profile ready 时，默认 Web store 会创建 `Local Real Provider` 项目与五个 role routes，降低本机试跑普通聊天和 LP 的摩擦；真实 provider smoke 仍是 operator opt-in，默认 gates 继续 deterministic/no-key。
+- Manus-style Task Experience v0：Stage58 已进入实施，目标是把 LP live task state 投影为用户可理解的 Manus 风格步骤卡，把普通聊天保持为纯对话，并把 composer 主操作收敛为发送/停止单按钮；不改变底层 run orchestration、worker queue、artifact polling、真实 provider 或 interrupt 安全边界。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 - LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
