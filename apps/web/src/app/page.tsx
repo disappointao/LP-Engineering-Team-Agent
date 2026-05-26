@@ -47,7 +47,6 @@ import {
   type WorkbenchPageState
 } from "../lib/workbench-store";
 import { getCurrentProjectId, getCurrentTaskId } from "../lib/workbench-session";
-import { InterruptSubmitButton } from "./interrupt-submit-button";
 import { LiveTaskPanel } from "./live-task-panel";
 import { ManagementSubmitButton } from "./management-submit-button";
 import { buildMCPManagementViewModel } from "./mcp-management-view-model";
@@ -1086,25 +1085,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             implicitProjectName={copy.entry.implicitProjectName}
             promptLabel={copy.projectFlow.promptLabel}
             placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
-            runtimeChip={composer.runtimeChip}
             sendLabel={composer.sendLabel}
             streamingStatusLabel={copy.chat.streamingStatusLabel}
             streamingErrorLabel={copy.chat.streamingErrorLabel}
             streamingErrorMessages={copy.chat.streamingErrorMessages}
-            interruptControl={
-              <InterruptSubmitButton
-                action={interruptCurrentTaskAction}
-                key="interrupt-control"
-                state={pageState.kind === "task_ready"
-                  ? pageState.interrupt.state
-                  : "not_interruptible"}
-                labels={{
-                  idle: composer.interruptLabel,
-                  stopping: copy.chat.interruptStoppingLabel,
-                  unavailable: copy.chat.interruptUnavailableLabel
-                }}
-              />
-            }
+            interruptAction={interruptCurrentTaskAction}
+            interruptState={pageState.kind === "task_ready"
+              ? pageState.interrupt.state
+              : "not_interruptible"}
+            interruptLabels={{
+              idle: composer.interruptLabel,
+              stopping: copy.chat.interruptStoppingLabel
+            }}
           >
                 {pageState.kind === "empty" ? (
                   <section className="entryPanel" aria-labelledby="entry-title">
@@ -1227,7 +1219,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               </>
                             ) : null}
 
-                              {isLatestTurn && pageState.kind === "task_ready" ? (
+                              {isLatestTurn &&
+                              pageState.kind === "task_ready" &&
+                              pageState.task.type === "lp_generation" ? (
                                 <LiveTaskPanel
                                   taskId={pageState.task.id}
                                   initialProjectId={pageState.task.projectId}

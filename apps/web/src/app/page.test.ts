@@ -103,6 +103,7 @@ import HomePage from "./page";
 import {
   executeRunRecoveryAction,
   executeSkillCommandAction,
+  interruptCurrentTaskAction,
   runLocalWorkerOnceAction,
   submitPromptAction
 } from "./actions";
@@ -659,16 +660,20 @@ describe("HomePage project flow errors", () => {
     });
   });
 
-  it("keys the parent-provided interrupt control so React dev overlay stays clear", async () => {
+  it("passes interrupt state into the streaming workbench without rendering idle chrome", async () => {
     const page = await HomePage({
       searchParams: Promise.resolve({})
     });
     const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
-    const interruptControl = streamingWorkbenchProps?.interruptControl as
-      | ReactTestElement
-      | undefined;
 
-    expect(interruptControl?.key).toBe("interrupt-control");
+    expect(streamingWorkbenchProps).toMatchObject({
+      interruptAction: interruptCurrentTaskAction,
+      interruptState: "not_interruptible",
+      interruptLabels: {
+        idle: "Interrupt",
+        stopping: "Stopping..."
+      }
+    });
   });
 
   it("wires sidebar task controls to real navigation actions", async () => {
@@ -750,8 +755,9 @@ describe("HomePage project flow errors", () => {
       implicitProjectName: "Untitled LP Project",
       promptLabel: "LP request",
       placeholder: "Message LP Agent",
-      runtimeChip: "Cloud runtime",
       sendLabel: "Send",
+      interruptAction: interruptCurrentTaskAction,
+      interruptState: "not_interruptible",
       streamingStatusLabel: "Generating response",
       streamingErrorLabel: "The chat response could not be generated.",
       streamingErrorMessages: expect.objectContaining({
@@ -761,7 +767,6 @@ describe("HomePage project flow errors", () => {
       })
     });
     expect(streamingWorkbenchProps?.taskId).toBeUndefined();
-    expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
   });
 
   it("renders persisted LP follow-up turns without repeating the agent process block", async () => {
@@ -1044,12 +1049,11 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
     const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
-    const buttons = collectElements(streamingWorkbenchProps?.interruptControl, "button");
-    const interruptButton = buttons.find((button) =>
-      collectText(button).includes("Interrupt")
-    );
 
-    expect(interruptButton?.props?.disabled).toBe(false);
+    expect(streamingWorkbenchProps).toMatchObject({
+      interruptAction: interruptCurrentTaskAction,
+      interruptState: "idle"
+    });
   });
 
   it("renders a persisted stopping interrupt button as disabled and busy", async () => {
@@ -1093,13 +1097,11 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
     const [streamingWorkbenchProps] = collectStreamingWorkbenchProps(page);
-    const buttons = collectElements(streamingWorkbenchProps?.interruptControl, "button");
-    const interruptButton = buttons.find((button) =>
-      collectText(button).includes("Stopping...")
-    );
 
-    expect(interruptButton?.props?.disabled).toBe(true);
-    expect(interruptButton?.props?.["aria-busy"]).toBe(true);
+    expect(streamingWorkbenchProps).toMatchObject({
+      interruptAction: interruptCurrentTaskAction,
+      interruptState: "stopping"
+    });
   });
 
   it("renders localized interrupt errors", async () => {

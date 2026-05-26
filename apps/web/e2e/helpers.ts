@@ -30,7 +30,12 @@ export async function expectOrdinaryChatThread(page: Page, prompt: string) {
     page.getByText("I created a task thread and can continue from here.")
   ).toBeVisible();
   await expect(page.getByLabel("Agent process")).toHaveCount(0);
+  await expect(page.getByLabel("Live task progress")).toHaveCount(0);
   await expect(page.getByText("Created a general task thread.")).toHaveCount(0);
+  await expect(page.getByText("Cloud runtime", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Nothing running", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("云端运行时", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("当前没有可打断任务", { exact: true })).toHaveCount(0);
 }
 
 export async function expectNoStaticArtifactPreview(page: Page) {
@@ -42,8 +47,13 @@ export async function expectStaticLpArtifacts(page: Page) {
   const liveTaskProgress = page.getByLabel("Live task progress");
   await expect(liveTaskProgress).toBeVisible();
   await expect(
-    liveTaskProgress.getByText("Artifact workspace ready", { exact: true })
+    liveTaskProgress.getByText("检查并准备交付", { exact: true })
   ).toBeVisible();
+  await expect(liveTaskProgress.getByText("4 / 4", { exact: true })).toBeVisible();
+  await expect(
+    liveTaskProgress.getByText("页面文件已准备好", { exact: true })
+  ).toBeVisible();
+  await expect(liveTaskProgress.getByText("Artifact workspace ready")).toHaveCount(0);
 
   const generatedFiles = page.getByLabel("Generated files");
   await expect(generatedFiles).toBeVisible();

@@ -1589,36 +1589,82 @@ button {
   font-weight: 760;
 }
 
-.liveTaskPanel {
+.taskProgressCard {
   display: grid;
-  gap: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-soft);
-  padding: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(31, 35, 40, 0.04);
+  padding: 10px;
 }
 
-.liveTaskHeader {
+.taskProgressCardInner {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.taskProgressIcon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.taskProgressIcon span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.taskProgressIcon[data-status="running"] span {
+  background: #2563eb;
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+.taskProgressIcon[data-status="stopping"] span {
+  background: #f59e0b;
+}
+
+.taskProgressMain {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.taskProgressTopline {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.liveTaskHeader strong {
+.taskProgressTopline strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #2f3338;
   font-size: 0.86rem;
   font-weight: 830;
 }
 
-.liveTaskStatus {
+.taskProgressTopline span {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 0.76rem;
-  font-weight: 780;
+  font-weight: 800;
 }
 
-.liveTaskMeta,
-.liveTaskProgressSummary,
+.taskProgressMain p,
+.taskProgressResult,
 .liveTaskError {
   margin: 0;
   font-size: 0.76rem;
@@ -1626,20 +1672,19 @@ button {
   overflow-wrap: anywhere;
 }
 
-.liveTaskMeta,
-.liveTaskProgressSummary {
+.taskProgressMain p,
+.taskProgressResult {
   color: var(--muted);
 }
 
-.liveTaskArtifact {
+.taskProgressResult {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  min-width: 0;
 }
 
-.liveTaskArtifact strong {
+.taskProgressResult strong {
   color: var(--accent);
   font-size: 0.78rem;
   font-weight: 820;
@@ -2346,6 +2391,17 @@ button {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
+}
+
+.composer .stopButton {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.composer .stopButton[aria-busy="true"] {
+  border-color: #f59e0b;
+  background: #92400e;
 }
 
 .composer .sendButton:disabled {

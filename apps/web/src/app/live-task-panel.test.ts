@@ -127,12 +127,15 @@ describe("LiveTaskStatusSummary", () => {
     const rendered = LiveTaskStatusSummary({ payload, copy });
     const text = collectText(rendered).join(" ");
 
-    expect(text).toContain("Live task progress");
-    expect(text).toContain("Task is running");
-    expect(text).toContain("Builder · Running");
+    expect(text).toContain("生成静态页面文件");
+    expect(text).toContain("3 / 4");
+    expect(text).toContain("处理中");
+    expect(text).toContain("页面文件已准备好");
+    expect(text).not.toContain("3 files");
+    expect(text).not.toContain("2 changed");
+    expect(text).not.toContain("Live task progress");
+    expect(text).not.toContain("Builder · Running");
     expect(text).not.toContain("builder · running");
-    expect(text).toContain("Artifact workspace ready");
-    expect(text).toContain("3 files · 2 changed");
     expect(text).not.toContain("<!doctype html");
   });
 });

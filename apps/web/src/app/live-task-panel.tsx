@@ -20,6 +20,7 @@ import {
   type LiveTaskPanelAction,
   type LiveTaskPanelState
 } from "./live-task-state";
+import { buildTaskProgressViewModel } from "./task-progress-view-model";
 
 export interface LiveTaskPanelProps {
   taskId?: string;
@@ -55,12 +56,6 @@ export type LiveTaskStateRouteResult =
   | { ok: false; error: string; retryable: boolean };
 
 const retryPollMs = 3000;
-const activeRunStates = new Set([
-  "queued",
-  "running",
-  "waiting_for_approval",
-  "cancelling"
-]);
 const permanentRouteErrors = new Set(["task_not_found", "project_not_found"]);
 const permanentRouteStatuses = new Set([403, 404]);
 
@@ -186,23 +181,6 @@ export function getLiveTaskPreviewRefreshDecision({
   };
 }
 
-function getActiveRun(payload?: LiveTaskStatePayload) {
-  return payload?.runs.find((run) => activeRunStates.has(run.state));
-}
-
-function getLiveTaskStatusText(
-  payload: LiveTaskStatePayload | undefined,
-  copy: LiveTaskCopy
-): string {
-  if (payload?.isTerminal) {
-    return copy.liveTaskCompleted;
-  }
-  if (getActiveRun(payload)) {
-    return copy.liveTaskRunning;
-  }
-  return copy.liveTaskIdle;
-}
-
 function reduceAndDispatch(
   stateRef: MutableRefObject<LiveTaskPanelState>,
   dispatch: Dispatch<LiveTaskPanelAction>,
@@ -215,35 +193,58 @@ function reduceAndDispatch(
 }
 
 function renderLiveTaskStatusContent({
+  payload
+}: LiveTaskStatusSummaryProps) {
+  const progress = buildTaskProgressViewModel({
+    taskType: payload?.taskType ?? "lp_generation",
+    payload
+  });
+
+  if (!progress) {
+    return null;
+  }
+
+  return (
+    <div className="taskProgressCardInner">
+      <div className="taskProgressIcon" data-status={progress.status} aria-hidden="true">
+        <span />
+      </div>
+      <div className="taskProgressMain">
+        <div className="taskProgressTopline">
+          <strong>{progress.currentLabel}</strong>
+          <span>{progress.progressLabel}</span>
+        </div>
+        <p>{progress.statusLabel}</p>
+        {progress.resultLabel ? (
+          <div className="taskProgressResult">
+            <strong>{progress.resultLabel}</strong>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function renderTaskProgressPanel({
   payload,
   copy
 }: LiveTaskStatusSummaryProps) {
-  const activeRun = getActiveRun(payload);
-  const artifactProgress = payload?.artifactProgress;
-  const artifactSummary = artifactProgress
-    ? `${artifactProgress.fileCount} files · ${artifactProgress.changedFileCount} changed`
-    : undefined;
+  const progress = buildTaskProgressViewModel({
+    taskType: payload?.taskType ?? "lp_generation",
+    payload
+  });
 
   return (
-    <>
-      <header className="liveTaskHeader">
-        <strong>{copy.liveTaskTitle}</strong>
-        <span className="liveTaskStatus">{getLiveTaskStatusText(payload, copy)}</span>
-      </header>
-      {activeRun ? (
-        <p className="liveTaskMeta">
-          {`${copy.roleLabels[activeRun.role]} · ${copy.recoveryStateLabels[activeRun.state]}`}
-        </p>
+    <section
+      aria-label={copy.liveTaskTitle}
+      className="taskProgressCard"
+      data-status={progress?.status ?? "idle"}
+    >
+      {renderLiveTaskStatusContent({ payload, copy })}
+      {payload && !progress ? (
+        <span className="taskProgressHidden">{copy.liveTaskIdle}</span>
       ) : null}
-      {artifactProgress && artifactSummary ? (
-        <div className="liveTaskArtifact">
-          {artifactProgress.artifactWorkspaceId ? (
-            <strong>{copy.liveTaskArtifactReady}</strong>
-          ) : null}
-          <span className="liveTaskProgressSummary">{artifactSummary}</span>
-        </div>
-      ) : null}
-    </>
+    </section>
   );
 }
 
@@ -251,11 +252,7 @@ export function LiveTaskStatusSummary({
   payload,
   copy
 }: LiveTaskStatusSummaryProps) {
-  return (
-    <section aria-label={copy.liveTaskTitle} className="liveTaskPanel">
-      {renderLiveTaskStatusContent({ payload, copy })}
-    </section>
-  );
+  return renderTaskProgressPanel({ payload, copy });
 }
 
 export function LiveTaskPanel({
@@ -369,7 +366,16 @@ export function LiveTaskPanel({
   const visibleErrorMessage = taskId ? state.errorMessage : undefined;
 
   return (
-    <section aria-label={copy.liveTaskTitle} className="liveTaskPanel">
+    <section
+      aria-label={copy.liveTaskTitle}
+      className="taskProgressCard"
+      data-status={
+        buildTaskProgressViewModel({
+          taskType: visiblePayload?.taskType ?? "lp_generation",
+          payload: visiblePayload
+        })?.status ?? "idle"
+      }
+    >
       {renderLiveTaskStatusContent({
         payload: visiblePayload,
         copy

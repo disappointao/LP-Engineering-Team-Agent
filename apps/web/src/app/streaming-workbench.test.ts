@@ -19,7 +19,9 @@ import {
   shouldRequestFallbackSubmitAfterCommit,
   shouldStartLiveTaskAfterFallback,
   shouldSubmitDirectlyToLiveTask,
+  getComposerSubmitIntent,
   getStreamingSubmitDecision,
+  getComposerPrimaryAction,
   startLiveTaskSubmitHandoff,
   StreamingContextSummary
 } from "./streaming-workbench";
@@ -123,6 +125,44 @@ describe("streaming workbench submit interception", () => {
       streamPrompt: "Build a spring launch page",
       fallbackPrompt: "  Build a spring launch page  "
     });
+  });
+
+  it("lets the interrupt submit button use its server action instead of chat streaming", () => {
+    expect(
+      getComposerSubmitIntent({
+        getAttribute: (name: string) =>
+          name === "data-composer-action" ? "interrupt" : null
+      })
+    ).toBe("interrupt");
+  });
+});
+
+describe("streaming workbench composer primary action", () => {
+  it("uses send when no task is interruptible", () => {
+    expect(
+      getComposerPrimaryAction({
+        interruptState: "not_interruptible",
+        isPromptDisabled: false
+      })
+    ).toBe("send");
+  });
+
+  it("uses stop while the selected task can be interrupted", () => {
+    expect(
+      getComposerPrimaryAction({
+        interruptState: "idle",
+        isPromptDisabled: false
+      })
+    ).toBe("stop");
+  });
+
+  it("uses stopping while cancellation is already in progress", () => {
+    expect(
+      getComposerPrimaryAction({
+        interruptState: "stopping",
+        isPromptDisabled: true
+      })
+    ).toBe("stopping");
   });
 });
 

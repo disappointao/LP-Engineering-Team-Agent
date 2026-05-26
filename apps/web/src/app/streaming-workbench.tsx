@@ -23,12 +23,16 @@ export interface StreamingWorkbenchProps {
   implicitProjectName: string;
   promptLabel: string;
   placeholder: string;
-  runtimeChip: string;
   sendLabel: string;
   streamingStatusLabel: string;
   streamingErrorLabel: string;
   streamingErrorMessages: Record<ChatStreamErrorCode, string>;
-  interruptControl?: React.ReactNode;
+  interruptAction: (formData: FormData) => Promise<void>;
+  interruptState: "idle" | "stopping" | "cancelled" | "not_interruptible";
+  interruptLabels: {
+    idle: string;
+    stopping: string;
+  };
 }
 
 type StreamingWorkbenchAction =
@@ -166,6 +170,37 @@ export interface StreamingSubmitDecision {
   fallbackPrompt?: string;
   preventDefault: boolean;
   streamPrompt?: string;
+}
+
+export type ComposerPrimaryAction = "send" | "stop" | "stopping";
+export type ComposerSubmitIntent = "prompt" | "interrupt";
+
+export function getComposerSubmitIntent(submitter: unknown): ComposerSubmitIntent {
+  if (
+    submitter &&
+    typeof submitter === "object" &&
+    "getAttribute" in submitter &&
+    typeof submitter.getAttribute === "function" &&
+    submitter.getAttribute("data-composer-action") === "interrupt"
+  ) {
+    return "interrupt";
+  }
+  return "prompt";
+}
+
+export function getComposerPrimaryAction({
+  interruptState
+}: {
+  interruptState: "idle" | "stopping" | "cancelled" | "not_interruptible";
+  isPromptDisabled: boolean;
+}): ComposerPrimaryAction {
+  if (interruptState === "stopping") {
+    return "stopping";
+  }
+  if (interruptState === "idle") {
+    return "stop";
+  }
+  return "send";
 }
 
 export function getStreamingSubmitDecision({
@@ -423,12 +458,13 @@ export function StreamingWorkbench({
   implicitProjectName,
   promptLabel,
   placeholder,
-  runtimeChip,
   sendLabel,
   streamingStatusLabel,
   streamingErrorLabel,
   streamingErrorMessages,
-  interruptControl
+  interruptAction,
+  interruptState,
+  interruptLabels
 }: StreamingWorkbenchProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -460,6 +496,10 @@ export function StreamingWorkbench({
     streamingErrorLabel,
     streamingErrorMessages
   );
+  const primaryAction = getComposerPrimaryAction({
+    interruptState,
+    isPromptDisabled: promptSubmissionControls.visiblePromptDisabled
+  });
 
   useEffect(() => {
     const viewport = conversationViewportRef.current;
@@ -468,9 +508,11 @@ export function StreamingWorkbench({
     }
     viewport.scrollTop = viewport.scrollHeight;
   }, [
-    children,
+    liveTaskId,
+    projectId,
     state.assistantContent,
     state.status,
+    taskId,
     visibleStatus,
     visibleSubmittedPrompt
   ]);
@@ -728,6 +770,11 @@ export function StreamingWorkbench({
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (getComposerSubmitIntent(submitter) === "interrupt") {
+      return;
+    }
+
     const decision = createSubmitDecisionFromForm(event.currentTarget);
 
     if (decision.allowNativeSubmit) {
@@ -755,6 +802,10 @@ export function StreamingWorkbench({
     }
 
     event.preventDefault();
+    if (primaryAction !== "send") {
+      return;
+    }
+
     const form = event.currentTarget.form;
     if (!form) {
       return;
@@ -823,16 +874,29 @@ export function StreamingWorkbench({
             placeholder={placeholder}
             rows={1}
           />
-          <span>{runtimeChip}</span>
-          {interruptControl}
-          <button
-            type="submit"
-            className="sendButton"
-            disabled={promptSubmissionControls.visiblePromptDisabled}
-            ref={sendButtonRef}
-          >
-            {sendLabel}
-          </button>
+          {primaryAction === "send" ? (
+            <button
+              type="submit"
+              className="sendButton"
+              disabled={promptSubmissionControls.visiblePromptDisabled}
+              ref={sendButtonRef}
+            >
+              {sendLabel}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              formAction={interruptAction}
+              className="sendButton stopButton"
+              data-composer-action="interrupt"
+              disabled={primaryAction === "stopping"}
+              aria-busy={primaryAction === "stopping" ? true : undefined}
+            >
+              {primaryAction === "stopping"
+                ? interruptLabels.stopping
+                : interruptLabels.idle}
+            </button>
+          )}
         </div>
       </form>
     </>
