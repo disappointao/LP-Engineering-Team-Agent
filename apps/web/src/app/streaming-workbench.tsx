@@ -12,16 +12,17 @@ import {
   reduceStreamingWorkbenchEvent,
   type StreamingWorkbenchState
 } from "./streaming-workbench-state";
+import { ChatMessageContent } from "./chat-message-content";
 
 export interface StreamingWorkbenchProps {
   children: React.ReactNode;
   action: (formData: FormData) => Promise<void>;
   projectId?: string;
   taskId?: string;
+  liveTaskId?: string;
   implicitProjectName: string;
   promptLabel: string;
   placeholder: string;
-  addAttachmentLabel: string;
   runtimeChip: string;
   sendLabel: string;
   streamingStatusLabel: string;
@@ -222,15 +223,24 @@ export function createStreamingChatRequestBody({
 export interface LiveTaskSubmitRequestBody {
   prompt: string;
   implicitProjectName: string;
+  projectId?: string;
+  taskId?: string;
 }
 
 export const liveTaskSubmitEndpoint = "/api/tasks/submit";
 
 export function createLiveTaskSubmitRequestBody({
   prompt,
-  implicitProjectName
+  implicitProjectName,
+  projectId,
+  taskId
 }: LiveTaskSubmitRequestBody): LiveTaskSubmitRequestBody {
-  return { prompt, implicitProjectName };
+  return {
+    prompt,
+    implicitProjectName,
+    ...(projectId ? { projectId } : {}),
+    ...(taskId ? { taskId } : {})
+  };
 }
 
 export function shouldStartLiveTaskAfterFallback({
@@ -241,6 +251,16 @@ export function shouldStartLiveTaskAfterFallback({
   taskType?: string;
 }): boolean {
   return fallbackReason === "unsupported_task_type" && taskType === "lp_generation";
+}
+
+export function shouldSubmitDirectlyToLiveTask({
+  liveTaskId,
+  streamingTaskId
+}: {
+  liveTaskId?: string;
+  streamingTaskId?: string;
+}): boolean {
+  return Boolean(liveTaskId) && !streamingTaskId;
 }
 
 export interface LiveTaskFallbackHandoffState {
@@ -313,15 +333,7 @@ export function startLiveTaskFallbackHandoff({
       taskType
     })
   ) {
-    const token = state.nextToken;
-    return {
-      action: { endpoint: liveTaskSubmitEndpoint, type: "start_live_task", token },
-      state: {
-        fallbackSubmitted: true,
-        nextToken: token + 1,
-        pendingToken: token
-      }
-    };
+    return startLiveTaskSubmitHandoff({ state });
   }
 
   return {
@@ -329,6 +341,29 @@ export function startLiveTaskFallbackHandoff({
     state: {
       fallbackSubmitted: true,
       nextToken: state.nextToken
+    }
+  };
+}
+
+export function startLiveTaskSubmitHandoff({
+  state
+}: {
+  state: LiveTaskFallbackHandoffState;
+}): LiveTaskFallbackHandoffStartResult {
+  if (state.fallbackSubmitted) {
+    return {
+      action: { type: "ignore" },
+      state
+    };
+  }
+
+  const token = state.nextToken;
+  return {
+    action: { endpoint: liveTaskSubmitEndpoint, type: "start_live_task", token },
+    state: {
+      fallbackSubmitted: true,
+      nextToken: token + 1,
+      pendingToken: token
     }
   };
 }
@@ -384,10 +419,10 @@ export function StreamingWorkbench({
   action,
   projectId,
   taskId,
+  liveTaskId,
   implicitProjectName,
   promptLabel,
   placeholder,
-  addAttachmentLabel,
   runtimeChip,
   sendLabel,
   streamingStatusLabel,
@@ -397,6 +432,8 @@ export function StreamingWorkbench({
 }: StreamingWorkbenchProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const conversationViewportRef = useRef<HTMLDivElement>(null);
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
   const skipStreamingOnceRef = useRef(false);
   const fallbackSubmitPendingRef = useRef(false);
   const liveTaskFallbackHandoffRef = useRef(
@@ -406,6 +443,7 @@ export function StreamingWorkbench({
   const stateRef = useRef(createInitialStreamingWorkbenchState());
   const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
   const [liveTaskSubmitPending, setLiveTaskSubmitPending] = useState(false);
+  const [visibleSubmittedPrompt, setVisibleSubmittedPrompt] = useState<string | undefined>();
   const [state, dispatch] = useReducer(
     streamingWorkbenchReducer,
     createInitialStreamingWorkbenchState()
@@ -422,6 +460,20 @@ export function StreamingWorkbench({
     streamingErrorLabel,
     streamingErrorMessages
   );
+
+  useEffect(() => {
+    const viewport = conversationViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [
+    children,
+    state.assistantContent,
+    state.status,
+    visibleStatus,
+    visibleSubmittedPrompt
+  ]);
 
   useEffect(() => {
     if (
@@ -483,6 +535,7 @@ export function StreamingWorkbench({
       return;
     }
 
+    setVisibleSubmittedPrompt(undefined);
     router.refresh();
     const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
     applyState(nextState);
@@ -507,7 +560,9 @@ export function StreamingWorkbench({
         body: JSON.stringify(
           createLiveTaskSubmitRequestBody({
             prompt,
-            implicitProjectName
+            implicitProjectName,
+            ...(projectId ? { projectId } : {}),
+            ...(liveTaskId ? { taskId: liveTaskId } : {})
           })
         )
       });
@@ -556,28 +611,14 @@ export function StreamingWorkbench({
   };
 
   const refreshAndClearTerminalState = () => {
+    setVisibleSubmittedPrompt(undefined);
     router.refresh();
     const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
     applyState(nextState);
     dispatch({ type: "clear_transient_after_refresh" });
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    const formData = new FormData(event.currentTarget);
-    const decision = getStreamingSubmitDecision({
-      promptValue: String(formData.get("prompt") ?? ""),
-      skipStreamingOnce: skipStreamingOnceRef.current
-    });
-
-    if (decision.allowNativeSubmit) {
-      skipStreamingOnceRef.current = false;
-      return;
-    }
-
-    if (decision.preventDefault) {
-      event.preventDefault();
-    }
-
+  const submitStreamingPrompt = async (decision: StreamingSubmitDecision) => {
     if (decision.streamPrompt === undefined) {
       return;
     }
@@ -592,9 +633,27 @@ export function StreamingWorkbench({
     );
     fallbackSubmitPendingRef.current = false;
     submittedPromptRef.current = decision.fallbackPrompt ?? prompt;
+    setVisibleSubmittedPrompt(submittedPromptRef.current);
     setFallbackPrompt(undefined);
+    formRef.current?.reset();
     applyState(initialState);
     dispatch({ type: "start" });
+
+    if (shouldSubmitDirectlyToLiveTask({ liveTaskId, streamingTaskId: taskId })) {
+      const handoff = startLiveTaskSubmitHandoff({
+        state: liveTaskFallbackHandoffRef.current
+      });
+      applyLiveTaskFallbackHandoffState(handoff.state);
+
+      if (handoff.action.type === "start_live_task") {
+        void startLiveTaskFromFallback({
+          endpoint: handoff.action.endpoint,
+          token: handoff.action.token,
+          prompt: submittedPromptRef.current
+        });
+      }
+      return;
+    }
 
     try {
       const response = await fetch("/api/chat/stream", {
@@ -660,11 +719,68 @@ export function StreamingWorkbench({
     }
   };
 
+  const createSubmitDecisionFromForm = (form: HTMLFormElement) => {
+    const formData = new FormData(form);
+    return getStreamingSubmitDecision({
+      promptValue: String(formData.get("prompt") ?? ""),
+      skipStreamingOnce: skipStreamingOnceRef.current
+    });
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    const decision = createSubmitDecisionFromForm(event.currentTarget);
+
+    if (decision.allowNativeSubmit) {
+      skipStreamingOnceRef.current = false;
+      return;
+    }
+
+    if (decision.preventDefault) {
+      event.preventDefault();
+    }
+
+    await submitStreamingPrompt(decision);
+  };
+
+  const handlePromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const form = event.currentTarget.form;
+    if (!form) {
+      return;
+    }
+
+    const decision = createSubmitDecisionFromForm(form);
+    if (decision.allowNativeSubmit) {
+      form.requestSubmit(sendButtonRef.current ?? undefined);
+      return;
+    }
+
+    void submitStreamingPrompt(decision);
+  };
+
   return (
     <>
-      <div className="conversationViewport">
+      <div className="conversationViewport" ref={conversationViewportRef}>
         <div className="conversationStack">
           {children}
+          {visibleSubmittedPrompt ? (
+            <div className="userTurn streamingUserTurn" aria-label="You">
+              <div className="messageBubble userMessage">
+                <ChatMessageContent content={visibleSubmittedPrompt} />
+              </div>
+            </div>
+          ) : null}
           {shouldRenderStreamingTurn(state) ? (
             <article className="assistantTurn streamingTurn" aria-live="polite">
               <div className="assistantIdentity">
@@ -673,7 +789,9 @@ export function StreamingWorkbench({
               </div>
               <div className="assistantMessage">
                 <StreamingContextSummary state={state} />
-                {state.assistantContent ? <p>{state.assistantContent}</p> : null}
+                {state.assistantContent ? (
+                  <ChatMessageContent content={state.assistantContent} />
+                ) : null}
                 {visibleStatus ? <p className="streamingStatus">{visibleStatus}</p> : null}
               </div>
             </article>
@@ -697,14 +815,13 @@ export function StreamingWorkbench({
           />
         )}
         <div className="composer">
-          <button type="button" aria-label={addAttachmentLabel}>
-            +
-          </button>
-          <input
+          <textarea
             aria-label={promptLabel}
             disabled={promptSubmissionControls.visiblePromptDisabled}
             name="prompt"
+            onKeyDown={handlePromptKeyDown}
             placeholder={placeholder}
+            rows={1}
           />
           <span>{runtimeChip}</span>
           {interruptControl}
@@ -712,6 +829,7 @@ export function StreamingWorkbench({
             type="submit"
             className="sendButton"
             disabled={promptSubmissionControls.visiblePromptDisabled}
+            ref={sendButtonRef}
           >
             {sendLabel}
           </button>

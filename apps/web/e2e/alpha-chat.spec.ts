@@ -1,8 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   expectNoStaticArtifactPreview,
-  expectOrdinaryChatThread,
-  submitPrompt
+  expectOrdinaryChatThread
 } from "./helpers";
 
 test("streams ordinary chat and preserves the completed thread", async ({ page }) => {
@@ -14,7 +13,8 @@ test("streams ordinary chat and preserves the completed thread", async ({ page }
       response.url().endsWith("/api/chat/stream") &&
       response.request().method() === "POST"
   );
-  await submitPrompt(page, prompt);
+  await page.getByLabel("LP request").fill(prompt);
+  await page.getByLabel("LP request").press("Enter");
   const streamResponse = await streamResponsePromise;
 
   expect(streamResponse.headers()["content-type"]).toContain("application/x-ndjson");

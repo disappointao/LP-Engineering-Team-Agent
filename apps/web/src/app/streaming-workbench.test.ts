@@ -18,7 +18,9 @@ import {
   startLiveTaskFallbackHandoff,
   shouldRequestFallbackSubmitAfterCommit,
   shouldStartLiveTaskAfterFallback,
+  shouldSubmitDirectlyToLiveTask,
   getStreamingSubmitDecision,
+  startLiveTaskSubmitHandoff,
   StreamingContextSummary
 } from "./streaming-workbench";
 
@@ -311,6 +313,27 @@ describe("streaming workbench live task fallback", () => {
     ).toBe(false);
   });
 
+  it("routes completed LP task submits directly to live task continuation", () => {
+    expect(
+      shouldSubmitDirectlyToLiveTask({
+        liveTaskId: "task_lp",
+        streamingTaskId: undefined
+      })
+    ).toBe(true);
+    expect(
+      shouldSubmitDirectlyToLiveTask({
+        liveTaskId: "task_lp",
+        streamingTaskId: "task_general"
+      })
+    ).toBe(false);
+    expect(
+      shouldSubmitDirectlyToLiveTask({
+        liveTaskId: undefined,
+        streamingTaskId: undefined
+      })
+    ).toBe(false);
+  });
+
   it("creates the live task submit request body", () => {
     const prompt = "Build an LP";
     const implicitProjectName = "Untitled LP Project";
@@ -321,11 +344,40 @@ describe("streaming workbench live task fallback", () => {
     });
   });
 
+  it("includes explicit project and task context for live task continuation submits", () => {
+    expect(
+      createLiveTaskSubmitRequestBody({
+        prompt: "Make the hero stronger",
+        implicitProjectName: "Untitled LP Project",
+        projectId: "project_1",
+        taskId: "task_1"
+      })
+    ).toEqual({
+      prompt: "Make the hero stronger",
+      implicitProjectName: "Untitled LP Project",
+      projectId: "project_1",
+      taskId: "task_1"
+    });
+  });
+
   it("starts live task submit and skips the native fallback path for lp fallback", () => {
     const handoff = startLiveTaskFallbackHandoff({
       state: createInitialLiveTaskFallbackHandoffState(),
       fallbackReason: "unsupported_task_type",
       taskType: "lp_generation"
+    });
+
+    expect(handoff.action).toEqual({
+      endpoint: "/api/tasks/submit",
+      type: "start_live_task",
+      token: 1
+    });
+    expect(isLiveTaskFallbackHandoffPending(handoff.state)).toBe(true);
+  });
+
+  it("starts direct live task submit handoff without waiting for stream fallback", () => {
+    const handoff = startLiveTaskSubmitHandoff({
+      state: createInitialLiveTaskFallbackHandoffState()
     });
 
     expect(handoff.action).toEqual({

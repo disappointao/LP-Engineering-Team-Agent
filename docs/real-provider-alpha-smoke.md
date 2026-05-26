@@ -86,13 +86,21 @@ Models view 中创建 provider：
 
 ## Web Route 设置
 
-在 Web 中打开 `Models`：
+如果 `.env.local` 已设置 `REAL_MODEL_RUNTIME=1`，且 OpenAI-compatible 或 Anthropic-compatible profile ready，`pnpm dev` 首次读取 workbench store 时会自动创建 `Local Real Provider` 项目、provider 和五个 role routes：
+
+- `assistant`：普通聊天 streaming。
+- `planner`：LP brief structured output。
+- `builder`：LP artifact structured output。
+- `reviewer`：LP review run。
+- `deployer`：LP deployment run。
+
+这条路径用于本地单用户第一版试跑，让 operator 不需要先进入 Models 页面手动填 route。OpenAI-compatible 和 Anthropic-compatible 同时 ready 时，自动引导优先使用 OpenAI-compatible profile。需要改用其他 provider、模型或项目时，再在 Web 中打开 `Models` 手动调整：
 
 1. 创建并启用 provider。
 2. 保存 `assistant` route，用于普通聊天 streaming。
 3. 保存 `planner` route，用于 LP brief structured output。
 4. 保存 `builder` route，用于 LP artifact structured output。
-5. `reviewer` 和 `deployer` 第一版仍可保持 deterministic / policy-driven。
+5. 保存 `reviewer` 和 `deployer` route，避免 `REAL_MODEL_RUNTIME=1` 下完整 Web LP 链路因为缺少 role route 而 fail closed。
 
 如果 `REAL_MODEL_RUNTIME=1` 但 route 缺失、provider disabled、protocol 不匹配或 key 缺失，系统应 fail closed，并在 UI/timeline 中显示 bounded error，而不是静默回到 mock 成功结果。
 

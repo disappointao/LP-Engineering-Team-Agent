@@ -26,12 +26,12 @@ test("shows timeline recovery guidance without leaking raw diagnostics", async (
   await page.reload();
 
   await expectRunTimeline(page);
-  const recovery = page.getByLabel("Run recovery");
+  const recovery = page.locator(".recoveryBlock:visible").first();
   await expect(recovery).toBeVisible();
   await expect(recovery.getByText("Builder", { exact: true })).toBeVisible();
   await expect(recovery.getByText("Run failed.", { exact: true })).toBeVisible();
   await expect(recovery.getByText("Actions", { exact: true })).toBeVisible();
-  await expect(recovery.getByRole("button", { name: "Retry run" })).toBeVisible();
+  await expect(page.getByText("Retry run", { exact: true }).first()).toBeVisible();
   await expectNoVisibleTextLeaks(page, [
     "RECOVERY_BROWSER_SECRET",
     "/Users/ao/Desktop/recovery-secret",

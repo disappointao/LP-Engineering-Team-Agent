@@ -15,6 +15,7 @@
   --danger: #b42318;
   --danger-soft: #fff0ed;
   --shadow: 0 18px 48px rgba(31, 35, 40, 0.08);
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
 }
 
 * {
@@ -122,6 +123,7 @@ button {
   background: transparent;
   color: var(--text);
   text-align: left;
+  text-decoration: none;
 }
 
 .sidebarAction {
@@ -207,6 +209,8 @@ button {
 
 .projectSelectButton {
   width: 100%;
+  color: var(--text);
+  text-decoration: none;
 }
 
 .projectItemActive {
@@ -314,10 +318,23 @@ button {
 }
 
 .taskItem {
-  display: block;
+  display: grid;
+  gap: 3px;
   color: #494d53;
   font-size: 0.86rem;
   line-height: 1.35;
+}
+
+.taskTitle,
+.taskProjectLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.taskProjectLabel {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
 }
 
 .taskItemActive {
@@ -1352,46 +1369,26 @@ button {
 }
 
 .entryPanel {
-  min-height: calc(100vh - 190px);
+  min-height: 0;
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 22px;
-  padding: 48px 0;
+  align-content: start;
+  justify-items: start;
+  gap: 14px;
+  padding: 34px 0 12px;
 }
 
 .entryPanel h1 {
   margin: 0;
   color: #2d3035;
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 1.1;
-  text-align: center;
+  font-size: 1.08rem;
+  line-height: 1.25;
   letter-spacing: 0;
-}
-
-.entryComposerShell {
-  width: min(100%, 720px);
-  display: grid;
-  gap: 18px;
-}
-
-.entryComposerShell p {
-  min-height: 96px;
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  color: var(--subtle);
-  box-shadow: var(--shadow);
-  padding: 18px;
-  font-size: 0.96rem;
-  line-height: 1.5;
 }
 
 .entryChipRow {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -1491,6 +1488,97 @@ button {
   overflow-wrap: anywhere;
 }
 
+.messageContent {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  color: #2f3338;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.messageContent p,
+.messageContent ul,
+.messageContent ol {
+  margin: 0;
+}
+
+.messageContent ul,
+.messageContent ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 22px;
+}
+
+.messageContent li {
+  padding-left: 2px;
+}
+
+.inlineCode {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-soft);
+  color: #1f2937;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.codeBlock {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111827;
+}
+
+.codeBlockHeader {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0 10px;
+}
+
+.codeBlockHeader span {
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 780;
+}
+
+.copyCodeButton {
+  min-height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  padding: 0 9px;
+  font-size: 0.74rem;
+  font-weight: 760;
+}
+
+.copyCodeButton:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.codeBlock pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.codeBlock code {
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
 .streamingTurn {
   padding-top: 2px;
 }
@@ -1563,6 +1651,7 @@ button {
 }
 
 .processBlock,
+.agentDetails,
 .runTimelineBlock,
 .recoveryBlock,
 .deliveryBlock,
@@ -1599,6 +1688,63 @@ button {
   color: var(--muted);
   font-size: 0.78rem;
   white-space: nowrap;
+}
+
+.agentDetails {
+  overflow: hidden;
+}
+
+.agentDetailsSummary {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  padding: 0 13px;
+  text-align: left;
+}
+
+.agentDetailsSummary span {
+  font-size: 0.86rem;
+  font-weight: 830;
+}
+
+.agentDetailsSummary small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.agentDetailsSummary:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: 0;
+}
+
+.agentDetailsSummary:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.agentDetails:focus-within .agentDetailsSummary,
+.agentDetails[data-open="true"] .agentDetailsSummary {
+  border-bottom: 1px solid var(--line);
+}
+
+.agentDetailsBody {
+  display: none;
+  gap: 12px;
+  padding: 12px;
+}
+
+.agentDetails:focus-within .agentDetailsBody,
+.agentDetails[data-open="true"] .agentDetailsBody {
+  display: grid;
 }
 
 .recoveryHeader > div {
@@ -2146,18 +2292,22 @@ button {
   padding: 8px;
 }
 
-.composer input {
+.composer textarea {
   flex: 1;
   min-width: 90px;
-  height: 38px;
+  min-height: 38px;
+  max-height: 130px;
   border: 0;
   outline: 0;
   color: var(--text);
   background: transparent;
   font-size: 0.95rem;
+  line-height: 1.45;
+  resize: none;
+  padding: 8px 0;
 }
 
-.composer input::placeholder {
+.composer textarea::placeholder {
   color: var(--subtle);
 }
 
@@ -2208,12 +2358,12 @@ button {
 }
 
 .composer button:disabled,
-.composer input:disabled {
+.composer textarea:disabled {
   cursor: not-allowed;
   opacity: 0.56;
 }
 
-.composer input:disabled::placeholder {
+.composer textarea:disabled::placeholder {
   color: var(--muted);
 }
 
@@ -2308,7 +2458,7 @@ button {
     flex-wrap: wrap;
   }
 
-  .composer input {
+  .composer textarea {
     order: -1;
     flex-basis: 100%;
   }

@@ -73,6 +73,10 @@ vi.mock("next/headers", () => ({
   })
 }));
 
+vi.mock("next/link", () => ({
+  default: "a"
+}));
+
 vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
     getPageState: pageMocks.getPageStateMock.mockImplementation(async () => pageMocks.pageState)
@@ -100,9 +104,6 @@ import {
   executeRunRecoveryAction,
   executeSkillCommandAction,
   runLocalWorkerOnceAction,
-  selectProjectAction,
-  selectTaskAction,
-  startNewTaskAction,
   submitPromptAction
 } from "./actions";
 
@@ -132,7 +133,12 @@ function collectText(node: unknown): string[] {
   }
 
   if (typeof node === "object" && "props" in node) {
-    const element = node as { props?: { children?: unknown } };
+    const element = node as { type?: { name?: string }; props?: { children?: unknown } & Record<string, unknown> };
+    if (element.type?.name === "ChatMessageContent") {
+      return collectText((element.type as unknown as (props: Record<string, unknown>) => unknown)(
+        element.props as Record<string, unknown>
+      ));
+    }
     return collectText(element.props?.children);
   }
 
@@ -157,6 +163,13 @@ function collectRenderOrderText(node: unknown): string[] {
       type?: string | { name?: string };
       props?: { children?: unknown };
     };
+    if (typeof element.type !== "string" && element.type?.name === "ChatMessageContent") {
+      return collectRenderOrderText(
+        (element.type as unknown as (props: Record<string, unknown>) => unknown)(
+          element.props as Record<string, unknown>
+        )
+      );
+    }
     const isLiveTaskPanel =
       element.type === "LiveTaskPanel" ||
       (typeof element.type !== "string" && element.type?.name === "LiveTaskPanel");
@@ -624,6 +637,11 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("What can I help you build?");
     expect(text).toContain("Create static LP");
     expect(text).toContain("Plan a campaign");
+    expect(collectElements(page, "div").some(
+      (element) => element.props?.className === "entryComposerShell"
+    )).toBe(false);
+    expect(text).not.toContain("Share");
+    expect(text).not.toContain("Start trial");
     expect(text).not.toContain("Start with a local project");
     expect(text).not.toContain("Repository URL");
     expect(streamingWorkbenchProps).toMatchObject({
@@ -658,23 +676,20 @@ describe("HomePage project flow errors", () => {
 
     const emptyProjectPage = await HomePage({ searchParams: Promise.resolve({}) });
     const emptyProjectText = collectText(emptyProjectPage);
-    const emptyProjectForms = collectElements(emptyProjectPage, "form");
-    const [newTaskForm] = emptyProjectForms.filter(
-      (form) => form.props?.className === "sidebarActionForm"
+    const emptyProjectLinks = collectElements(emptyProjectPage, "a");
+    const [newTaskLink] = emptyProjectLinks.filter(
+      (link) => link.props?.className === "sidebarAction"
     );
-    const [projectSelectForm] = emptyProjectForms.filter(
-      (form) => form.props?.className === "projectSelectForm"
+    const [projectSelectLink] = emptyProjectLinks.filter(
+      (link) => String(link.props?.className ?? "").includes("projectSelectButton")
     );
-    const taskSelectForms = emptyProjectForms.filter(
-      (form) => form.props?.className === "taskSelectForm"
+    const taskSelectLinks = emptyProjectLinks.filter(
+      (link) => link.props?.className === "taskItem"
     );
 
-    expect(newTaskForm?.props?.action).toBe(startNewTaskAction);
-    expect(projectSelectForm?.props?.action).toBe(selectProjectAction);
-    expect(collectFormPayload(projectSelectForm)).toMatchObject({
-      projectId: "project_1"
-    });
-    expect(taskSelectForms).toHaveLength(0);
+    expect(newTaskLink?.props?.href).toBe("/?projectId=project_1&newTask=1");
+    expect(projectSelectLink?.props?.href).toBe("/?projectId=project_1");
+    expect(taskSelectLinks).toHaveLength(0);
     expect(emptyProjectText).toContain(
       "No tasks yet. Start from the composer or a quick prompt."
     );
@@ -685,14 +700,11 @@ describe("HomePage project flow errors", () => {
     pageMocks.pageState = createCompletedLpPageState();
 
     const taskReadyPage = await HomePage({ searchParams: Promise.resolve({}) });
-    const [taskSelectForm] = collectElements(taskReadyPage, "form").filter(
-      (form) => form.props?.className === "taskSelectForm"
+    const [taskSelectLink] = collectElements(taskReadyPage, "a").filter(
+      (link) => link.props?.className === "taskItem taskItemActive"
     );
 
-    expect(taskSelectForm?.props?.action).toBe(selectTaskAction);
-    expect(collectFormPayload(taskSelectForm)).toMatchObject({
-      taskId: "task_1"
-    });
+    expect(taskSelectLink?.props?.href).toBe("/?projectId=project_1&taskId=task_1");
   });
 
   it("renders quick prompts as submit forms instead of inert buttons", async () => {
@@ -734,10 +746,10 @@ describe("HomePage project flow errors", () => {
     expect(streamingWorkbenchProps).toMatchObject({
       action: submitPromptAction,
       projectId: "project_1",
+      liveTaskId: "task_1",
       implicitProjectName: "Untitled LP Project",
       promptLabel: "LP request",
       placeholder: "Message LP Agent",
-      addAttachmentLabel: "Add context",
       runtimeChip: "Cloud runtime",
       sendLabel: "Send",
       streamingStatusLabel: "Generating response",
@@ -750,6 +762,68 @@ describe("HomePage project flow errors", () => {
     });
     expect(streamingWorkbenchProps?.taskId).toBeUndefined();
     expect(streamingWorkbenchProps?.interruptControl).toBeDefined();
+  });
+
+  it("renders persisted LP follow-up turns without repeating the agent process block", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      messages: [
+        {
+          id: "message_user_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_assistant_1",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        },
+        {
+          id: "message_user_2",
+          taskId: "task_1",
+          role: "user",
+          content: "Make the hero shorter and add a pricing CTA.",
+          createdAt: "2026-05-12T08:01:00.000Z"
+        },
+        {
+          id: "message_assistant_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Updated the landing page with a tighter hero and pricing CTA.",
+          createdAt: "2026-05-12T08:01:01.000Z"
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const processBlocks = collectElements(page, "section").filter(
+      (section) => section.props?.className === "processBlock"
+    );
+
+    expect(text).toContain("Make the hero shorter and add a pricing CTA.");
+    expect(text).toContain("Updated the landing page with a tighter hero and pricing CTA.");
+    expect(processBlocks).toHaveLength(1);
+  });
+
+  it("preserves active project and task context in artifact workspace entry links", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const artifactWorkspaceLink = collectElements(page, "a").find(
+      (link) => collectText(link.props?.children).join(" ").includes("Open artifact workspace")
+    );
+
+    expect(artifactWorkspaceLink?.props?.href).toBe(
+      "/?view=artifacts&projectId=project_1&taskId=task_1"
+    );
   });
 
   it("renders live task panel for task-ready pages without changing streaming task context", async () => {
@@ -1907,7 +1981,13 @@ describe("HomePage project flow errors", () => {
     expect(linkLabels).toContain("Skills");
     expect(linkLabels).toContain("Models");
     expect(linkLabels).toContain("MCP");
-    expect(links.some((link) => link.props?.href === "/?view=mcp")).toBe(true);
+    expect(
+      links.some(
+        (link) =>
+          collectText(link.props?.children).join("") === "MCP" &&
+          String(link.props?.href ?? "").includes("view=mcp")
+      )
+    ).toBe(true);
   });
 
   it("renders the MCP management view without raw argument controls", async () => {
@@ -1987,7 +2067,7 @@ describe("HomePage project flow errors", () => {
     expect(
       links.some(
         (link) =>
-          link.props?.href === "/?view=mcp" &&
+          String(link.props?.href ?? "").includes("view=mcp") &&
           link.props?.["aria-current"] === "page" &&
           collectText(link.props?.children).join("") === "MCP"
       )
@@ -3024,6 +3104,9 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Help me write a campaign plan.");
     expect(text).toContain("I created a task thread and can continue from here.");
     expect(text).toContain("Assistant");
+    expect(text).not.toContain("I created a normal task thread.");
+    expect(text).not.toContain("Created a general task thread.");
+    expect(text).not.toContain("Agent process");
     expect(text).not.toContain("Run timeline");
     expect(text).not.toContain("index.single.html");
     expect(text).not.toContain("Static LP preview");

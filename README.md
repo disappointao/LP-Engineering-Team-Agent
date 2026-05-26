@@ -77,10 +77,9 @@ OPENAI_COMPATIBLE_DEFAULT_MODEL=glm-5.1
 真实 provider 本地 smoke 的最小路径见 [docs/real-provider-alpha-smoke.md](docs/real-provider-alpha-smoke.md)。简要流程：
 
 1. 运行 `pnpm real-provider:doctor`，确认 `.env.local` 已设置 `REAL_MODEL_RUNTIME=1` 且至少一个 provider profile ready。
-2. 在 Web 的 Models view 创建 provider，选择 `anthropic-messages` 或 `openai-completions`。
-3. 使用 `apiKeyEnv` 引用本地环境变量名，不在 UI 或文档中填写真实 key。
-4. 为 `assistant`、`planner` 和 `builder` 保存 route。
-5. 手动提交一个普通聊天 prompt 和一个 LP prompt；成功的普通聊天应流式显示，成功的 `model.completed` timeline entry 应显示 bounded usage/duration/streaming summary，失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
+2. 运行 `pnpm dev`。当 `.env.local` 中 `REAL_MODEL_RUNTIME=1` 且 OpenAI-compatible 或 Anthropic-compatible profile ready 时，Web 会自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes。
+3. 直接提交一个普通聊天 prompt 或 LP prompt；成功的普通聊天应流式显示，成功的 `model.completed` timeline entry 应显示 bounded usage/duration/streaming summary，失败时应看到 bounded error 或 safe runtime summary，而不是原始 provider response。
+4. 如需改用其他 provider 或模型，再进入 Web 的 Models view 手动调整；UI 只保存 `apiKeyEnv` 变量名，不保存真实 key。
 
 默认 `pnpm alpha:check`、`pnpm smoke`、`pnpm alpha:e2e` 和 `pnpm test` 不会触发真实 provider 调用。
 

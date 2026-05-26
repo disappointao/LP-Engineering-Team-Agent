@@ -30,7 +30,11 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
   expect(submitResponse.ok()).toBe(true);
   await expect(page.getByLabel("You").getByText(prompt, { exact: true })).toBeVisible();
 
-  const agentProcess = page.getByLabel("Agent process");
+  const agentDetails = page.locator(".agentDetails").first();
+  await expect(agentDetails.locator(".agentDetailsSummary")).toBeVisible();
+  await agentDetails.locator(".agentDetailsSummary").click();
+
+  const agentProcess = agentDetails.getByLabel("Agent process");
   await expect(agentProcess).toBeVisible();
   for (const role of ["Planner", "Builder", "Reviewer", "Deployer"]) {
     await expect(page.getByText(role, { exact: true }).first()).toBeVisible();

@@ -1,5 +1,6 @@
 import React from "react";
 import { headers } from "next/headers";
+import Link from "next/link";
 import {
   bindSkillVersionAction,
   createMCPConnectorAction,
@@ -10,15 +11,12 @@ import {
   runLocalWorkerOnceAction,
   createModelProviderAction,
   createSkillDraftAction,
-  selectProjectAction,
-  selectTaskAction,
   publishSkillVersionAction,
   interruptCurrentTaskAction,
   setMCPConnectorEnabledAction,
   setMCPToolApprovalAction,
   setModelProviderEnabledAction,
   setSkillBindingEnabledAction,
-  startNewTaskAction,
   submitPromptAction,
   upsertProjectModelRouteAction,
   validateSkillVersionAction
@@ -26,7 +24,8 @@ import {
 import { LPPreview } from "../components/lp-preview";
 import {
   createChatWorkbenchThread,
-  createGeneralTaskThread
+  createGeneralTaskThread,
+  type ChatToolEvent
 } from "../lib/chat-workbench";
 import {
   createArtifactDownloadLinks,
@@ -64,6 +63,8 @@ import {
   toModelManagementNotice,
   toSkillManagementNotice
 } from "./skills-models-management-view-model";
+import { AgentDetailsDisclosure } from "./agent-details-disclosure";
+import { ChatMessageContent } from "./chat-message-content";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -78,16 +79,22 @@ type MCPManagementViewModel = ReturnType<typeof buildMCPManagementViewModel>;
 function QuickPromptForm({
   className,
   implicitProjectName,
-  prompt
+  prompt,
+  projectId,
+  taskId
 }: {
   className: string;
   implicitProjectName: string;
   prompt: string;
+  projectId?: string;
+  taskId?: string;
 }) {
   return (
     <form action={submitPromptAction} className={className}>
       <input name="prompt" type="hidden" value={prompt} />
       <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
+      {projectId ? <input name="projectId" type="hidden" value={projectId} /> : null}
+      {taskId ? <input name="taskId" type="hidden" value={taskId} /> : null}
       <button type="submit">{prompt}</button>
     </form>
   );
@@ -120,6 +127,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const workerError = parseWorkerQueueError(getFirstSearchParam(params?.workerError));
   const skillNotice = toSkillManagementNotice(getFirstSearchParam(params?.skillNotice));
   const modelNotice = toModelManagementNotice(getFirstSearchParam(params?.modelNotice));
+  const requestedProjectId = getFirstSearchParam(params?.projectId);
+  const requestedTaskId = getFirstSearchParam(params?.taskId);
+  const requestedNewTask = getFirstSearchParam(params?.newTask) === "1";
+  const hasProjectParam = requestedProjectId !== undefined;
+  const hasTaskParam = requestedTaskId !== undefined;
   const previewSearchParams = createArtifactPreviewSearchParams({
     activeView,
     errorCode,
@@ -131,8 +143,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     skillError,
     workerError
   });
-  const currentProjectId = await getCurrentProjectId();
-  const currentTaskId = await getCurrentTaskId();
+  const cookieProjectId = await getCurrentProjectId();
+  const cookieTaskId = await getCurrentTaskId();
+  const currentProjectId = requestedProjectId ?? cookieProjectId;
+  const currentTaskId =
+    requestedNewTask || (hasProjectParam && !hasTaskParam)
+      ? undefined
+      : requestedTaskId ?? cookieTaskId;
   const store = await getWebWorkbenchStore();
   const pageState = await store.getPageState({
     projectId: currentProjectId,
@@ -148,6 +165,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? pageState.snapshot.project
       : pageState.projects.find((project) => project.id === currentProjectId) ??
         pageState.projects.find((project) => project.id === activeTask?.projectId);
+  const activeWorkbenchHref = createWorkbenchHref({
+    projectId: activeProject?.id,
+    taskId: activeTask?.id
+  });
+  const projectNameById = new Map(pageState.projects.map((project) => [project.id, project.name]));
   const errorMessage = errorCode ? copy.projectFlow.errors[errorCode] : undefined;
   const skillErrorMessage = skillError ? copy.skillsView.errors[skillError] : undefined;
   const workerErrorMessage = workerError
@@ -220,6 +242,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             objective: completedSnapshot.brief.brief.objective,
             pageVersion: completedSnapshot.pageVersion,
             downloadLinks,
+            messages: pageState.messages,
             runEvents: pageState.runEvents
           })
         : createGeneralTaskThread({
@@ -242,6 +265,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   };
   const streamingTaskId =
     pageState.kind === "task_ready" && pageState.task.type === "general_chat"
+      ? pageState.task.id
+      : undefined;
+  const liveTaskId =
+    pageState.kind === "task_ready" && pageState.task.type === "lp_generation"
       ? pageState.task.id
       : undefined;
   const initialPreviewVersionKey =
@@ -276,71 +303,84 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <p>{copy.sidebar.mode}</p>
             </div>
           </div>
-          <form action={startNewTaskAction} className="sidebarActionForm">
-            <button className="sidebarAction" type="submit">{copy.sidebar.newTask}</button>
-          </form>
+          <Link
+            className="sidebarAction"
+            href={createWorkbenchHref({ projectId: activeProject?.id, newTask: true })}
+          >
+            {copy.sidebar.newTask}
+          </Link>
         </div>
 
         <nav className="navList" aria-label={copy.nav.label}>
-          <a
+          <Link
             aria-current={activeView === "workbench" ? "page" : undefined}
             className={activeView === "workbench" ? "navItem navItemActive" : "navItem"}
-            href="/"
+            href={activeWorkbenchHref}
           >
             {copy.nav.workbench}
-          </a>
-          <a
+          </Link>
+          <Link
             aria-current={activeView === "artifacts" ? "page" : undefined}
             className={activeView === "artifacts" ? "navItem navItemActive" : "navItem"}
-            href="/?view=artifacts"
+            href={createWorkbenchHref({
+              projectId: activeProject?.id,
+              taskId: activeTask?.id,
+              view: "artifacts"
+            })}
           >
             {copy.nav.artifacts}
-          </a>
-          <a
+          </Link>
+          <Link
             aria-current={activeView === "skills" ? "page" : undefined}
             className={activeView === "skills" ? "navItem navItemActive" : "navItem"}
-            href="/?view=skills"
+            href={createWorkbenchHref({
+              projectId: activeProject?.id,
+              taskId: activeTask?.id,
+              view: "skills"
+            })}
           >
             {copy.nav.skills}
-          </a>
-          <a
+          </Link>
+          <Link
             aria-current={activeView === "models" ? "page" : undefined}
             className={activeView === "models" ? "navItem navItemActive" : "navItem"}
-            href="/?view=models"
+            href={createWorkbenchHref({
+              projectId: activeProject?.id,
+              taskId: activeTask?.id,
+              view: "models"
+            })}
           >
             {copy.nav.models}
-          </a>
-          <a
+          </Link>
+          <Link
             aria-current={activeView === "mcp" ? "page" : undefined}
             className={activeView === "mcp" ? "navItem navItemActive" : "navItem"}
-            href="/?view=mcp"
+            href={createWorkbenchHref({
+              projectId: activeProject?.id,
+              taskId: activeTask?.id,
+              view: "mcp"
+            })}
           >
             {copy.nav.mcp}
-          </a>
+          </Link>
         </nav>
 
         <div className="sidebarSection">
           <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
           {pageState.projects.length > 0
             ? pageState.projects.map((project) => (
-                <form
-                  action={selectProjectAction}
-                  className="projectSelectForm"
+                <Link
+                  aria-current={project.id === activeProject?.id ? "page" : undefined}
+                  className={
+                    project.id === activeProject?.id
+                      ? "projectItem projectItemActive projectSelectButton"
+                      : "projectItem projectSelectButton"
+                  }
+                  href={createWorkbenchHref({ projectId: project.id })}
                   key={project.id}
                 >
-                  <input name="projectId" type="hidden" value={project.id} />
-                  <button
-                    aria-current={project.id === activeProject?.id ? "page" : undefined}
-                    className={
-                      project.id === activeProject?.id
-                        ? "projectItem projectItemActive projectSelectButton"
-                        : "projectItem projectSelectButton"
-                    }
-                    type="submit"
-                  >
-                    <strong>{project.name}</strong>
-                  </button>
-                </form>
+                  <strong>{project.name}</strong>
+                </Link>
               ))
             : null}
           <div className="projectItem">
@@ -367,20 +407,22 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
           {pageState.tasks.length > 0
             ? pageState.tasks.map((task) => (
-                <form
-                  action={selectTaskAction}
-                  className="taskSelectForm"
+                <Link
+                  aria-current={task.id === activeTask?.id ? "page" : undefined}
+                  className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                  href={createWorkbenchHref({
+                    projectId: task.projectId,
+                    taskId: task.id
+                  })}
                   key={task.id}
                 >
-                  <input name="taskId" type="hidden" value={task.id} />
-                  <button
-                    aria-current={task.id === activeTask?.id ? "page" : undefined}
-                    className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
-                    type="submit"
-                  >
-                    {task.title}
-                  </button>
-                </form>
+                  <span className="taskTitle">{task.title}</span>
+                  {task.projectId ? (
+                    <span className="taskProjectLabel">
+                      {projectNameById.get(task.projectId) ?? task.projectId}
+                    </span>
+                  ) : null}
+                </Link>
               ))
             : <p className="sidebarEmptyState">{copy.sidebar.emptyTasks}</p>}
         </div>
@@ -417,10 +459,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             {activeView === "workbench" ? (
               <span className="modelRuntimeChip">{assistantModelLabel}</span>
             ) : null}
-          </div>
-          <div className="topBarActions">
-            <button type="button">{copy.chat.topbarShare}</button>
-            <button type="button" className="trialButton">{copy.chat.topbarTrial}</button>
           </div>
         </header>
 
@@ -1044,10 +1082,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             action={submitPromptAction}
             projectId={activeProject?.id}
             taskId={streamingTaskId}
+            liveTaskId={liveTaskId}
             implicitProjectName={copy.entry.implicitProjectName}
             promptLabel={copy.projectFlow.promptLabel}
             placeholder={pageState.kind === "empty" ? copy.entry.placeholder : composer.placeholder}
-            addAttachmentLabel={composer.addAttachmentLabel}
             runtimeChip={composer.runtimeChip}
             sendLabel={composer.sendLabel}
             streamingStatusLabel={copy.chat.streamingStatusLabel}
@@ -1078,19 +1116,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     {recoveryErrorMessage ? (
                       <div className="formError" role="alert">{recoveryErrorMessage}</div>
                     ) : null}
-                    <div className="entryComposerShell">
-                      <p>{copy.entry.placeholder}</p>
-                      <div className="entryChipRow">
-                        {copy.entry.chips.map((chip) => (
-                          <React.Fragment key={chip}>
-                            {QuickPromptForm({
-                              className: "entryChipForm",
-                              implicitProjectName: copy.entry.implicitProjectName,
-                              prompt: chip
-                            })}
-                          </React.Fragment>
-                        ))}
-                      </div>
+                    <div className="entryChipRow">
+                      {copy.entry.chips.map((chip) => (
+                        <React.Fragment key={chip}>
+                          {QuickPromptForm({
+                            className: "entryChipForm",
+                            implicitProjectName: copy.entry.implicitProjectName,
+                            prompt: chip,
+                            projectId: activeProject?.id
+                          })}
+                        </React.Fragment>
+                      ))}
                     </div>
                   </section>
                 ) : null}
@@ -1104,73 +1140,39 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     {recoveryErrorMessage ? (
                       <div className="formError" role="alert">{recoveryErrorMessage}</div>
                     ) : null}
-                    {chat.turns.map((turn, turnIndex) => (
-                      <React.Fragment key={turn.id}>
-                        <div className="userTurn" aria-label={copy.chat.userLabel}>
-                          <div className="messageBubble userMessage">{turn.userMessage}</div>
-                        </div>
+                    {chat.turns.map((turn, turnIndex) => {
+                      const isLatestTurn = turnIndex === chat.turns.length - 1;
+                      const shouldShowLpTaskDetails =
+                        isLatestTurn &&
+                        pageState.kind === "task_ready" &&
+                        pageState.task.type === "lp_generation";
+                      const hasRecoveryRows =
+                        pageState.kind === "task_ready" &&
+                        (pageState.recovery?.runs.length ?? 0) > 0;
 
-                        <article className="assistantTurn">
-                          <div className="assistantIdentity">
-                            <div className="assistantAvatar">LP</div>
-                            <strong>{chat.assistantName}</strong>
-                            <span>{chat.assistantBadge}</span>
+                      return (
+                        <React.Fragment key={turn.id}>
+                          <div className="userTurn" aria-label={copy.chat.userLabel}>
+                            <div className="messageBubble userMessage">
+                              <ChatMessageContent content={turn.userMessage} />
+                            </div>
                           </div>
 
-                          <div className="assistantMessage">
-                            <p>{chat.assistantIntro}</p>
+                          <article className="assistantTurn">
+                            <div className="assistantIdentity">
+                              <div className="assistantAvatar">LP</div>
+                              <strong>{chat.assistantName}</strong>
+                              <span>{chat.assistantBadge}</span>
+                            </div>
 
-                            <section className="processBlock" aria-label={copy.chat.toolsTitle}>
-                              <div className="processHeader">
-                                <strong>{copy.chat.toolsTitle}</strong>
-                                <span>{chat.toolEvents.length}/{chat.toolEvents.length}</span>
-                              </div>
-                              <div className="toolTimeline">
-                                {chat.toolEvents.map((event) => (
-                                  <div
-                                    className="toolEvent"
-                                    data-status={event.status}
-                                    key={`${turn.id}:${event.id}`}
-                                  >
-                                    <div className="toolStatusDot" aria-hidden="true" />
-                                    <div>
-                                      <div className="toolEventTop">
-                                        <strong>{event.label}</strong>
-                                        <span>{event.statusLabel}</span>
-                                      </div>
-                                      <p>{event.operation}</p>
-                                      <small>{event.meta}</small>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </section>
+                            <div className="assistantMessage">
+                              {chat.assistantIntro ? (
+                                <ChatMessageContent content={chat.assistantIntro} />
+                              ) : null}
 
-                            {turnIndex === chat.turns.length - 1 &&
-                            pageState.kind === "task_ready" ? (
-                              <LiveTaskPanel
-                                taskId={pageState.task.id}
-                                initialProjectId={pageState.task.projectId}
-                                initialPreviewVersionKey={initialPreviewVersionKey}
-                                copy={liveTaskCopy}
-                              />
-                            ) : null}
+                              <ChatMessageContent content={turn.assistantCompletion} />
 
-                            {turnIndex === chat.turns.length - 1 &&
-                            pageState.kind === "task_ready" &&
-                            pageState.task.type === "lp_generation"
-                              ? RunTimelineBlock({ pageState, copy })
-                              : null}
-
-                            {turnIndex === chat.turns.length - 1 &&
-                            pageState.kind === "task_ready" &&
-                            (pageState.recovery?.runs.length ?? 0) > 0
-                              ? RecoveryBlock({ pageState, copy })
-                              : null}
-
-                            <p>{turn.assistantCompletion}</p>
-
-                            {turnIndex === chat.turns.length - 1 && completedSnapshot ? (
+                              {isLatestTurn && completedSnapshot ? (
                               <>
                                 <section
                                   className="deliveryBlock"
@@ -1195,7 +1197,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                     ))}
                                     <a
                                       className="artifactCard"
-                                      href="/?view=artifacts"
+                                      href={createWorkbenchHref({
+                                        projectId: activeProject?.id,
+                                        taskId: activeTask?.id,
+                                        view: "artifacts"
+                                      })}
                                     >
                                       <span>{copy.nav.artifacts}</span>
                                       <strong>{copy.chat.artifactWorkspaceOpenLabel}</strong>
@@ -1220,10 +1226,36 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 </section>
                               </>
                             ) : null}
-                          </div>
-                        </article>
-                      </React.Fragment>
-                    ))}
+
+                              {isLatestTurn && pageState.kind === "task_ready" ? (
+                                <LiveTaskPanel
+                                  taskId={pageState.task.id}
+                                  initialProjectId={pageState.task.projectId}
+                                  initialPreviewVersionKey={initialPreviewVersionKey}
+                                  copy={liveTaskCopy}
+                                />
+                              ) : null}
+
+                              {shouldShowLpTaskDetails ? (
+                                <AgentDetailsDisclosure
+                                  countLabel={`${chat.toolEvents.length}/${chat.toolEvents.length}`}
+                                  storageKey={`agent-details:${pageState.task.id}`}
+                                  title={copy.chat.toolsTitle}
+                                >
+                                  {AgentProcessBlock({
+                                    events: chat.toolEvents,
+                                    title: copy.chat.toolsTitle,
+                                    turnId: turn.id
+                                  })}
+                                  {RunTimelineBlock({ pageState, copy })}
+                                  {hasRecoveryRows ? RecoveryBlock({ pageState, copy }) : null}
+                                </AgentDetailsDisclosure>
+                              ) : null}
+                            </div>
+                          </article>
+                        </React.Fragment>
+                      );
+                    })}
 
                     <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
                       <div>{copy.chat.suggestionsTitle}</div>
@@ -1232,7 +1264,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                           {QuickPromptForm({
                             className: "suggestionPromptForm",
                             implicitProjectName: copy.entry.implicitProjectName,
-                            prompt: suggestion
+                            prompt: suggestion,
+                            projectId: activeProject?.id,
+                            taskId: activeTask?.id
                           })}
                         </React.Fragment>
                       ))}
@@ -1408,6 +1442,48 @@ type CompletedArtifactSnapshot = {
     NonNullable<TaskReadyWorkbenchPageState["snapshot"]>["currentPageVersion"]
   >;
 };
+
+function AgentProcessBlock({
+  events,
+  title,
+  turnId
+}: {
+  events: ChatToolEvent[];
+  title: string;
+  turnId: string;
+}) {
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="processBlock" aria-label={title}>
+      <div className="processHeader">
+        <strong>{title}</strong>
+        <span>{events.length}/{events.length}</span>
+      </div>
+      <div className="toolTimeline">
+        {events.map((event) => (
+          <div
+            className="toolEvent"
+            data-status={event.status}
+            key={`${turnId}:${event.id}`}
+          >
+            <div className="toolStatusDot" aria-hidden="true" />
+            <div>
+              <div className="toolEventTop">
+                <strong>{event.label}</strong>
+                <span>{event.statusLabel}</span>
+              </div>
+              <p>{event.operation}</p>
+              <small>{event.meta}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function RunTimelineBlock({
   pageState,
@@ -2013,6 +2089,34 @@ function createArtifactPreviewHref(searchParams: URLSearchParams, artifactPath: 
   const nextSearchParams = new URLSearchParams(searchParams);
   nextSearchParams.set("artifactPath", artifactPath);
   return `/?${nextSearchParams.toString()}`;
+}
+
+function createWorkbenchHref({
+  newTask,
+  projectId,
+  taskId,
+  view
+}: {
+  newTask?: boolean;
+  projectId?: string;
+  taskId?: string;
+  view?: "artifacts" | "skills" | "models" | "mcp";
+}): string {
+  const query = new URLSearchParams();
+  if (view) {
+    query.set("view", view);
+  }
+  if (projectId) {
+    query.set("projectId", projectId);
+  }
+  if (taskId) {
+    query.set("taskId", taskId);
+  }
+  if (newTask) {
+    query.set("newTask", "1");
+  }
+  const serialized = query.toString();
+  return serialized.length > 0 ? `/?${serialized}` : "/";
 }
 
 function getModelRouteTargetLabel(routeRow: ModelManagementRouteRow): string {

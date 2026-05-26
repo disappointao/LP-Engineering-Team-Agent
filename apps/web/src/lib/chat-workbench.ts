@@ -54,6 +54,7 @@ interface CreateChatWorkbenchThreadInput {
   pageVersion: PageVersionRecord;
   downloadLinks: ArtifactDownloadLink[];
   runEvents?: RunEventRecord[];
+  messages?: GeneralTaskMessage[];
 }
 
 export function createChatWorkbenchThread({
@@ -62,12 +63,19 @@ export function createChatWorkbenchThread({
   objective,
   pageVersion,
   downloadLinks,
-  runEvents = []
+  runEvents = [],
+  messages
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
   const terminalRunStatuses = toTerminalRunStatuses(runEvents);
   const toolEvents: ChatToolEvent[] = runEvents.length > 0
     ? runEvents.map((event) => toChatToolEvent(event, copy, terminalRunStatuses))
     : createFallbackToolEvents({ copy, objective, pageVersion, downloadLinks });
+  const turns = createTaskTurns({
+    fallbackAssistantMessage: copy.chat.completion,
+    fallbackId: "lp_generation",
+    fallbackUserMessage: prompt,
+    messages
+  });
 
   const artifacts: ChatArtifactCard[] = downloadLinks.map((link, index) => ({
     ...link,
@@ -76,18 +84,12 @@ export function createChatWorkbenchThread({
   }));
 
   return {
-    userMessage: prompt,
+    userMessage: turns[0]?.userMessage ?? prompt,
     assistantName: copy.chat.assistantName,
     assistantBadge: copy.chat.assistantBadge,
     assistantIntro: copy.chat.intro,
-    assistantCompletion: copy.chat.completion,
-    turns: [
-      {
-        id: "lp_generation",
-        userMessage: prompt,
-        assistantCompletion: copy.chat.completion
-      }
-    ],
+    assistantCompletion: turns[0]?.assistantCompletion ?? copy.chat.completion,
+    turns,
     toolEvents,
     artifacts,
     suggestions: copy.chat.suggestions,
@@ -395,20 +397,10 @@ export function createGeneralTaskThread({
     userMessage: turns[0]?.userMessage ?? userMessage,
     assistantName: copy.chat.assistantName,
     assistantBadge: copy.chat.assistantBadge,
-    assistantIntro: copy.chat.generalIntro,
+    assistantIntro: "",
     assistantCompletion: turns[0]?.assistantCompletion ?? assistantMessage,
     turns,
-    toolEvents: [
-      {
-        id: "assistant",
-        role: "assistant",
-        label: copy.chat.generalToolLabel,
-        operation: copy.chat.generalToolOperation,
-        status: "complete",
-        statusLabel: copy.chat.toolStatusComplete,
-        meta: copy.chat.generalToolMeta
-      }
-    ],
+    toolEvents: [],
     artifacts: [],
     suggestions: copy.chat.generalSuggestions,
     composer: {
@@ -436,6 +428,25 @@ function createGeneralTaskTurns({
   messages?: GeneralTaskMessage[];
   userMessage: string;
 }): ChatWorkbenchTurn[] {
+  return createTaskTurns({
+    fallbackAssistantMessage: assistantMessage,
+    fallbackId: "general_chat",
+    fallbackUserMessage: userMessage,
+    messages
+  });
+}
+
+function createTaskTurns({
+  fallbackAssistantMessage,
+  fallbackId,
+  fallbackUserMessage,
+  messages
+}: {
+  fallbackAssistantMessage: string;
+  fallbackId: string;
+  fallbackUserMessage: string;
+  messages?: GeneralTaskMessage[];
+}): ChatWorkbenchTurn[] {
   const turns: ChatWorkbenchTurn[] = [];
   let pendingUser: GeneralTaskMessage | undefined;
 
@@ -455,15 +466,23 @@ function createGeneralTaskTurns({
     }
   }
 
+  if (pendingUser) {
+    turns.push({
+      id: pendingUser.id,
+      userMessage: pendingUser.content,
+      assistantCompletion: ""
+    });
+  }
+
   if (turns.length > 0) {
     return turns;
   }
 
   return [
     {
-      id: "general_chat",
-      userMessage,
-      assistantCompletion: assistantMessage
+      id: fallbackId,
+      userMessage: fallbackUserMessage,
+      assistantCompletion: fallbackAssistantMessage
     }
   ];
 }

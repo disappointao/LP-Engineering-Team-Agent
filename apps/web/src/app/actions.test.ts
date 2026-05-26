@@ -381,12 +381,12 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("uses the cookie project id when the hidden project id is mismatched", async () => {
+  it("uses the hidden project id when URL-state forms provide one", async () => {
     await expectRedirect(submitPromptAction(buildPromptForm({ projectId: "project_1" })), "/");
 
     expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
       taskId: "task_1",
-      projectId: "project_2",
+      projectId: "project_1",
       prompt: "Build a spring landing page.",
       implicitProjectName: "Untitled LP Project"
     });

@@ -42,6 +42,8 @@ import {
   type WorkbenchUserIdentity,
   type WorkbenchSnapshot
 } from "@lp-agent/api";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   ARTIFACT_WORKSPACE_DEFAULT_READ_MAX_BYTES,
   normalizeArtifactWorkspaceFilePath,
@@ -443,6 +445,24 @@ export type WorkbenchPageState =
 
 type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
 
+type LocalRealProviderProfile = {
+  key: string;
+  name: string;
+  api: "openai-completions" | "anthropic-messages";
+  baseUrl: string;
+  apiKeyEnv: string;
+  model: string;
+};
+
+const LOCAL_REAL_PROVIDER_PROJECT_NAME = "Local Real Provider";
+const LOCAL_REAL_PROVIDER_ROUTE_ROLES: AgentRole[] = [
+  "assistant",
+  "planner",
+  "builder",
+  "reviewer",
+  "deployer"
+];
+
 export type LiveTaskStateErrorCode = "task_not_found" | "project_not_found";
 
 export interface LiveTaskArtifactProgress {
@@ -816,6 +836,7 @@ export function deriveProjectSkillCommands(
 
 export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}): WebWorkbenchStore {
   const repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
+  const runtimeEnv = options.env ?? resolveDefaultRuntimeEnvironment();
   const workerRuntime = options.workerRuntime;
   const workerQueueRuntime = options.workerQueueRuntime;
   const workerJobRepository = options.workerJobRepository;
@@ -834,12 +855,36 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     deployerRuntime: options.deployerRuntime,
     toolCommandRunner: options.toolCommandRunner ?? new SimulatedToolCommandRunner(),
     workerQueueRuntime,
-    env: options.env,
+    env: runtimeEnv,
     modelFetch: options.modelFetch
   });
 
-  const listProjects = async () =>
-    (await repositories.projects.listAll()).map((project) => ({ ...project }));
+  let localRealProviderProjectPromise: Promise<string | undefined> | undefined;
+  const ensureLocalRealProviderProject = async () => {
+    localRealProviderProjectPromise ??= ensureLocalRealProviderProjectForEnv({
+      repositories,
+      service,
+      env: runtimeEnv
+    }).catch((error: unknown) => {
+      localRealProviderProjectPromise = undefined;
+      throw error;
+    });
+    return localRealProviderProjectPromise;
+  };
+  const resolveProjectIdForPrompt = async (projectId?: string | null) =>
+    projectId
+      ? await ensureLocalRealProviderRoutesForProject({
+          repositories,
+          service,
+          env: runtimeEnv,
+          projectId
+        })
+      : await ensureLocalRealProviderProject();
+
+  const listProjects = async () => {
+    await ensureLocalRealProviderProject();
+    return (await repositories.projects.listAll()).map((project) => ({ ...project }));
+  };
 
   const listTasks = async () =>
     (await repositories.tasks.listAll()).map((task) => ({ ...task }));
@@ -1432,7 +1477,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: "fallback_required", taskType };
       }
 
-      const requestedProjectId = input.projectId ?? undefined;
+      const requestedProjectId = await resolveProjectIdForPrompt(input.projectId);
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
         return { ok: false, error: "project_not_found" };
       }
@@ -1577,7 +1622,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: prompt.error };
       }
 
-      const requestedProjectId = input.projectId ?? undefined;
+      const requestedProjectId = await resolveProjectIdForPrompt(input.projectId);
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
         return { ok: false, error: "project_not_found" };
       }
@@ -1643,7 +1688,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return { ok: false, error: prompt.error };
       }
 
-      const requestedProjectId = input.projectId ?? undefined;
+      const requestedProjectId = await resolveProjectIdForPrompt(input.projectId);
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
         return { ok: false, error: "project_not_found" };
       }
@@ -2835,6 +2880,184 @@ function getOrCreateStreamingChatTask(input: {
     ...(input.projectId ? { projectId: input.projectId } : {}),
     createdAt: input.now
   };
+}
+
+async function ensureLocalRealProviderProjectForEnv(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  env: RuntimeEnvironment;
+}): Promise<string | undefined> {
+  if (!resolveLocalRealProviderProfile(input.env)) {
+    return undefined;
+  }
+
+  const existingProjects = await input.repositories.projects.listAll();
+  const project =
+    existingProjects.find((candidate) => candidate.name === LOCAL_REAL_PROVIDER_PROJECT_NAME) ??
+    (await input.service.createProject({ name: LOCAL_REAL_PROVIDER_PROJECT_NAME }));
+  await input.service.ensureProjectOwnerMembership(project.id);
+
+  return ensureLocalRealProviderRoutesForProject({
+    ...input,
+    projectId: project.id
+  });
+}
+
+async function ensureLocalRealProviderRoutesForProject(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  env: RuntimeEnvironment;
+  projectId: string;
+}): Promise<string | undefined> {
+  const profile = resolveLocalRealProviderProfile(input.env);
+  if (!profile || !(await input.repositories.projects.getById(input.projectId))) {
+    return input.projectId;
+  }
+
+  await input.service.ensureProjectOwnerMembership(input.projectId);
+  const providerId = buildLocalRealProviderId(profile, input.projectId);
+  const existingProvider = await input.repositories.modelProviders.getById(providerId);
+  if (existingProvider) {
+    await input.repositories.modelProviders.save({
+      ...existingProvider,
+      scope: "project",
+      targetKey: input.projectId,
+      name: profile.name,
+      provider: "custom",
+      config: {
+        api: profile.api,
+        baseUrl: profile.baseUrl,
+        apiKeyEnv: profile.apiKeyEnv,
+        models: [{ id: profile.model }]
+      },
+      enabled: true,
+      updatedAt: new Date().toISOString()
+    });
+  } else {
+    await input.service.createModelProvider({
+      projectId: input.projectId,
+      providerId,
+      name: profile.name,
+      provider: "custom",
+      api: profile.api,
+      baseUrl: profile.baseUrl,
+      apiKeyEnv: profile.apiKeyEnv,
+      modelId: profile.model
+    });
+  }
+
+  for (const role of LOCAL_REAL_PROVIDER_ROUTE_ROLES) {
+    await input.service.upsertProjectModelRoute({
+      projectId: input.projectId,
+      role,
+      providerId,
+      model: profile.model
+    });
+  }
+
+  return input.projectId;
+}
+
+function resolveLocalRealProviderProfile(
+  env: RuntimeEnvironment
+): LocalRealProviderProfile | undefined {
+  if (env.REAL_MODEL_RUNTIME !== "1") {
+    return undefined;
+  }
+
+  return (
+    readOpenAICompatibleProfile(env) ??
+    readAnthropicCompatibleProfile(env)
+  );
+}
+
+function readOpenAICompatibleProfile(env: RuntimeEnvironment): LocalRealProviderProfile | undefined {
+  const baseUrl = readEnvValue(env, "OPENAI_COMPATIBLE_BASE_URL");
+  const apiKey = readEnvValue(env, "OPENAI_COMPATIBLE_API_KEY");
+  const model = readEnvValue(env, "OPENAI_COMPATIBLE_DEFAULT_MODEL");
+  if (!baseUrl || !apiKey || !model) {
+    return undefined;
+  }
+  return {
+    key: "openai_compatible",
+    name: "Local OpenAI Compatible",
+    api: "openai-completions",
+    baseUrl,
+    apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+    model
+  };
+}
+
+function readAnthropicCompatibleProfile(
+  env: RuntimeEnvironment
+): LocalRealProviderProfile | undefined {
+  const baseUrl = readEnvValue(env, "ANTHROPIC_BASE_URL");
+  const apiKey = readEnvValue(env, "ANTHROPIC_API_KEY");
+  const model = readEnvValue(env, "ANTHROPIC_DEFAULT_MODEL");
+  if (!baseUrl || !apiKey || !model) {
+    return undefined;
+  }
+  return {
+    key: "anthropic_compatible",
+    name: "Local Anthropic Compatible",
+    api: "anthropic-messages",
+    baseUrl,
+    apiKeyEnv: "ANTHROPIC_API_KEY",
+    model
+  };
+}
+
+function readEnvValue(env: RuntimeEnvironment, key: string): string | undefined {
+  const value = env[key]?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+
+function buildLocalRealProviderId(profile: LocalRealProviderProfile, projectId: string): string {
+  return `local_real_provider_${profile.key}_${projectId.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+}
+
+function resolveDefaultRuntimeEnvironment(): RuntimeEnvironment {
+  if (process.env.NODE_ENV === "test") {
+    return process.env;
+  }
+
+  return {
+    ...readLocalEnvFile(resolve(process.cwd(), "../../.env.local")),
+    ...readLocalEnvFile(resolve(process.cwd(), ".env.local")),
+    ...process.env
+  };
+}
+
+function readLocalEnvFile(filePath: string): RuntimeEnvironment {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  const env: RuntimeEnvironment = {};
+  for (const rawLine of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const separator = line.indexOf("=");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = line.slice(0, separator).trim();
+    const rawValue = line.slice(separator + 1).trim();
+    env[key] = unquoteEnvValue(rawValue);
+  }
+  return env;
+}
+
+function unquoteEnvValue(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 async function withRepositoryTaskLock<T>(

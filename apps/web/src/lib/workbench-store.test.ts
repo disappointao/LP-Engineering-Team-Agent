@@ -2572,6 +2572,146 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("bootstraps a local real-provider project for projectless LP prompts", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { modelFetch, calls } = createStructuredLPModelFetch();
+    const store = createWebWorkbenchStore({
+      repositories,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_BASE_URL: "https://models.example.test/v1",
+        OPENAI_COMPATIBLE_API_KEY: "test-key",
+        OPENAI_COMPATIBLE_DEFAULT_MODEL: "lp-model"
+      },
+      modelFetch
+    });
+
+    const result = await store.submitTaskPrompt({
+      projectId: null,
+      taskId: null,
+      prompt: "Create a landing page in HTML for a local real-provider default.",
+      implicitProjectName: "Ignored Implicit Project"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      taskType: "lp_generation",
+      projectId: expect.any(String)
+    });
+    if (!result.ok || !result.projectId) {
+      throw new Error("Expected project-backed LP result.");
+    }
+    const projects = await repositories.projects.listAll();
+    expect(projects).toEqual([
+      expect.objectContaining({
+        id: result.projectId,
+        name: "Local Real Provider"
+      })
+    ]);
+    const providers = await repositories.modelProviders.listForProject(result.projectId);
+    expect(providers).toEqual([
+      expect.objectContaining({
+        provider: "custom",
+        config: expect.objectContaining({
+          api: "openai-completions",
+          apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+          models: [{ id: "lp-model" }]
+        })
+      })
+    ]);
+    const routes = await repositories.modelRoutingPolicies.listForProject(result.projectId);
+    expect(routes.map((route) => [route.role, route.providerId, route.model])).toEqual([
+      ["assistant", providers[0]?.id, "lp-model"],
+      ["planner", providers[0]?.id, "lp-model"],
+      ["builder", providers[0]?.id, "lp-model"],
+      ["reviewer", providers[0]?.id, "lp-model"],
+      ["deployer", providers[0]?.id, "lp-model"]
+    ]);
+    expect(calls.map((call) => call.kind)).toEqual(["planner", "builder", "other", "other"]);
+  });
+
+  it("bootstraps local real-provider routes for an explicitly selected project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const { modelFetch } = createStructuredLPModelFetch();
+    const store = createWebWorkbenchStore({
+      repositories,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_BASE_URL: "https://models.example.test/v1",
+        OPENAI_COMPATIBLE_API_KEY: "test-key",
+        OPENAI_COMPATIBLE_DEFAULT_MODEL: "lp-model"
+      },
+      modelFetch
+    });
+    const project = await store.createProject({ name: "Existing Project" });
+
+    const result = await store.submitTaskPrompt({
+      projectId: project.id,
+      taskId: null,
+      prompt: "Create a landing page in HTML for an existing project.",
+      implicitProjectName: "Ignored"
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      projectId: project.id,
+      taskType: "lp_generation"
+    });
+    const providers = await repositories.modelProviders.listForProject(project.id);
+    const routes = await repositories.modelRoutingPolicies.listForProject(project.id);
+    expect(providers).toHaveLength(1);
+    expect(routes.map((route) => route.role)).toEqual([
+      "assistant",
+      "planner",
+      "builder",
+      "reviewer",
+      "deployer"
+    ]);
+  });
+
+  it("bootstraps a local real-provider project for projectless chat prompts", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new RecordingRuntime({
+      modelOutputText: "Local real-provider chat is ready."
+    });
+    const store = createWebWorkbenchStore({
+      repositories,
+      assistantRuntime: runtime,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        ANTHROPIC_BASE_URL: "https://anthropic.example.test",
+        ANTHROPIC_API_KEY: "test-key",
+        ANTHROPIC_DEFAULT_MODEL: "claude-test"
+      }
+    });
+
+    const started = await store.startStreamingChatPrompt({
+      projectId: null,
+      taskId: null,
+      prompt: "Can I chat without manual setup?"
+    });
+
+    expect(started).toMatchObject({
+      ok: true,
+      projectId: expect.any(String),
+      contextSummary: {
+        runtimeMode: "real",
+        projectName: "Local Real Provider"
+      }
+    });
+    if (!started.ok || !started.projectId) {
+      throw new Error("Expected project-backed chat start.");
+    }
+    const request = runtime.requests[0];
+    if (!request?.context?.modelRoutingPolicy) {
+      throw new Error("Expected assistant runtime request with model routing policy.");
+    }
+    expect(request.context.modelRoutingPolicy.assistant).toMatchObject({
+      api: "anthropic-messages",
+      model: "claude-test"
+    });
+  });
+
   it("recovers page model state when a persisted route points to a disabled provider", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const store = createWebWorkbenchStore({ repositories });

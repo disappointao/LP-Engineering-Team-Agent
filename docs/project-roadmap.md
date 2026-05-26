@@ -42,7 +42,7 @@
 - Browser failure / visual regression expansion v0：Stage 45 已把 `pnpm alpha:e2e` 扩展到 Stage 41-44 V1 Web surface，覆盖当时的 MCP route fallback、artifact workspace boundary、timeline/recovery diagnostics、Skills / Models fail-closed 和轻量 visual contracts。
 - Provider token delta streaming v0：Stage 35 已把真实 provider streaming contract 接入普通聊天 `assistant` role；LP Planner / Builder structured output 仍保持完整 buffer parse / repair。
 - Real provider alpha smoke docs v0：Stage 36 已整理真实 provider opt-in smoke matrix、operator docs、可选 integration tests 和 fake-provider usage/fail-closed regression；默认 gates 继续 deterministic/no-key。
-- Real Provider Local Run Polish v0：Stage57 已新增 `.env.real-provider.example`、`pnpm real-provider:doctor` 和 Models 本地真实 provider checklist，降低本机 `.env.local` 试跑摩擦；真实 provider smoke 仍是 operator opt-in，默认 gates 继续 deterministic/no-key。
+- Real Provider Local Run Polish v0：Stage57 已新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models 本地真实 provider checklist 和 `pnpm dev` 本地自动引导；当 `.env.local` 已 opt in 且 profile ready 时，默认 Web store 会创建 `Local Real Provider` 项目与五个 role routes，降低本机试跑普通聊天和 LP 的摩擦；真实 provider smoke 仍是 operator opt-in，默认 gates 继续 deterministic/no-key。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 - LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
@@ -1044,13 +1044,14 @@ Stage 41 v0 已收紧 V1 Web surface：MCP 管理入口、sidebar/top-level nav 
 
 **状态：** 已实现。
 
-Stage57 v0 已把真实 provider 本地试跑从“阅读文档后手动拼步骤”收紧成 operator-friendly preflight：新增 `.env.real-provider.example`、`pnpm real-provider:doctor` 和 Web Models 本地运行 checklist。它只降低本机 `.env.local` 配置摩擦，不改变真实 provider opt-in 安全边界。
+Stage57 v0 已把真实 provider 本地试跑从“阅读文档后手动拼步骤”收紧成 operator-friendly preflight：新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Web Models 本地运行 checklist 和 `pnpm dev` 本地自动引导。`.env.local` 已设置 `REAL_MODEL_RUNTIME=1` 且 OpenAI-compatible 或 Anthropic-compatible profile ready 时，默认 Web store 会创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes。它只降低本机 `.env.local` 配置摩擦，不改变真实 provider opt-in 安全边界。
 
 已实现范围：
 
 - 新增 `.env.real-provider.example`，默认 `REAL_MODEL_RUNTIME=1`、`REAL_MODEL_PROVIDER_TEST=0`，只保留空 key placeholder。
 - 新增 `pnpm real-provider:doctor`，默认读取 `.env.local`，支持 `--env-file` 和 `--strict`，不发起网络请求，不打印 API key 值或 base URL 值。
 - Models 页面新增 local real-provider run checklist，从项目 provider / route facts 派生 provider、chat route、LP route readiness；不读取 server env，也不展示 raw secret、env value 或完整 base URL。
+- Web store 在本地真实 runtime ready 时自动创建 `Local Real Provider` 项目、provider 和五个 role routes，让无 project 的普通聊天和 LP prompt 也能直接走真实 provider。
 - README、真实 provider smoke、acceptance、RC 和 Agent 学习文档已同步，明确 `not_run` / `skipped_no_keys` 是有效状态。
 
 非目标：
@@ -1180,7 +1181,7 @@ Stage57 v0 已把真实 provider 本地试跑从“阅读文档后手动拼步�
 
 ## 决策记录
 
-- 2026-05-25 Stage57 Real Provider Local Run Polish v0 已完成：新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models 本地真实 provider checklist、真实 smoke / RC 状态语言和 roadmap / Agent 学习同步；本阶段仍不让默认 gates 触发真实 provider，不保存 secret，不打印 key/base URL 值，不改变 LP Planner / Builder complete-buffer structured output 边界。验证已完成：focused Vitest 4 files / 104 tests passed、`pnpm real-provider:doctor --env-file .env.real-provider.example` checklist mode exited 0、`pnpm alpha:check` 8 files / 146 tests passed、`pnpm smoke` 1 file / 2 tests passed、`pnpm test` 61 files passed / 1186 tests passed / 2 skipped、`pnpm typecheck` passed、`pnpm build` passed、`pnpm alpha:e2e` 16 passed、`git diff --check` passed。当前推荐下一阶段仍为 Stage 52 Real Deployment Runner Discovery v0，Stage 53、Stage 55、Stage 56 和 Stage 48 conditional 保留。
+- 2026-05-25 Stage57 Real Provider Local Run Polish v0 已完成并补充本地自动引导：新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models 本地真实 provider checklist、`pnpm dev` 下的 `Local Real Provider` 项目/provider/五角色 route 自动创建、真实 smoke / RC 状态语言和 roadmap / Agent 学习同步；本阶段仍不让默认 gates 触发真实 provider，不保存 secret，不打印 key/base URL 值，不改变 LP Planner / Builder complete-buffer structured output 边界。验证已完成：focused Vitest 4 files / 104 tests passed、`pnpm real-provider:doctor --env-file .env.real-provider.example` checklist mode exited 0、`pnpm alpha:check` 8 files / 146 tests passed、`pnpm smoke` 1 file / 2 tests passed、`pnpm test` 61 files passed / 1186 tests passed / 2 skipped、`pnpm typecheck` passed、`pnpm build` passed、`pnpm alpha:e2e` 16 passed、`git diff --check` passed；本地自动引导补充验证为 workbench-store focused Vitest 2 tests passed、当前 `.env.local` strict doctor passed。当前推荐下一阶段仍为 Stage 52 Real Deployment Runner Discovery v0，Stage 53、Stage 55、Stage 56 和 Stage 48 conditional 保留。
 
 - 2026-05-25 Stage 50 Browser Platform / Visual Baseline Planning v0 已完成：`docs/browser-platform-visual-baseline-planning.md` 记录 current Chromium deterministic baseline、browser matrix tiers、remote browser farm assumptions、visual baseline decision、artifact retention、failure triage 和 baseline update policy；本阶段未修改 Playwright config/specs/scripts，未引入 cross-browser default matrix、remote browser farm 或 pixel screenshot baseline。当前推荐下一阶段转为 Stage 52 Real Deployment Runner Discovery v0；Stage 48 conditional、Stage 53、Stage 55 和 Stage 56 保留。
 

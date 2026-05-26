@@ -29,8 +29,8 @@ export async function expectOrdinaryChatThread(page: Page, prompt: string) {
   await expect(
     page.getByText("I created a task thread and can continue from here.")
   ).toBeVisible();
-  await expect(page.getByLabel("Agent process")).toBeVisible();
-  await expect(page.getByText("Created a general task thread.")).toBeVisible();
+  await expect(page.getByLabel("Agent process")).toHaveCount(0);
+  await expect(page.getByText("Created a general task thread.")).toHaveCount(0);
 }
 
 export async function expectNoStaticArtifactPreview(page: Page) {
@@ -64,7 +64,12 @@ export async function expectStaticLpArtifacts(page: Page) {
 }
 
 export async function expectRunTimeline(page: Page) {
-  const runTimeline = page.getByLabel("Run timeline");
+  const agentDetails = page.locator(".agentDetails").first();
+  const summary = agentDetails.locator(".agentDetailsSummary");
+  if ((await summary.getAttribute("aria-expanded")) !== "true") {
+    await agentDetails.locator(".agentDetailsSummary").click();
+  }
+  const runTimeline = agentDetails.locator(".runTimelineBlock");
   await expect(runTimeline).toBeVisible();
   await expect(runTimeline.getByText("Run timeline", { exact: true })).toBeVisible();
   await expect(runTimeline.getByText("Planner to deployment handoff", { exact: true })).toBeVisible();

@@ -16,9 +16,9 @@ describe("chat workbench view model", () => {
     });
 
     expect(thread.userMessage).toBe("Help me write a campaign plan.");
-    expect(thread.assistantIntro).toBe(copy.chat.generalIntro);
+    expect(thread.assistantIntro).toBe("");
     expect(thread.assistantCompletion).toBe("I created a task thread and can continue from here.");
-    expect(thread.toolEvents.map((event) => event.role)).toEqual(["assistant"]);
+    expect(thread.toolEvents).toEqual([]);
     expect(thread.artifacts).toEqual([]);
   });
 
@@ -38,6 +38,51 @@ describe("chat workbench view model", () => {
     expect(thread.userMessage).toBe(snapshot.brief.prompt);
     expect(thread.assistantName).toBe(copy.chat.assistantName);
     expect(thread.composer.placeholder).toBe(copy.chat.composerPlaceholder);
+  });
+
+  it("uses persisted LP task messages as visible conversation turns", async () => {
+    const copy = getWorkbenchCopy("en");
+    const snapshot = await createDemoWorkbenchSnapshot();
+    const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
+
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      downloadLinks,
+      messages: [
+        {
+          id: "message_user_1",
+          role: "user",
+          content: snapshot.brief.prompt
+        },
+        {
+          id: "message_assistant_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review."
+        },
+        {
+          id: "message_user_2",
+          role: "user",
+          content: "Make the hero more direct."
+        },
+        {
+          id: "message_assistant_2",
+          role: "assistant",
+          content: "LP artifacts are ready for review."
+        }
+      ]
+    });
+
+    expect(thread.turns.map((turn) => turn.userMessage)).toEqual([
+      snapshot.brief.prompt,
+      "Make the hero more direct."
+    ]);
+    expect(thread.turns.map((turn) => turn.assistantCompletion)).toEqual([
+      "LP artifacts are ready for review.",
+      "LP artifacts are ready for review."
+    ]);
   });
 
   it("returns deterministic planner builder reviewer tool order", async () => {
