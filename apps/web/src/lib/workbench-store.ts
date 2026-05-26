@@ -34,7 +34,11 @@ import {
   type SkillContentType,
   type SkillDraftResult,
   type SkillVersionRecord,
+  type TaskFollowupSuggestion,
   type TaskInterruptView,
+  type TaskIntentArtifactSummary,
+  type TaskIntentRecentMessage,
+  type TaskInputIntent,
   type TaskInterruptWorkerRuntime,
   type ToolCommandRunner,
   type WorkerQueueSnapshot,
@@ -441,6 +445,7 @@ export type WorkbenchPageState =
       recovery: WorkbenchTaskRecoveryState;
       snapshot?: WorkbenchSnapshot;
       artifactDiff?: WebArtifactDiffState;
+      taskFollowupSuggestions: TaskFollowupSuggestion[];
     };
 
 type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
@@ -1398,6 +1403,16 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               selectedPath: input?.artifactPath
             })
           : undefined;
+      const taskFollowupSuggestions =
+        task.type === "lp_generation" && activeProjectId
+          ? await generateLpTaskFollowupSuggestions({
+              service,
+              projectId: activeProjectId,
+              task,
+              recentMessages: await listRecentTaskIntentMessages(repositories, task.id),
+              artifactSummary: buildTaskIntentArtifactSummary(artifactDiff, snapshot)
+            })
+          : [];
       const recovery = await listRunRecoveryViewsForTask({
         repositories,
         taskId: task.id,
@@ -1427,7 +1442,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           runs: recovery
         },
         snapshot,
-        artifactDiff
+        artifactDiff,
+        taskFollowupSuggestions
       };
     },
 
@@ -1636,6 +1652,42 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           existingTask.projectId !== undefined &&
           existingTask.projectId === continuationProjectId
         ) {
+          const routed = await routeExistingLpTaskPromptIntent({
+            repositories,
+            service,
+            task: existingTask,
+            projectId: continuationProjectId,
+            prompt: prompt.value
+          });
+          if (routed.type === "chat_in_task") {
+            return answerLpTaskChatInPlace({
+              repositories,
+              service,
+              task: existingTask,
+              projectId: continuationProjectId,
+              prompt: prompt.value
+            });
+          }
+          if (routed.type === "agent_new_task") {
+            return runLpTaskPrompt({
+              repositories,
+              service,
+              currentUser,
+              requestedTaskId: undefined,
+              requestedProjectId: continuationProjectId,
+              prompt: prompt.value,
+              implicitProjectName: input.implicitProjectName
+            });
+          }
+          if (routed.type === "clarify") {
+            return clarifyLpTaskInputInPlace({
+              repositories,
+              task: existingTask,
+              projectId: continuationProjectId,
+              prompt: prompt.value,
+              question: routed.question
+            });
+          }
           return runLpTaskPrompt({
             repositories,
             service,
@@ -1702,6 +1754,72 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           existingTask.projectId !== undefined &&
           existingTask.projectId === continuationProjectId
         ) {
+          const routed = await routeExistingLpTaskPromptIntent({
+            repositories,
+            service,
+            task: existingTask,
+            projectId: continuationProjectId,
+            prompt: prompt.value
+          });
+          if (routed.type === "chat_in_task") {
+            const result = await answerLpTaskChatInPlace({
+              repositories,
+              service,
+              task: existingTask,
+              projectId: continuationProjectId,
+              prompt: prompt.value
+            });
+            return {
+              ok: true,
+              taskId: existingTask.id,
+              taskType: "lp_generation",
+              projectId: continuationProjectId,
+              completion: Promise.resolve(result)
+            };
+          }
+          if (routed.type === "agent_new_task") {
+            const prepared = await prepareLpTaskPrompt({
+              repositories,
+              service,
+              requestedTaskId: undefined,
+              requestedProjectId: continuationProjectId,
+              prompt: prompt.value,
+              implicitProjectName: input.implicitProjectName
+            });
+            const completion = completePreparedLpTaskPrompt({
+              repositories,
+              service,
+              currentUser,
+              task: prepared.task,
+              projectId: prepared.projectId,
+              prompt: prompt.value,
+              previousPageVersionId: prepared.previousPageVersionId
+            });
+            completion.catch(() => undefined);
+            return {
+              ok: true,
+              taskId: prepared.task.id,
+              taskType: "lp_generation",
+              projectId: prepared.projectId,
+              completion
+            };
+          }
+          if (routed.type === "clarify") {
+            const result = await clarifyLpTaskInputInPlace({
+              repositories,
+              task: existingTask,
+              projectId: continuationProjectId,
+              prompt: prompt.value,
+              question: routed.question
+            });
+            return {
+              ok: true,
+              taskId: existingTask.id,
+              taskType: "lp_generation",
+              projectId: continuationProjectId,
+              completion: Promise.resolve(result)
+            };
+          }
           const prepared = await prepareLpTaskPrompt({
             repositories,
             service,
@@ -2553,6 +2671,160 @@ async function runLpAgentChainForTask(input: {
   return {
     briefId: brief.id,
     pageVersionId: reviewedPageVersion.id
+  };
+}
+
+async function routeExistingLpTaskPromptIntent(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  task: TaskRecord;
+  projectId: string;
+  prompt: string;
+}): Promise<TaskInputIntent> {
+  const snapshotRef = await input.repositories.taskSnapshots.getByTaskId(input.task.id);
+  const snapshot = snapshotRef
+    ? await input.service.getSnapshotForRecords({
+        projectId: snapshotRef.projectId,
+        briefId: snapshotRef.briefId,
+        pageVersionId: snapshotRef.pageVersionId
+      })
+    : undefined;
+  const artifactDiff = snapshot?.currentPageVersion
+    ? await buildWebArtifactDiffState({
+        service: input.service,
+        repositories: input.repositories,
+        projectId: snapshot.project.id,
+        currentPageVersion: snapshot.currentPageVersion
+      })
+    : undefined;
+
+  return input.service.routeTaskInputIntent({
+    projectId: input.projectId,
+    taskId: input.task.id,
+    prompt: input.prompt,
+    currentTask: {
+      id: input.task.id,
+      type: "lp_generation",
+      projectId: input.projectId,
+      status: input.task.status
+    },
+    recentMessages: await listRecentTaskIntentMessages(input.repositories, input.task.id),
+    artifactSummary: buildTaskIntentArtifactSummary(artifactDiff, snapshot)
+  });
+}
+
+async function answerLpTaskChatInPlace(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  task: TaskRecord;
+  projectId: string;
+  prompt: string;
+}): Promise<SubmitTaskResult> {
+  await appendTaskMessage({
+    repositories: input.repositories,
+    taskId: input.task.id,
+    role: "user",
+    content: input.prompt
+  });
+  const assistant = await input.service.runAssistantChat({
+    projectId: input.projectId,
+    taskId: input.task.id,
+    prompt: input.prompt
+  });
+  await appendTaskMessage({
+    repositories: input.repositories,
+    taskId: input.task.id,
+    role: "assistant",
+    content: assistant.ok
+      ? assistant.content
+      : "I could not answer that in chat. Please try again or continue the LP task."
+  });
+  if (!assistant.ok) {
+    return {
+      ok: false,
+      error: assistant.error,
+      taskId: input.task.id,
+      taskType: "lp_generation",
+      projectId: input.projectId
+    };
+  }
+  return {
+    ok: true,
+    taskId: input.task.id,
+    taskType: "lp_generation",
+    projectId: input.projectId
+  };
+}
+
+async function clarifyLpTaskInputInPlace(input: {
+  repositories: WorkbenchRepositories;
+  task: TaskRecord;
+  projectId: string;
+  prompt: string;
+  question: string;
+}): Promise<SubmitTaskResult> {
+  await appendTaskMessage({
+    repositories: input.repositories,
+    taskId: input.task.id,
+    role: "user",
+    content: input.prompt
+  });
+  await appendTaskMessage({
+    repositories: input.repositories,
+    taskId: input.task.id,
+    role: "assistant",
+    content: input.question
+  });
+  return {
+    ok: true,
+    taskId: input.task.id,
+    taskType: "lp_generation",
+    projectId: input.projectId
+  };
+}
+
+async function generateLpTaskFollowupSuggestions(input: {
+  service: DemoWorkbenchService;
+  projectId: string;
+  task: TaskRecord;
+  recentMessages: TaskIntentRecentMessage[];
+  artifactSummary: TaskIntentArtifactSummary;
+}): Promise<TaskFollowupSuggestion[]> {
+  try {
+    return await input.service.generateTaskFollowupSuggestions({
+      projectId: input.projectId,
+      taskTitle: input.task.title,
+      taskStatus: input.task.status,
+      recentMessages: input.recentMessages,
+      artifactSummary: input.artifactSummary
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function listRecentTaskIntentMessages(
+  repositories: WorkbenchRepositories,
+  taskId: string
+): Promise<TaskIntentRecentMessage[]> {
+  const messages = await repositories.messages.listForTask(taskId);
+  return messages.slice(-6).map((message) => ({
+    role: message.role,
+    content: message.content
+  }));
+}
+
+function buildTaskIntentArtifactSummary(
+  artifactDiff: WebArtifactDiffState | undefined,
+  snapshot: WorkbenchSnapshot | undefined
+): TaskIntentArtifactSummary {
+  return {
+    hasPreview: Boolean(snapshot?.currentPageVersion),
+    files:
+      artifactDiff?.files.map((file) => ({
+        path: file.path,
+        summary: file.summary
+      })) ?? []
   };
 }
 

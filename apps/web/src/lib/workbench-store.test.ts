@@ -281,6 +281,21 @@ class RecordingRuntime extends StaticRuntime {
   }
 }
 
+class QueuedRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(private readonly results: Array<Partial<RuntimeRunResult>>) {}
+
+  async run(request: RuntimeRunRequest): Promise<RuntimeRunResult> {
+    this.requests.push(request);
+    const result = this.results.shift();
+    if (!result) {
+      throw new Error(`unexpected ${request.role} runtime call`);
+    }
+    return new StaticRuntime(result).run(request);
+  }
+}
+
 class StreamingRuntime implements AgentRuntimeAdapter {
   readonly requests: RuntimeRunRequest[] = [];
 
@@ -3962,11 +3977,20 @@ describe("web workbench store", () => {
 
   it("continues an existing LP task by creating a new page version", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "agent_continue",
+          confidence: 0.91,
+          reason: "The user is requesting an artifact change."
+        })
+      }
+    ]);
     const builderRuntime = new RecordingRuntime({
       state: "completed",
       artifacts: completeArtifacts()
     });
-    const store = createWebWorkbenchStore({ repositories, builderRuntime });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
 
     const first = await store.submitTaskPrompt({
       prompt: "Create a landing page for a spring sale",
@@ -4026,8 +4050,266 @@ describe("web workbench store", () => {
     ]);
   });
 
+  it("answers ordinary questions inside an LP task without running the LP chain", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "chat_in_task",
+          confidence: 0.93,
+          reason: "The user is asking about the current task."
+        })
+      },
+      { modelOutputText: "The landing page currently targets a spring sale campaign." }
+    ]);
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+    const builderCallsAfterFirst = builderRuntime.requests.length;
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "What audience is this page for?",
+      implicitProjectName: "Spring Sale"
+    });
+
+    expect(second).toEqual({
+      ok: true,
+      taskId: first.taskId,
+      taskType: "lp_generation",
+      projectId: first.projectId
+    });
+    expect(builderRuntime.requests).toHaveLength(builderCallsAfterFirst);
+    await expect(repositories.messages.listForTask(first.taskId)).resolves.toEqual([
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant" }),
+      expect.objectContaining({
+        role: "user",
+        content: "What audience is this page for?"
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "The landing page currently targets a spring sale campaign."
+      })
+    ]);
+  });
+
+  it("continues an LP task when the router classifies the prompt as agent continuation", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "agent_continue",
+          confidence: 0.91,
+          reason: "The user is requesting an artifact change."
+        })
+      }
+    ]);
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+    const builderCallsAfterFirst = builderRuntime.requests.length;
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "Add a testimonials section",
+      implicitProjectName: "Spring Sale"
+    });
+
+    expect(second).toEqual({
+      ok: true,
+      taskId: first.taskId,
+      taskType: "lp_generation",
+      projectId: first.projectId
+    });
+    expect(builderRuntime.requests.length).toBeGreaterThan(builderCallsAfterFirst);
+    await expect(repositories.pageVersions.getById("version_2")).resolves.toMatchObject({
+      id: "version_2"
+    });
+  });
+
+  it("creates a new LP task in the same project when the router classifies a new task", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "agent_new_task",
+          confidence: 0.9,
+          reason: "The user is requesting a separate LP."
+        })
+      }
+    ]);
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "Create a landing page for a summer sale",
+      implicitProjectName: "Summer Sale"
+    });
+
+    expect(second).toMatchObject({
+      ok: true,
+      taskType: "lp_generation",
+      projectId: first.projectId
+    });
+    if (!second.ok) {
+      throw new Error("expected second LP task");
+    }
+    expect(second.taskId).not.toBe(first.taskId);
+  });
+
+  it("exposes LP follow-up suggestions from the service and keeps general tasks empty", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const suggestions = [
+      { id: "ask", intent: "chat_in_task", prompt: "What changed in this version?" },
+      { id: "continue", intent: "agent_continue", prompt: "Make the hero more direct." }
+    ];
+    const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify(suggestions) }
+    ]);
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const lpTask = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(lpTask).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!lpTask.ok || !lpTask.projectId) {
+      throw new Error("expected LP task");
+    }
+
+    const lpState = await store.getPageState({
+      projectId: lpTask.projectId,
+      taskId: lpTask.taskId
+    });
+    expect(lpState.kind).toBe("task_ready");
+    if (lpState.kind !== "task_ready") {
+      throw new Error("expected LP task state");
+    }
+    expect(lpState.taskFollowupSuggestions).toEqual(suggestions);
+
+    const generalTask = await store.submitTaskPrompt({
+      prompt: "Help me write a launch checklist.",
+      implicitProjectName: "Untitled LP Project"
+    });
+    expect(generalTask.ok).toBe(true);
+    if (!generalTask.ok) {
+      throw new Error("expected general task");
+    }
+    const generalState = await store.getPageState({ taskId: generalTask.taskId });
+    expect(generalState.kind).toBe("task_ready");
+    if (generalState.kind !== "task_ready") {
+      throw new Error("expected general task state");
+    }
+    expect(generalState.taskFollowupSuggestions).toEqual([]);
+  });
+
+  it("asks for clarification without running the LP chain when router confidence is low", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "agent_continue",
+          confidence: 0.2,
+          reason: "Ambiguous request."
+        })
+      }
+    ]);
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+    const builderCallsAfterFirst = builderRuntime.requests.length;
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "Can you handle that?",
+      implicitProjectName: "Spring Sale"
+    });
+
+    expect(second).toEqual({
+      ok: true,
+      taskId: first.taskId,
+      taskType: "lp_generation",
+      projectId: first.projectId
+    });
+    expect(builderRuntime.requests).toHaveLength(builderCallsAfterFirst);
+    await expect(repositories.messages.listForTask(first.taskId)).resolves.toEqual([
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant" }),
+      expect.objectContaining({
+        role: "user",
+        content: "Can you handle that?"
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content:
+          "Do you want me to answer this in chat, continue the current LP task, or create a new LP task?"
+      })
+    ]);
+  });
+
   it("clears the current page version when Builder fails during a continued LP task", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      {
+        modelOutputText: JSON.stringify({
+          type: "agent_continue",
+          confidence: 0.91,
+          reason: "The user is requesting an artifact change."
+        })
+      }
+    ]);
     const builderRuntime = new (class extends StaticRuntime {
       private calls = 0;
 
@@ -4045,7 +4327,7 @@ describe("web workbench store", () => {
         return new StaticRuntime({ state: "failed" }).run(request);
       }
     })();
-    const store = createWebWorkbenchStore({ repositories, builderRuntime });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
 
     const first = await store.submitTaskPrompt({
       prompt: "Create a landing page for a spring sale",
