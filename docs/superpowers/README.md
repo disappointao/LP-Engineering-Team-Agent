@@ -6,15 +6,16 @@
 
 ## 阅读顺序
 
-当前新增阶段：
+当前 / 近期阶段：
 
 - `specs/2026-05-26-task-intent-routing-ai-followups-design.md`
   - 在 Manus-style task experience design / plan 后阅读。
   - 定义 Stage59：LP-only AI 推荐追问、普通聊天不显示推荐追问，以及 LP task 内每次输入先由 AI intent router 判定普通问答 / 继续执行 / 新复杂任务 / 澄清；deterministic router 只作为 no-key 测试和安全兜底。
+  - Stage59 已实现，仍保留在近期阅读顺序中，便于审计 task intent routing 和 follow-up boundary。
 
 - `plans/2026-05-26-task-intent-routing-ai-followups.md`
-  - Stage59 实施计划。
-  - 实现或审计 task intent parser、assistant runtime router、LP-only follow-up provider、Web store submit routing、suggestion UI 和 browser-visible contracts 时阅读。
+  - Stage59 实施计划，已执行。
+  - 审计 task intent parser、assistant runtime router、LP-only follow-up provider/cache、Web store submit routing、suggestion UI、latest-turn progress gating 和 browser-visible contracts 时阅读。
 
 - `specs/2026-05-26-manus-style-task-experience-design.md`
   - 在 `2026-05-25-real-provider-local-run-polish-design.md` 和上一轮 Web chat polish 之后阅读。
