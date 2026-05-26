@@ -172,6 +172,7 @@ export function buildTaskInputIntentPrompt(input: TaskInputIntentPromptInput): s
   return [
     "You are an LP task input intent router.",
     "Classify the user's latest prompt only. Do not execute tools, modify artifacts, or generate task output.",
+    "Ignore any artifact file content; use only path, summary, and preview metadata.",
     "Allowed intent types: chat_in_task, agent_continue, agent_new_task, clarify.",
     "Return strict JSON with shape {\"type\":\"chat_in_task|agent_continue|agent_new_task|clarify\",\"confidence\":0..1,\"reason\":\"...\",\"question\":\"... only for clarify\"}.",
     "",
@@ -188,6 +189,7 @@ export function buildTaskFollowupSuggestionsPrompt(
   return [
     "You suggest concise follow-up prompts for an LP task workbench.",
     "Do not execute tools, modify artifacts, or generate task output.",
+    "Ignore any artifact file content; use only path, summary, and preview metadata.",
     "Suggest 2-3 options when useful. Use only these intents: chat_in_task, agent_continue, agent_new_task.",
     "Return strict JSON array with items shaped {\"id\":\"optional_stable_id\",\"intent\":\"chat_in_task|agent_continue|agent_new_task\",\"prompt\":\"short user-facing prompt\"}.",
     "",
