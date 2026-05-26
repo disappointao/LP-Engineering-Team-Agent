@@ -25,6 +25,7 @@ import { LPPreview } from "../components/lp-preview";
 import {
   createChatWorkbenchThread,
   createGeneralTaskThread,
+  type ChatWorkbenchTurn,
   type ChatToolEvent
 } from "../lib/chat-workbench";
 import {
@@ -80,12 +81,14 @@ function QuickPromptForm({
   implicitProjectName,
   prompt,
   projectId,
+  suggestionIntent,
   taskId
 }: {
   className: string;
   implicitProjectName: string;
   prompt: string;
   projectId?: string;
+  suggestionIntent?: string;
   taskId?: string;
 }) {
   return (
@@ -94,6 +97,9 @@ function QuickPromptForm({
       <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
       {projectId ? <input name="projectId" type="hidden" value={projectId} /> : null}
       {taskId ? <input name="taskId" type="hidden" value={taskId} /> : null}
+      {suggestionIntent ? (
+        <input name="suggestionIntent" type="hidden" value={suggestionIntent} />
+      ) : null}
       <button type="submit">{prompt}</button>
     </form>
   );
@@ -241,6 +247,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             objective: completedSnapshot.brief.brief.objective,
             pageVersion: completedSnapshot.pageVersion,
             downloadLinks,
+            followupSuggestions: pageState.taskFollowupSuggestions,
             messages: pageState.messages,
             runEvents: pageState.runEvents
           })
@@ -1137,7 +1144,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       const shouldShowLpTaskDetails =
                         isLatestTurn &&
                         pageState.kind === "task_ready" &&
-                        pageState.task.type === "lp_generation";
+                        hasLpAgentWorkForTurn(pageState, turn);
                       const hasRecoveryRows =
                         pageState.kind === "task_ready" &&
                         (pageState.recovery?.runs.length ?? 0) > 0;
@@ -1221,7 +1228,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                               {isLatestTurn &&
                               pageState.kind === "task_ready" &&
-                              pageState.task.type === "lp_generation" ? (
+                              hasLpAgentWorkForTurn(pageState, turn) ? (
                                 <LiveTaskPanel
                                   taskId={pageState.task.id}
                                   initialProjectId={pageState.task.projectId}
@@ -1251,20 +1258,23 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       );
                     })}
 
-                    <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
-                      <div>{copy.chat.suggestionsTitle}</div>
-                      {chat.suggestions.map((suggestion) => (
-                        <React.Fragment key={suggestion}>
-                          {QuickPromptForm({
-                            className: "suggestionPromptForm",
-                            implicitProjectName: copy.entry.implicitProjectName,
-                            prompt: suggestion,
-                            projectId: activeProject?.id,
-                            taskId: activeTask?.id
-                          })}
-                        </React.Fragment>
-                      ))}
-                    </section>
+                    {chat.suggestions.length > 0 ? (
+                      <section className="suggestionBlock" aria-label={copy.chat.suggestionsTitle}>
+                        <div>{copy.chat.suggestionsTitle}</div>
+                        {chat.suggestions.map((suggestion) => (
+                          <React.Fragment key={suggestion.id}>
+                            {QuickPromptForm({
+                              className: "suggestionPromptForm",
+                              implicitProjectName: copy.entry.implicitProjectName,
+                              prompt: suggestion.prompt,
+                              projectId: activeProject?.id,
+                              suggestionIntent: suggestion.intent,
+                              taskId: activeTask?.id
+                            })}
+                          </React.Fragment>
+                        ))}
+                      </section>
+                    ) : null}
                   </>
                 ) : null}
           </StreamingWorkbench>
@@ -1436,6 +1446,47 @@ type CompletedArtifactSnapshot = {
     NonNullable<TaskReadyWorkbenchPageState["snapshot"]>["currentPageVersion"]
   >;
 };
+
+function hasLpAgentWorkForTurn(
+  pageState: WorkbenchPageState,
+  turn: ChatWorkbenchTurn
+): pageState is TaskReadyPageState {
+  if (pageState.kind !== "task_ready" || pageState.task.type !== "lp_generation") {
+    return false;
+  }
+
+  const lpAgentEvents = (pageState.runEvents ?? []).filter(isLpAgentRunEvent);
+  if (lpAgentEvents.length === 0) {
+    return false;
+  }
+
+  if (!turn.userCreatedAt) {
+    return true;
+  }
+
+  const turnStartedAt = Date.parse(turn.userCreatedAt);
+  if (!Number.isFinite(turnStartedAt)) {
+    return false;
+  }
+
+  return lpAgentEvents.some((event) => {
+    const eventCreatedAt = Date.parse(event.createdAt);
+    return Number.isFinite(eventCreatedAt) && eventCreatedAt >= turnStartedAt;
+  });
+}
+
+function isLpAgentRunEvent(event: TaskReadyPageState["runEvents"][number]): boolean {
+  const role = event.payload.role;
+  if (role === "planner" || role === "builder" || role === "reviewer" || role === "deployer") {
+    return true;
+  }
+  return (
+    event.runId.startsWith("run_planner_") ||
+    event.runId.startsWith("run_builder_") ||
+    event.runId.startsWith("run_reviewer_") ||
+    event.runId.startsWith("run_deployer_")
+  );
+}
 
 function AgentProcessBlock({
   events,

@@ -1,4 +1,4 @@
-import type { PageVersionRecord, RunEventRecord } from "@lp-agent/api";
+import type { PageVersionRecord, RunEventRecord, TaskFollowupSuggestion } from "@lp-agent/api";
 import type { ArtifactDownloadLink } from "./export-links";
 import type { WorkbenchCopy } from "./i18n";
 
@@ -32,6 +32,8 @@ export interface ChatWorkbenchTurn {
   id: string;
   userMessage: string;
   assistantCompletion: string;
+  userCreatedAt?: string;
+  assistantCreatedAt?: string;
 }
 
 export interface ChatWorkbenchThread {
@@ -43,7 +45,7 @@ export interface ChatWorkbenchThread {
   turns: ChatWorkbenchTurn[];
   toolEvents: ChatToolEvent[];
   artifacts: ChatArtifactCard[];
-  suggestions: string[];
+  suggestions: TaskFollowupSuggestion[];
   composer: ChatComposerCopy;
 }
 
@@ -55,6 +57,7 @@ interface CreateChatWorkbenchThreadInput {
   downloadLinks: ArtifactDownloadLink[];
   runEvents?: RunEventRecord[];
   messages?: GeneralTaskMessage[];
+  followupSuggestions?: TaskFollowupSuggestion[];
 }
 
 export function createChatWorkbenchThread({
@@ -64,7 +67,8 @@ export function createChatWorkbenchThread({
   pageVersion,
   downloadLinks,
   runEvents = [],
-  messages
+  messages,
+  followupSuggestions = []
 }: CreateChatWorkbenchThreadInput): ChatWorkbenchThread {
   const terminalRunStatuses = toTerminalRunStatuses(runEvents);
   const toolEvents: ChatToolEvent[] = runEvents.length > 0
@@ -92,7 +96,7 @@ export function createChatWorkbenchThread({
     turns,
     toolEvents,
     artifacts,
-    suggestions: copy.chat.suggestions,
+    suggestions: followupSuggestions,
     composer: {
       placeholder: copy.chat.composerPlaceholder,
       addAttachmentLabel: copy.chat.addAttachmentLabel,
@@ -402,7 +406,7 @@ export function createGeneralTaskThread({
     turns,
     toolEvents: [],
     artifacts: [],
-    suggestions: copy.chat.generalSuggestions,
+    suggestions: [],
     composer: {
       placeholder: copy.chat.composerPlaceholder,
       addAttachmentLabel: copy.chat.addAttachmentLabel,
@@ -417,6 +421,7 @@ interface GeneralTaskMessage {
   id: string;
   role: string;
   content: string;
+  createdAt?: string;
 }
 
 function createGeneralTaskTurns({
@@ -460,7 +465,9 @@ function createTaskTurns({
       turns.push({
         id: `${pendingUser.id}:${message.id}`,
         userMessage: pendingUser.content,
-        assistantCompletion: message.content
+        assistantCompletion: message.content,
+        userCreatedAt: pendingUser.createdAt,
+        assistantCreatedAt: message.createdAt
       });
       pendingUser = undefined;
     }
@@ -470,7 +477,8 @@ function createTaskTurns({
     turns.push({
       id: pendingUser.id,
       userMessage: pendingUser.content,
-      assistantCompletion: ""
+      assistantCompletion: "",
+      userCreatedAt: pendingUser.createdAt
     });
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StaticArtifacts } from "@lp-agent/artifacts";
-import type { PageVersionRecord, RunEventRecord } from "@lp-agent/api";
+import type { PageVersionRecord, RunEventRecord, TaskFollowupSuggestion } from "@lp-agent/api";
 import { createDemoWorkbenchSnapshot } from "./demo-workbench";
 import { createArtifactDownloadLinks } from "./export-links";
 import { createChatWorkbenchThread, createGeneralTaskThread } from "./chat-workbench";
@@ -20,6 +20,7 @@ describe("chat workbench view model", () => {
     expect(thread.assistantCompletion).toBe("I created a task thread and can continue from here.");
     expect(thread.toolEvents).toEqual([]);
     expect(thread.artifacts).toEqual([]);
+    expect(thread.suggestions).toEqual([]);
   });
 
   it("uses localized copy and preserves the brief prompt as the user message", async () => {
@@ -38,6 +39,52 @@ describe("chat workbench view model", () => {
     expect(thread.userMessage).toBe(snapshot.brief.prompt);
     expect(thread.assistantName).toBe(copy.chat.assistantName);
     expect(thread.composer.placeholder).toBe(copy.chat.composerPlaceholder);
+  });
+
+  it("uses supplied LP follow-up suggestions and preserves intent values", async () => {
+    const copy = getWorkbenchCopy("en");
+    const snapshot = await createDemoWorkbenchSnapshot();
+    const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
+    const followupSuggestions: TaskFollowupSuggestion[] = [
+      {
+        id: "suggestion_chat",
+        intent: "chat_in_task",
+        prompt: "Explain why this hero works."
+      },
+      {
+        id: "suggestion_continue",
+        intent: "agent_continue",
+        prompt: "Try a more urgent CTA."
+      }
+    ];
+
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      downloadLinks,
+      followupSuggestions
+    });
+
+    expect(thread.suggestions).toEqual(followupSuggestions);
+  });
+
+  it("does not use static chat suggestions when LP follow-ups are absent", async () => {
+    const copy = getWorkbenchCopy("en");
+    const snapshot = await createDemoWorkbenchSnapshot();
+    const downloadLinks = createArtifactDownloadLinks(snapshot.pageVersion.artifacts, copy.exports);
+
+    const thread = createChatWorkbenchThread({
+      copy,
+      prompt: snapshot.brief.prompt,
+      objective: copy.demo.objective,
+      pageVersion: snapshot.pageVersion,
+      downloadLinks
+    });
+
+    expect(copy.chat.suggestions.length).toBeGreaterThan(0);
+    expect(thread.suggestions).toEqual([]);
   });
 
   it("uses persisted LP task messages as visible conversation turns", async () => {

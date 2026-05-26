@@ -445,10 +445,45 @@ function createCompletedLpPageState(overrides: Record<string, unknown> = {}) {
         createdAt: "2026-05-12T08:00:01.000Z"
       }
     ],
-    runEvents: [],
+    runEvents: [
+      {
+        id: "event_planner_initial",
+        projectId: "project_1",
+        taskId: "task_1",
+        runId: "run_planner_initial",
+        sequence: 1,
+        type: "run.started",
+        message: "Planner started.",
+        payload: { role: "planner" },
+        createdAt: "2026-05-12T08:00:00.100Z"
+      },
+      {
+        id: "event_builder_initial",
+        projectId: "project_1",
+        taskId: "task_1",
+        runId: "run_builder_initial",
+        sequence: 1,
+        type: "run.started",
+        message: "Builder started.",
+        payload: { role: "builder" },
+        createdAt: "2026-05-12T08:00:00.200Z"
+      },
+      {
+        id: "event_reviewer_initial",
+        projectId: "project_1",
+        taskId: "task_1",
+        runId: "run_reviewer_initial",
+        sequence: 1,
+        type: "run.started",
+        message: "Reviewer started.",
+        payload: { role: "reviewer" },
+        createdAt: "2026-05-12T08:00:00.300Z"
+      }
+    ],
     recovery: {
       runs: []
     },
+    taskFollowupSuggestions: [],
     interrupt: unavailableInterrupt,
     snapshot: {
       project: {
@@ -726,7 +761,15 @@ describe("HomePage project flow errors", () => {
 
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
-    pageMocks.pageState = createCompletedLpPageState();
+    pageMocks.pageState = createCompletedLpPageState({
+      taskFollowupSuggestions: [
+        {
+          id: "suggestion_continue",
+          intent: "agent_continue",
+          prompt: "Try a sharper campaign CTA."
+        }
+      ]
+    });
 
     const taskReadyPage = await HomePage({ searchParams: Promise.resolve({}) });
     const [suggestionForm] = collectElements(taskReadyPage, "form").filter(
@@ -738,6 +781,95 @@ describe("HomePage project flow errors", () => {
     expect(typeof suggestionPayload.prompt).toBe("string");
     expect(String(suggestionPayload.prompt).length).toBeGreaterThan(0);
     expect(suggestionPayload.implicitProjectName).toBe("Untitled LP Project");
+    expect(suggestionPayload.suggestionIntent).toBe("agent_continue");
+  });
+
+  it("does not render static suggested prompts for a general chat page", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_general";
+    pageMocks.pageState = createCompletedLpPageState({
+      activeTaskId: "task_general",
+      tasks: [
+        {
+          id: "task_general",
+          title: "Help me write a campaign plan.",
+          type: "general_chat",
+          status: "complete",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      task: {
+        id: "task_general",
+        title: "Help me write a campaign plan.",
+        type: "general_chat",
+        status: "complete",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:02:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_general_user",
+          taskId: "task_general",
+          role: "user",
+          content: "Help me write a campaign plan.",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        },
+        {
+          id: "message_general_assistant",
+          taskId: "task_general",
+          role: "assistant",
+          content: "I created a task thread and can continue from here.",
+          createdAt: "2026-05-12T08:02:01.000Z"
+        }
+      ],
+      snapshot: undefined
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+
+    expect(text).not.toContain("Suggested next prompts");
+    expect(text).not.toContain("推荐追问");
+  });
+
+  it("renders LP follow-up suggestions with non-authoritative suggestion intent fields", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      taskFollowupSuggestions: [
+        {
+          id: "suggestion_chat",
+          intent: "chat_in_task",
+          prompt: "Explain the current offer strategy."
+        },
+        {
+          id: "suggestion_continue",
+          intent: "agent_continue",
+          prompt: "Continue by testing a more direct hero."
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const suggestionForms = collectElements(page, "form").filter(
+      (form) => form.props?.className === "suggestionPromptForm"
+    );
+
+    expect(text).toContain("Suggested next prompts");
+    expect(text).toContain("Explain the current offer strategy.");
+    expect(text).toContain("Continue by testing a more direct hero.");
+    expect(suggestionForms.map(collectFormPayload)).toEqual([
+      expect.objectContaining({
+        prompt: "Explain the current offer strategy.",
+        suggestionIntent: "chat_in_task"
+      }),
+      expect.objectContaining({
+        prompt: "Continue by testing a more direct hero.",
+        suggestionIntent: "agent_continue"
+      })
+    ]);
   });
 
   it("wires active LP project context into the streaming workbench shell without task context", async () => {
@@ -813,7 +945,117 @@ describe("HomePage project flow errors", () => {
 
     expect(text).toContain("Make the hero shorter and add a pricing CTA.");
     expect(text).toContain("Updated the landing page with a tighter hero and pricing CTA.");
-    expect(processBlocks).toHaveLength(1);
+    expect(processBlocks).toHaveLength(0);
+  });
+
+  it("hides latest LP progress when a timestamped ordinary chat turn is newer than old run events", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      messages: [
+        {
+          id: "message_user_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_assistant_1",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        },
+        {
+          id: "message_user_2",
+          taskId: "task_1",
+          role: "user",
+          content: "Why did you choose this layout?",
+          createdAt: "2026-05-12T08:05:00.000Z"
+        },
+        {
+          id: "message_assistant_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "The layout prioritizes the sale message and CTA.",
+          createdAt: "2026-05-12T08:05:01.000Z"
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_planner_old",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_planner_initial",
+          sequence: 1,
+          type: "run.started",
+          message: "Planner started.",
+          payload: { role: "planner" },
+          createdAt: "2026-05-12T08:00:00.500Z"
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+
+    expect(collectComponentProps(page, "LiveTaskPanel")).toHaveLength(0);
+    expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
+  });
+
+  it("shows latest LP progress when a continue turn has new run events after that turn", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      messages: [
+        {
+          id: "message_user_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_assistant_1",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        },
+        {
+          id: "message_user_2",
+          taskId: "task_1",
+          role: "user",
+          content: "Continue with a more direct hero.",
+          createdAt: "2026-05-12T08:05:00.000Z"
+        },
+        {
+          id: "message_assistant_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "Updated the hero for a more direct campaign angle.",
+          createdAt: "2026-05-12T08:05:05.000Z"
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_builder_new",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_continue",
+          sequence: 1,
+          type: "run.started",
+          message: "Builder started.",
+          payload: { role: "builder" },
+          createdAt: "2026-05-12T08:05:01.000Z"
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+
+    expect(collectComponentProps(page, "LiveTaskPanel")).toHaveLength(1);
+    expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(1);
   });
 
   it("preserves active project and task context in artifact workspace entry links", async () => {
@@ -3399,6 +3641,10 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:01.000Z"
         }
       ],
+      recovery: {
+        runs: []
+      },
+      taskFollowupSuggestions: [],
       interrupt: unavailableInterrupt,
       runEvents: [
         {
@@ -3612,6 +3858,45 @@ describe("HomePage project flow errors", () => {
           createdAt: "2026-05-12T08:00:01.000Z"
         }
       ],
+      runEvents: [
+        {
+          id: "event_planner_initial",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_planner_initial",
+          sequence: 1,
+          type: "run.started",
+          message: "Planner started.",
+          payload: { role: "planner" },
+          createdAt: "2026-05-12T08:00:00.100Z"
+        },
+        {
+          id: "event_builder_initial",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_initial",
+          sequence: 1,
+          type: "run.started",
+          message: "Builder started.",
+          payload: { role: "builder" },
+          createdAt: "2026-05-12T08:00:00.200Z"
+        },
+        {
+          id: "event_reviewer_initial",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_reviewer_initial",
+          sequence: 1,
+          type: "run.started",
+          message: "Reviewer started.",
+          payload: { role: "reviewer" },
+          createdAt: "2026-05-12T08:00:00.300Z"
+        }
+      ],
+      recovery: {
+        runs: []
+      },
+      taskFollowupSuggestions: [],
       interrupt: unavailableInterrupt,
       snapshot: {
         project: {
