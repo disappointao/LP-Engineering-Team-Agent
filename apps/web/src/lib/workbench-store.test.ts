@@ -4340,13 +4340,18 @@ describe("web workbench store", () => {
       projectId: task.projectId,
       taskId: task.taskId
     });
+    const secondLiveState = await store.getLiveTaskState({
+      projectId: task.projectId,
+      taskId: task.taskId
+    });
 
     expect(liveState.ok).toBe(true);
+    expect(secondLiveState.ok).toBe(true);
     expect(assistantRuntime.requests).toHaveLength(assistantCallsAfterWrite);
-    const followupRunsAfterLiveRead = (await repositories.runs.listAll()).filter((run) =>
+    const followupRunsAfterLiveReads = (await repositories.runs.listAll()).filter((run) =>
       run.id.startsWith("run_task_followups_")
     );
-    expect(followupRunsAfterLiveRead).toEqual(followupRunsAfterWrite);
+    expect(followupRunsAfterLiveReads).toEqual(followupRunsAfterWrite);
   });
 
   it("asks for clarification without running the LP chain when router confidence is low", async () => {
