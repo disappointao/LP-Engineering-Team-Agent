@@ -37,6 +37,7 @@ Stage58 已把 Web 任务体验收紧为 Manus 风格：普通聊天保持干净
 - 不引入 billing / quota / credit 系统。
 - 不把推荐追问显示给普通聊天线程。
 - 不让 deterministic/no-key 默认测试依赖真实模型。
+- 不把 deterministic heuristic router 作为产品主路径；它只用于 no-key 测试、开发兜底和 schema failure 时的安全降级。
 
 ## 用户体验规则
 
@@ -91,12 +92,13 @@ type TaskFollowupSuggestion = {
 - 使用 `assistant` role route。
 - 生成 strict JSON 数组。
 - 输出必须经过 schema validation、长度限制、去重和敏感内容过滤。
-- 失败时不显示 AI 推荐追问，或仅在 deterministic test mode 使用固定 fallback。
+- 失败时不显示 AI 推荐追问；仅在 deterministic test mode 使用固定 fallback，并且不能在产品 UI 中伪装成 AI 结果。
 
 deterministic 路径：
 
-- 默认 no-key 环境继续有稳定测试输出，但应标记为 deterministic fallback。
+- no-key 环境继续有稳定测试输出，但只作为 deterministic fallback / fixture。
 - 产品主路径不把旧 `copy.chat.suggestions` / `copy.chat.generalSuggestions` 当成“AI 推荐”。
+- 当真实 provider 未配置或返回不合法时，用户可见行为优先隐藏推荐追问，而不是展示硬编码推荐项。
 
 ## 意图路由设计
 
@@ -125,18 +127,21 @@ type TaskInputIntentRequest = {
 
 ```ts
 type TaskInputIntent =
-  | { type: "chat_in_task" }
-  | { type: "agent_continue" }
-  | { type: "agent_new_task" }
-  | { type: "clarify"; question: string };
+  | { type: "chat_in_task"; confidence: number; reason: string }
+  | { type: "agent_continue"; confidence: number; reason: string }
+  | { type: "agent_new_task"; confidence: number; reason: string }
+  | { type: "clarify"; confidence: number; question: string; reason: string };
 ```
 
 第一版实现建议：
 
-- 先做 deterministic heuristic router，覆盖最常见中文/英文意图。
-- 真实模型 opt-in 可作为后续增强：当 `.env.local` 已配置真实 provider 时，用 assistant route 判定 intent，但必须保留 fail-closed heuristic fallback。
+- 产品主路径先做 AI intent router：当 `.env.local` 已配置真实 provider / role route 时，用 `assistant` route 读取 bounded task context 并返回 strict JSON。
+- prompt 明确要求模型只做意图判定，不生成任务结果、不启动工具、不读取完整 artifact。
+- `confidence` 低于阈值（建议 `0.72`）时强制降级为 `clarify`，避免误启动 agent chain。
+- schema validation、JSON parse、provider error 或 timeout 失败时 fail closed：返回 `clarify` 或不执行动作。
+- deterministic heuristic router 只保留为 no-key test fixture、开发兜底和明显关键词的安全 fallback；不能成为真实产品判断的默认解释。
 
-这是比“所有判断都依赖模型”更稳的第一版：路由行为可测试、可解释，且不让 no-key gate 变脆。
+这种设计把“理解用户意图”交给真实模型，同时保留可测的 no-key gate：生产路径更接近 Manus/ChatGPT 的混合任务体验，测试路径仍然稳定。
 
 ## 数据流
 
@@ -165,10 +170,11 @@ Unit tests：
 
 - 普通 chat thread 的 `suggestions` 为空。
 - LP thread 的 suggestions 来自 task follow-up provider，而不是 `copy.chat.suggestions`。
-- intent router 将“为什么这样设计”判为 `chat_in_task`。
-- intent router 将“把首屏文案改得更强”判为 `agent_continue`。
-- intent router 将“再做一个夏季活动页”判为 `agent_new_task`。
-- ambiguous prompt 返回 `clarify`。
+- fake model intent router 将“为什么这样设计”判为 `chat_in_task`。
+- fake model intent router 将“把首屏文案改得更强”判为 `agent_continue`。
+- fake model intent router 将“再做一个夏季活动页”判为 `agent_new_task`。
+- fake model 低置信度或 ambiguous prompt 返回 `clarify`。
+- deterministic fallback 只在 no-key/test mode 使用，不让产品 UI 展示硬编码“AI 推荐追问”。
 
 API / store tests：
 
@@ -186,14 +192,14 @@ Browser E2E：
 
 ## 风险和取舍
 
-- 直接完全依赖模型做 intent routing 更智能，但容易在 no-key / deterministic gate 下不可测，也会引入成本和延迟。第一版先用 deterministic router，后续再加 real-model override。
-- 推荐追问如果实时服务端生成，会增加页面加载延迟。第一版可以在 server render 时同步生成 deterministic/cheap suggestions；真实模型生成可后续改成异步刷新。
+- AI intent routing 比 heuristic 更贴近真实用户输入，但会引入误判、成本和延迟。第一版用 strict schema、confidence threshold、fail-closed clarify 和 fake model tests 控制风险。
+- 推荐追问如果实时服务端生成，会增加页面加载延迟。第一版可以按 task ready / message submit 后异步刷新；失败时隐藏推荐追问，不阻断主对话。
 - LP task 中普通问答需要上下文，但不能暴露 raw artifact。只注入 bounded artifact summary 和最近消息。
 
 ## 完成标准
 
 - 普通聊天没有推荐追问。
 - LP task 有上下文相关推荐追问，且不是 i18n 固定数组。
-- LP task composer 能区分普通提问、继续修改和新任务。
+- LP task composer 通过 AI intent router 区分普通提问、继续修改和新任务，低置信度时先澄清。
 - 默认 deterministic tests 不依赖真实 provider、网络或 key。
 - `pnpm test`、`pnpm typecheck`、`pnpm alpha:e2e` 通过。

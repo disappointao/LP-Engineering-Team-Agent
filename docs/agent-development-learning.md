@@ -227,7 +227,21 @@ Stage 28 的设计重点是把当前“先跑 Planner/Builder/Reviewer，成功�
 
 这个边界很重要：Agent 工作流的用户体验不能只展示最终成功产物。真正可用的 Agent 系统要让失败、阻塞、部分完成和后续修改都有同一个可观察上下文。
 
-### 2.14 Live timeline 是事实刷新，不是新的事实源
+### 2.14 Intent router 是任务入口的运行边界
+
+普通聊天和复杂任务共用一个 composer 后，系统不能只按“当前页面是不是 LP task”来决定每次输入的含义。同一个 LP task 里，用户可能是在问“为什么这样设计”，也可能是在要求“把首屏文案改强一点”，还可能是在发起另一个新页面。把这些输入都默认送进 Planner / Builder / Reviewer / Deployer，会让普通问题误触发复杂任务。
+
+Stage59 的设计决定是把 task input intent routing 做成 Web/API 层的运行边界：
+
+- 产品主路径用 `assistant` role 的 AI intent router 读取 bounded task context，返回 strict JSON，例如 `chat_in_task`、`agent_continue`、`agent_new_task` 或 `clarify`，并带 `confidence` 和 `reason`。
+- router 只做意图判定，不生成任务结果、不调用工具、不读取完整 artifact，也不能绕过后续 agent chain 的 schema、policy 和 run event 边界。
+- 低置信度、schema validation 失败、provider error 或 timeout 时 fail closed 到 `clarify`，而不是猜测执行复杂任务。
+- deterministic heuristic router 只作为 no-key gate、fake model fixture 和安全兜底；它不能成为产品主路径，也不能把硬编码推荐伪装成 AI。
+- LP 推荐追问只在 `lp_generation` task ready 时出现，并且每个推荐项携带 intent；普通聊天不显示推荐追问，保持正常 ChatGPT/Manus 风格问答。
+
+这个边界的学习点是：Agent 的“聪明”不只在 Planner / Builder 里，也在入口路由里。入口路由可以使用模型理解用户意图，但必须比普通对话更严格：结构化输出、上下文限界、低置信度澄清、失败不执行。
+
+### 2.15 Live timeline 是事实刷新，不是新的事实源
 
 Stage 29 的重点不是再造一套前端状态机，而是把已有 repository facts 持续投影到 Web task panel。Agent 工作流里的实时感来自这些事实：
 
@@ -249,7 +263,7 @@ Stage 29 v0 先用短轮询 task state refresh，而不是直接上 SSE。这里
 
 Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/api/chat/stream`；当服务端判断 prompt 是 LP 任务并返回 `fallback.required` 时，客户端调用 `/api/tasks/submit` live task submit route 创建 task 并启动 in-process LP chain，然后通过 `/api/tasks/[taskId]/state` task state polling 观察 repository facts。这个边界保留了 Stage 26 的 text streaming，同时让 LP workflow 不再依赖阻塞式 form submit 才能回到页面。
 
-### 2.15 Provider usage 和 token streaming 不是同一件事
+### 2.16 Provider usage 和 token streaming 不是同一件事
 
 真实模型接入后，可观察性要拆成几层：
 
@@ -271,7 +285,7 @@ Stage 36 的学习点是把真实 provider alpha smoke 当成 operator opt-in �
 
 Stage57 的补充学习点是把真实 provider 本地运行做成 operator-friendly preflight，而不是把它提升为默认 Agent readiness gate。`.env.real-provider.example` 和 `pnpm real-provider:doctor` 降低本机配置摩擦；本地 `pnpm dev` 现在会在 `REAL_MODEL_RUNTIME=1` 且 env profile ready 时自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes，让单用户第一版可以直接试普通聊天和 LP 链路。这个自动引导仍只读本机 env、只保存 env var name 和 provider config，不保存真实 key；缺 key 时应 skip 或 fail closed，不应触网、不应回退成假成功，也不应记录 secret、完整 base URL、raw provider response 或完整 artifact 内容。
 
-### 2.16 Streaming failure UX 也要分清 transient 和事实
+### 2.17 Streaming failure UX 也要分清 transient 和事实
 
 普通聊天 token streaming 带来更好的体感，也带来新的失败形态：provider 配置错误、SSE 中途断开、malformed frame、慢首 token、空 terminal content、repository persistence failure，以及浏览器侧 cancel / disconnect。这些不能全部压成“聊天失败”，否则用户和 operator 都无法判断是 provider 配置问题、网络/stream 协议问题，还是本地持久化问题。
 
@@ -325,6 +339,7 @@ Stage 38 的学习点是：streaming failure classification 仍然属于 Agent �
 - Stage 35 Provider Token Delta Streaming v0 已实现：普通聊天 `assistant` role 在真实 provider route 支持时会通过 `ModelGateway.stream()` 消费 provider SSE delta，Web/API 只展示 transient `assistant.delta`，最终事实仍是完整 assistant message 和 terminal run/model events；LP Planner / Builder 继续完整 buffer parse / repair。
 - Stage 36 Real Provider Alpha Smoke Matrix and Operator Docs v0 已实现：真实 provider 手动 smoke 已整理到 operator 文档，默认 readiness gates 继续 deterministic/no-key；fake-provider regression 覆盖 provider usage metadata 和 missing-key fail-closed 脱敏边界。
 - Stage57 Real Provider Local Run Polish v0 已实现：新增 `.env.real-provider.example`、`pnpm real-provider:doctor`、Models 本地运行 checklist 和 `pnpm dev` 本地真实 provider 自动引导，帮助 operator 用本机 `.env.local` 直接试跑普通聊天和 LP；它不是默认 readiness gate，不触网、不打印 key/base URL 值，也不把缺 key 场景回退成假成功。
+- Stage59 Task Intent Routing / AI Follow-ups v0 已完成设计但尚未实现：后续应把 LP task 内每次输入先交给 AI intent router 判断 `chat_in_task` / `agent_continue` / `agent_new_task` / `clarify`，并让 LP-only 推荐追问来自 bounded context 的 AI 生成；deterministic router 只用于 no-key gate、fake model fixture 和安全兜底。
 - Stage 41 当时的 V1 polished alpha Web surface 决策是：MCP backend registry / read-only execution / Context Pack 边界可以继续存在，但 MCP 管理和 MCP tab / sidebar / top-level Web 入口不属于第一版可见 UI。第一版优先把 Chat、LP task、artifact workspace、Skills 和 Models 做完整；旧 MCP URL 或 query 入口当时应安全降级，不能展示 connector、tool approval 或 execution form。这是历史 V1 surface 边界，不是删除 MCP runtime 能力。Stage 54 之后，`view=mcp` 不再安全降级，而是 post-V1 MCP management view；这个变化没有扩权 runtime，只是把 existing registry、visible tools、approval summary 和 read-only execution observation 做成安全投影。
 - Stage 51 MCP Management Surface v0 的学习点是把 MCP 重新进入产品面时仍然当作安全投影，而不是 runtime 扩权。它应该投影 existing MCP registry、read-only execution 和 safe `ToolObservationRecord`：展示 connector metadata、visible tools、approval summaries、deterministic/local health、safe read-only execution affordance 和 failure diagnostics；它不是新的 MCP SDK、remote server adapter、write tool、MCP worker execution、secret storage、auth/RBAC 或 raw output 通道。任何后续 Web 管理面都必须继续禁止 raw MCP output、raw arguments、secret、full artifact、本机绝对路径和未脱敏异常进入 UI、message、timeline 或 model context。Stage 54 implementation 已把这个边界落实到 Web：MCP management view 可以展示 connector/tool/approval/read-only metadata，view-model 对 malformed connector、malformed tool、visible tool lookup 和 approval 缺失 fail closed，也会丢弃 unsafe connector/tool display metadata，并且 stale visible tool 不能显示 read-only execution affordance；server action 忽略 browser raw `argumentsJson`，只提交后端可审计的 `{}` 给既有 read-only execution use case。这样 UI affordance 和 API execution 都仍围绕同一个 `ToolObservationRecord` 安全摘要闭环，而不是开一条把 raw tool payload 带进页面的捷径。真实 remote MCP SDK、write tools 和 MCP worker execution 仍后置。
 - Deployment adapter 边界存在；当前 Web V1 只创建 repository 中的 deployment handoff，不做真实外部部署。
@@ -333,6 +348,7 @@ Stage 38 的学习点是：streaming failure classification 仍然属于 Agent �
 
 - LP structured output token-level UI、tool-call protocol conversion、billing/quota/cost ledger 和超过 one-shot repair 的更复杂自我修正还没实现；Stage 32 已补 usage metadata 和 streaming capability 可见性，Stage 35 已补普通聊天 provider token delta streaming，真实 fallback provider execution 仍未做。
 - LP chain 的 no-refresh live timeline 和 artifact progress v0 已完成；LP structured output token streaming、tool-call conversion、remote MCP SDK / write tools / MCP worker execution 和 usage/cost reporting 仍然后置。Stage 28 已完成 task-first fixed chain、继续编辑、previous artifact context、真实 Planner / Builder structured output 覆盖和 recovery 边界。
+- Stage59 implementation 尚未完成：AI intent router、LP-only AI 推荐追问、普通聊天无推荐追问，以及 LP task 内普通提问不启动 agent chain。
 - Postgres production rollout 还没实现；Stage 23-24 只完成 Web opt-in backend wiring 和 worker queue opt-in backend，不做 Postgres 上的 auth/RBAC、object storage / artifact content migration、Prisma migrations / production deployment docs。
 - 高级压缩和检索：向量检索、持久 summary repository、selected file snippets、跨项目或跨用户长期记忆。
 - 真实 MCP SDK / remote MCP server adapter、MCP worker execution 和 write tools 仍未做；Stage 20 已完成 read-only MCP execution v0，Stage 54 已提供 Web management metadata/read-only surface，当前只允许 deterministic local executor 和安全摘要 observation。下一阶段默认路由已转向 Stage50 browser platform / visual baseline planning；如果继续 MCP，应先走 Stage55 MCP SDK and write-tool discovery，不直接实现 remote SDK、write tools 或 worker execution。
