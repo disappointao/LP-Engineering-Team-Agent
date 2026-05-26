@@ -62,7 +62,10 @@ const INVALID_INTENT_REASON = "Invalid intent router output.";
 const LOW_CONFIDENCE_REASON = "Low confidence intent classification.";
 const REASON_LIMIT = 240;
 const SUGGESTION_PROMPT_LIMIT = 120;
+const TASK_FIELD_LIMIT = 160;
+const MESSAGE_ROLE_LIMIT = 48;
 const MESSAGE_CONTENT_LIMIT = 360;
+const ARTIFACT_PATH_LIMIT = 240;
 const ARTIFACT_SUMMARY_LIMIT = 360;
 const USER_PROMPT_LIMIT = 1200;
 const INTENT_TYPES = new Set<TaskInputIntentType>([
@@ -219,11 +222,11 @@ function createInvalidClarify(confidence: number): TaskInputIntent {
 }
 
 function normalizeConfidence(value: unknown): number | null {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
     return null;
   }
 
-  return Math.min(1, Math.max(0, value));
+  return value;
 }
 
 function isTaskInputIntentType(value: unknown): value is TaskInputIntentType {
@@ -265,7 +268,12 @@ function normalizeSuggestionId(value: unknown): string | null {
 }
 
 function formatTask(task: TaskIntentPromptTaskInput): string {
-  return `Task: ${task.id}\ntype=${task.type}\nstatus=${task.status}\nprojectId=${task.projectId}`;
+  return [
+    `Task: ${trimBounded(task.id, TASK_FIELD_LIMIT)}`,
+    `type=${trimBounded(task.type, TASK_FIELD_LIMIT)}`,
+    `status=${trimBounded(task.status, TASK_FIELD_LIMIT)}`,
+    `projectId=${trimBounded(task.projectId, TASK_FIELD_LIMIT)}`
+  ].join("\n");
 }
 
 function formatMessages(messages: TaskIntentPromptMessageInput[] = []): string {
@@ -279,10 +287,10 @@ function formatMessages(messages: TaskIntentPromptMessageInput[] = []): string {
     "Recent messages:",
     ...recentMessages.map(
       (message, index) =>
-        `${index + 1}. role=${message.role} content=${trimBounded(
-          message.content,
-          MESSAGE_CONTENT_LIMIT
-        )}`
+        `${index + 1}. role=${trimBounded(
+          message.role,
+          MESSAGE_ROLE_LIMIT
+        )} content=${trimBounded(message.content, MESSAGE_CONTENT_LIMIT)}`
     )
   ].join("\n");
 }
@@ -296,7 +304,10 @@ function formatArtifacts(artifacts: TaskIntentPromptArtifactInput[] = []): strin
     "Artifacts:",
     ...artifacts.slice(0, 6).map(
       (artifact, index) =>
-        `${index + 1}. filePath=${artifact.filePath} summary=${trimBounded(
+        `${index + 1}. filePath=${trimBounded(
+          artifact.filePath,
+          ARTIFACT_PATH_LIMIT
+        )} summary=${trimBounded(
           artifact.summary ?? "",
           ARTIFACT_SUMMARY_LIMIT
         )} hasPreview=${artifact.hasPreview === true}`
