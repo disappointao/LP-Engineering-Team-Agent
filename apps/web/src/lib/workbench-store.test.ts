@@ -4354,6 +4354,82 @@ describe("web workbench store", () => {
     expect(followupRunsAfterLiveReads).toEqual(followupRunsAfterWrite);
   });
 
+  it("keeps live LP state polling until follow-up suggestions are cached", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const suggestions = [
+      { id: "ask", intent: "chat_in_task", prompt: "What changed in this version?" }
+    ];
+    const followupResult = deferred<Partial<RuntimeRunResult>>();
+    const assistantRequests: RuntimeRunRequest[] = [];
+    const assistantRuntime: AgentRuntimeAdapter & { requests: RuntimeRunRequest[] } = {
+      requests: assistantRequests,
+      async run(request) {
+        assistantRequests.push(request);
+        return new StaticRuntime(await followupResult.promise).run(request);
+      }
+    };
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const started = await store.startLiveTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(started).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!started.ok || !started.projectId) {
+      throw new Error("expected LP task");
+    }
+
+    await vi.waitFor(async () => {
+      const pageState = await store.getPageState({
+        projectId: started.projectId,
+        taskId: started.taskId
+      });
+      expect(pageState.kind).toBe("task_ready");
+      if (pageState.kind !== "task_ready") {
+        throw new Error("expected task state");
+      }
+      expect(pageState.snapshot?.currentPageVersion).toBeDefined();
+      expect(pageState.taskFollowupSuggestionsReady).toBe(false);
+    });
+
+    const beforeFollowups = await store.getLiveTaskState({
+      projectId: started.projectId,
+      taskId: started.taskId
+    });
+    expect(beforeFollowups.ok).toBe(true);
+    if (!beforeFollowups.ok) {
+      throw new Error("expected live task state");
+    }
+    expect(beforeFollowups.value.isTerminal).toBe(false);
+    expect(beforeFollowups.value.artifactProgress).toBeUndefined();
+
+    followupResult.resolve({ modelOutputText: JSON.stringify(suggestions) });
+    await expect(started.completion).resolves.toMatchObject({ ok: true });
+
+    const afterFollowups = await store.getLiveTaskState({
+      projectId: started.projectId,
+      taskId: started.taskId
+    });
+    expect(afterFollowups.ok).toBe(true);
+    if (!afterFollowups.ok) {
+      throw new Error("expected live task state");
+    }
+    expect(afterFollowups.value.isTerminal).toBe(true);
+    expect(afterFollowups.value.artifactProgress).toBeDefined();
+
+    const pageState = await store.getPageState({
+      projectId: started.projectId,
+      taskId: started.taskId
+    });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected task state");
+    }
+    expect(pageState.taskFollowupSuggestionsReady).toBe(true);
+    expect(pageState.taskFollowupSuggestions).toEqual(suggestions);
+  });
+
   it("asks for clarification without running the LP chain when router confidence is low", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([

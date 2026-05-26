@@ -1175,7 +1175,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                               <ChatMessageContent content={turn.assistantCompletion} />
 
-                              {isLatestTurn && completedSnapshot ? (
+                              {shouldShowLpTaskDetails && completedSnapshot ? (
                               <>
                                 <section
                                   className="deliveryBlock"
@@ -1456,7 +1456,13 @@ function hasLpAgentWorkForTurn(
   if (pageState.kind !== "task_ready" || pageState.task.type !== "lp_generation") {
     return false;
   }
+  return hasLpAgentRunEventsForTurn(pageState, turn);
+}
 
+function hasLpAgentRunEventsForTurn(
+  pageState: TaskReadyPageState,
+  turn: ChatWorkbenchTurn
+): boolean {
   const lpAgentEvents = (pageState.runEvents ?? []).filter(isLpAgentRunEvent);
   if (lpAgentEvents.length === 0) {
     return false;
@@ -1481,12 +1487,11 @@ function shouldShowLiveTaskPanelForTurn(
   pageState: WorkbenchPageState,
   turn: ChatWorkbenchTurn
 ): pageState is TaskReadyPageState {
-  if (hasLpAgentWorkForTurn(pageState, turn)) {
-    return true;
+  if (pageState.kind !== "task_ready" || pageState.task.type !== "lp_generation") {
+    return false;
   }
   return (
-    pageState.kind === "task_ready" &&
-    pageState.task.type === "lp_generation" &&
+    hasLpAgentRunEventsForTurn(pageState, turn) ||
     turn.assistantCompletion.trim().length === 0
   );
 }

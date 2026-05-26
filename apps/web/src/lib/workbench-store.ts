@@ -446,6 +446,7 @@ export type WorkbenchPageState =
       snapshot?: WorkbenchSnapshot;
       artifactDiff?: WebArtifactDiffState;
       taskFollowupSuggestions: TaskFollowupSuggestion[];
+      taskFollowupSuggestionsReady?: boolean;
     };
 
 type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
@@ -950,6 +951,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       if (!currentPageVersion) {
         return true;
       }
+      if (!pageState.taskFollowupSuggestionsReady) {
+        return false;
+      }
       if (currentPageVersion.reviewStatus === "pending") {
         return false;
       }
@@ -969,6 +973,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       pageState.snapshot?.currentPageVersion?.id ?? "no-page",
       pageState.artifactDiff?.artifactWorkspaceId ?? "no-workspace",
       pageState.snapshot?.deployment?.id ?? "no-deployment",
+      pageState.taskFollowupSuggestionsReady ? "followups-ready" : "followups-pending",
       String(pageState.workerQueue.counts.queued),
       String(pageState.workerQueue.counts.running)
     ];
@@ -1406,16 +1411,20 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             })
           : undefined;
       const messages = await listMessages(task.id);
-      const taskFollowupSuggestions =
+      const taskFollowupSuggestionCacheKey =
         task.type === "lp_generation" && activeProjectId
-          ? taskFollowupSuggestionCache.get(
-              buildTaskFollowupSuggestionCacheKey({
-                taskId: task.id,
-                messages,
-                snapshot
-              })
-            ) ?? []
-          : [];
+          ? buildTaskFollowupSuggestionCacheKey({
+              taskId: task.id,
+              messages,
+              snapshot
+            })
+          : undefined;
+      const taskFollowupSuggestionsReady =
+        taskFollowupSuggestionCacheKey === undefined ||
+        taskFollowupSuggestionCache.has(taskFollowupSuggestionCacheKey);
+      const taskFollowupSuggestions = taskFollowupSuggestionCacheKey
+        ? taskFollowupSuggestionCache.get(taskFollowupSuggestionCacheKey) ?? []
+        : [];
       const recovery = await listRunRecoveryViewsForTask({
         repositories,
         taskId: task.id,
@@ -1446,7 +1455,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         },
         snapshot,
         artifactDiff,
-        taskFollowupSuggestions
+        taskFollowupSuggestions,
+        taskFollowupSuggestionsReady
       };
     },
 
@@ -1480,7 +1490,9 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           interrupt: pageState.interrupt,
           snapshot: buildLiveTaskSnapshot(pageState.snapshot),
           artifactDiff: buildLiveArtifactDiff(pageState.artifactDiff),
-          artifactProgress: buildArtifactProgress(pageState.artifactDiff)
+          artifactProgress: pageState.taskFollowupSuggestionsReady
+            ? buildArtifactProgress(pageState.artifactDiff)
+            : undefined
         }
       };
     },

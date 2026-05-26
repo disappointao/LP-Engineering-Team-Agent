@@ -1001,6 +1001,16 @@ describe("HomePage project flow errors", () => {
 
     expect(collectComponentProps(page, "LiveTaskPanel")).toHaveLength(0);
     expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
+    expect(
+      collectElements(page, "section").filter(
+        (section) => section.props?.className === "deliveryBlock"
+      )
+    ).toHaveLength(0);
+    expect(
+      collectElements(page, "section").filter(
+        (section) => section.props?.className === "inlinePreview"
+      )
+    ).toHaveLength(0);
   });
 
   it("keeps LP live polling mounted while a latest continuation turn is pending", async () => {
