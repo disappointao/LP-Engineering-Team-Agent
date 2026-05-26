@@ -2322,7 +2322,13 @@ export class DemoWorkbenchService {
     try {
       const project = await this.getProjectOrThrow(input.projectId);
       const taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
-      const prompt = buildTaskInputIntentPrompt(toTaskInputIntentPromptInput(input, taskId));
+      const currentTask = sanitizeTaskIntentCurrentTask(input, project.id, taskId);
+      if (currentTask === null) {
+        return normalizeTaskInputIntentOutput("");
+      }
+      const prompt = buildTaskInputIntentPrompt(
+        toTaskInputIntentPromptInput(input, taskId, currentTask)
+      );
       runId = await reserveRepositoryId(this.repositories, "run_task_intent", async () =>
         (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
       );
@@ -2338,6 +2344,10 @@ export class DemoWorkbenchService {
         input: { prompt },
         now: this.now
       });
+
+      if (result.state !== "completed") {
+        return normalizeTaskInputIntentOutput("");
+      }
 
       return normalizeTaskInputIntentOutput(result.modelOutputText ?? "");
     } catch {
@@ -2374,6 +2384,10 @@ export class DemoWorkbenchService {
         input: { prompt },
         now: this.now
       });
+
+      if (result.state !== "completed") {
+        return [];
+      }
 
       return normalizeTaskFollowupSuggestionsOutput(result.modelOutputText ?? "");
     } catch {
@@ -4776,18 +4790,40 @@ function createAssistantChatGenerationFailure(
 
 function toTaskInputIntentPromptInput(
   input: RouteTaskInputIntentInput,
-  taskId: string | undefined
+  taskId: string | undefined,
+  currentTask: RouteTaskInputIntentInput["currentTask"] | undefined
 ) {
   return {
     userPrompt: input.prompt,
     task: {
-      id: input.currentTask?.id ?? taskId ?? "",
-      type: input.currentTask?.type ?? "general_chat",
-      status: input.currentTask?.status ?? "unknown",
-      projectId: input.currentTask?.projectId ?? input.projectId
+      id: currentTask?.id ?? taskId ?? "",
+      type: currentTask?.type ?? "general_chat",
+      status: currentTask?.status ?? "unknown",
+      projectId: currentTask?.projectId ?? input.projectId
     },
     messages: input.recentMessages,
     artifacts: toTaskIntentPromptArtifacts(input.artifactSummary)
+  };
+}
+
+function sanitizeTaskIntentCurrentTask(
+  input: RouteTaskInputIntentInput,
+  projectId: string,
+  taskId: string | undefined
+): RouteTaskInputIntentInput["currentTask"] | null {
+  const currentTask = input.currentTask;
+  if (!currentTask) {
+    return undefined;
+  }
+  if (currentTask.projectId !== undefined && currentTask.projectId !== projectId) {
+    return null;
+  }
+  if (taskId !== undefined && currentTask.id !== taskId) {
+    return null;
+  }
+  return {
+    ...currentTask,
+    projectId
   };
 }
 

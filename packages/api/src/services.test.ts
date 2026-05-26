@@ -4451,6 +4451,108 @@ describe("demo workbench service", () => {
     expect(result.type).toBe("clarify");
   });
 
+  it("fails closed to clarify when assistant intent run fails with parseable output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "failed",
+      modelOutputText: JSON.stringify({
+        type: "agent_continue",
+        confidence: 0.95,
+        reason: "Failed runs must not trigger actions."
+      })
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    const result = await service.routeTaskInputIntent({
+      projectId: project.id,
+      prompt: "Continue the LP.",
+      recentMessages: []
+    });
+
+    expect(result.type).toBe("clarify");
+  });
+
+  it("fails closed when current task project does not match the validated project", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: JSON.stringify({
+        type: "chat_in_task",
+        confidence: 0.91,
+        reason: "Should not run."
+      })
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Project A" });
+    const otherProject = await service.createProject({ name: "Project B" });
+
+    const result = await service.routeTaskInputIntent({
+      projectId: project.id,
+      prompt: "Explain this task.",
+      currentTask: {
+        id: "task_other",
+        type: "general_chat",
+        projectId: otherProject.id,
+        status: "complete"
+      },
+      recentMessages: []
+    });
+
+    expect(result.type).toBe("clarify");
+    expect(assistantRuntime.requests).toEqual([]);
+  });
+
+  it("fails closed when current task id does not match the validated task id", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: JSON.stringify({
+        type: "chat_in_task",
+        confidence: 0.91,
+        reason: "Should not run."
+      })
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Buyer answer",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+
+    const result = await service.routeTaskInputIntent({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Explain this task.",
+      currentTask: {
+        id: "task_other",
+        type: "general_chat",
+        projectId: project.id,
+        status: "complete"
+      },
+      recentMessages: []
+    });
+
+    expect(result.type).toBe("clarify");
+    expect(assistantRuntime.requests).toEqual([]);
+  });
+
   it("generates sanitized LP follow-up suggestions through assistant runtime", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new RecordingRuntime({
@@ -4520,6 +4622,35 @@ describe("demo workbench service", () => {
     const assistantRuntime = new RecordingRuntime({
       state: "completed",
       modelOutputText: "try asking about the LP"
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    const result = await service.generateTaskFollowupSuggestions({
+      projectId: project.id,
+      taskTitle: "Generate LP",
+      taskStatus: "complete",
+      recentMessages: []
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns no follow-up suggestions when assistant follow-up run fails with parseable output", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "failed",
+      modelOutputText: JSON.stringify([
+        {
+          id: "continue",
+          intent: "agent_continue",
+          prompt: "Apply the next recommended LP improvement."
+        }
+      ])
     });
     const service = new DemoWorkbenchService({
       repositories,
