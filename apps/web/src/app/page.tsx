@@ -1145,6 +1145,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         isLatestTurn &&
                         pageState.kind === "task_ready" &&
                         hasLpAgentWorkForTurn(pageState, turn);
+                      const shouldShowLiveTaskPanel =
+                        isLatestTurn &&
+                        pageState.kind === "task_ready" &&
+                        shouldShowLiveTaskPanelForTurn(pageState, turn);
                       const hasRecoveryRows =
                         pageState.kind === "task_ready" &&
                         (pageState.recovery?.runs.length ?? 0) > 0;
@@ -1226,9 +1230,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               </>
                             ) : null}
 
-                              {isLatestTurn &&
-                              pageState.kind === "task_ready" &&
-                              hasLpAgentWorkForTurn(pageState, turn) ? (
+                              {shouldShowLiveTaskPanel ? (
                                 <LiveTaskPanel
                                   taskId={pageState.task.id}
                                   initialProjectId={pageState.task.projectId}
@@ -1473,6 +1475,20 @@ function hasLpAgentWorkForTurn(
     const eventCreatedAt = Date.parse(event.createdAt);
     return Number.isFinite(eventCreatedAt) && eventCreatedAt >= turnStartedAt;
   });
+}
+
+function shouldShowLiveTaskPanelForTurn(
+  pageState: WorkbenchPageState,
+  turn: ChatWorkbenchTurn
+): pageState is TaskReadyPageState {
+  if (hasLpAgentWorkForTurn(pageState, turn)) {
+    return true;
+  }
+  return (
+    pageState.kind === "task_ready" &&
+    pageState.task.type === "lp_generation" &&
+    turn.assistantCompletion.trim().length === 0
+  );
 }
 
 function isLpAgentRunEvent(event: TaskReadyPageState["runEvents"][number]): boolean {

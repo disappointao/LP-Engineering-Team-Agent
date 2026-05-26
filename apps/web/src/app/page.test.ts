@@ -1003,6 +1003,54 @@ describe("HomePage project flow errors", () => {
     expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
   });
 
+  it("keeps LP live polling mounted while a latest continuation turn is pending", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      messages: [
+        {
+          id: "message_user_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a no git spring ecommerce landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_assistant_1",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP artifacts are ready for review.",
+          createdAt: "2026-05-12T08:00:01.000Z"
+        },
+        {
+          id: "message_user_2",
+          taskId: "task_1",
+          role: "user",
+          content: "Continue with a more direct hero.",
+          createdAt: "2026-05-12T08:05:00.000Z"
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_planner_old",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_planner_initial",
+          sequence: 1,
+          type: "run.started",
+          message: "Planner started.",
+          payload: { role: "planner" },
+          createdAt: "2026-05-12T08:00:00.500Z"
+        }
+      ]
+    });
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+
+    expect(collectComponentProps(page, "LiveTaskPanel")).toHaveLength(1);
+    expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
+  });
+
   it("shows latest LP progress when a continue turn has new run events after that turn", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";

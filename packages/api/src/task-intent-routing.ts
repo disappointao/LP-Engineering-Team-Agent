@@ -203,6 +203,99 @@ export function buildTaskFollowupSuggestionsPrompt(
   ].join("\n");
 }
 
+export function createDeterministicTaskInputIntent(
+  input: TaskInputIntentPromptInput
+): TaskInputIntent {
+  const prompt = input.userPrompt.trim().toLowerCase();
+
+  if (matchesAny(prompt, ["another", "new lp", "new landing", "separate", "再做", "新建"])) {
+    return {
+      type: "agent_new_task",
+      confidence: 0.9,
+      reason: "Deterministic no-key fixture detected a new LP request."
+    };
+  }
+
+  if (
+    matchesAny(prompt, [
+      "continue",
+      "make",
+      "change",
+      "update",
+      "optimize",
+      "improve",
+      "shorter",
+      "add",
+      "继续",
+      "修改",
+      "优化",
+      "调整",
+      "增加",
+      "改"
+    ])
+  ) {
+    return {
+      type: "agent_continue",
+      confidence: 0.88,
+      reason: "Deterministic no-key fixture detected a current LP modification request."
+    };
+  }
+
+  if (
+    matchesAny(prompt, [
+      "why",
+      "explain",
+      "what",
+      "how",
+      "structure",
+      "layout",
+      "为什么",
+      "解释",
+      "说明",
+      "怎么看",
+      "什么"
+    ])
+  ) {
+    return {
+      type: "chat_in_task",
+      confidence: 0.86,
+      reason: "Deterministic no-key fixture detected a contextual task question."
+    };
+  }
+
+  return {
+    type: "clarify",
+    confidence: TASK_INPUT_INTENT_CONFIDENCE_THRESHOLD,
+    question: DEFAULT_CLARIFY_QUESTION,
+    reason: "Deterministic no-key fixture could not classify the prompt."
+  };
+}
+
+export function createDeterministicTaskFollowupSuggestions(
+  input: TaskFollowupSuggestionsPromptInput
+): TaskFollowupSuggestion[] {
+  const hasArtifacts = (input.artifacts?.length ?? 0) > 0;
+  const taskLabel = trimBounded(input.task.id || input.task.type, 36);
+
+  return [
+    {
+      id: "explain_page_structure",
+      intent: "chat_in_task",
+      prompt: hasArtifacts ? "Explain the page structure" : "Explain the current plan"
+    },
+    {
+      id: "improve_hero_copy",
+      intent: "agent_continue",
+      prompt: "Make the hero copy sharper"
+    },
+    {
+      id: "create_variant_lp",
+      intent: "agent_new_task",
+      prompt: taskLabel ? `Create a variant LP for ${taskLabel}` : "Create a variant LP"
+    }
+  ];
+}
+
 function parseJsonObject(raw: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -265,6 +358,10 @@ function normalizeSuggestionId(value: unknown): string | null {
   }
 
   return id;
+}
+
+function matchesAny(value: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => value.includes(pattern));
 }
 
 function formatTask(task: TaskIntentPromptTaskInput): string {

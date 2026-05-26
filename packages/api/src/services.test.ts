@@ -4486,6 +4486,44 @@ describe("demo workbench service", () => {
     expect(result.type).toBe("clarify");
   });
 
+  it("uses deterministic no-key intent fixtures when the default mock assistant is not JSON", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    await expect(
+      service.routeTaskInputIntent({
+        projectId: project.id,
+        prompt: "Why did you choose this layout?",
+        recentMessages: []
+      })
+    ).resolves.toMatchObject({
+      type: "chat_in_task",
+      confidence: 0.86
+    });
+
+    await expect(
+      service.routeTaskInputIntent({
+        projectId: project.id,
+        prompt: "Continue by making the hero shorter and adding a pricing CTA",
+        recentMessages: []
+      })
+    ).resolves.toMatchObject({
+      type: "agent_continue",
+      confidence: 0.88
+    });
+
+    await expect(
+      service.routeTaskInputIntent({
+        projectId: project.id,
+        prompt: "Create another summer campaign LP",
+        recentMessages: []
+      })
+    ).resolves.toMatchObject({
+      type: "agent_new_task",
+      confidence: 0.9
+    });
+  });
+
   it("fails closed to clarify when assistant intent run fails with parseable output", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new RecordingRuntime({
@@ -4785,6 +4823,40 @@ describe("demo workbench service", () => {
     });
 
     expect(result).toEqual([]);
+  });
+
+  it("uses deterministic no-key follow-up fixtures when the default mock assistant is not JSON", async () => {
+    const service = new DemoWorkbenchService({ now: fixedClock() });
+    const project = await service.createProject({ name: "Spring Campaign" });
+
+    const result = await service.generateTaskFollowupSuggestions({
+      projectId: project.id,
+      taskTitle: "Generate LP",
+      taskStatus: "complete",
+      recentMessages: [{ role: "assistant", content: "The LP is ready for review." }],
+      artifactSummary: {
+        hasPreview: true,
+        files: [{ path: "index.html", summary: "Completed ecommerce LP." }]
+      }
+    });
+
+    expect(result).toEqual([
+      {
+        id: "explain_page_structure",
+        intent: "chat_in_task",
+        prompt: "Explain the page structure"
+      },
+      {
+        id: "improve_hero_copy",
+        intent: "agent_continue",
+        prompt: "Make the hero copy sharper"
+      },
+      {
+        id: "create_variant_lp",
+        intent: "agent_new_task",
+        prompt: "Create a variant LP for lp_generation"
+      }
+    ]);
   });
 
   it("returns no follow-up suggestions when assistant follow-up run fails with parseable output", async () => {

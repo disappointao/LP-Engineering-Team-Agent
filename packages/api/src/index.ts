@@ -157,6 +157,8 @@ import { assembleContextPack } from "./context-assembler";
 import {
   buildTaskFollowupSuggestionsPrompt,
   buildTaskInputIntentPrompt,
+  createDeterministicTaskFollowupSuggestions,
+  createDeterministicTaskInputIntent,
   normalizeTaskFollowupSuggestionsOutput,
   normalizeTaskInputIntentOutput,
   type TaskFollowupSuggestion,
@@ -592,6 +594,7 @@ export class DemoWorkbenchService {
   private readonly now: () => Date;
   private readonly structuredPlannerOutputEnabled: boolean;
   private readonly structuredBuilderOutputEnabled: boolean;
+  private readonly deterministicAiFixturesEnabled: boolean;
 
   constructor(options: DemoWorkbenchServiceOptions = {}) {
     this.repositories = options.repositories ?? createInMemoryWorkbenchRepositories();
@@ -604,6 +607,8 @@ export class DemoWorkbenchService {
     };
     this.structuredPlannerOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
     this.structuredBuilderOutputEnabled = env.REAL_MODEL_RUNTIME === "1";
+    this.deterministicAiFixturesEnabled =
+      env.REAL_MODEL_RUNTIME !== "1" && options.assistantRuntime === undefined;
     this.assistantRuntime = options.assistantRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.plannerRuntime = options.plannerRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
     this.builderRuntime = options.builderRuntime ?? createLocalRuntimeAdapter(runtimeFactoryInput);
@@ -2331,9 +2336,8 @@ export class DemoWorkbenchService {
       if (currentTask === null) {
         return normalizeTaskInputIntentOutput("");
       }
-      const prompt = buildTaskInputIntentPrompt(
-        toTaskInputIntentPromptInput(input, taskId, currentTask)
-      );
+      const promptInput = toTaskInputIntentPromptInput(input, taskId, currentTask);
+      const prompt = buildTaskInputIntentPrompt(promptInput);
       runId = await reserveRepositoryId(this.repositories, "run_task_intent", async () =>
         (await this.repositories.runs.listAll()).map((run) => run.id)
       );
@@ -2354,7 +2358,10 @@ export class DemoWorkbenchService {
         return normalizeTaskInputIntentOutput("");
       }
 
-      return normalizeTaskInputIntentOutput(result.modelOutputText ?? "");
+      const intent = normalizeTaskInputIntentOutput(result.modelOutputText ?? "");
+      return this.deterministicAiFixturesEnabled && isInvalidTaskIntentFallback(intent)
+        ? createDeterministicTaskInputIntent(promptInput)
+        : intent;
     } catch {
       return normalizeTaskInputIntentOutput("");
     } finally {
@@ -2371,9 +2378,8 @@ export class DemoWorkbenchService {
     try {
       const project = await this.getProjectOrThrow(input.projectId);
       const taskId = await this.resolveOptionalTaskIdForProject(project.id, input.taskId);
-      const prompt = buildTaskFollowupSuggestionsPrompt(
-        toTaskFollowupSuggestionsPromptInput(input, taskId)
-      );
+      const promptInput = toTaskFollowupSuggestionsPromptInput(input, taskId);
+      const prompt = buildTaskFollowupSuggestionsPrompt(promptInput);
       runId = await reserveRepositoryId(this.repositories, "run_task_followups", async () =>
         (await this.repositories.runs.listAll()).map((run) => run.id)
       );
@@ -2394,7 +2400,10 @@ export class DemoWorkbenchService {
         return [];
       }
 
-      return normalizeTaskFollowupSuggestionsOutput(result.modelOutputText ?? "");
+      const suggestions = normalizeTaskFollowupSuggestionsOutput(result.modelOutputText ?? "");
+      return this.deterministicAiFixturesEnabled && suggestions.length === 0
+        ? createDeterministicTaskFollowupSuggestions(promptInput)
+        : suggestions;
     } catch {
       return [];
     } finally {
@@ -4809,6 +4818,14 @@ function toTaskInputIntentPromptInput(
     messages: input.recentMessages,
     artifacts: toTaskIntentPromptArtifacts(input.artifactSummary)
   };
+}
+
+function isInvalidTaskIntentFallback(intent: TaskInputIntent): boolean {
+  return (
+    intent.type === "clarify" &&
+    intent.confidence === 0 &&
+    intent.reason === "Invalid intent router output."
+  );
 }
 
 async function sanitizeTaskIntentCurrentTask(
