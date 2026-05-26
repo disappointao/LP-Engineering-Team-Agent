@@ -2642,7 +2642,13 @@ describe("web workbench store", () => {
       ["reviewer", providers[0]?.id, "lp-model"],
       ["deployer", providers[0]?.id, "lp-model"]
     ]);
-    expect(calls.map((call) => call.kind)).toEqual(["planner", "builder", "other", "other"]);
+    expect(calls.map((call) => call.kind)).toEqual([
+      "planner",
+      "builder",
+      "other",
+      "other",
+      "other"
+    ]);
   });
 
   it("bootstraps local real-provider routes for an explicitly selected project", async () => {
@@ -3978,13 +3984,15 @@ describe("web workbench store", () => {
   it("continues an existing LP task by creating a new page version", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "agent_continue",
           confidence: 0.91,
           reason: "The user is requesting an artifact change."
         })
-      }
+      },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const builderRuntime = new RecordingRuntime({
       state: "completed",
@@ -4053,6 +4061,7 @@ describe("web workbench store", () => {
   it("answers ordinary questions inside an LP task without running the LP chain", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "chat_in_task",
@@ -4060,7 +4069,8 @@ describe("web workbench store", () => {
           reason: "The user is asking about the current task."
         })
       },
-      { modelOutputText: "The landing page currently targets a spring sale campaign." }
+      { modelOutputText: "The landing page currently targets a spring sale campaign." },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const builderRuntime = new RecordingRuntime({
       state: "completed",
@@ -4110,13 +4120,15 @@ describe("web workbench store", () => {
   it("continues an LP task when the router classifies the prompt as agent continuation", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "agent_continue",
           confidence: 0.91,
           reason: "The user is requesting an artifact change."
         })
-      }
+      },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const builderRuntime = new RecordingRuntime({
       state: "completed",
@@ -4157,13 +4169,15 @@ describe("web workbench store", () => {
   it("creates a new LP task in the same project when the router classifies a new task", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "agent_new_task",
           confidence: 0.9,
           reason: "The user is requesting a separate LP."
         })
-      }
+      },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const store = createWebWorkbenchStore({ repositories, assistantRuntime });
 
@@ -4216,6 +4230,13 @@ describe("web workbench store", () => {
       throw new Error("expected LP task");
     }
 
+    const assistantCallsAfterWrite = assistantRuntime.requests.length;
+    const followupRunsAfterWrite = (await repositories.runs.listAll()).filter((run) =>
+      run.id.startsWith("run_task_followups_")
+    );
+    expect(assistantCallsAfterWrite).toBe(1);
+    expect(followupRunsAfterWrite).toHaveLength(1);
+
     const lpState = await store.getPageState({
       projectId: lpTask.projectId,
       taskId: lpTask.taskId
@@ -4225,6 +4246,10 @@ describe("web workbench store", () => {
       throw new Error("expected LP task state");
     }
     expect(lpState.taskFollowupSuggestions).toEqual(suggestions);
+    expect(assistantRuntime.requests).toHaveLength(assistantCallsAfterWrite);
+    await expect(repositories.runs.listAll()).resolves.toEqual(
+      expect.arrayContaining(followupRunsAfterWrite)
+    );
 
     const generalTask = await store.submitTaskPrompt({
       prompt: "Help me write a launch checklist.",
@@ -4242,16 +4267,100 @@ describe("web workbench store", () => {
     expect(generalState.taskFollowupSuggestions).toEqual([]);
   });
 
+  it("returns cached LP follow-up suggestions without creating assistant runs on page reads", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const suggestions = [
+      { id: "ask", intent: "chat_in_task", prompt: "What changed in this version?" }
+    ];
+    const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify(suggestions) },
+      { modelOutputText: JSON.stringify([]) },
+      { modelOutputText: JSON.stringify([]) }
+    ]);
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const task = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(task).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!task.ok || !task.projectId) {
+      throw new Error("expected LP task");
+    }
+
+    const assistantCallsAfterWrite = assistantRuntime.requests.length;
+    const followupRunsAfterWrite = (await repositories.runs.listAll()).filter((run) =>
+      run.id.startsWith("run_task_followups_")
+    );
+
+    const firstRead = await store.getPageState({ projectId: task.projectId, taskId: task.taskId });
+    const secondRead = await store.getPageState({ projectId: task.projectId, taskId: task.taskId });
+
+    expect(firstRead.kind).toBe("task_ready");
+    expect(secondRead.kind).toBe("task_ready");
+    if (firstRead.kind !== "task_ready" || secondRead.kind !== "task_ready") {
+      throw new Error("expected task-ready states");
+    }
+    expect(firstRead.taskFollowupSuggestions).toEqual(suggestions);
+    expect(secondRead.taskFollowupSuggestions).toEqual(suggestions);
+    expect(assistantRuntime.requests).toHaveLength(assistantCallsAfterWrite);
+    const followupRunsAfterReads = (await repositories.runs.listAll()).filter((run) =>
+      run.id.startsWith("run_task_followups_")
+    );
+    expect(followupRunsAfterReads).toEqual(followupRunsAfterWrite);
+  });
+
+  it("does not create follow-up assistant runs while reading live LP task state", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const suggestions = [
+      { id: "ask", intent: "chat_in_task", prompt: "What changed in this version?" }
+    ];
+    const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify(suggestions) },
+      { modelOutputText: JSON.stringify([]) }
+    ]);
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const task = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(task).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!task.ok || !task.projectId) {
+      throw new Error("expected LP task");
+    }
+    const assistantCallsAfterWrite = assistantRuntime.requests.length;
+    const followupRunsAfterWrite = (await repositories.runs.listAll()).filter((run) =>
+      run.id.startsWith("run_task_followups_")
+    );
+
+    const liveState = await store.getLiveTaskState({
+      projectId: task.projectId,
+      taskId: task.taskId
+    });
+
+    expect(liveState.ok).toBe(true);
+    expect(assistantRuntime.requests).toHaveLength(assistantCallsAfterWrite);
+    const followupRunsAfterLiveRead = (await repositories.runs.listAll()).filter((run) =>
+      run.id.startsWith("run_task_followups_")
+    );
+    expect(followupRunsAfterLiveRead).toEqual(followupRunsAfterWrite);
+  });
+
   it("asks for clarification without running the LP chain when router confidence is low", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "agent_continue",
           confidence: 0.2,
           reason: "Ambiguous request."
         })
-      }
+      },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const builderRuntime = new RecordingRuntime({
       state: "completed",
@@ -4302,13 +4411,15 @@ describe("web workbench store", () => {
   it("clears the current page version when Builder fails during a continued LP task", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
       {
         modelOutputText: JSON.stringify({
           type: "agent_continue",
           confidence: 0.91,
           reason: "The user is requesting an artifact change."
         })
-      }
+      },
+      { modelOutputText: JSON.stringify([]) }
     ]);
     const builderRuntime = new (class extends StaticRuntime {
       private calls = 0;

@@ -449,6 +449,7 @@ export type WorkbenchPageState =
     };
 
 type TaskReadyPageState = Extract<WorkbenchPageState, { kind: "task_ready" }>;
+type TaskFollowupSuggestionCache = Map<string, TaskFollowupSuggestion[]>;
 
 type LocalRealProviderProfile = {
   key: string;
@@ -863,6 +864,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     env: runtimeEnv,
     modelFetch: options.modelFetch
   });
+  const taskFollowupSuggestionCache: TaskFollowupSuggestionCache = new Map();
 
   let localRealProviderProjectPromise: Promise<string | undefined> | undefined;
   const ensureLocalRealProviderProject = async () => {
@@ -1403,15 +1405,16 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               selectedPath: input?.artifactPath
             })
           : undefined;
+      const messages = await listMessages(task.id);
       const taskFollowupSuggestions =
         task.type === "lp_generation" && activeProjectId
-          ? await generateLpTaskFollowupSuggestions({
-              service,
-              projectId: activeProjectId,
-              task,
-              recentMessages: await listRecentTaskIntentMessages(repositories, task.id),
-              artifactSummary: buildTaskIntentArtifactSummary(artifactDiff, snapshot)
-            })
+          ? taskFollowupSuggestionCache.get(
+              buildTaskFollowupSuggestionCacheKey({
+                taskId: task.id,
+                messages,
+                snapshot
+              })
+            ) ?? []
           : [];
       const recovery = await listRunRecoveryViewsForTask({
         repositories,
@@ -1431,7 +1434,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         workerQueue: await loadWorkerQueueSnapshot(activeProjectId),
         activeTaskId: task.id,
         task: { ...task },
-        messages: await listMessages(task.id),
+        messages,
         runEvents,
         interrupt: await deriveWebTaskInterruptView({
           repositories,
@@ -1663,6 +1666,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             return answerLpTaskChatInPlace({
               repositories,
               service,
+              taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
               prompt: prompt.value
@@ -1673,6 +1677,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               repositories,
               service,
               currentUser,
+              taskFollowupSuggestionCache,
               requestedTaskId: undefined,
               requestedProjectId: continuationProjectId,
               prompt: prompt.value,
@@ -1682,6 +1687,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           if (routed.type === "clarify") {
             return clarifyLpTaskInputInPlace({
               repositories,
+              service,
+              taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
               prompt: prompt.value,
@@ -1692,6 +1699,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             repositories,
             service,
             currentUser,
+            taskFollowupSuggestionCache,
             requestedTaskId,
             requestedProjectId: continuationProjectId,
             prompt: prompt.value,
@@ -1706,6 +1714,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           repositories,
           service,
           currentUser,
+          taskFollowupSuggestionCache,
           requestedTaskId,
           requestedProjectId,
           prompt: prompt.value,
@@ -1765,6 +1774,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             const result = await answerLpTaskChatInPlace({
               repositories,
               service,
+              taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
               prompt: prompt.value
@@ -1789,6 +1799,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             const completion = completePreparedLpTaskPrompt({
               repositories,
               service,
+              taskFollowupSuggestionCache,
               currentUser,
               task: prepared.task,
               projectId: prepared.projectId,
@@ -1807,6 +1818,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           if (routed.type === "clarify") {
             const result = await clarifyLpTaskInputInPlace({
               repositories,
+              service,
+              taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
               prompt: prompt.value,
@@ -1831,6 +1844,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           const completion = completePreparedLpTaskPrompt({
             repositories,
             service,
+            taskFollowupSuggestionCache,
             currentUser,
             task: prepared.task,
             projectId: prepared.projectId,
@@ -1864,6 +1878,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       const completion = completePreparedLpTaskPrompt({
         repositories,
         service,
+        taskFollowupSuggestionCache,
         currentUser,
         task: prepared.task,
         projectId: prepared.projectId,
@@ -2716,6 +2731,7 @@ async function routeExistingLpTaskPromptIntent(input: {
 async function answerLpTaskChatInPlace(input: {
   repositories: WorkbenchRepositories;
   service: DemoWorkbenchService;
+  taskFollowupSuggestionCache: TaskFollowupSuggestionCache;
   task: TaskRecord;
   projectId: string;
   prompt: string;
@@ -2739,6 +2755,13 @@ async function answerLpTaskChatInPlace(input: {
       ? assistant.content
       : "I could not answer that in chat. Please try again or continue the LP task."
   });
+  await refreshLpTaskFollowupSuggestionCache({
+    repositories: input.repositories,
+    service: input.service,
+    taskFollowupSuggestionCache: input.taskFollowupSuggestionCache,
+    task: input.task,
+    projectId: input.projectId
+  });
   if (!assistant.ok) {
     return {
       ok: false,
@@ -2758,6 +2781,8 @@ async function answerLpTaskChatInPlace(input: {
 
 async function clarifyLpTaskInputInPlace(input: {
   repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  taskFollowupSuggestionCache: TaskFollowupSuggestionCache;
   task: TaskRecord;
   projectId: string;
   prompt: string;
@@ -2775,12 +2800,61 @@ async function clarifyLpTaskInputInPlace(input: {
     role: "assistant",
     content: input.question
   });
+  await refreshLpTaskFollowupSuggestionCache({
+    repositories: input.repositories,
+    service: input.service,
+    taskFollowupSuggestionCache: input.taskFollowupSuggestionCache,
+    task: input.task,
+    projectId: input.projectId
+  });
   return {
     ok: true,
     taskId: input.task.id,
     taskType: "lp_generation",
     projectId: input.projectId
   };
+}
+
+async function refreshLpTaskFollowupSuggestionCache(input: {
+  repositories: WorkbenchRepositories;
+  service: DemoWorkbenchService;
+  taskFollowupSuggestionCache: TaskFollowupSuggestionCache;
+  task: TaskRecord;
+  projectId: string;
+}): Promise<void> {
+  const snapshotRef = await input.repositories.taskSnapshots.getByTaskId(input.task.id);
+  const snapshot = snapshotRef
+    ? await input.service.getSnapshotForRecords({
+        projectId: snapshotRef.projectId,
+        briefId: snapshotRef.briefId,
+        pageVersionId: snapshotRef.pageVersionId
+      })
+    : undefined;
+  const artifactDiff = snapshot?.currentPageVersion
+    ? await buildWebArtifactDiffState({
+        service: input.service,
+        repositories: input.repositories,
+        projectId: snapshot.project.id,
+        currentPageVersion: snapshot.currentPageVersion
+      })
+    : undefined;
+  const messages = await input.repositories.messages.listForTask(input.task.id);
+  const cacheKey = buildTaskFollowupSuggestionCacheKey({
+    taskId: input.task.id,
+    messages,
+    snapshot
+  });
+  const suggestions = await generateLpTaskFollowupSuggestions({
+    service: input.service,
+    projectId: input.projectId,
+    task: input.task,
+    recentMessages: messages.slice(-6).map((message) => ({
+      role: message.role,
+      content: message.content
+    })),
+    artifactSummary: buildTaskIntentArtifactSummary(artifactDiff, snapshot)
+  });
+  input.taskFollowupSuggestionCache.set(cacheKey, suggestions);
 }
 
 async function generateLpTaskFollowupSuggestions(input: {
@@ -2828,10 +2902,23 @@ function buildTaskIntentArtifactSummary(
   };
 }
 
+function buildTaskFollowupSuggestionCacheKey(input: {
+  taskId: string;
+  messages: WorkbenchMessageRecord[];
+  snapshot: WorkbenchSnapshot | undefined;
+}): string {
+  const latestMessageId = input.messages.at(-1)?.id ?? "no_message";
+  const pageVersionId = input.snapshot?.currentPageVersion?.id ?? "no_page";
+  const artifactWorkspaceId =
+    input.snapshot?.currentPageVersion?.artifactWorkspaceId ?? "no_workspace";
+  return [input.taskId, latestMessageId, pageVersionId, artifactWorkspaceId].join(":");
+}
+
 async function runLpTaskPrompt(input: {
   repositories: WorkbenchRepositories;
   service: DemoWorkbenchService;
   currentUser: WorkbenchUserIdentity;
+  taskFollowupSuggestionCache: TaskFollowupSuggestionCache;
   requestedTaskId?: string;
   requestedProjectId?: string;
   prompt: string;
@@ -2848,6 +2935,7 @@ async function runLpTaskPrompt(input: {
   return completePreparedLpTaskPrompt({
     repositories: input.repositories,
     service: input.service,
+    taskFollowupSuggestionCache: input.taskFollowupSuggestionCache,
     currentUser: input.currentUser,
     task: prepared.task,
     projectId: prepared.projectId,
@@ -2918,6 +3006,7 @@ async function prepareLpTaskPrompt(input: {
 async function completePreparedLpTaskPrompt(input: {
   repositories: WorkbenchRepositories;
   service: DemoWorkbenchService;
+  taskFollowupSuggestionCache: TaskFollowupSuggestionCache;
   currentUser: WorkbenchUserIdentity;
   task: TaskRecord;
   projectId: string;
@@ -2952,6 +3041,13 @@ async function completePreparedLpTaskPrompt(input: {
       role: "assistant",
       content: assistantSummary
     });
+    await refreshLpTaskFollowupSuggestionCache({
+      repositories: input.repositories,
+      service: input.service,
+      taskFollowupSuggestionCache: input.taskFollowupSuggestionCache,
+      task: input.task,
+      projectId: input.projectId
+    });
     return {
       ok: true,
       taskId: input.task.id,
@@ -2964,6 +3060,13 @@ async function completePreparedLpTaskPrompt(input: {
       taskId: input.task.id,
       role: "assistant",
       content: "LP generation failed. Open recovery details for the failed run."
+    });
+    await refreshLpTaskFollowupSuggestionCache({
+      repositories: input.repositories,
+      service: input.service,
+      taskFollowupSuggestionCache: input.taskFollowupSuggestionCache,
+      task: input.task,
+      projectId: input.projectId
     });
     return {
       ok: false,
