@@ -723,13 +723,19 @@ export class DemoWorkbenchService {
     const plannerPrompt = this.structuredPlannerOutputEnabled
       ? createStructuredLPBriefPlannerPrompt(input.prompt)
       : input.prompt;
+    let plannerRunReservation: RepositoryIdReservation | undefined;
 
     try {
+      plannerRunReservation = await reserveRepositoryRunId(
+        this.repositories,
+        "run_planner_brief",
+        input.runId
+      );
       const { result, run, events } = await runAgentStep({
         repositories: this.repositories,
         service: this,
         runtime: this.plannerRuntime,
-        runId: input.runId ?? `run_planner_${briefId}`,
+        runId: plannerRunReservation.id,
         projectId: input.projectId,
         taskId: input.taskId,
         role: "planner",
@@ -808,6 +814,7 @@ export class DemoWorkbenchService {
       });
       return copyBriefRecord(brief);
     } finally {
+      plannerRunReservation?.release();
       releaseRepositoryId(this.repositories, briefId);
     }
   }
@@ -835,13 +842,19 @@ export class DemoWorkbenchService {
     const builderPrompt = this.structuredBuilderOutputEnabled
       ? createStructuredStaticArtifactsBuilderPrompt(brief.brief)
       : brief.prompt;
+    let builderRunReservation: RepositoryIdReservation | undefined;
 
     try {
+      builderRunReservation = await reserveRepositoryRunId(
+        this.repositories,
+        "run_builder_version",
+        input.runId
+      );
       const { result, run, events } = await runAgentStep({
         repositories: this.repositories,
         service: this,
         runtime: this.builderRuntime,
-        runId: input.runId ?? `run_builder_${pageVersionId}`,
+        runId: builderRunReservation.id,
         projectId: input.projectId,
         taskId: input.taskId,
         pageVersionId: contextPageVersionId,
@@ -995,6 +1008,7 @@ export class DemoWorkbenchService {
         releaseRepositoryId(this.repositories, artifactWorkspaceId);
       }
     } finally {
+      builderRunReservation?.release();
       releaseRepositoryId(this.repositories, pageVersionId);
     }
   }
@@ -1007,31 +1021,42 @@ export class DemoWorkbenchService {
     }
 
     const brief = await this.getBriefForProjectOrThrow(input.projectId, pageVersion.briefId);
+    const reviewerRunReservation = await reserveRepositoryRunId(
+      this.repositories,
+      "run_reviewer_version",
+      input.runId
+    );
 
-    const { result, run, events } = await runAgentStep({
-      repositories: this.repositories,
-      service: this,
-      runtime: this.reviewerRuntime,
-      runId: input.runId ?? `run_reviewer_${pageVersion.id}`,
-      projectId: input.projectId,
-      taskId: input.taskId,
-      pageVersionId: pageVersion.id,
-      role: "reviewer",
-      input: {
-        brief: copyBrief(brief.brief),
-        prompt: "Review for launch blockers."
-      },
-      beforeRuntime: () =>
-        this.consumeReadyHandoffsForRun({
+    const { result, run, events } = await (async () => {
+      try {
+        return await runAgentStep({
+          repositories: this.repositories,
+          service: this,
+          runtime: this.reviewerRuntime,
+          runId: reviewerRunReservation.id,
           projectId: input.projectId,
           taskId: input.taskId,
+          pageVersionId: pageVersion.id,
           role: "reviewer",
-          artifactRefs: {
-            pageVersionId: pageVersion.id
-          }
-        }),
-      now: this.now
-    });
+          input: {
+            brief: copyBrief(brief.brief),
+            prompt: "Review for launch blockers."
+          },
+          beforeRuntime: () =>
+            this.consumeReadyHandoffsForRun({
+              projectId: input.projectId,
+              taskId: input.taskId,
+              role: "reviewer",
+              artifactRefs: {
+                pageVersionId: pageVersion.id
+              }
+            }),
+          now: this.now
+        });
+      } finally {
+        reviewerRunReservation.release();
+      }
+    })();
 
     if (result.state === "failed") {
       throw new Error("Reviewer run failed.");
@@ -1097,29 +1122,40 @@ export class DemoWorkbenchService {
       return copyDeployment(existing);
     }
 
-    const { result } = await runAgentStep({
-      repositories: this.repositories,
-      service: this,
-      runtime: this.deployerRuntime,
-      runId: input.runId ?? `run_deployer_${pageVersion.id}`,
-      projectId: input.projectId,
-      taskId: input.taskId,
-      pageVersionId: pageVersion.id,
-      role: "deployer",
-      input: {
-        prompt: "Prepare deployment handoff."
-      },
-      beforeRuntime: () =>
-        this.consumeReadyHandoffsForRun({
+    const deployerRunReservation = await reserveRepositoryRunId(
+      this.repositories,
+      "run_deployer_version",
+      input.runId
+    );
+    const { result } = await (async () => {
+      try {
+        return await runAgentStep({
+          repositories: this.repositories,
+          service: this,
+          runtime: this.deployerRuntime,
+          runId: deployerRunReservation.id,
           projectId: input.projectId,
           taskId: input.taskId,
+          pageVersionId: pageVersion.id,
           role: "deployer",
-          artifactRefs: {
-            pageVersionId: pageVersion.id
-          }
-        }),
-      now: this.now
-    });
+          input: {
+            prompt: "Prepare deployment handoff."
+          },
+          beforeRuntime: () =>
+            this.consumeReadyHandoffsForRun({
+              projectId: input.projectId,
+              taskId: input.taskId,
+              role: "deployer",
+              artifactRefs: {
+                pageVersionId: pageVersion.id
+              }
+            }),
+          now: this.now
+        });
+      } finally {
+        deployerRunReservation.release();
+      }
+    })();
 
     if (result.state === "failed") {
       throw new Error("Deployer run failed.");
@@ -2458,7 +2494,7 @@ export class DemoWorkbenchService {
         runId = input.runId;
       } else {
         runId = await reserveRepositoryId(this.repositories, "run_assistant", async () =>
-          (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+          (await this.repositories.runs.listAll()).map((run) => run.id)
         );
         createdRunId = true;
       }
@@ -2541,7 +2577,7 @@ export class DemoWorkbenchService {
         runId = input.runId;
       } else {
         runId = await reserveRepositoryId(this.repositories, "run_assistant", async () =>
-          (await this.repositories.runs.listForProject(project.id)).map((run) => run.id)
+          (await this.repositories.runs.listAll()).map((run) => run.id)
         );
         releaseRunId = () => releaseRepositoryId(this.repositories, runId!);
       }
@@ -4842,6 +4878,11 @@ function nextSequentialId(prefix: string, existingIds: string[]): string {
   return `${prefix}_${nextNumber}`;
 }
 
+interface RepositoryIdReservation {
+  id: string;
+  release(): void;
+}
+
 async function withRepositoryIdLock<T>(
   repositories: WorkbenchRepositories,
   operation: () => Promise<T>
@@ -4859,6 +4900,27 @@ async function withRepositoryIdLock<T>(
     }
   });
   return run;
+}
+
+async function reserveRepositoryRunId(
+  repositories: WorkbenchRepositories,
+  prefix: string,
+  providedRunId?: string
+): Promise<RepositoryIdReservation> {
+  if (providedRunId !== undefined) {
+    return {
+      id: providedRunId,
+      release: () => undefined
+    };
+  }
+
+  const id = await reserveRepositoryId(repositories, prefix, async () =>
+    (await repositories.runs.listAll()).map((run) => run.id)
+  );
+  return {
+    id,
+    release: () => releaseRepositoryId(repositories, id)
+  };
 }
 
 async function reserveRepositoryId(

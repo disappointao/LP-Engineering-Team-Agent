@@ -289,6 +289,8 @@ Stage57 的补充学习点是把真实 provider 本地运行做成 operator-frie
 
 真实 provider 的结构化输出还需要“宽容解析 + 安全降级”的边界：Planner / Builder 仍不能保存 raw model output，但 parser 可以对常见 schema shape drift 做 bounded normalization，例如把 `sections[].media`、`layoutHints`、`tracking.events` 这类数组字段的非数组输出归一到安全形状。如果 Planner 首次 parse 失败且 repair 仍然是 `schema_invalid`，runtime 应记录 `model.output.parse_failed`、`model.output.repair_started`、`model.output.repair_failed` 和 `model.output.fallback_used`，再用 deterministic brief 继续 LP 链路；这样用户不会因为真实模型 JSON 轻微漂移看到半截失败，同时 operator 仍能从 safe run events 看出真实 provider 输出没有通过 schema。`invalid_json`、缺 key、provider timeout、HTTP 错误等仍按各自 fail-closed / retry 规则处理，不能伪装成真实模型成功。
 
+真实 provider 手动 smoke 也暴露了 run id 必须是全局事实 ID，而不能只从尚未成功落库的业务 artifact id 推导。Planner 失败时不会创建 `brief`，Builder 失败时也可能不会创建 `pageVersion`；如果下一次尝试复用 `run_planner_brief_1` / `run_builder_version_1` 这类 ID，Web 会按 `runId` 合并旧事件，导致新任务刚提交就显示旧失败或串到其他项目的 assistant 回复。当前 runtime 入口会基于全局 `runs` repository 预留自动 run id；显式传入的 `runId` 仍由调用方负责唯一性。这个规则同样适用于普通聊天 `assistant` role，避免跨项目局部计数造成消息和 run event 串台。
+
 ### 2.17 Streaming failure UX 也要分清 transient 和事实
 
 普通聊天 token streaming 带来更好的体感，也带来新的失败形态：provider 配置错误、SSE 中途断开、malformed frame、慢首 token、空 terminal content、repository persistence failure，以及浏览器侧 cancel / disconnect。这些不能全部压成“聊天失败”，否则用户和 operator 都无法判断是 provider 配置问题、网络/stream 协议问题，还是本地持久化问题。

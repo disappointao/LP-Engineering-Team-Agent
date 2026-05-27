@@ -954,6 +954,68 @@ describe("demo workbench service", () => {
     expect(serializedWorkspaceEvent).not.toContain(pageVersion.artifacts.scriptJs);
   });
 
+  it("does not reuse a planner run id after a failed brief attempt leaves no brief record", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const failingService = new DemoWorkbenchService({
+      repositories,
+      plannerRuntime: new ThrowingRuntime(new Error("planner exploded")),
+      now: fixedClock()
+    });
+    const project = await failingService.createProject({ name: "Project" });
+
+    await expect(
+      failingService.createBriefFromPrompt({
+        projectId: project.id,
+        prompt: "First attempt",
+        taskId: "task_failed"
+      })
+    ).rejects.toThrow("planner exploded");
+
+    await expect(repositories.briefs.listAll()).resolves.toEqual([]);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        taskId: "task_failed",
+        state: "failed"
+      })
+    ]);
+
+    const succeedingService = new DemoWorkbenchService({
+      repositories,
+      plannerRuntime: new StaticRuntime({ state: "completed" }),
+      now: fixedClock()
+    });
+
+    const brief = await succeedingService.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Second attempt",
+      taskId: "task_success"
+    });
+
+    expect(brief.id).toBe("brief_1");
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        taskId: "task_failed",
+        state: "failed"
+      }),
+      expect.objectContaining({
+        id: "run_planner_brief_2",
+        taskId: "task_success",
+        state: "completed"
+      })
+    ]);
+    await expect(repositories.runEvents.listForTask("task_success")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: "run_planner_brief_2",
+          taskId: "task_success",
+          type: "handoff.created"
+        })
+      ])
+    );
+  });
+
   it("creates ready handoffs for planner and builder outputs", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const service = new DemoWorkbenchService({ repositories, now: fixedClock() });
@@ -5075,6 +5137,45 @@ describe("demo workbench service", () => {
     });
 
     expect(result).toEqual([]);
+  });
+
+  it("keeps assistant chat run ids unique across projects", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new RecordingRuntime({
+      state: "completed",
+      modelOutputText: "Ready."
+    });
+    const service = new DemoWorkbenchService({
+      repositories,
+      assistantRuntime,
+      now: fixedClock()
+    });
+    const projectA = await service.createProject({ name: "Project A" });
+    const projectB = await service.createProject({ name: "Project B" });
+
+    const first = await service.runAssistantChat({
+      projectId: projectA.id,
+      prompt: "Hello A"
+    });
+    const second = await service.runAssistantChat({
+      projectId: projectB.id,
+      prompt: "Hello B"
+    });
+
+    expect(first).toMatchObject({ ok: true, runId: "run_assistant_1" });
+    expect(second).toMatchObject({ ok: true, runId: "run_assistant_2" });
+    await expect(repositories.runs.listAll()).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_assistant_1",
+        projectId: projectA.id,
+        state: "completed"
+      }),
+      expect.objectContaining({
+        id: "run_assistant_2",
+        projectId: projectB.id,
+        state: "completed"
+      })
+    ]);
   });
 
   it("fails closed when task id does not belong to project", async () => {
