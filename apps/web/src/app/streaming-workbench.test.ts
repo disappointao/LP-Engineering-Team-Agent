@@ -580,7 +580,7 @@ describe("streaming workbench live task fallback", () => {
 });
 
 describe("streaming workbench context summary", () => {
-  it("renders context summary from stream events inside the assistant turn", () => {
+  it("keeps stream context summary out of the user-facing assistant turn", () => {
     const streamFixture =
       `${JSON.stringify({ type: "task.created", taskId: "task_1", projectId: "project_1" })}\n` +
       `${JSON.stringify({
@@ -606,8 +606,8 @@ describe("streaming workbench context summary", () => {
 
     const rendered = StreamingContextSummary({ state });
     const text = collectText(rendered).join(" ");
-    expect(text).toContain("Project: Spring Campaign");
-    expect(text).toContain("Skills: 1");
-    expect(text).toContain("Runtime: real");
+    expect(text).not.toContain("Project: Spring Campaign");
+    expect(text).not.toContain("Skills: 1");
+    expect(text).not.toContain("Runtime: real");
   });
 });

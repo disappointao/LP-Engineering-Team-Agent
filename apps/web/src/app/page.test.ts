@@ -3541,6 +3541,78 @@ describe("HomePage project flow errors", () => {
     );
   });
 
+  it("does not render an empty assistant response for a pending general chat user message", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_2";
+    pageMocks.pageState = {
+      kind: "task_ready",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [
+        {
+          id: "task_2",
+          title: "Help me plan the campaign.",
+          type: "general_chat",
+          status: "failed",
+          projectId: "project_1",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      skills: {
+        boundSkills: [],
+        availableVersions: []
+      },
+      models: {
+        providers: [],
+        routes: [],
+        resolvedPolicy: {
+          assistant: { provider: "mock-openai", model: "assistant-model" },
+          planner: { provider: "mock-openai", model: "planning-model" },
+          builder: { provider: "mock-anthropic", model: "code-model" },
+          reviewer: { provider: "mock-openai", model: "review-model" },
+          deployer: { provider: "mock-local", model: "tool-model" }
+        }
+      },
+      activeTaskId: "task_2",
+      task: {
+        id: "task_2",
+        title: "Help me plan the campaign.",
+        type: "general_chat",
+        status: "failed",
+        projectId: "project_1",
+        createdAt: "2026-05-12T08:00:00.000Z"
+      },
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_2",
+          role: "user",
+          content: "Help me plan the campaign.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      runEvents: [],
+      taskFollowupSuggestions: [],
+      interrupt: unavailableInterrupt,
+      workerQueue: emptyWorkerQueue,
+      snapshot: undefined
+    };
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const assistantTurns = collectElements(page, "article").filter((element) =>
+      String(element.props?.className ?? "").split(" ").includes("assistantTurn")
+    );
+
+    expect(text).toContain("Help me plan the campaign.");
+    expect(assistantTurns).toHaveLength(0);
+  });
+
   it("does not show stale LP artifacts for a project-bound general task", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_2";

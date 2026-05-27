@@ -142,21 +142,11 @@ export function getVisibleStreamingStatus(
 }
 
 export function StreamingContextSummary({
-  state
+  state: _state
 }: {
   state: StreamingWorkbenchState;
 }) {
-  return state.contextSummary ? (
-    <p className="streamingContext">
-      {[
-        state.contextSummary.projectName
-          ? `Project: ${state.contextSummary.projectName}`
-          : "No project context",
-        `Skills: ${state.contextSummary.skillCount}`,
-        `Runtime: ${state.contextSummary.runtimeMode}`
-      ].join(" · ")}
-    </p>
-  ) : null;
+  return null;
 }
 
 export interface PromptSubmissionControlState {

@@ -1189,6 +1189,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       const hasRecoveryRows =
                         pageState.kind === "task_ready" &&
                         (pageState.recovery?.runs.length ?? 0) > 0;
+                      const shouldShowAssistantTurn = shouldRenderAssistantTurn({
+                        assistantCompletion: turn.assistantCompletion,
+                        assistantIntro: chat.assistantIntro,
+                        hasLpTaskDetails: shouldShowLpTaskDetails,
+                        hasLiveTaskPanel: shouldShowLiveTaskPanel
+                      });
 
                       return (
                         <React.Fragment key={turn.id}>
@@ -1198,6 +1204,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             </div>
                           </div>
 
+                          {shouldShowAssistantTurn ? (
                           <article className="assistantTurn">
                             <div className="assistantIdentity">
                               <div className="assistantAvatar">LP</div>
@@ -1293,6 +1300,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               ) : null}
                             </div>
                           </article>
+                          ) : null}
                         </React.Fragment>
                       );
                     })}
@@ -1530,6 +1538,25 @@ function shouldShowLiveTaskPanelForTurn(
   return (
     hasLpAgentRunEventsForTurn(pageState, turn) ||
     turn.assistantCompletion.trim().length === 0
+  );
+}
+
+function shouldRenderAssistantTurn({
+  assistantCompletion,
+  assistantIntro,
+  hasLpTaskDetails,
+  hasLiveTaskPanel
+}: {
+  assistantCompletion: string;
+  assistantIntro: string;
+  hasLpTaskDetails: boolean;
+  hasLiveTaskPanel: boolean;
+}): boolean {
+  return (
+    assistantIntro.trim().length > 0 ||
+    assistantCompletion.trim().length > 0 ||
+    hasLpTaskDetails ||
+    hasLiveTaskPanel
   );
 }
 
