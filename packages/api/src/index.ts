@@ -3415,6 +3415,36 @@ async function repairPlannerResult(input: {
     };
   } catch (error) {
     if (error instanceof PlannerLPBriefParseError) {
+      if (error.reason === "schema_invalid") {
+        const brief = copyBrief(sampleBrief);
+        return {
+          brief,
+          result: {
+            ...input.result,
+            events: [
+              ...input.result.events.filter((event) => event.type !== "run.completed"),
+              parseFailedEvent,
+              repairStarted,
+              ...repairEvents,
+              toPlannerRepairFailureEvent({
+                result: input.result,
+                error
+              }),
+              toPlannerFallbackUsedEvent({
+                result: input.result,
+                brief,
+                error
+              }),
+              {
+                type: "run.completed",
+                message: "planner run completed",
+                runId: input.result.runId,
+                state: "completed"
+              }
+            ]
+          }
+        };
+      }
       return {
         result: failPlannerResultForRepairError({
           result: input.result,
@@ -3494,7 +3524,6 @@ function failPlannerResultForRepairError(input: {
   repairEvents: RuntimeEvent[];
   error: PlannerLPBriefParseError;
 }): RuntimeRunResult {
-  const issueSummary = input.error.issueSummary;
   return {
     ...input.result,
     state: "failed",
@@ -3503,24 +3532,10 @@ function failPlannerResultForRepairError(input: {
       input.parseFailedEvent,
       input.repairStarted,
       ...input.repairEvents,
-      {
-        ...toLPBriefParseFailurePayload(input.error),
-        type: "model.output.repair_failed",
-        message: "Planner output repair failed",
-        runId: input.result.runId,
-        role: "planner",
-        schema: "LPBriefSchema",
-        reason: input.error.reason,
-        ...(issueSummary.issueCount !== undefined
-          ? { issueCount: issueSummary.issueCount }
-          : {}),
-        ...(issueSummary.firstIssuePath !== undefined
-          ? { firstIssuePath: issueSummary.firstIssuePath }
-          : {}),
-        ...(issueSummary.firstIssueCode !== undefined
-          ? { firstIssueCode: issueSummary.firstIssueCode }
-          : {})
-      },
+      toPlannerRepairFailureEvent({
+        result: input.result,
+        error: input.error
+      }),
       {
         type: "run.failed",
         message: "Planner run failed.",
@@ -3530,6 +3545,51 @@ function failPlannerResultForRepairError(input: {
         errorName: input.error.name
       }
     ]
+  };
+}
+
+function toPlannerRepairFailureEvent(input: {
+  result: RuntimeRunResult;
+  error: PlannerLPBriefParseError;
+}): RuntimeEvent {
+  const issueSummary = input.error.issueSummary;
+  return {
+    ...toLPBriefParseFailurePayload(input.error),
+    type: "model.output.repair_failed",
+    message: "Planner output repair failed",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    reason: input.error.reason,
+    ...(issueSummary.issueCount !== undefined
+      ? { issueCount: issueSummary.issueCount }
+      : {}),
+    ...(issueSummary.firstIssuePath !== undefined
+      ? { firstIssuePath: issueSummary.firstIssuePath }
+      : {}),
+    ...(issueSummary.firstIssueCode !== undefined
+      ? { firstIssueCode: issueSummary.firstIssueCode }
+      : {})
+  };
+}
+
+function toPlannerFallbackUsedEvent(input: {
+  result: RuntimeRunResult;
+  brief: LPBrief;
+  error: PlannerLPBriefParseError;
+}): RuntimeEvent {
+  return {
+    ...toLPBriefParseSuccessPayload(input.brief),
+    type: "model.output.fallback_used",
+    message: "Planner deterministic fallback used after schema-invalid model output",
+    runId: input.result.runId,
+    role: "planner",
+    schema: "LPBriefSchema",
+    reason: "schema_invalid",
+    title: input.brief.title,
+    sectionCount: input.brief.sections.length,
+    productCount: input.brief.productData.length,
+    hasAssets: input.brief.assets.length > 0
   };
 }
 

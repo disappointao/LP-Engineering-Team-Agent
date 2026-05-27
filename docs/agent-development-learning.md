@@ -287,6 +287,8 @@ Stage 36 的学习点是把真实 provider alpha smoke 当成 operator opt-in �
 
 Stage57 的补充学习点是把真实 provider 本地运行做成 operator-friendly preflight，而不是把它提升为默认 Agent readiness gate。`.env.real-provider.example` 和 `pnpm real-provider:doctor` 降低本机配置摩擦；本地 `pnpm dev` 现在会在 `REAL_MODEL_RUNTIME=1` 且 env profile ready 时自动创建 `Local Real Provider` 项目、provider 和 `assistant` / `planner` / `builder` / `reviewer` / `deployer` routes，让单用户第一版可以直接试普通聊天和 LP 链路。真实 provider local runtime 的模型调用默认 timeout 是 `LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS=120000`，慢模型可显式调高到最多 `300000`，但超时仍必须形成 bounded `model_provider_request_timeout` 诊断和安全失败消息。这个自动引导仍只读本机 env、只保存 env var name 和 provider config，不保存真实 key；缺 key 时应 skip 或 fail closed，不应触网、不应回退成假成功，也不应记录 secret、完整 base URL、raw provider response 或完整 artifact 内容。
 
+真实 provider 的结构化输出还需要“宽容解析 + 安全降级”的边界：Planner / Builder 仍不能保存 raw model output，但 parser 可以对常见 schema shape drift 做 bounded normalization，例如把 `sections[].media`、`layoutHints`、`tracking.events` 这类数组字段的非数组输出归一到安全形状。如果 Planner 首次 parse 失败且 repair 仍然是 `schema_invalid`，runtime 应记录 `model.output.parse_failed`、`model.output.repair_started`、`model.output.repair_failed` 和 `model.output.fallback_used`，再用 deterministic brief 继续 LP 链路；这样用户不会因为真实模型 JSON 轻微漂移看到半截失败，同时 operator 仍能从 safe run events 看出真实 provider 输出没有通过 schema。`invalid_json`、缺 key、provider timeout、HTTP 错误等仍按各自 fail-closed / retry 规则处理，不能伪装成真实模型成功。
+
 ### 2.17 Streaming failure UX 也要分清 transient 和事实
 
 普通聊天 token streaming 带来更好的体感，也带来新的失败形态：provider 配置错误、SSE 中途断开、malformed frame、慢首 token、空 terminal content、repository persistence failure，以及浏览器侧 cancel / disconnect。这些不能全部压成“聊天失败”，否则用户和 operator 都无法判断是 provider 配置问题、网络/stream 协议问题，还是本地持久化问题。

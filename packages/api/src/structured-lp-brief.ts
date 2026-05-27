@@ -144,7 +144,7 @@ export function parsePlannerLPBriefOutput(output: string): LPBrief {
     });
   }
 
-  const parsed = LPBriefSchema.safeParse(parsedJson);
+  const parsed = LPBriefSchema.safeParse(normalizePlannerBriefCandidate(parsedJson));
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     throw new PlannerLPBriefParseError("schema_invalid", {
@@ -155,6 +155,77 @@ export function parsePlannerLPBriefOutput(output: string): LPBrief {
   }
 
   return parsed.data;
+}
+
+function normalizePlannerBriefCandidate(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    brandProfile: normalizeBrandProfile(value.brandProfile),
+    constraints: normalizeStringArray(value.constraints),
+    sections: Array.isArray(value.sections)
+      ? value.sections.map(normalizeSectionCandidate)
+      : value.sections,
+    assets: Array.isArray(value.assets) ? value.assets : [],
+    productData: Array.isArray(value.productData) ? value.productData : [],
+    tracking: normalizeTracking(value.tracking),
+    complianceNotes: normalizeStringArray(value.complianceNotes)
+  };
+}
+
+function normalizeBrandProfile(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    colors: normalizeStringArray(value.colors)
+  };
+}
+
+function normalizeSectionCandidate(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    media: Array.isArray(value.media) ? value.media : [],
+    cta: isRecord(value.cta) ? value.cta : undefined,
+    layoutHints: normalizeStringArray(value.layoutHints),
+    validationRules: normalizeStringArray(value.validationRules)
+  };
+}
+
+function normalizeTracking(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return { events: [] };
+  }
+
+  return {
+    ...value,
+    events: normalizeStringArray(value.events)
+  };
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function toLPBriefParseSuccessPayload(brief: LPBrief): Record<string, unknown> {

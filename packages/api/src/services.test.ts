@@ -3097,6 +3097,105 @@ describe("demo workbench service", () => {
     expect(serializedEvents).not.toContain("https://open.bigmodel.cn");
   });
 
+  it("falls back to deterministic planner brief when real planner repair remains schema-invalid", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const schemaInvalidBrief = {
+      ...sampleBrief,
+      title: "RAW_MODEL_OUTPUT_SECRET",
+      sections: []
+    };
+    const fakeFetch: ModelFetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl_test",
+          model: "glm-5.1",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify(schemaInvalidBrief)
+              },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "Generate a landing page brief."
+    });
+
+    expect(brief.brief.title).toBe(sampleBrief.title);
+    await expect(repositories.runs.listForProject(project.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: "run_planner_brief_1",
+        projectId: project.id,
+        role: "planner",
+        state: "completed",
+        completedAt: expect.any(String)
+      })
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "runtime.context.loaded",
+      "model.completed",
+      "model.output.parse_failed",
+      "model.output.repair_started",
+      "model.completed",
+      "model.output.repair_failed",
+      "model.output.fallback_used",
+      "run.completed",
+      "handoff.created"
+    ]);
+    expect(events.find((event) => event.type === "model.output.fallback_used")).toMatchObject({
+      runId: "run_planner_brief_1",
+      type: "model.output.fallback_used",
+      message: "Planner deterministic fallback used after schema-invalid model output",
+      payload: expect.objectContaining({
+        role: "planner",
+        schema: "LPBriefSchema",
+        reason: "schema_invalid",
+        title: sampleBrief.title
+      })
+    });
+    const serializedEvents = JSON.stringify(events);
+    expect(serializedEvents).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+    expect(serializedEvents).not.toContain("sk-test-secret");
+    expect(serializedEvents).not.toContain("OPENAI_COMPATIBLE_API_KEY");
+    expect(serializedEvents).not.toContain("https://open.bigmodel.cn");
+  });
+
   it("uses parsed real Builder artifacts when REAL_MODEL_RUNTIME is enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const modelBrief = {

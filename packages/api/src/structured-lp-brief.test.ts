@@ -76,6 +76,36 @@ describe("structured LP brief model output", () => {
     expect(parsed.sections[0]?.id).toBe("model_section_1");
   });
 
+  it("normalizes common model array drift before validating the LP brief", () => {
+    const parsed = parsePlannerLPBriefOutput(JSON.stringify({
+      ...sampleBrief,
+      brandProfile: {
+        ...sampleBrief.brandProfile,
+        colors: "#f97316"
+      },
+      sections: [
+        {
+          ...sampleBrief.sections[0],
+          media: { label: "Hero image" },
+          layoutHints: "two-column hero",
+          validationRules: null
+        }
+      ],
+      assets: { id: "asset_hero" },
+      tracking: {
+        analyticsId: "G-TEST",
+        events: "cta_click"
+      }
+    }));
+
+    expect(parsed.brandProfile.colors).toEqual(["#f97316"]);
+    expect(parsed.sections[0]?.media).toEqual([]);
+    expect(parsed.sections[0]?.layoutHints).toEqual(["two-column hero"]);
+    expect(parsed.sections[0]?.validationRules).toEqual([]);
+    expect(parsed.assets).toEqual([]);
+    expect(parsed.tracking.events).toEqual(["cta_click"]);
+  });
+
   it("rejects empty output with a stable reason", () => {
     expect(() => parsePlannerLPBriefOutput("   ")).toThrow(PlannerLPBriefParseError);
 

@@ -240,6 +240,18 @@ export type RuntimeEvent =
       firstIssueCode?: string;
     }
   | {
+      type: "model.output.fallback_used";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      schema: "LPBriefSchema";
+      reason: "schema_invalid";
+      title: string;
+      sectionCount: number;
+      productCount: number;
+      hasAssets: boolean;
+    }
+  | {
       type: "runtime.context.loaded";
       message: string;
       runId?: string;
