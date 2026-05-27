@@ -201,6 +201,8 @@ pi-mono 的 provider 配置思路适合作为参考，但本项目不应该直�
 
 模型路由错误也要分层处理。provider adapter 和 run timeline 可以记录 bounded `model_provider_*` 诊断码，帮助开发者判断是缺少 `apiKeyEnv`、provider disabled、协议不匹配还是 mock route 被真实 runtime 禁用；但 Web 普通聊天在 stream 开始前或首个 delta 前失败时，不能把这些底层细节直接当作通用 `generation_failed` 或泄露给用户。当前做法是把 context assembly / route resolution 阶段，以及 async stream 初始阶段的已知 provider 配置错误归类为稳定 UI 错误码 `provider_configuration_failed`，提示用户检查项目模型设置，同时继续避免暴露 secret env 名、base URL 和 raw provider message。
 
+真实 provider HTTP / request / response 错误也不能都归成“stream interrupted”。`stream_interrupted` 应只表示已经进入流式生成但 provider stream 没有正常完成，或者已经有 partial delta 后失败。对于没有 token 输出前就被 provider 拒绝的情况，runtime event 保留安全 `errorCode` 和 HTTP `status`，UI 再映射成稳定分类，例如 `provider_authentication_failed`、`provider_billing_required`、`provider_rate_limited`、`provider_timeout`、`provider_unavailable`、`provider_request_failed` 或 `provider_response_invalid`。这让用户能区分“余额/账单/限流/服务不可用/响应格式不兼容”和真正断流，同时仍然不展示 raw provider response、完整 endpoint、secret env value 或 API key。
+
 ### 2.12 普通聊天也需要明确 Agent role
 
 普通问答不是 LP `Planner`。如果把普通聊天临时复用 `planner` model route，短期可以少改类型，但长期会混淆两类完全不同的职责：`planner` 负责把 LP 需求转成结构化 brief，普通聊天则负责回答问题、解释项目状态和承接后续工作流入口。

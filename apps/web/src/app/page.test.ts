@@ -3296,6 +3296,56 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("Publish");
   });
 
+  it("renders unique accessible labels for multiple bind actions", async () => {
+    const firstPublishedSkill = projectSkillState("published");
+    const secondPublishedSkill = projectSkillState("published");
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.pageState = {
+      kind: "empty",
+      projects: [
+        {
+          id: "project_1",
+          name: "Spring Campaign",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        }
+      ],
+      tasks: [],
+      skills: {
+        boundSkills: [],
+        availableVersions: [
+          {
+            ...firstPublishedSkill.version,
+            id: "skill_version_brand",
+            manifest: {
+              ...firstPublishedSkill.version.manifest,
+              name: "Brand Voice"
+            }
+          },
+          {
+            ...secondPublishedSkill.version,
+            id: "skill_version_assets",
+            manifest: {
+              ...secondPublishedSkill.version.manifest,
+              name: "Asset Reader"
+            }
+          }
+        ]
+      }
+    };
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({ view: "skills" })
+    });
+    const bindButtons = collectElements(page, "button").filter(
+      (button) => collectText(button.props?.children).join("") === "Bind"
+    );
+
+    expect(bindButtons.map((button) => button.props?.["aria-label"])).toEqual([
+      "Bind Brand Voice",
+      "Bind Asset Reader"
+    ]);
+  });
+
   it("does not render bind for a published skill version already bound to the project", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.pageState = {
@@ -4172,6 +4222,8 @@ describe("HomePage project flow errors", () => {
     expect(text).not.toContain("<!doctype html>");
     expect(text).not.toContain("window.lpAgent");
     expect(snippetHrefs).toContainEqual(expect.stringContaining("view=artifacts"));
+    expect(snippetHrefs).toContainEqual(expect.stringContaining("projectId=project_1"));
+    expect(snippetHrefs).toContainEqual(expect.stringContaining("taskId=task_1"));
     expect(snippetHrefs).toContainEqual(expect.stringContaining("artifactPath=index.html"));
     expect(snippetHrefs).not.toContainEqual(expect.stringContaining("view=mcp"));
   });

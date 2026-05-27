@@ -1055,6 +1055,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         project_not_found: "The selected project is unavailable.",
         generation_failed: "The chat response could not be generated.",
         provider_configuration_failed: "Check the project model provider configuration before retrying.",
+        provider_authentication_failed: "The model provider rejected authentication. Check the API key or permissions.",
+        provider_billing_required:
+          "The model provider rejected the request for billing or quota. Check provider usage or billing, then retry.",
+        provider_rate_limited: "The model provider is rate limited. Wait a moment, then retry.",
+        provider_unavailable: "The model provider is temporarily unavailable. Retry later.",
+        provider_timeout: "The model provider timed out. Retry later.",
+        provider_request_failed: "The model provider request failed. Check provider status, then retry.",
+        provider_response_invalid: "The model provider returned a response format this app does not support yet.",
         stream_interrupted: "The provider stream stopped before the response completed.",
         empty_response: "The provider completed without usable assistant text.",
         persistence_failed: "The response was generated but could not be saved."
@@ -1722,6 +1730,13 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
         project_not_found: "当前项目不可用。",
         generation_failed: "聊天回复生成失败。",
         provider_configuration_failed: "请检查项目模型 provider 配置后重试。",
+        provider_authentication_failed: "模型 provider 认证失败，请检查 API key 或权限。",
+        provider_billing_required: "模型 provider 余额或计费状态异常，请充值或切换 provider 后重试。",
+        provider_rate_limited: "模型 provider 请求过于频繁，请稍后重试。",
+        provider_unavailable: "模型 provider 暂时不可用，请稍后重试。",
+        provider_timeout: "模型 provider 响应超时，请稍后重试。",
+        provider_request_failed: "模型 provider 请求失败，请检查 provider 状态后重试。",
+        provider_response_invalid: "模型 provider 返回了暂不支持的响应格式。",
         stream_interrupted: "Provider stream 在回复完成前中断。",
         empty_response: "Provider 已结束，但没有返回可用的 assistant 文本。",
         persistence_failed: "回复已生成，但无法保存。"

@@ -5404,6 +5404,87 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
   });
 
+  it("classifies provider billing failures without calling them stream interruptions", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const fakeFetch: ModelFetch = async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            message: "Insufficient Balance",
+            code: "invalid_request_error"
+          }
+        }),
+        {
+          status: 402,
+          headers: { "content-type": "application/json" }
+        }
+      );
+    const service = new DemoWorkbenchService({
+      repositories,
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch,
+      now: fixedClock()
+    });
+    const project = await service.createProject({ name: "Billing Provider" });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Provider chat",
+      type: "general_chat",
+      status: "complete",
+      projectId: project.id,
+      createdAt: "2026-05-12T00:00:00.000Z"
+    });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "billing_openai",
+      name: "Billing OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://models.example.test/v1",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "provider-model"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "assistant",
+      providerId: provider.id,
+      model: "provider-model"
+    });
+
+    const started = await service.runAssistantChatStream({
+      projectId: project.id,
+      taskId: "task_1",
+      prompt: "Hello"
+    });
+
+    if (!started.ok || !started.stream) {
+      throw new Error("Expected streaming assistant result");
+    }
+    const stream = started.stream;
+    await expect(async () => {
+      for await (const _delta of stream) {
+        // No deltas are expected before a provider billing failure.
+      }
+    }).rejects.toMatchObject({ code: "provider_billing_required" });
+
+    const events = await repositories.runEvents.listForTask("task_1");
+    expect(events.find((event) => event.type === "run.failed")).toMatchObject({
+      runId: "run_assistant_1",
+      type: "run.failed",
+      message: "assistant model provider failed",
+      payload: expect.objectContaining({
+        errorName: "ModelProviderRequestError",
+        errorCode: "model_provider_http_error",
+        status: 402
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("Insufficient Balance");
+    expect(JSON.stringify(events)).not.toContain("sk-test-secret");
+  });
+
   it("fails closed for provider-backed assistant streaming when the API key is missing", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const fetchCalls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];

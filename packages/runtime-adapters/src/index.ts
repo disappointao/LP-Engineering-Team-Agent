@@ -280,6 +280,7 @@ export type RuntimeEvent =
       state: "failed";
       errorName?: string;
       errorCode?: string;
+      status?: number;
     };
 
 export interface RuntimeRunResult {
@@ -710,7 +711,8 @@ function toRunFailedEvent(request: RuntimeRunRequest, error: unknown): RuntimeEv
     role: request.role,
     state: "failed",
     errorName: error instanceof Error ? error.name : undefined,
-    ...(isProviderError ? { errorCode: providerSummary.errorCode } : {})
+    ...(isProviderError ? { errorCode: providerSummary.errorCode } : {}),
+    ...(providerSummary.status !== undefined ? { status: providerSummary.status } : {})
   };
 }
 

@@ -951,6 +951,66 @@ describe("POST /api/chat/stream", () => {
     expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
   });
 
+  it("emits a provider billing error when the provider rejects the request for usage or billing", async () => {
+    const providerBillingError = Object.assign(new Error("assistant_stream_failed"), {
+      code: "provider_billing_required"
+    });
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "general_chat",
+      userMessageId: "message_1",
+      assistantMessageId: "message_2",
+      assistantContent: "",
+      assistantStream: (async function* () {
+        throw providerBillingError;
+      })(),
+      chunks: [],
+      contextSummary: deterministicContextSummary
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Hello" })
+      })
+    );
+
+    expect(decodeChatStreamLines(await response.text())).toEqual({
+      events: [
+        {
+          type: "task.created",
+          taskId: "task_1"
+        },
+        {
+          type: "context.summary",
+          taskId: "task_1",
+          ...deterministicContextSummary
+        },
+        {
+          type: "run.status",
+          taskId: "task_1",
+          state: "running",
+          label: "Generating response"
+        },
+        {
+          type: "run.status",
+          taskId: "task_1",
+          state: "failed",
+          label: "Provider billing or quota blocked"
+        },
+        {
+          type: "error",
+          code: "provider_billing_required",
+          message: "The model provider rejected the request for billing or quota. Check provider usage or billing, then retry."
+        }
+      ],
+      remainder: ""
+    });
+    expect(mocks.completeStreamingChatPrompt).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       outcome: "resolves",

@@ -137,17 +137,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const requestedNewTask = getFirstSearchParam(params?.newTask) === "1";
   const hasProjectParam = requestedProjectId !== undefined;
   const hasTaskParam = requestedTaskId !== undefined;
-  const previewSearchParams = createArtifactPreviewSearchParams({
-    activeView,
-    errorCode,
-    interruptError,
-    modelError,
-    modelNotice,
-    recoveryError,
-    skillNotice,
-    skillError,
-    workerError
-  });
   const cookieProjectId = await getCurrentProjectId();
   const cookieTaskId = await getCurrentTaskId();
   const currentProjectId = requestedProjectId ?? cookieProjectId;
@@ -155,6 +144,19 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     requestedNewTask || (hasProjectParam && !hasTaskParam)
       ? undefined
       : requestedTaskId ?? cookieTaskId;
+  const previewSearchParams = createArtifactPreviewSearchParams({
+    activeView,
+    errorCode,
+    interruptError,
+    modelError,
+    modelNotice,
+    projectId: currentProjectId,
+    recoveryError,
+    skillNotice,
+    skillError,
+    taskId: currentTaskId,
+    workerError
+  });
   const store = await getWebWorkbenchStore();
   const pageState = await store.getPageState({
     projectId: currentProjectId,
@@ -525,6 +527,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <>
                     <form action={createSkillDraftAction} className="skillEditor">
                       <h2>{copy.skillsView.createTitle}</h2>
+                      <input name="projectId" type="hidden" value={activeProject.id} />
+                      {activeTask ? <input name="taskId" type="hidden" value={activeTask.id} /> : null}
                       <label htmlFor="manifestJson">{copy.skillsView.manifestLabel}</label>
                       <textarea
                         id="manifestJson"
@@ -582,9 +586,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             <div className="skillActions">
                               {version.reviewState === "draft" ? (
                                 <form action={validateSkillVersionAction}>
+                                  <input name="projectId" type="hidden" value={activeProject.id} />
+                                  {activeTask ? (
+                                    <input name="taskId" type="hidden" value={activeTask.id} />
+                                  ) : null}
                                   <input name="skillVersionId" type="hidden" value={version.id} />
                                   <ManagementSubmitButton
                                     pendingLabel={copy.skillsView.management.pending.validate}
+                                    ariaLabel={`${copy.skillsView.validate} ${version.manifest.name}`}
                                   >
                                     {copy.skillsView.validate}
                                   </ManagementSubmitButton>
@@ -592,9 +601,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               ) : null}
                               {version.reviewState === "validated" ? (
                                 <form action={publishSkillVersionAction}>
+                                  <input name="projectId" type="hidden" value={activeProject.id} />
+                                  {activeTask ? (
+                                    <input name="taskId" type="hidden" value={activeTask.id} />
+                                  ) : null}
                                   <input name="skillVersionId" type="hidden" value={version.id} />
                                   <ManagementSubmitButton
                                     pendingLabel={copy.skillsView.management.pending.publish}
+                                    ariaLabel={`${copy.skillsView.publish} ${version.manifest.name}`}
                                   >
                                     {copy.skillsView.publish}
                                   </ManagementSubmitButton>
@@ -603,9 +617,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               {version.reviewState === "published" && !boundSkillVersionIds.has(version.id) ? (
                                 <form action={bindSkillVersionAction}>
                                   <input name="projectId" type="hidden" value={activeProject.id} />
+                                  {activeTask ? (
+                                    <input name="taskId" type="hidden" value={activeTask.id} />
+                                  ) : null}
                                   <input name="skillVersionId" type="hidden" value={version.id} />
                                   <ManagementSubmitButton
                                     pendingLabel={copy.skillsView.management.pending.bind}
+                                    ariaLabel={`${copy.skillsView.bind} ${version.manifest.name}`}
                                   >
                                     {copy.skillsView.bind}
                                   </ManagementSubmitButton>
@@ -644,6 +662,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             <div className="skillActions">
                               <form action={setSkillBindingEnabledAction}>
                                 <input name="projectId" type="hidden" value={activeProject.id} />
+                                {activeTask ? (
+                                  <input name="taskId" type="hidden" value={activeTask.id} />
+                                ) : null}
                                 <input name="bindingId" type="hidden" value={boundSkill.binding.id} />
                                 <input
                                   name="enabled"
@@ -656,6 +677,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                       ? copy.skillsView.management.pending.disable
                                       : copy.skillsView.management.pending.enable
                                   }
+                                  ariaLabel={`${
+                                    boundSkill.binding.enabled
+                                      ? copy.skillsView.disable
+                                      : copy.skillsView.enable
+                                  } ${boundSkill.skill.name}`}
                                 >
                                   {boundSkill.binding.enabled
                                     ? copy.skillsView.disable
@@ -743,6 +769,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         </div>
                         <form action={runLocalWorkerOnceAction}>
                           <input type="hidden" name="projectId" value={activeProject.id} />
+                          {activeTask ? (
+                            <input name="taskId" type="hidden" value={activeTask.id} />
+                          ) : null}
                           <ManagementSubmitButton
                             pendingLabel={copy.skillsView.management.pending.runWorker}
                           >
@@ -861,6 +890,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <form action={createModelProviderAction} className="modelEditor">
                       <h2>{copy.modelsView.providerCreateTitle}</h2>
                       <input name="projectId" type="hidden" value={activeProject.id} />
+                      {activeTask ? <input name="taskId" type="hidden" value={activeTask.id} /> : null}
 
                       <label htmlFor="providerId">{copy.modelsView.providerIdLabel}</label>
                       <input
@@ -960,6 +990,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             </div>
                             <form action={setModelProviderEnabledAction}>
                               <input name="projectId" type="hidden" value={activeProject.id} />
+                              {activeTask ? (
+                                <input name="taskId" type="hidden" value={activeTask.id} />
+                              ) : null}
                               <input name="providerId" type="hidden" value={provider.id} />
                               <input
                                 name="enabled"
@@ -1022,6 +1055,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               ) : null;
                             })()}
                             <input name="projectId" type="hidden" value={activeProject.id} />
+                            {activeTask ? (
+                              <input name="taskId" type="hidden" value={activeTask.id} />
+                            ) : null}
                             <input name="role" type="hidden" value={role} />
                             <select
                               name="providerId"
@@ -1075,6 +1111,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             {activeView === "mcp"
               ? MCPManagementView({
                   activeProject,
+                  activeTaskId: activeTask?.id,
                   copy,
                   errorMessage: mcpErrorMessage,
                   management: mcpManagement
@@ -1688,11 +1725,13 @@ function RecoveryBlock({
 
 function MCPManagementView({
   activeProject,
+  activeTaskId,
   copy,
   errorMessage,
   management
 }: {
   activeProject: WorkbenchPageState["projects"][number] | undefined;
+  activeTaskId?: string;
   copy: ReturnType<typeof getWorkbenchCopy>;
   errorMessage?: string;
   management: MCPManagementViewModel;
@@ -1733,6 +1772,7 @@ function MCPManagementView({
         <>
           <form action={createMCPConnectorAction} className="mcpEditor">
             <input name="projectId" type="hidden" value={activeProject.id} />
+            {activeTaskId ? <input name="taskId" type="hidden" value={activeTaskId} /> : null}
             <h2>{copy.mcpView.createTitle}</h2>
             <label htmlFor="definitionJson">{copy.mcpView.definitionLabel}</label>
             <textarea
@@ -1764,6 +1804,9 @@ function MCPManagementView({
                   </div>
                   <form action={setMCPConnectorEnabledAction}>
                     <input name="projectId" type="hidden" value={activeProject.id} />
+                    {activeTaskId ? (
+                      <input name="taskId" type="hidden" value={activeTaskId} />
+                    ) : null}
                     <input name="connectorId" type="hidden" value={connector.id} />
                     <input
                       name="enabled"
@@ -1799,6 +1842,9 @@ function MCPManagementView({
                           {tool.requiresApproval ? (
                             <form action={setMCPToolApprovalAction}>
                               <input name="projectId" type="hidden" value={activeProject.id} />
+                              {activeTaskId ? (
+                                <input name="taskId" type="hidden" value={activeTaskId} />
+                              ) : null}
                               <input name="connectorId" type="hidden" value={connector.id} />
                               <input name="toolName" type="hidden" value={tool.name} />
                               <input
@@ -1846,6 +1892,9 @@ function MCPManagementView({
                       {tool.executionAvailable ? (
                         <form action={executeMCPToolAction} className="mcpExecutionForm">
                           <input name="projectId" type="hidden" value={activeProject.id} />
+                          {activeTaskId ? (
+                            <input name="taskId" type="hidden" value={activeTaskId} />
+                          ) : null}
                           <input name="connectorId" type="hidden" value={tool.connectorId} />
                           <input name="toolName" type="hidden" value={tool.name} />
                           <input name="role" type="hidden" value={group.role} />
@@ -2102,9 +2151,11 @@ function createArtifactPreviewSearchParams({
   interruptError,
   modelError,
   modelNotice,
+  projectId,
   recoveryError,
   skillNotice,
   skillError,
+  taskId,
   workerError
 }: {
   activeView: "artifacts" | "skills" | "models" | "mcp" | "workbench";
@@ -2112,15 +2163,23 @@ function createArtifactPreviewSearchParams({
   interruptError?: InterruptFlowErrorCode;
   modelError?: ModelFlowErrorCode;
   modelNotice?: ReturnType<typeof toModelManagementNotice>;
+  projectId?: string;
   recoveryError?: RunRecoveryFlowErrorCode;
   skillNotice?: ReturnType<typeof toSkillManagementNotice>;
   skillError?: SkillFlowErrorCode;
+  taskId?: string;
   workerError?: WorkerQueueFlowErrorCode;
 }): URLSearchParams {
   const query = new URLSearchParams();
 
   if (activeView !== "workbench") {
     query.set("view", activeView);
+  }
+  if (projectId) {
+    query.set("projectId", projectId);
+  }
+  if (taskId) {
+    query.set("taskId", taskId);
   }
 
   if (errorCode) {

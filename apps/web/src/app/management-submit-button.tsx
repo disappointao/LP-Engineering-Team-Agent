@@ -7,10 +7,12 @@ import { useFormStatus } from "react-dom";
 interface ManagementSubmitButtonProps {
   children: ReactNode;
   pendingLabel: string;
+  ariaLabel?: string;
   disabled?: boolean;
 }
 
 export function ManagementSubmitButton({
+  ariaLabel,
   children,
   pendingLabel,
   disabled = false
@@ -23,6 +25,7 @@ export function ManagementSubmitButton({
       className="managementSubmitButton"
       disabled={disabled || isPending}
       aria-busy={isPending ? true : undefined}
+      aria-label={ariaLabel}
     >
       {isPending ? pendingLabel : children}
     </button>

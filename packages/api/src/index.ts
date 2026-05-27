@@ -540,6 +540,13 @@ export type AssistantChatErrorCode =
 
 export type AssistantChatStreamFailureCode =
   | "provider_configuration_failed"
+  | "provider_authentication_failed"
+  | "provider_billing_required"
+  | "provider_rate_limited"
+  | "provider_unavailable"
+  | "provider_timeout"
+  | "provider_request_failed"
+  | "provider_response_invalid"
   | "stream_interrupted"
   | "empty_response"
   | "generation_failed";
@@ -2619,6 +2626,7 @@ export class DemoWorkbenchService {
     };
     let terminalResult: RuntimeRunResult | undefined;
     let persistedTerminal = false;
+    let sawDelta = false;
 
     try {
       await this.repositories.runs.save(startedRun);
@@ -2643,6 +2651,7 @@ export class DemoWorkbenchService {
         }
         const event = read.event;
         if (event.type === "model.delta") {
+          sawDelta = true;
           yield event.text;
         } else {
           terminalResult = event.result;
@@ -2662,7 +2671,9 @@ export class DemoWorkbenchService {
       });
       persistedTerminal = true;
       if (terminalResult.state !== "completed") {
-        throw new AssistantChatStreamError(classifyAssistantStreamFailure(terminalResult));
+        throw new AssistantChatStreamError(
+          classifyAssistantStreamFailure(terminalResult, { sawDelta })
+        );
       }
     } catch (error) {
       const failedResult = createAssistantStreamFailedResult(
@@ -5033,12 +5044,14 @@ function normalizeAssistantStreamingTerminalResult(result: RuntimeRunResult): Ru
 }
 
 function classifyAssistantStreamFailure(
-  result: RuntimeRunResult
+  result: RuntimeRunResult,
+  options: { sawDelta?: boolean } = {}
 ): AssistantChatStreamFailureCode {
-  const errorCode = [...result.events]
+  const failedEvent = [...result.events]
     .reverse()
-    .map((event) => getRuntimeEventErrorCode(event))
-    .find((code): code is string => typeof code === "string" && code.length > 0);
+    .find((event) => getRuntimeEventErrorCode(event));
+  const errorCode = failedEvent ? getRuntimeEventErrorCode(failedEvent) : undefined;
+  const status = failedEvent ? getRuntimeEventStatus(failedEvent) : undefined;
 
   if (errorCode === "assistant_empty_response") {
     return "empty_response";
@@ -5046,10 +5059,41 @@ function classifyAssistantStreamFailure(
   if (errorCode && assistantProviderConfigurationErrorCodes.has(errorCode)) {
     return "provider_configuration_failed";
   }
+  if (errorCode === "model_provider_request_timeout") {
+    return "provider_timeout";
+  }
+  if (errorCode === "model_provider_response_json_invalid") {
+    return "provider_response_invalid";
+  }
+  if (errorCode === "model_provider_response_shape_invalid") {
+    return options.sawDelta ? "stream_interrupted" : "provider_response_invalid";
+  }
+  if (errorCode === "model_provider_http_error") {
+    return classifyProviderHttpStatus(status);
+  }
+  if (errorCode === "model_provider_request_failed") {
+    return "provider_request_failed";
+  }
   if (result.state === "failed") {
     return "stream_interrupted";
   }
   return "generation_failed";
+}
+
+function classifyProviderHttpStatus(status: number | undefined): AssistantChatStreamFailureCode {
+  if (status === 401 || status === 403) {
+    return "provider_authentication_failed";
+  }
+  if (status === 402) {
+    return "provider_billing_required";
+  }
+  if (status === 429) {
+    return "provider_rate_limited";
+  }
+  if (status !== undefined && status >= 500) {
+    return "provider_unavailable";
+  }
+  return "provider_request_failed";
 }
 
 const assistantProviderConfigurationErrorCodes = new Set([
@@ -5071,6 +5115,15 @@ function getRuntimeEventErrorCode(event: RuntimeEvent): string | undefined {
     return undefined;
   }
   return event.errorCode;
+}
+
+function getRuntimeEventStatus(event: RuntimeEvent): number | undefined {
+  if (!("status" in event) || typeof event.status !== "number") {
+    return undefined;
+  }
+  return Number.isSafeInteger(event.status) && event.status >= 100 && event.status <= 599
+    ? event.status
+    : undefined;
 }
 
 function canStreamAssistantRoute(route: ModelRoute | undefined): boolean {

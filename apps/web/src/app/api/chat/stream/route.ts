@@ -149,6 +149,20 @@ function getSafeErrorMessage(error: ChatStreamErrorCode) {
       return "The selected project is unavailable.";
     case "provider_configuration_failed":
       return "Check the project model provider configuration before retrying.";
+    case "provider_authentication_failed":
+      return "The model provider rejected authentication. Check the API key or permissions.";
+    case "provider_billing_required":
+      return "The model provider rejected the request for billing or quota. Check provider usage or billing, then retry.";
+    case "provider_rate_limited":
+      return "The model provider is rate limited. Wait a moment, then retry.";
+    case "provider_unavailable":
+      return "The model provider is temporarily unavailable. Retry later.";
+    case "provider_timeout":
+      return "The model provider timed out. Retry later.";
+    case "provider_request_failed":
+      return "The model provider request failed. Check provider status, then retry.";
+    case "provider_response_invalid":
+      return "The model provider returned a response format this app does not support yet.";
     case "stream_interrupted":
       return "The provider stream stopped before the response completed.";
     case "empty_response":
@@ -176,6 +190,13 @@ function toChatStreamErrorCodeFromUnknown(error: unknown): ChatStreamErrorCode {
   const code = (error as { code?: unknown })?.code;
   if (
     code === "provider_configuration_failed" ||
+    code === "provider_authentication_failed" ||
+    code === "provider_billing_required" ||
+    code === "provider_rate_limited" ||
+    code === "provider_unavailable" ||
+    code === "provider_timeout" ||
+    code === "provider_request_failed" ||
+    code === "provider_response_invalid" ||
     code === "stream_interrupted" ||
     code === "empty_response"
   ) {
@@ -188,6 +209,20 @@ function getTerminalErrorLabel(code: ChatStreamErrorCode): string {
   switch (code) {
     case "provider_configuration_failed":
       return "Provider configuration failed";
+    case "provider_authentication_failed":
+      return "Provider authentication failed";
+    case "provider_billing_required":
+      return "Provider billing or quota blocked";
+    case "provider_rate_limited":
+      return "Provider rate limited";
+    case "provider_unavailable":
+      return "Provider temporarily unavailable";
+    case "provider_timeout":
+      return "Provider timed out";
+    case "provider_request_failed":
+      return "Provider request failed";
+    case "provider_response_invalid":
+      return "Provider response unsupported";
     case "stream_interrupted":
       return "Provider stream interrupted";
     case "empty_response":

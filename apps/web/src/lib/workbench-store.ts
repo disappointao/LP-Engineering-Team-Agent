@@ -541,6 +541,9 @@ export interface LiveTaskRunEventPayload {
   fromRunId?: string;
   fromRole?: string;
   toRole?: string;
+  errorName?: string;
+  errorCode?: string;
+  status?: number;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -570,9 +573,11 @@ type LiveTaskStringPayloadKey =
   | "handoffId"
   | "fromRunId"
   | "fromRole"
-  | "toRole";
+  | "toRole"
+  | "errorName"
+  | "errorCode";
 
-type LiveTaskNumberPayloadKey = "skillCount" | "toolCount" | "fileCount";
+type LiveTaskNumberPayloadKey = "skillCount" | "toolCount" | "fileCount" | "status";
 
 export interface LiveTaskRunEvent {
   id: string;
@@ -1119,9 +1124,16 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       "handoffId",
       "fromRunId",
       "fromRole",
-      "toRole"
+      "toRole",
+      "errorName",
+      "errorCode"
     ];
-    const numberKeys: LiveTaskNumberPayloadKey[] = ["skillCount", "toolCount", "fileCount"];
+    const numberKeys: LiveTaskNumberPayloadKey[] = [
+      "skillCount",
+      "toolCount",
+      "fileCount",
+      "status"
+    ];
 
     for (const key of stringKeys) {
       addStringPayloadValue(safe, payload, key);

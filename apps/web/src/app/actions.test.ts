@@ -686,6 +686,25 @@ describe("submitPromptAction", () => {
     );
   });
 
+  it("preserves task context when redirecting skill management errors", async () => {
+    mocks.createSkillDraft.mockResolvedValue({
+      ok: false,
+      error: "invalid_manifest_json"
+    });
+
+    await expectRedirect(
+      createSkillDraftAction(
+        buildSkillForm({
+          projectId: "project_1",
+          taskId: "task_1",
+          manifestJson: "{",
+          content: "# Brand LP"
+        })
+      ),
+      "/?view=skills&projectId=project_1&taskId=task_1&skillError=invalid_manifest_json"
+    );
+  });
+
   it("redirects invalid skill content types before calling the store", async () => {
     await expectRedirect(
       createSkillDraftAction(
@@ -919,7 +938,7 @@ describe("submitPromptAction", () => {
 
     await expectRedirect(
       executeSkillCommandAction(buildSkillCommandForm({ taskId: " task_1 " })),
-      "/?view=skills&skillNotice=command_queued"
+      "/?view=skills&projectId=project_2&taskId=task_1&skillNotice=command_queued"
     );
 
     expect(mocks.executeSkillCommand).toHaveBeenCalledWith({
@@ -1296,6 +1315,24 @@ describe("submitPromptAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("preserves task context when redirecting model management errors", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.createModelProvider.mockResolvedValue({
+      ok: false,
+      error: "model_provider_key_required"
+    });
+
+    await expectRedirect(
+      createModelProviderAction(
+        buildSkillForm({
+          projectId: "project_1",
+          taskId: "task_1"
+        })
+      ),
+      "/?view=models&projectId=project_1&taskId=task_1&modelError=model_provider_key_required"
+    );
+  });
+
   it.each([
     ["true", true, "/?view=skills&skillNotice=enabled"],
     ["false", false, "/?view=skills&skillNotice=disabled"]
@@ -1340,6 +1377,29 @@ describe("submitPromptAction", () => {
 
     expect(mocks.createMCPConnector).toHaveBeenCalledWith({
       projectId: "missing_project",
+      definitionJson: "{"
+    });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("preserves task context when redirecting MCP management errors", async () => {
+    mocks.currentProjectId = undefined;
+    mocks.createMCPConnector.mockResolvedValue({
+      ok: false,
+      error: "mcp_connector_json_invalid"
+    });
+    const formData = new FormData();
+    formData.set("projectId", "project_1");
+    formData.set("taskId", "task_1");
+    formData.set("definitionJson", "{");
+
+    await expectRedirect(
+      createMCPConnectorAction(formData),
+      "/?view=mcp&projectId=project_1&taskId=task_1&mcpError=mcp_connector_json_invalid"
+    );
+
+    expect(mocks.createMCPConnector).toHaveBeenCalledWith({
+      projectId: "project_1",
       definitionJson: "{"
     });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();

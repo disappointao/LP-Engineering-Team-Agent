@@ -9,6 +9,7 @@ import {
   completeLiveTaskFallbackHandoff,
   createInitialLiveTaskFallbackHandoffState,
   createLiveTaskSubmitRequestBody,
+  createStreamingTerminalHref,
   createStreamingChatRequestBody,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
@@ -204,6 +205,28 @@ describe("streaming workbench terminal refresh state", () => {
   });
 });
 
+describe("streaming workbench terminal navigation", () => {
+  it("replaces the new-task URL with the completed task context", () => {
+    expect(
+      createStreamingTerminalHref({
+        currentSearch: "?projectId=project_1&newTask=1",
+        projectId: "project_1",
+        taskId: "task_2"
+      })
+    ).toBe("/?projectId=project_1&taskId=task_2");
+  });
+
+  it("clears stale diagnostics when moving to the streamed task URL", () => {
+    expect(
+      createStreamingTerminalHref({
+        currentSearch: "?newTask=1&error=generation_failed&artifactPath=styles.css",
+        projectId: "project_1",
+        taskId: "task_2"
+      })
+    ).toBe("/?projectId=project_1&taskId=task_2");
+  });
+});
+
 describe("streaming workbench visible status", () => {
   const errorMessages = {
     prompt_required: "Enter a prompt before sending.",
@@ -211,6 +234,16 @@ describe("streaming workbench visible status", () => {
     generation_failed: "The chat response could not be generated.",
     provider_configuration_failed:
       "Check the project model provider configuration before retrying.",
+    provider_authentication_failed:
+      "The model provider rejected authentication. Check the API key or permissions.",
+    provider_billing_required:
+      "The model provider rejected the request for billing or quota. Check provider usage or billing, then retry.",
+    provider_rate_limited: "The model provider is rate limited. Wait a moment, then retry.",
+    provider_unavailable: "The model provider is temporarily unavailable. Retry later.",
+    provider_timeout: "The model provider timed out. Retry later.",
+    provider_request_failed: "The model provider request failed. Check provider status, then retry.",
+    provider_response_invalid:
+      "The model provider returned a response format this app does not support yet.",
     stream_interrupted: "The provider stream stopped before the response completed.",
     empty_response: "The provider completed without usable assistant text.",
     persistence_failed: "The response was generated but could not be saved."

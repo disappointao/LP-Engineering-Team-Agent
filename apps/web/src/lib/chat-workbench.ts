@@ -246,6 +246,8 @@ function formatRunEventMeta(event: RunEventRecord): string {
   const workerJobId = toDisplayValue(event.payload.workerJobId);
   const exitCode = toDisplayValue(event.payload.exitCode);
   const errorName = toDisplayValue(event.payload.errorName);
+  const errorCode = toDisplayValue(event.payload.errorCode);
+  const status = toDisplayValue(event.payload.status);
   const outputSummary = toDisplayValue(event.payload.outputSummary);
 
   if (commandId) {
@@ -259,6 +261,12 @@ function formatRunEventMeta(event: RunEventRecord): string {
   }
   if (errorName) {
     parts.push(errorName);
+  }
+  if (errorCode) {
+    parts.push(errorCode);
+  }
+  if (status) {
+    parts.push(`HTTP ${status}`);
   }
   if (outputSummary) {
     parts.push(outputSummary);

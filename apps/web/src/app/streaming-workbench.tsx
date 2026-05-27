@@ -98,6 +98,29 @@ export function getTerminalStreamingStateAfterRefresh(
   return state;
 }
 
+export function createStreamingTerminalHref({
+  currentSearch,
+  projectId,
+  taskId
+}: {
+  currentSearch: string;
+  projectId?: string;
+  taskId?: string;
+}): string {
+  // Parse the current query so malformed inputs follow URLSearchParams behavior,
+  // then build a clean task URL without stale transient flags.
+  new URLSearchParams(currentSearch);
+  const query = new URLSearchParams();
+  if (projectId) {
+    query.set("projectId", projectId);
+  }
+  if (taskId) {
+    query.set("taskId", taskId);
+  }
+  const serialized = query.toString();
+  return serialized.length > 0 ? `/?${serialized}` : "/";
+}
+
 export function getVisibleStreamingStatus(
   state: StreamingWorkbenchState,
   streamingStatusLabel: string,
@@ -262,6 +285,12 @@ export interface LiveTaskSubmitRequestBody {
   taskId?: string;
 }
 
+interface LiveTaskSubmitSuccessPayload {
+  ok: true;
+  taskId: string;
+  projectId?: string;
+}
+
 export const liveTaskSubmitEndpoint = "/api/tasks/submit";
 
 export function createLiveTaskSubmitRequestBody({
@@ -275,6 +304,21 @@ export function createLiveTaskSubmitRequestBody({
     implicitProjectName,
     ...(projectId ? { projectId } : {}),
     ...(taskId ? { taskId } : {})
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toLiveTaskSubmitSuccessPayload(value: unknown): LiveTaskSubmitSuccessPayload | undefined {
+  if (!isRecord(value) || value.ok !== true || typeof value.taskId !== "string") {
+    return undefined;
+  }
+  return {
+    ok: true,
+    taskId: value.taskId,
+    ...(typeof value.projectId === "string" ? { projectId: value.projectId } : {})
   };
 }
 
@@ -554,12 +598,38 @@ export function StreamingWorkbench({
     dispatch({ type: "error", message: streamingErrorLabel });
   };
 
+  const replaceWithTerminalTaskRoute = ({
+    projectId: nextProjectId,
+    taskId: nextTaskId
+  }: {
+    projectId?: string;
+    taskId?: string;
+  } = {}) => {
+    const terminalProjectId =
+      nextProjectId ?? stateRef.current.contextSummary?.projectId ?? projectId;
+    const terminalTaskId = nextTaskId ?? stateRef.current.taskId ?? taskId ?? liveTaskId;
+    if (!terminalProjectId && !terminalTaskId) {
+      return;
+    }
+    router.replace(
+      createStreamingTerminalHref({
+        currentSearch: window.location.search,
+        ...(terminalProjectId ? { projectId: terminalProjectId } : {}),
+        ...(terminalTaskId ? { taskId: terminalTaskId } : {})
+      })
+    );
+  };
+
   const completeLiveTaskFromFallback = ({
     token,
-    ok
+    ok,
+    projectId: completedProjectId,
+    taskId: completedTaskId
   }: {
     token: number;
     ok: boolean;
+    projectId?: string;
+    taskId?: string;
   }) => {
     const completed = completeLiveTaskFallbackHandoff({
       state: liveTaskFallbackHandoffRef.current,
@@ -578,6 +648,10 @@ export function StreamingWorkbench({
     }
 
     setVisibleSubmittedPrompt(undefined);
+    replaceWithTerminalTaskRoute({
+      ...(completedProjectId ? { projectId: completedProjectId } : {}),
+      ...(completedTaskId ? { taskId: completedTaskId } : {})
+    });
     router.refresh();
     const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
     applyState(nextState);
@@ -614,7 +688,13 @@ export function StreamingWorkbench({
         return;
       }
 
-      completeLiveTaskFromFallback({ token, ok: true });
+      const payload = toLiveTaskSubmitSuccessPayload(await response.json().catch(() => undefined));
+      completeLiveTaskFromFallback({
+        token,
+        ok: true,
+        ...(payload?.projectId ? { projectId: payload.projectId } : {}),
+        ...(payload?.taskId ? { taskId: payload.taskId } : {})
+      });
     } catch {
       completeLiveTaskFromFallback({ token, ok: false });
     }
@@ -654,6 +734,7 @@ export function StreamingWorkbench({
 
   const refreshAndClearTerminalState = () => {
     setVisibleSubmittedPrompt(undefined);
+    replaceWithTerminalTaskRoute();
     router.refresh();
     const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
     applyState(nextState);

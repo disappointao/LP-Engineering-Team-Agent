@@ -48,7 +48,12 @@ test("manages skills and models with safe client-side feedback", async ({ page }
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page).toHaveURL(/[?&]skillNotice=published(?:&|$)/);
   await expect(page.getByText("Skill published.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Bind" }).click();
+  await page
+    .getByLabel("Skill lifecycle")
+    .locator(".skillRow")
+    .filter({ hasText: "Stage 44 Brand Voice" })
+    .getByRole("button", { name: "Bind Stage 44 Brand Voice", exact: true })
+    .click();
   await expect(page).toHaveURL(/[?&]skillNotice=bound(?:&|$)/);
   await expect(page.getByText("Skill bound to the project.", { exact: true })).toBeVisible();
   await expect(

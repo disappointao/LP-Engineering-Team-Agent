@@ -26,6 +26,50 @@ import type {
   SkillManagementNotice
 } from "./skills-models-management-view-model";
 
+type ManagementView = "skills" | "models" | "mcp";
+
+interface RedirectContext {
+  projectId?: string;
+  taskId?: string;
+}
+
+function getOptionalFormString(formData: FormData, key: string): string | undefined {
+  const value = String(formData.get(key) ?? "").trim();
+  return value.length > 0 ? value : undefined;
+}
+
+function getRedirectContextFromForm(formData: FormData): RedirectContext {
+  const taskId = getOptionalFormString(formData, "taskId");
+  if (!taskId) {
+    return {};
+  }
+  return {
+    ...(getOptionalFormString(formData, "projectId")
+      ? { projectId: getOptionalFormString(formData, "projectId") }
+      : {}),
+    taskId
+  };
+}
+
+function buildManagementViewRedirectHref(
+  view: ManagementView,
+  params: Record<string, string>,
+  context: RedirectContext = {}
+): string {
+  const query = new URLSearchParams();
+  query.set("view", view);
+  if (context.projectId) {
+    query.set("projectId", context.projectId);
+  }
+  if (context.taskId) {
+    query.set("taskId", context.taskId);
+  }
+  for (const [key, value] of Object.entries(params)) {
+    query.set(key, value);
+  }
+  return `/?${query.toString()}`;
+}
+
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
 }
@@ -39,33 +83,51 @@ function redirectToRecoveryError(error: RunRecoveryFlowErrorCode): never {
 }
 
 function redirectToSkillsWithError(
-  error: SkillFlowErrorCode | SkillCommandFlowErrorCode | SkillCommandQueueFlowErrorCode
+  error: SkillFlowErrorCode | SkillCommandFlowErrorCode | SkillCommandQueueFlowErrorCode,
+  context?: RedirectContext
 ): never {
-  redirect(`/?view=skills&skillError=${encodeURIComponent(error)}`);
+  redirect(buildManagementViewRedirectHref("skills", { skillError: error }, context));
 }
 
-function redirectToSkillsWithWorkerError(error: WorkerQueueFlowErrorCode): never {
-  redirect(`/?view=skills&workerError=${encodeURIComponent(error)}`);
+function redirectToSkillsWithWorkerError(
+  error: WorkerQueueFlowErrorCode,
+  context?: RedirectContext
+): never {
+  redirect(buildManagementViewRedirectHref("skills", { workerError: error }, context));
 }
 
-function redirectToModelsWithError(error: ModelFlowErrorCode): never {
-  redirect(`/?view=models&modelError=${encodeURIComponent(error)}`);
+function redirectToModelsWithError(
+  error: ModelFlowErrorCode,
+  context?: RedirectContext
+): never {
+  redirect(buildManagementViewRedirectHref("models", { modelError: error }, context));
 }
 
-function redirectToSkillsWithNotice(notice: SkillManagementNotice): never {
-  redirect(`/?view=skills&skillNotice=${encodeURIComponent(notice)}`);
+function redirectToSkillsWithNotice(
+  notice: SkillManagementNotice,
+  context?: RedirectContext
+): never {
+  redirect(buildManagementViewRedirectHref("skills", { skillNotice: notice }, context));
 }
 
-function redirectToModelsWithNotice(notice: ModelManagementNotice): never {
-  redirect(`/?view=models&modelNotice=${encodeURIComponent(notice)}`);
+function redirectToModelsWithNotice(
+  notice: ModelManagementNotice,
+  context?: RedirectContext
+): never {
+  redirect(buildManagementViewRedirectHref("models", { modelNotice: notice }, context));
 }
 
-function redirectToMCPWithError(error: MCPFlowErrorCode): never {
-  redirect(`/?view=mcp&mcpError=${encodeURIComponent(error)}`);
+function redirectToMCP(context?: RedirectContext): never {
+  redirect(buildManagementViewRedirectHref("mcp", {}, context));
+}
+
+function redirectToMCPWithError(error: MCPFlowErrorCode, context?: RedirectContext): never {
+  redirect(buildManagementViewRedirectHref("mcp", { mcpError: error }, context));
 }
 
 function parseAgentRole(
-  rawValue: FormDataEntryValue | null
+  rawValue: FormDataEntryValue | null,
+  context?: RedirectContext
 ): "assistant" | "planner" | "builder" | "reviewer" | "deployer" {
   const value = String(rawValue ?? "");
   if (
@@ -77,7 +139,7 @@ function parseAgentRole(
   ) {
     return value;
   }
-  redirectToModelsWithError("model_role_unsupported");
+  redirectToModelsWithError("model_role_unsupported", context);
 }
 
 function parseRunRecoveryAction(
@@ -107,12 +169,15 @@ const binarySignatures = [
   [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]
 ];
 
-function parseSkillContentType(rawValue: FormDataEntryValue | null): "text/markdown" | "text/plain" {
+function parseSkillContentType(
+  rawValue: FormDataEntryValue | null,
+  context?: RedirectContext
+): "text/markdown" | "text/plain" {
   const value = String(rawValue ?? "text/markdown");
   if (value === "text/markdown" || value === "text/plain") {
     return value;
   }
-  redirectToSkillsWithError("unsupported_content_type");
+  redirectToSkillsWithError("unsupported_content_type", context);
 }
 
 function isUploadedSkillFile(value: FormDataEntryValue | null): value is File {
@@ -127,7 +192,10 @@ function isUploadedSkillFile(value: FormDataEntryValue | null): value is File {
   );
 }
 
-function inferUploadedSkillContentType(file: File): "text/markdown" | "text/plain" {
+function inferUploadedSkillContentType(
+  file: File,
+  context?: RedirectContext
+): "text/markdown" | "text/plain" {
   const name = file.name.toLowerCase();
   const mediaType = file.type.toLowerCase();
   const extension = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
@@ -139,7 +207,7 @@ function inferUploadedSkillContentType(file: File): "text/markdown" | "text/plai
     return "text/plain";
   }
   if (extension.length > 0) {
-    redirectToSkillsWithError("unsupported_content_type");
+    redirectToSkillsWithError("unsupported_content_type", context);
   }
   if (mediaType === "text/markdown" || mediaType === "text/x-markdown") {
     return "text/markdown";
@@ -147,7 +215,7 @@ function inferUploadedSkillContentType(file: File): "text/markdown" | "text/plai
   if (mediaType === "text/plain") {
     return "text/plain";
   }
-  redirectToSkillsWithError("unsupported_content_type");
+  redirectToSkillsWithError("unsupported_content_type", context);
 }
 
 function hasSignature(bytes: Uint8Array, signature: number[]): boolean {
@@ -162,42 +230,42 @@ function isProbablyBinary(bytes: Uint8Array): boolean {
   return sample.some((byte) => byte === 0);
 }
 
-function decodeSkillText(bytes: Uint8Array): string {
+function decodeSkillText(bytes: Uint8Array, context?: RedirectContext): string {
   try {
     const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const firstLine = content.split(/\r?\n/, 1)[0] ?? "";
     if (/^#!.*\b(?:sh|bash|zsh|python|python3|node|deno|ruby|perl|php)\b/.test(firstLine)) {
-      redirectToSkillsWithError("unsupported_content_type");
+      redirectToSkillsWithError("unsupported_content_type", context);
     }
     return content;
   } catch {
-    redirectToSkillsWithError("unsupported_content_type");
+    redirectToSkillsWithError("unsupported_content_type", context);
   }
 }
 
-async function readSkillContent(formData: FormData): Promise<{
+async function readSkillContent(formData: FormData, context?: RedirectContext): Promise<{
   content: string;
   contentType: "text/markdown" | "text/plain";
 }> {
   const uploadedFile = formData.get("contentFile");
   if (isUploadedSkillFile(uploadedFile)) {
     if (uploadedFile.size > maxSkillContentBytes) {
-      redirectToSkillsWithError("skill_content_too_large");
+      redirectToSkillsWithError("skill_content_too_large", context);
     }
-    const contentType = inferUploadedSkillContentType(uploadedFile);
+    const contentType = inferUploadedSkillContentType(uploadedFile, context);
     const bytes = new Uint8Array(await uploadedFile.arrayBuffer());
     if (isProbablyBinary(bytes)) {
-      redirectToSkillsWithError("unsupported_content_type");
+      redirectToSkillsWithError("unsupported_content_type", context);
     }
     return {
-      content: decodeSkillText(bytes),
+      content: decodeSkillText(bytes, context),
       contentType
     };
   }
 
   return {
     content: String(formData.get("content") ?? ""),
-    contentType: parseSkillContentType(formData.get("contentType"))
+    contentType: parseSkillContentType(formData.get("contentType"), context)
   };
 }
 
@@ -334,7 +402,8 @@ export async function executeRunRecoveryAction(formData: FormData): Promise<void
 }
 
 export async function createSkillDraftAction(formData: FormData): Promise<void> {
-  const skillContent = await readSkillContent(formData);
+  const redirectContext = getRedirectContextFromForm(formData);
+  const skillContent = await readSkillContent(formData, redirectContext);
   const store = await getWebWorkbenchStore();
   const result = await store.createSkillDraft({
     manifestJson: String(formData.get("manifestJson") ?? ""),
@@ -342,37 +411,40 @@ export async function createSkillDraftAction(formData: FormData): Promise<void> 
     contentType: skillContent.contentType
   });
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
   revalidatePath("/");
-  redirectToSkillsWithNotice("draft_created");
+  redirectToSkillsWithNotice("draft_created", redirectContext);
 }
 
 export async function validateSkillVersionAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const store = await getWebWorkbenchStore();
   const result = await store.validateSkillVersion(
     String(formData.get("skillVersionId") ?? "")
   );
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
   revalidatePath("/");
-  redirectToSkillsWithNotice("validated");
+  redirectToSkillsWithNotice("validated", redirectContext);
 }
 
 export async function publishSkillVersionAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const store = await getWebWorkbenchStore();
   const result = await store.publishSkillVersion(
     String(formData.get("skillVersionId") ?? "")
   );
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
   revalidatePath("/");
-  redirectToSkillsWithNotice("published");
+  redirectToSkillsWithNotice("published", redirectContext);
 }
 
 export async function bindSkillVersionAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "");
   const store = await getWebWorkbenchStore();
   const result = await store.bindSkillVersionToProject({
@@ -380,14 +452,15 @@ export async function bindSkillVersionAction(formData: FormData): Promise<void> 
     skillVersionId: String(formData.get("skillVersionId") ?? "")
   });
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirectToSkillsWithNotice("bound");
+  redirectToSkillsWithNotice("bound", redirectContext);
 }
 
 export async function setSkillBindingEnabledAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const currentProjectId = await getCurrentProjectId();
   const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
   const store = await getWebWorkbenchStore();
@@ -397,19 +470,20 @@ export async function setSkillBindingEnabledAction(formData: FormData): Promise<
     enabled: String(formData.get("enabled") ?? "false") === "true"
   });
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
   if (projectId) {
     await setCurrentProjectId(projectId);
   }
   revalidatePath("/");
-  redirectToSkillsWithNotice(result.value.enabled ? "enabled" : "disabled");
+  redirectToSkillsWithNotice(result.value.enabled ? "enabled" : "disabled", redirectContext);
 }
 
 export async function executeSkillCommandAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "").trim();
   if (!projectId) {
-    redirectToSkillsWithError("project_not_found");
+    redirectToSkillsWithError("project_not_found", redirectContext);
   }
 
   const pageVersionId = String(formData.get("pageVersionId") ?? "").trim();
@@ -423,34 +497,36 @@ export async function executeSkillCommandAction(formData: FormData): Promise<voi
     ...(taskId ? { taskId } : {})
   });
   if (!result.ok) {
-    redirectToSkillsWithError(result.error);
+    redirectToSkillsWithError(result.error, redirectContext);
   }
 
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirectToSkillsWithNotice("command_queued");
+  redirectToSkillsWithNotice("command_queued", redirectContext);
 }
 
 export async function runLocalWorkerOnceAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const currentProjectId = (await getCurrentProjectId())?.trim();
   const projectId = currentProjectId || String(formData.get("projectId") ?? "").trim();
   const store = await getWebWorkbenchStore();
   const result = await store.runLocalWorkerOnce(projectId ? { projectId } : {});
   if (!result.ok) {
-    redirectToSkillsWithWorkerError(result.error);
+    redirectToSkillsWithWorkerError(result.error, redirectContext);
   }
   if (projectId) {
     await setCurrentProjectId(projectId);
   }
   revalidatePath("/");
-  redirectToSkillsWithNotice("worker_ran");
+  redirectToSkillsWithNotice("worker_ran", redirectContext);
 }
 
 export async function createModelProviderAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const currentProjectId = await getCurrentProjectId();
   const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
   if (!projectId) {
-    redirectToModelsWithError("project_not_found");
+    redirectToModelsWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.createModelProvider({
@@ -465,18 +541,19 @@ export async function createModelProviderAction(formData: FormData): Promise<voi
     modelId: String(formData.get("modelId") ?? "")
   });
   if (!result.ok) {
-    redirectToModelsWithError(result.error);
+    redirectToModelsWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirectToModelsWithNotice("provider_created");
+  redirectToModelsWithNotice("provider_created", redirectContext);
 }
 
 export async function setModelProviderEnabledAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const currentProjectId = await getCurrentProjectId();
   const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
   if (!projectId) {
-    redirectToModelsWithError("project_not_found");
+    redirectToModelsWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.setModelProviderEnabled({
@@ -485,20 +562,24 @@ export async function setModelProviderEnabledAction(formData: FormData): Promise
     enabled: String(formData.get("enabled") ?? "false") === "true"
   });
   if (!result.ok) {
-    redirectToModelsWithError(result.error);
+    redirectToModelsWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirectToModelsWithNotice(result.value.enabled ? "provider_enabled" : "provider_disabled");
+  redirectToModelsWithNotice(
+    result.value.enabled ? "provider_enabled" : "provider_disabled",
+    redirectContext
+  );
 }
 
 export async function upsertProjectModelRouteAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const currentProjectId = await getCurrentProjectId();
   const projectId = currentProjectId ?? String(formData.get("projectId") ?? "");
   if (!projectId) {
-    redirectToModelsWithError("project_not_found");
+    redirectToModelsWithError("project_not_found", redirectContext);
   }
-  const role = parseAgentRole(formData.get("role"));
+  const role = parseAgentRole(formData.get("role"), redirectContext);
   const store = await getWebWorkbenchStore();
   const result = await store.upsertProjectModelRoute({
     projectId,
@@ -507,17 +588,18 @@ export async function upsertProjectModelRouteAction(formData: FormData): Promise
     model: String(formData.get("model") ?? "")
   });
   if (!result.ok) {
-    redirectToModelsWithError(result.error);
+    redirectToModelsWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirectToModelsWithNotice("route_saved");
+  redirectToModelsWithNotice("route_saved", redirectContext);
 }
 
 export async function createMCPConnectorAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "").trim();
   if (!projectId) {
-    redirectToMCPWithError("project_not_found");
+    redirectToMCPWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.createMCPConnector({
@@ -525,17 +607,18 @@ export async function createMCPConnectorAction(formData: FormData): Promise<void
     definitionJson: String(formData.get("definitionJson") ?? "")
   });
   if (!result.ok) {
-    redirectToMCPWithError(result.error);
+    redirectToMCPWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=mcp");
+  redirectToMCP(redirectContext);
 }
 
 export async function setMCPConnectorEnabledAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "").trim();
   if (!projectId) {
-    redirectToMCPWithError("project_not_found");
+    redirectToMCPWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.setMCPConnectorEnabled({
@@ -544,17 +627,18 @@ export async function setMCPConnectorEnabledAction(formData: FormData): Promise<
     enabled: String(formData.get("enabled") ?? "false") === "true"
   });
   if (!result.ok) {
-    redirectToMCPWithError(result.error);
+    redirectToMCPWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=mcp");
+  redirectToMCP(redirectContext);
 }
 
 export async function setMCPToolApprovalAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "").trim();
   if (!projectId) {
-    redirectToMCPWithError("project_not_found");
+    redirectToMCPWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.setMCPToolApproval({
@@ -564,17 +648,18 @@ export async function setMCPToolApprovalAction(formData: FormData): Promise<void
     approved: String(formData.get("approved") ?? "false") === "true"
   });
   if (!result.ok) {
-    redirectToMCPWithError(result.error);
+    redirectToMCPWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=mcp");
+  redirectToMCP(redirectContext);
 }
 
 export async function executeMCPToolAction(formData: FormData): Promise<void> {
+  const redirectContext = getRedirectContextFromForm(formData);
   const projectId = String(formData.get("projectId") ?? "").trim();
   if (!projectId) {
-    redirectToMCPWithError("project_not_found");
+    redirectToMCPWithError("project_not_found", redirectContext);
   }
   const store = await getWebWorkbenchStore();
   const result = await store.executeMCPTool({
@@ -585,9 +670,9 @@ export async function executeMCPToolAction(formData: FormData): Promise<void> {
     argumentsJson: "{}"
   });
   if (!result.ok) {
-    redirectToMCPWithError(result.error);
+    redirectToMCPWithError(result.error, redirectContext);
   }
   await setCurrentProjectId(projectId);
   revalidatePath("/");
-  redirect("/?view=mcp");
+  redirectToMCP(redirectContext);
 }

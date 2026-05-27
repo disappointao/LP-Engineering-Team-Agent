@@ -3,6 +3,13 @@ export type ChatStreamErrorCode =
   | "project_not_found"
   | "generation_failed"
   | "provider_configuration_failed"
+  | "provider_authentication_failed"
+  | "provider_billing_required"
+  | "provider_rate_limited"
+  | "provider_unavailable"
+  | "provider_timeout"
+  | "provider_request_failed"
+  | "provider_response_invalid"
   | "stream_interrupted"
   | "empty_response"
   | "persistence_failed";
@@ -118,6 +125,13 @@ function isErrorCode(value: unknown): value is ChatStreamErrorCode {
     value === "project_not_found" ||
     value === "generation_failed" ||
     value === "provider_configuration_failed" ||
+    value === "provider_authentication_failed" ||
+    value === "provider_billing_required" ||
+    value === "provider_rate_limited" ||
+    value === "provider_unavailable" ||
+    value === "provider_timeout" ||
+    value === "provider_request_failed" ||
+    value === "provider_response_invalid" ||
     value === "stream_interrupted" ||
     value === "empty_response" ||
     value === "persistence_failed"
