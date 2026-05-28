@@ -3965,7 +3965,7 @@ describe("web workbench store", () => {
       expect.objectContaining({
         role: "assistant",
         content:
-          "Model provider timed out while planning the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow."
+          "Model provider timed out while generating the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow."
       })
     ]);
   });

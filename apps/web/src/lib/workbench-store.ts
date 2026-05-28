@@ -3174,7 +3174,7 @@ async function completePreparedLpTaskPrompt(input: {
 const lpGenerationFailureMessage =
   "LP generation failed. Open recovery details for the failed run.";
 const lpGenerationModelTimeoutFailureMessage =
-  "Model provider timed out while planning the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow.";
+  "Model provider timed out while generating the LP. Retry the task, or increase LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS in .env.local if the provider is slow.";
 
 async function resolveLpGenerationFailureMessage(input: {
   repositories: WorkbenchRepositories;
