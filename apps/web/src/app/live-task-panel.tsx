@@ -99,14 +99,25 @@ function isPermanentLiveTaskRouteFailure({
 
 export async function fetchLiveTaskStateRoute({
   taskId,
+  projectId,
   fetcher = fetch
 }: {
   taskId: string;
+  projectId?: string;
   fetcher?: typeof fetch;
 }): Promise<LiveTaskStateRouteResult> {
   try {
+    const searchParams = new URLSearchParams();
+    const trimmedProjectId = projectId?.trim();
+    if (trimmedProjectId) {
+      searchParams.set("projectId", trimmedProjectId);
+    }
+    const query = searchParams.toString();
+    const route = `/api/tasks/${encodeURIComponent(taskId)}/state${
+      query ? `?${query}` : ""
+    }`;
     const response = await fetcher(
-      `/api/tasks/${encodeURIComponent(taskId)}/state`,
+      route,
       { cache: "no-store" }
     );
     const result = await readLiveTaskStateRouteResponse(response);
@@ -269,8 +280,7 @@ export function LiveTaskPanel({
   const stateRef = useRef(state);
   const previousPreviewVersionKeyRef = useRef(initialPreviewVersionKey);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  void acceptedInitialProjectId;
+  const initialProjectId = acceptedInitialProjectId?.trim() || undefined;
 
   useEffect(() => {
     previousPreviewVersionKeyRef.current = initialPreviewVersionKey;
@@ -341,7 +351,10 @@ export function LiveTaskPanel({
     const pollTaskState = async () => {
       reduceAndDispatch(stateRef, dispatch, { type: "loading" });
 
-      const result = await fetchLiveTaskStateRoute({ taskId });
+      const result = await fetchLiveTaskStateRoute({
+        taskId,
+        projectId: initialProjectId
+      });
       if (!isMounted) {
         return;
       }
@@ -359,7 +372,13 @@ export function LiveTaskPanel({
       isMounted = false;
       clearPollTimer();
     };
-  }, [copy.liveTaskRefreshError, initialPreviewVersionKey, router, taskId]);
+  }, [
+    copy.liveTaskRefreshError,
+    initialPreviewVersionKey,
+    initialProjectId,
+    router,
+    taskId
+  ]);
 
   const visiblePayload =
     taskId && state.payload?.taskId === taskId ? state.payload : undefined;

@@ -32,10 +32,11 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   ]);
   const url = new URL(request.url);
   const artifactPath = url.searchParams.get("artifactPath");
+  const explicitProjectId = url.searchParams.get("projectId")?.trim() || null;
   const store = await getWebWorkbenchStore();
   const result = await store.getLiveTaskState({
     taskId,
-    projectId: sessionProjectId ?? null,
+    projectId: explicitProjectId ?? sessionProjectId ?? null,
     artifactPath
   });
 

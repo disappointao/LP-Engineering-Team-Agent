@@ -78,6 +78,57 @@ describe("GET /api/tasks/[taskId]/state", () => {
     });
   });
 
+  it("uses an explicit project query before the session project", async () => {
+    mocks.getCurrentProjectId.mockResolvedValue("stale_project");
+    mocks.getLiveTaskState.mockResolvedValue({
+      ok: true,
+      value: {
+        taskId: "task_1",
+        projectId: "project_1",
+        taskType: "lp_generation",
+        taskStatus: "complete",
+        stateVersion: "v1",
+        isTerminal: false,
+        nextPollMs: 1200,
+        updatedAt: "2026-05-21T00:00:00.000Z",
+        messages: [],
+        runs: [],
+        runEvents: [],
+        recovery: { runs: [] },
+        workerQueue: {
+          projectId: "project_1",
+          counts: {
+            queued: 0,
+            running: 1,
+            stale: 0,
+            completed: 0,
+            failed: 0,
+            rejected: 0,
+            cancelled: 0
+          },
+          heartbeat: { status: "active" },
+          logs: []
+        },
+        interrupt: { state: "interruptible", targets: [] }
+      }
+    });
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/tasks/task_1/state?projectId=project_1&artifactPath=styles.css"
+      ),
+      { params: Promise.resolve({ taskId: "task_1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.getLiveTaskState).toHaveBeenCalledWith({
+      taskId: "task_1",
+      projectId: "project_1",
+      artifactPath: "styles.css"
+    });
+  });
+
   it("returns stable safe error codes", async () => {
     mocks.getLiveTaskState.mockResolvedValue({ ok: false, error: "task_not_found" });
     const { GET } = await import("./route");

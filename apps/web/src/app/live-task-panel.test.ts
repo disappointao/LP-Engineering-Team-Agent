@@ -141,6 +141,23 @@ describe("LiveTaskStatusSummary", () => {
 });
 
 describe("live task panel polling helpers", () => {
+  it("includes the explicit project context when polling a task", async () => {
+    const fetcher = vi.fn(async () =>
+      jsonResponse({ ok: false, error: "task_not_found" }, { status: 404 })
+    );
+
+    await fetchLiveTaskStateRoute({
+      taskId: "task_1",
+      projectId: "project_1",
+      fetcher
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/tasks/task_1/state?projectId=project_1",
+      { cache: "no-store" }
+    );
+  });
+
   it("classifies permanent task and project route errors without scheduling retries", async () => {
     const taskFetch = vi.fn(async () =>
       jsonResponse({ ok: false, error: "task_not_found" }, { status: 404 })
