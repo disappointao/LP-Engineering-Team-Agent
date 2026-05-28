@@ -2875,7 +2875,7 @@ describe("demo workbench service", () => {
     expect(JSON.stringify(events)).not.toContain("https://open.bigmodel.cn");
   });
 
-  it("uses a longer default timeout for local real provider runtime", async () => {
+  it("uses stream first-byte timeouts for local real provider runtime", async () => {
     vi.useFakeTimers();
     try {
       const repositories = createInMemoryWorkbenchRepositories();
@@ -2942,9 +2942,13 @@ describe("demo workbench service", () => {
 
       await vi.advanceTimersByTimeAsync(90_000);
       expect(outcome).toBe("pending");
+      expect(fetchCalls).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(outcome).toBe("pending");
       expect(fetchCalls).toHaveLength(2);
 
-      await vi.advanceTimersByTimeAsync(120_000);
+      await vi.advanceTimersByTimeAsync(180_000);
       await request;
       expect(outcome).toBe("rejected");
       expect(fetchCalls).toHaveLength(2);

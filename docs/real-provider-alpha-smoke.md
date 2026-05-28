@@ -157,7 +157,7 @@ pnpm exec vitest run packages/model-gateway/src/anthropic-messages.integration.t
 - `model_provider_config_missing`：route 指向的 provider 不存在或不属于当前 project。重新保存 provider 和 role route。
 - `model_provider_disabled`：provider 被 disabled。启用 provider 后重新保存 route。
 - `model_provider_protocol_mismatch`：route 的 `api` 与 provider 配置不一致。确认 OpenAI-compatible 使用 `openai-completions`，Anthropic-compatible 使用 `anthropic-messages`。
-- `model_provider_request_timeout`：provider 在当前 timeout 内没有返回。Web 本地真实 runtime 默认使用 `LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS=120000`，慢模型可在 `.env.local` 调高到最多 `300000`，然后重启 `pnpm dev`。
+- `model_provider_request_timeout`：provider 在当前 timeout 内没有返回。Web 本地真实 runtime 的非流式请求默认使用 `LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS=120000`，可调高到最多 `300000`；流式请求默认首包 `LP_AGENT_MODEL_PROVIDER_STREAM_FIRST_BYTE_TIMEOUT_MS=180000`、空闲 `LP_AGENT_MODEL_PROVIDER_STREAM_IDLE_TIMEOUT_MS=180000`、总上限 `LP_AGENT_MODEL_PROVIDER_STREAM_MAX_DURATION_MS=900000`，复杂 LP 生成慢时优先调整这三个 stream timeout，然后重启 `pnpm dev`。
 - Structured output parse failure：Planner / Builder 返回了非 schema JSON。当前 runtime 会做一次 repair；仍失败时查看 bounded `model.output.parse_failed` 和 `run.failed`。
 - Artifact policy failure：Builder 返回了不符合静态 artifact policy 的内容，例如框架依赖或非法路径。需要调整 prompt 或 provider/model。
 - Artifact quality issue：生成成功且 policy 通过，但视觉层级、CTA、移动端、copy 或基础可访问性不达预期。按 `docs/lp-artifact-quality.md` 记录 rubric score 和 safe evidence，再路由到 Stage 39/41。

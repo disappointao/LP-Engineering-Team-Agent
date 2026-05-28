@@ -8,6 +8,7 @@ import {
   completeOpenAIChatCompletions,
   streamOpenAIChatCompletions
 } from "./openai-completions";
+import type { ModelProviderStreamTimeouts } from "./stream-timeouts";
 
 export type AgentRole = "assistant" | "planner" | "builder" | "reviewer" | "deployer";
 
@@ -73,10 +74,13 @@ export interface ProviderBackedModelGatewayOptions {
   fetch?: ModelFetch;
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
+  streamTimeouts?: ModelProviderStreamTimeouts;
   anthropicVersion?: string;
   maxTokens?: number;
   allowMockRoutes?: boolean;
 }
+
+export type { ModelProviderStreamTimeouts } from "./stream-timeouts";
 
 export interface ModelRoute {
   provider: string;
@@ -379,6 +383,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
   private readonly fetch?: ModelFetch;
   private readonly env?: Record<string, string | undefined>;
   private readonly timeoutMs?: number;
+  private readonly streamTimeouts?: ModelProviderStreamTimeouts;
   private readonly anthropicVersion?: string;
   private readonly maxTokens?: number;
   private readonly allowMockRoutes: boolean;
@@ -389,6 +394,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
     this.fetch = options.fetch;
     this.env = options.env;
     this.timeoutMs = options.timeoutMs;
+    this.streamTimeouts = options.streamTimeouts;
     this.anthropicVersion = options.anthropicVersion;
     this.maxTokens = options.maxTokens;
     this.allowMockRoutes = options.allowMockRoutes ?? true;

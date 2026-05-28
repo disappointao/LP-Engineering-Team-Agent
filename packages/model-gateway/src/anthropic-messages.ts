@@ -1,11 +1,16 @@
 import type {
   ModelProviderRuntimeConfig,
+  ModelProviderStreamTimeouts,
   ModelRequest,
   ModelResponse,
   ModelRoute,
   ModelStreamEvent,
   ModelUsageMetadata
 } from "./index";
+import {
+  createModelProviderStreamTimeoutController,
+  resolveModelProviderStreamTimeouts
+} from "./stream-timeouts";
 
 export type ModelFetch = (
   input: string | URL | Request,
@@ -23,7 +28,9 @@ export interface AnthropicMessagesCompleteInput {
   maxTokens?: number;
 }
 
-export interface AnthropicMessagesStreamInput extends AnthropicMessagesCompleteInput {}
+export interface AnthropicMessagesStreamInput extends AnthropicMessagesCompleteInput {
+  streamTimeouts?: ModelProviderStreamTimeouts;
+}
 
 export class ModelProviderConfigurationError extends Error {
   constructor(
@@ -57,6 +64,11 @@ export class ModelProviderResponseError extends Error {
 }
 
 const defaultTimeoutMs = 30000;
+const defaultStreamTimeouts = {
+  firstByteMs: 180_000,
+  idleMs: 180_000,
+  maxDurationMs: 900_000
+};
 const defaultMaxTokens = 1024;
 const defaultAnthropicVersion = "2023-06-01";
 const maxStreamDeltaChars = 4096;
@@ -184,13 +196,9 @@ export async function* streamAnthropicMessages(
     );
   }
 
-  const controller = new AbortController();
-  const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timeoutController = createModelProviderStreamTimeoutController(
+    resolveModelProviderStreamTimeouts(input.streamTimeouts, defaultStreamTimeouts)
+  );
 
   try {
     const response = await fetchImpl(toAnthropicMessagesUrl(baseUrl), {
@@ -201,7 +209,7 @@ export async function* streamAnthropicMessages(
         "anthropic-version": input.anthropicVersion ?? defaultAnthropicVersion
       },
       body: JSON.stringify(createRequestBody(input, { streaming: true })),
-      signal: controller.signal
+      signal: timeoutController.signal
     });
 
     if (!response.ok) {
@@ -222,7 +230,7 @@ export async function* streamAnthropicMessages(
       try {
         payload = await response.json();
       } catch {
-        if (controller.signal.aborted) {
+        if (timeoutController.timedOut || timeoutController.signal.aborted) {
           throw createTimeoutError(input.route.provider);
         }
         throw new ModelProviderResponseError(
@@ -267,7 +275,9 @@ export async function* streamAnthropicMessages(
       return;
     }
 
-    for await (const data of readSSEDataFrames(response, input.route.provider)) {
+    for await (const data of readSSEDataFrames(response, input.route.provider, {
+      onChunk: timeoutController.markProgress
+    })) {
       const payload = parseStreamJson(data, input.route.provider);
       const parsed = parseAnthropicMessagesStreamFrame(payload, input.route.provider);
       if (parsed.model) {
@@ -333,7 +343,7 @@ export async function* streamAnthropicMessages(
     ) {
       throw error;
     }
-    if (timedOut || controller.signal.aborted) {
+    if (timeoutController.timedOut || timeoutController.signal.aborted) {
       throw createTimeoutError(input.route.provider);
     }
 
@@ -342,7 +352,7 @@ export async function* streamAnthropicMessages(
       `Model provider ${input.route.provider} request failed`
     );
   } finally {
-    clearTimeout(timeout);
+    timeoutController.clear();
   }
 }
 
@@ -607,10 +617,11 @@ function parseStreamJson(data: string, providerId: string): unknown {
 
 async function* readSSEDataFrames(
   response: Response,
-  providerId: string
+  providerId: string,
+  options: { onChunk?: () => void } = {}
 ): AsyncIterable<string> {
   let buffer = "";
-  for await (const chunk of readResponseTextChunks(response)) {
+  for await (const chunk of readResponseTextChunks(response, options)) {
     buffer += chunk;
     for (;;) {
       const boundary = findSSEBoundary(buffer);
@@ -635,10 +646,15 @@ async function* readSSEDataFrames(
   }
 }
 
-async function* readResponseTextChunks(response: Response): AsyncIterable<string> {
+async function* readResponseTextChunks(
+  response: Response,
+  options: { onChunk?: () => void } = {}
+): AsyncIterable<string> {
   const body = response.body;
   if (!body || typeof body.getReader !== "function") {
-    yield await response.text();
+    const text = await response.text();
+    options.onChunk?.();
+    yield text;
     return;
   }
 
@@ -650,6 +666,7 @@ async function* readResponseTextChunks(response: Response): AsyncIterable<string
       if (read.done) {
         break;
       }
+      options.onChunk?.();
       yield decoder.decode(read.value, { stream: true });
     }
     const flushed = decoder.decode();

@@ -3877,6 +3877,11 @@ function selectModelAttemptEvents(events: RuntimeEvent[]): RuntimeEvent[] {
 
 const DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS = 120_000;
 const MAX_LOCAL_REAL_PROVIDER_TIMEOUT_MS = 300_000;
+const DEFAULT_LOCAL_REAL_PROVIDER_STREAM_FIRST_BYTE_TIMEOUT_MS = 180_000;
+const DEFAULT_LOCAL_REAL_PROVIDER_STREAM_IDLE_TIMEOUT_MS = 180_000;
+const DEFAULT_LOCAL_REAL_PROVIDER_STREAM_MAX_DURATION_MS = 900_000;
+const MAX_LOCAL_REAL_PROVIDER_STREAM_ACTIVITY_TIMEOUT_MS = 300_000;
+const MAX_LOCAL_REAL_PROVIDER_STREAM_MAX_DURATION_MS = 1_800_000;
 
 function createLocalRuntimeAdapter(
   input?: LocalRuntimeAdapterFactoryInput
@@ -3885,13 +3890,15 @@ function createLocalRuntimeAdapter(
   const env = input?.env ?? getProcessEnv();
 
   if (env.REAL_MODEL_RUNTIME === "1" && input) {
+    const timeoutMs = resolveLocalRealProviderTimeoutMs(env);
     return new LocalAgentRuntimeAdapter(
       new ProviderBackedModelGateway({
         policy,
         providers: createRepositoryModelProviderResolver(input.repositories),
         ...(input.fetch ? { fetch: input.fetch } : {}),
         env,
-        timeoutMs: resolveLocalRealProviderTimeoutMs(env),
+        timeoutMs,
+        streamTimeouts: resolveLocalRealProviderStreamTimeouts(env),
         allowMockRoutes: false
       })
     );
@@ -3901,17 +3908,58 @@ function createLocalRuntimeAdapter(
 }
 
 function resolveLocalRealProviderTimeoutMs(env: RuntimeEnvironment): number {
-  const rawValue = env.LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS?.trim();
+  return resolvePositiveEnvMs(
+    env,
+    "LP_AGENT_MODEL_PROVIDER_TIMEOUT_MS",
+    DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS,
+    MAX_LOCAL_REAL_PROVIDER_TIMEOUT_MS
+  );
+}
+
+function resolveLocalRealProviderStreamTimeouts(env: RuntimeEnvironment): {
+  firstByteMs: number;
+  idleMs: number;
+  maxDurationMs: number;
+} {
+  return {
+    firstByteMs: resolvePositiveEnvMs(
+      env,
+      "LP_AGENT_MODEL_PROVIDER_STREAM_FIRST_BYTE_TIMEOUT_MS",
+      DEFAULT_LOCAL_REAL_PROVIDER_STREAM_FIRST_BYTE_TIMEOUT_MS,
+      MAX_LOCAL_REAL_PROVIDER_STREAM_ACTIVITY_TIMEOUT_MS
+    ),
+    idleMs: resolvePositiveEnvMs(
+      env,
+      "LP_AGENT_MODEL_PROVIDER_STREAM_IDLE_TIMEOUT_MS",
+      DEFAULT_LOCAL_REAL_PROVIDER_STREAM_IDLE_TIMEOUT_MS,
+      MAX_LOCAL_REAL_PROVIDER_STREAM_ACTIVITY_TIMEOUT_MS
+    ),
+    maxDurationMs: resolvePositiveEnvMs(
+      env,
+      "LP_AGENT_MODEL_PROVIDER_STREAM_MAX_DURATION_MS",
+      DEFAULT_LOCAL_REAL_PROVIDER_STREAM_MAX_DURATION_MS,
+      MAX_LOCAL_REAL_PROVIDER_STREAM_MAX_DURATION_MS
+    )
+  };
+}
+
+function resolvePositiveEnvMs(
+  env: RuntimeEnvironment,
+  name: string,
+  fallback: number,
+  max: number
+): number {
+  const rawValue = env[name]?.trim();
   if (!rawValue) {
-    return DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS;
+    return fallback;
   }
 
   const parsed = Number(rawValue);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return DEFAULT_LOCAL_REAL_PROVIDER_TIMEOUT_MS;
+    return fallback;
   }
 
-  return Math.min(parsed, MAX_LOCAL_REAL_PROVIDER_TIMEOUT_MS);
+  return Math.min(parsed, max);
 }
 
 function createRepositoryModelProviderResolver(

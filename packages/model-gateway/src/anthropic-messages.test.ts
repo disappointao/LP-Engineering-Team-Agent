@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ProviderBackedModelGateway,
   createDefaultModelPolicy,
@@ -229,6 +229,88 @@ describe("anthropic messages model gateway", () => {
     });
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("event:");
+  });
+
+  it("allows streaming providers to respond slower than the non-stream request timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let abortObserved = false;
+      const fakeFetch: ModelFetch = async (_input, init) =>
+        new Promise<Response>((resolve, reject) => {
+          const rejectAbort = () => {
+            abortObserved = true;
+            reject(new DOMException("Aborted", "AbortError"));
+          };
+          if (init?.signal?.aborted) {
+            rejectAbort();
+            return;
+          }
+          init?.signal?.addEventListener("abort", rejectAbort, { once: true });
+          setTimeout(() => {
+            resolve(
+              new Response(
+                [
+                  'event: message_start\ndata: {"type":"message_start","message":{"model":"glm-5.1","usage":{"input_tokens":4,"output_tokens":0}}}',
+                  "",
+                  'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"慢速"}}',
+                  "",
+                  'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"流式"}}',
+                  "",
+                  'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":3}}',
+                  "",
+                  'event: message_stop\ndata: {"type":"message_stop"}',
+                  ""
+                ].join("\n"),
+                { status: 200, headers: { "content-type": "text/event-stream" } }
+              )
+            );
+          }, 150);
+        });
+
+      const gateway = new ProviderBackedModelGateway({
+        policy: createDefaultModelPolicy(),
+        providers: {
+          async getProvider() {
+            return createZhipuProvider();
+          }
+        },
+        fetch: fakeFetch,
+        env: { ANTHROPIC_API_KEY: "sk-test-secret" },
+        timeoutMs: 100
+      });
+
+      const outcome = collectStream(
+        gateway.stream({
+          role: "builder",
+          projectId: "project_1",
+          prompt: "慢速生成",
+          routingPolicy: createPolicy()
+        })
+      ).then(
+        (events) => ({ ok: true as const, events }),
+        (error: unknown) => ({ ok: false as const, error })
+      );
+
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await outcome;
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw result.error;
+      }
+      expect(abortObserved).toBe(false);
+      expect(result.events.at(-1)).toMatchObject({
+        type: "model.completed",
+        response: {
+          text: "慢速流式",
+          call: {
+            streamingEnabled: true
+          }
+        }
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("falls back to estimated usage when Anthropic-compatible streams omit usage", async () => {

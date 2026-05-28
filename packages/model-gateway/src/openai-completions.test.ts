@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ProviderBackedModelGateway,
   createDefaultModelPolicy,
@@ -229,6 +229,88 @@ describe("openai compatible chat completions model gateway", () => {
     });
     expect(JSON.stringify(events)).not.toContain("sk-test-secret");
     expect(JSON.stringify(events)).not.toContain("data:");
+  });
+
+  it("allows streaming providers to respond slower than the non-stream request timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let abortObserved = false;
+      const fakeFetch: ModelFetch = async (_input, init) =>
+        new Promise<Response>((resolve, reject) => {
+          const rejectAbort = () => {
+            abortObserved = true;
+            reject(new DOMException("Aborted", "AbortError"));
+          };
+          if (init?.signal?.aborted) {
+            rejectAbort();
+            return;
+          }
+          init?.signal?.addEventListener("abort", rejectAbort, { once: true });
+          setTimeout(() => {
+            resolve(
+              new Response(
+                [
+                  'data: {"model":"glm-5.1","choices":[{"index":0,"delta":{"content":"Slow"}}]}',
+                  "",
+                  'data: {"choices":[{"index":0,"delta":{"content":" stream"}}]}',
+                  "",
+                  'data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}',
+                  "",
+                  "data: [DONE]",
+                  ""
+                ].join("\n"),
+                { status: 200, headers: { "content-type": "text/event-stream" } }
+              )
+            );
+          }, 150);
+        });
+
+      const gateway = new ProviderBackedModelGateway({
+        policy: createDefaultModelPolicy(),
+        providers: {
+          async getProvider() {
+            return createOpenAICompatibleProvider({
+              models: [{ id: "glm-5.1", supportsStreaming: true }]
+            });
+          }
+        },
+        fetch: fakeFetch,
+        env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" },
+        timeoutMs: 100
+      });
+
+      const outcome = collectStream(
+        gateway.stream({
+          role: "planner",
+          projectId: "project_1",
+          prompt: "Plan slowly",
+          routingPolicy: createPolicy()
+        })
+      ).then(
+        (events) => ({ ok: true as const, events }),
+        (error: unknown) => ({ ok: false as const, error })
+      );
+
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await outcome;
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw result.error;
+      }
+      expect(abortObserved).toBe(false);
+      expect(result.events.at(-1)).toMatchObject({
+        type: "model.completed",
+        response: {
+          text: "Slow stream",
+          call: {
+            streamingEnabled: true
+          }
+        }
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("falls back to estimated usage when OpenAI-compatible streams omit usage", async () => {

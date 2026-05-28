@@ -6,12 +6,17 @@ import {
 } from "./anthropic-messages";
 import type {
   ModelProviderRuntimeConfig,
+  ModelProviderStreamTimeouts,
   ModelRequest,
   ModelResponse,
   ModelRoute,
   ModelStreamEvent,
   ModelUsageMetadata
 } from "./index";
+import {
+  createModelProviderStreamTimeoutController,
+  resolveModelProviderStreamTimeouts
+} from "./stream-timeouts";
 
 export interface OpenAIChatCompletionsCompleteInput {
   request: ModelRequest;
@@ -24,9 +29,16 @@ export interface OpenAIChatCompletionsCompleteInput {
 }
 
 export interface OpenAIChatCompletionsStreamInput
-  extends OpenAIChatCompletionsCompleteInput {}
+  extends OpenAIChatCompletionsCompleteInput {
+  streamTimeouts?: ModelProviderStreamTimeouts;
+}
 
 const defaultTimeoutMs = 30000;
+const defaultStreamTimeouts = {
+  firstByteMs: 180_000,
+  idleMs: 180_000,
+  maxDurationMs: 900_000
+};
 const maxStreamDeltaChars = 4096;
 
 export function toOpenAIChatCompletionsUrl(baseUrl: string): string {
@@ -148,13 +160,9 @@ export async function* streamOpenAIChatCompletions(
     );
   }
 
-  const controller = new AbortController();
-  const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timeoutController = createModelProviderStreamTimeoutController(
+    resolveModelProviderStreamTimeouts(input.streamTimeouts, defaultStreamTimeouts)
+  );
 
   try {
     const response = await fetchImpl(toOpenAIChatCompletionsUrl(baseUrl), {
@@ -164,7 +172,7 @@ export async function* streamOpenAIChatCompletions(
         authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify(createRequestBody(input, { streaming: true })),
-      signal: controller.signal
+      signal: timeoutController.signal
     });
 
     if (!response.ok) {
@@ -184,7 +192,7 @@ export async function* streamOpenAIChatCompletions(
       try {
         payload = await response.json();
       } catch {
-        if (controller.signal.aborted) {
+        if (timeoutController.timedOut || timeoutController.signal.aborted) {
           throw createTimeoutError(input.route.provider);
         }
         throw new ModelProviderResponseError(
@@ -229,7 +237,9 @@ export async function* streamOpenAIChatCompletions(
       return;
     }
 
-    for await (const data of readSSEDataFrames(response, input.route.provider)) {
+    for await (const data of readSSEDataFrames(response, input.route.provider, {
+      onChunk: timeoutController.markProgress
+    })) {
       if (data === "[DONE]") {
         continue;
       }
@@ -285,7 +295,7 @@ export async function* streamOpenAIChatCompletions(
     ) {
       throw error;
     }
-    if (timedOut || controller.signal.aborted) {
+    if (timeoutController.timedOut || timeoutController.signal.aborted) {
       throw createTimeoutError(input.route.provider);
     }
     throw new ModelProviderRequestError(
@@ -293,7 +303,7 @@ export async function* streamOpenAIChatCompletions(
       `Model provider ${input.route.provider} request failed`
     );
   } finally {
-    clearTimeout(timeout);
+    timeoutController.clear();
   }
 }
 
@@ -512,10 +522,11 @@ function parseStreamJson(data: string, providerId: string): unknown {
 
 async function* readSSEDataFrames(
   response: Response,
-  providerId: string
+  providerId: string,
+  options: { onChunk?: () => void } = {}
 ): AsyncIterable<string> {
   let buffer = "";
-  for await (const chunk of readResponseTextChunks(response)) {
+  for await (const chunk of readResponseTextChunks(response, options)) {
     buffer += chunk;
     for (;;) {
       const boundary = findSSEBoundary(buffer);
@@ -540,10 +551,15 @@ async function* readSSEDataFrames(
   }
 }
 
-async function* readResponseTextChunks(response: Response): AsyncIterable<string> {
+async function* readResponseTextChunks(
+  response: Response,
+  options: { onChunk?: () => void } = {}
+): AsyncIterable<string> {
   const body = response.body;
   if (!body || typeof body.getReader !== "function") {
-    yield await response.text();
+    const text = await response.text();
+    options.onChunk?.();
+    yield text;
     return;
   }
 
@@ -555,6 +571,7 @@ async function* readResponseTextChunks(response: Response): AsyncIterable<string
       if (read.done) {
         break;
       }
+      options.onChunk?.();
       yield decoder.decode(read.value, { stream: true });
     }
     const flushed = decoder.decode();
