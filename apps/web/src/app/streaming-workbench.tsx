@@ -39,7 +39,8 @@ type StreamingWorkbenchAction =
   | { type: "start" }
   | { type: "event"; event: ChatStreamEvent }
   | { type: "error"; message: string }
-  | { type: "clear_transient_after_refresh" };
+  | { type: "clear_transient_after_refresh" }
+  | { type: "clear_live_task_submit_after_refresh" };
 
 function streamingWorkbenchReducer(
   state: StreamingWorkbenchState,
@@ -62,6 +63,8 @@ function streamingWorkbenchReducer(
       };
     case "clear_transient_after_refresh":
       return getTerminalStreamingStateAfterRefresh(state, true);
+    case "clear_live_task_submit_after_refresh":
+      return getLiveTaskSubmitAcceptedStreamingState();
   }
 }
 
@@ -96,6 +99,10 @@ export function getTerminalStreamingStateAfterRefresh(
   }
 
   return state;
+}
+
+export function getLiveTaskSubmitAcceptedStreamingState(): StreamingWorkbenchState {
+  return createInitialStreamingWorkbenchState();
 }
 
 export function createStreamingTerminalHref({
@@ -643,9 +650,9 @@ export function StreamingWorkbench({
       ...(completedTaskId ? { taskId: completedTaskId } : {})
     });
     router.refresh();
-    const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);
+    const nextState = getLiveTaskSubmitAcceptedStreamingState();
     applyState(nextState);
-    dispatch({ type: "clear_transient_after_refresh" });
+    dispatch({ type: "clear_live_task_submit_after_refresh" });
   };
 
   const startLiveTaskFromFallback = async ({

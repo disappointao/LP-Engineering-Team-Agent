@@ -11,6 +11,7 @@ import {
   createLiveTaskSubmitRequestBody,
   createStreamingTerminalHref,
   createStreamingChatRequestBody,
+  getLiveTaskSubmitAcceptedStreamingState,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
   getVisibleStreamingStatus,
@@ -202,6 +203,19 @@ describe("streaming workbench terminal refresh state", () => {
     };
 
     expect(getTerminalStreamingStateAfterRefresh(errorState, false)).toEqual(errorState);
+  });
+
+  it("clears direct live task submit streaming state after the submit is accepted", () => {
+    const streamingState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "streaming",
+      statusMessage: "Generating reply"
+    };
+
+    expect(getLiveTaskSubmitAcceptedStreamingState()).toEqual(
+      createInitialStreamingWorkbenchState()
+    );
+    expect(getLiveTaskSubmitAcceptedStreamingState()).not.toEqual(streamingState);
   });
 });
 
