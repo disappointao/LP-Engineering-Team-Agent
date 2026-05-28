@@ -1502,9 +1502,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           interrupt: pageState.interrupt,
           snapshot: buildLiveTaskSnapshot(pageState.snapshot),
           artifactDiff: buildLiveArtifactDiff(pageState.artifactDiff),
-          artifactProgress: pageState.taskFollowupSuggestionsReady
-            ? buildArtifactProgress(pageState.artifactDiff)
-            : undefined
+          artifactProgress: buildArtifactProgress(pageState.artifactDiff)
         }
       };
     },

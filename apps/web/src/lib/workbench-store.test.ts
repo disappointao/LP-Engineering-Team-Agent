@@ -4465,7 +4465,11 @@ describe("web workbench store", () => {
       throw new Error("expected live task state");
     }
     expect(beforeFollowups.value.isTerminal).toBe(false);
-    expect(beforeFollowups.value.artifactProgress).toBeUndefined();
+    expect(beforeFollowups.value.artifactProgress).toMatchObject({
+      artifactWorkspaceId: expect.any(String),
+      fileCount: 3,
+      changedFileCount: 3
+    });
 
     followupResult.resolve({ modelOutputText: JSON.stringify(suggestions) });
     await expect(started.completion).resolves.toMatchObject({ ok: true });
