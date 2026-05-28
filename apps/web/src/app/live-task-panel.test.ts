@@ -138,6 +138,104 @@ describe("LiveTaskStatusSummary", () => {
     expect(text).not.toContain("builder · running");
     expect(text).not.toContain("<!doctype html");
   });
+
+  it("renders LP process feedback from safe runtime events", () => {
+    const copy = {
+      ...getWorkbenchCopy("en").chat,
+      roleLabels: getWorkbenchCopy("en").modelsView.roleLabels
+    };
+    const payload = createPayload({
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "assistant",
+          content: "<!doctype html><html><body>raw artifact</body></html>",
+          createdAt: "2026-05-21T00:00:00.000Z"
+        }
+      ],
+      runs: [
+        {
+          runId: "run_planner_brief_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          role: "planner",
+          state: "completed",
+          runRecordState: "completed",
+          startedAt: "2026-05-21T00:00:00.000Z",
+          completedAt: "2026-05-21T00:00:02.000Z",
+          recoveryActions: []
+        },
+        {
+          runId: "run_builder_version_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          role: "builder",
+          state: "running",
+          runRecordState: "running",
+          startedAt: "2026-05-21T00:00:03.000Z",
+          recoveryActions: []
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_context_loaded",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "runtime.context.loaded",
+          createdAt: "2026-05-21T00:00:03.000Z",
+          payload: { role: "builder", skillCount: 1, toolCount: 0 }
+        },
+        {
+          id: "event_handoff_consumed",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "handoff.consumed",
+          createdAt: "2026-05-21T00:00:03.100Z",
+          payload: { role: "builder", fromRole: "planner", toRole: "builder" }
+        },
+        {
+          id: "event_model_completed",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.completed",
+          createdAt: "2026-05-21T00:00:04.000Z",
+          payload: { role: "builder", provider: "safe_provider", model: "safe-model" }
+        },
+        {
+          id: "event_workspace_created",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "artifact.workspace.created",
+          createdAt: "2026-05-21T00:00:05.000Z",
+          payload: { role: "builder", fileCount: 3, artifactWorkspaceId: "workspace_1" }
+        }
+      ],
+      artifactProgress: {
+        pageVersionId: "page_1",
+        artifactWorkspaceId: "workspace_1",
+        fileCount: 3,
+        changedFileCount: 3,
+        previewVersionKey: "page_1|workspace_1|index.html:aaa"
+      }
+    });
+
+    const rendered = LiveTaskStatusSummary({ payload, copy });
+    const text = collectText(rendered).join(" ");
+
+    expect(text).toContain("生成静态 LP 文件");
+    expect(text).toContain("正在编写框架无关 HTML/CSS/JS。");
+    expect(text).toContain("上下文已装载");
+    expect(text).toContain("接收上一步结果");
+    expect(text).toContain("模型已响应");
+    expect(text).toContain("文件已生成：3 个");
+    expect(text).not.toContain("<!doctype html");
+    expect(text).not.toContain("raw artifact");
+  });
 });
 
 describe("live task panel polling helpers", () => {

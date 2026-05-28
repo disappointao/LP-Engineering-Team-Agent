@@ -20,7 +20,11 @@ import {
   type LiveTaskPanelAction,
   type LiveTaskPanelState
 } from "./live-task-state";
-import { buildTaskProgressViewModel } from "./task-progress-view-model";
+import {
+  buildTaskNarrativeViewModel,
+  buildTaskProgressViewModel,
+  type TaskNarrativeStepViewModel
+} from "./task-progress-view-model";
 
 export interface LiveTaskPanelProps {
   taskId?: string;
@@ -252,6 +256,7 @@ function renderTaskProgressPanel({
       data-status={progress?.status ?? "idle"}
     >
       {renderLiveTaskStatusContent({ payload, copy })}
+      {renderTaskNarrativeTimeline({ payload, copy })}
       {payload && !progress ? (
         <span className="taskProgressHidden">{copy.liveTaskIdle}</span>
       ) : null}
@@ -264,6 +269,47 @@ export function LiveTaskStatusSummary({
   copy
 }: LiveTaskStatusSummaryProps) {
   return renderTaskProgressPanel({ payload, copy });
+}
+
+function renderTaskNarrativeTimeline({
+  payload
+}: LiveTaskStatusSummaryProps) {
+  const narrative = buildTaskNarrativeViewModel({
+    taskType: payload?.taskType ?? "lp_generation",
+    payload
+  });
+
+  if (!narrative) {
+    return null;
+  }
+
+  return (
+    <div className="taskNarrativeTimeline" aria-label="LP 生成过程">
+      {narrative.steps.map((step) => renderTaskNarrativeStep(step))}
+    </div>
+  );
+}
+
+function renderTaskNarrativeStep(step: TaskNarrativeStepViewModel) {
+  return (
+    <div className="taskNarrativeStep" data-status={step.status} key={step.id}>
+      <div className="taskNarrativeDot" aria-hidden="true" />
+      <div className="taskNarrativeBody">
+        <div className="taskNarrativeTopline">
+          <strong>{step.title}</strong>
+          <span>{step.statusLabel}</span>
+        </div>
+        <p>{step.body}</p>
+        {step.chips.length > 0 ? (
+          <div className="taskNarrativeChips">
+            {step.chips.map((chip) => (
+              <span key={chip}>{chip}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function LiveTaskPanel({
@@ -396,6 +442,10 @@ export function LiveTaskPanel({
       }
     >
       {renderLiveTaskStatusContent({
+        payload: visiblePayload,
+        copy
+      })}
+      {renderTaskNarrativeTimeline({
         payload: visiblePayload,
         copy
       })}

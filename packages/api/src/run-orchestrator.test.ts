@@ -4,11 +4,81 @@ import {
   createDefaultRuntimeContext,
   type AgentRuntimeAdapter,
   type RuntimeRunRequest,
-  type RuntimeRunResult
+  type RuntimeRunResult,
+  type RuntimeStreamEvent
 } from "@lp-agent/runtime-adapters";
 import { runAgentStep } from "./run-orchestrator";
 
 describe("run agent step finalization", () => {
+  it("consumes runtime streams for agent steps without calling non-streaming run", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new StreamingRuntime(["Planning ", "the page."], "Planning the page.");
+    const service = createTestService();
+
+    const result = await runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_planner_stream_1",
+      projectId: "project_1",
+      role: "planner",
+      input: { prompt: "Plan an LP" },
+      now: () => new Date("2026-05-21T00:00:00.000Z")
+    });
+
+    expect(runtime.requests).toEqual([
+      expect.objectContaining({
+        runId: "run_planner_stream_1",
+        projectId: "project_1",
+        role: "planner"
+      })
+    ]);
+    expect(result.result.modelOutputText).toBe("Planning the page.");
+    const events = await repositories.runEvents.listForRun("run_planner_stream_1");
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "model.completed",
+      "run.completed"
+    ]);
+    expect(JSON.stringify(events)).not.toContain("Planning ");
+  });
+
+  it("persists running state and run start before a streaming step completes", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const runtime = new DeferredStreamingRuntime("Builder completed.");
+    const service = createTestService();
+
+    const runningStep = runAgentStep({
+      repositories,
+      service,
+      runtime,
+      runId: "run_builder_stream_1",
+      projectId: "project_1",
+      role: "builder",
+      input: { prompt: "Build the LP" },
+      now: () => new Date("2026-05-21T00:00:00.000Z")
+    });
+    await runtime.waitUntilStreaming();
+
+    await expect(repositories.runs.getById("run_builder_stream_1")).resolves.toEqual(
+      expect.objectContaining({ state: "running" })
+    );
+    await expect(repositories.runEvents.listForRun("run_builder_stream_1")).resolves.toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        type: "run.started"
+      })
+    ]);
+
+    runtime.complete();
+    await expect(runningStep).resolves.toMatchObject({
+      result: {
+        state: "completed",
+        modelOutputText: "Builder completed."
+      }
+    });
+  });
+
   it("persists assistant cancelled runs and cancellation events", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await repositories.projects.save({
@@ -236,10 +306,10 @@ describe("run agent step finalization", () => {
     expect(run?.completedAt).toBeDefined();
 
     const events = await repositories.runEvents.listForProject("project_1");
-    expect(events.map((event) => event.type)).toEqual(["run.failed"]);
-    const [event] = events;
-    expect(event).toBeDefined();
-    expect(event?.message).toBe("Planner finalizer crashed.");
+    expect(events.map((event) => event.type)).toEqual(["run.started", "run.failed"]);
+    const failedEvent = events.find((event) => event.type === "run.failed");
+    expect(failedEvent).toBeDefined();
+    expect(failedEvent?.message).toBe("Planner finalizer crashed.");
     expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
   });
 
@@ -442,6 +512,116 @@ class RecordingRuntime implements AgentRuntimeAdapter {
       ]
     };
   }
+}
+
+class StreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+
+  constructor(
+    private readonly deltas: string[],
+    private readonly content: string
+  ) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(structuredClone(request));
+    for (const delta of this.deltas) {
+      yield { type: "model.delta", text: delta };
+    }
+    yield {
+      type: "completed",
+      result: createCompletedRuntimeResult(request, this.content, true)
+    };
+  }
+}
+
+class DeferredStreamingRuntime implements AgentRuntimeAdapter {
+  readonly requests: RuntimeRunRequest[] = [];
+  private readonly streaming = createDeferred<void>();
+  private readonly terminal = createDeferred<void>();
+
+  constructor(private readonly content: string) {}
+
+  async run(): Promise<RuntimeRunResult> {
+    throw new Error("run_should_not_be_called_for_streaming");
+  }
+
+  async *stream(request: RuntimeRunRequest): AsyncIterable<RuntimeStreamEvent> {
+    this.requests.push(structuredClone(request));
+    this.streaming.resolve();
+    yield { type: "model.delta", text: "Partial builder output" };
+    await this.terminal.promise;
+    yield {
+      type: "completed",
+      result: createCompletedRuntimeResult(request, this.content, true)
+    };
+  }
+
+  async waitUntilStreaming(): Promise<void> {
+    await this.streaming.promise;
+  }
+
+  complete(): void {
+    this.terminal.resolve();
+  }
+}
+
+function createCompletedRuntimeResult(
+  request: RuntimeRunRequest,
+  content: string,
+  streamingEnabled = false
+): RuntimeRunResult {
+  return {
+    runId: request.runId,
+    projectId: request.projectId,
+    role: request.role,
+    state: "completed",
+    modelOutputText: content,
+    events: [
+      {
+        type: "run.started",
+        message: `${request.role} run started`,
+        runId: request.runId,
+        role: request.role
+      },
+      {
+        type: "model.completed",
+        message: `${request.role} model call completed`,
+        runId: request.runId,
+        role: request.role,
+        provider: "stream-provider",
+        api: "openai-completions",
+        model: "stream-model",
+        usage: {
+          inputTokens: 2,
+          outputTokens: 3,
+          totalTokens: 5,
+          source: "provider_reported"
+        },
+        attempt: 1,
+        durationMs: 9,
+        supportsStreaming: true,
+        streamingEnabled
+      },
+      {
+        type: "run.completed",
+        message: `${request.role} run completed`,
+        runId: request.runId,
+        state: "completed"
+      }
+    ]
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function createTestService() {

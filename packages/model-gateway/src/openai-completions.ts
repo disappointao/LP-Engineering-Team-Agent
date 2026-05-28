@@ -179,6 +179,56 @@ export async function* streamOpenAIChatCompletions(
     let model: string | undefined;
     let usage: ModelUsageMetadata | undefined;
 
+    if (!isEventStreamResponse(response)) {
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        if (controller.signal.aborted) {
+          throw createTimeoutError(input.route.provider);
+        }
+        throw new ModelProviderResponseError(
+          "model_provider_response_json_invalid",
+          `Model provider ${input.route.provider} returned invalid JSON`
+        );
+      }
+      const parsed = parseOpenAIChatCompletionsResponse(payload, input.route.provider);
+      for (const bounded of chunkText(parsed.text, maxStreamDeltaChars)) {
+        yield {
+          type: "model.delta",
+          text: bounded
+        };
+      }
+      yield {
+        type: "model.completed",
+        response: {
+          provider: input.route.provider,
+          ...(input.route.providerName ? { providerName: input.route.providerName } : {}),
+          api: "openai-completions",
+          model: parsed.model ?? input.route.model,
+          baseUrlConfigured: true,
+          apiKeyEnvConfigured: true,
+          ...(input.route.modelCapabilities
+            ? { modelCapabilities: { ...input.route.modelCapabilities } }
+            : {}),
+          text: parsed.text,
+          usage: {
+            inputTokens: parsed.inputTokens,
+            outputTokens: parsed.outputTokens,
+            totalTokens: parsed.totalTokens,
+            source: "provider_reported"
+          },
+          call: {
+            attempt: 1,
+            durationMs: elapsedMs(startedAtMs),
+            supportsStreaming: input.route.modelCapabilities?.supportsStreaming === true,
+            streamingEnabled: false
+          }
+        }
+      };
+      return;
+    }
+
     for await (const data of readSSEDataFrames(response, input.route.provider)) {
       if (data === "[DONE]") {
         continue;
@@ -245,6 +295,10 @@ export async function* streamOpenAIChatCompletions(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isEventStreamResponse(response: Response): boolean {
+  return response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
 }
 
 async function performOpenAIChatCompletionsRequest({

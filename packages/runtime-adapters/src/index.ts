@@ -459,21 +459,36 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
         context: toModelRequestContext(context),
         ...(context.modelRoutingPolicy ? { routingPolicy: context.modelRoutingPolicy } : {})
       };
-      let modelResponse: ModelResponse | undefined;
-      for await (const event of streamModel(modelRequest)) {
-        if (event.type === "model.delta") {
-          yield { type: "model.delta", text: event.text };
-        } else {
-          modelResponse = event.response;
-        }
-      }
-      if (!modelResponse) {
-        throw new ModelProviderResponseError(
-          "model_provider_response_shape_invalid",
-          `Model provider for ${request.role} returned an incomplete stream`
-        );
-      }
+      const modelResponse = yield* streamModelWithRetry({
+        streamModel,
+        request: modelRequest,
+        runRequest: request,
+        events
+      });
       events.push(toModelCompletedEvent(request, modelResponse));
+      const artifacts = request.role === "builder" && request.input.brief
+        ? generateStaticArtifacts(request.input.brief)
+        : undefined;
+      if (artifacts) {
+        events.push({
+          type: "artifact.created",
+          message: "Static LP artifacts created",
+          runId: request.runId,
+          artifactId: `artifact_${request.runId}`
+        });
+      }
+
+      const findings = request.role === "reviewer" && request.input.brief
+        ? reviewHeroCta(request.input.brief)
+        : undefined;
+      if (findings) {
+        events.push({
+          type: "review.completed",
+          message: "Reviewer checks completed",
+          runId: request.runId
+        });
+      }
+
       const state = "completed";
       events.push({
         type: "run.completed",
@@ -489,6 +504,8 @@ export class LocalAgentRuntimeAdapter implements AgentRuntimeAdapter {
           role: request.role,
           state,
           events,
+          artifacts,
+          findings,
           modelOutputText: modelResponse.text
         }
       };
@@ -597,6 +614,70 @@ async function completeModelWithRetry(input: {
           durationMs: response.call?.durationMs ?? 0,
           supportsStreaming: response.call?.supportsStreaming ?? false,
           streamingEnabled: response.call?.streamingEnabled ?? false,
+          attempt
+        }
+      };
+    } catch (error) {
+      const summary = summarizeProviderError(error);
+      if (!summary.retryable || attempt >= maxModelProviderAttempts) {
+        if (summary.retryable) {
+          input.events.push({
+            type: "model.retry.exhausted",
+            message: `${input.runRequest.role} model retry exhausted`,
+            runId: input.runRequest.runId,
+            role: input.runRequest.role,
+            attempts: attempt,
+            errorCode: summary.errorCode,
+            ...(summary.status !== undefined ? { status: summary.status } : {})
+          });
+        }
+        throw error;
+      }
+      input.events.push({
+        type: "model.retry.scheduled",
+        message: `${input.runRequest.role} model retry scheduled`,
+        runId: input.runRequest.runId,
+        role: input.runRequest.role,
+        attempt,
+        maxAttempts: maxModelProviderAttempts,
+        errorCode: summary.errorCode,
+        retryable: true,
+        ...(summary.status !== undefined ? { status: summary.status } : {})
+      });
+      attempt += 1;
+    }
+  }
+}
+
+async function* streamModelWithRetry(input: {
+  streamModel: NonNullable<ModelGateway["stream"]>;
+  request: ModelRequest;
+  runRequest: RuntimeRunRequest;
+  events: RuntimeEvent[];
+}): AsyncGenerator<RuntimeStreamEvent, ModelResponse, unknown> {
+  let attempt = 1;
+  while (true) {
+    try {
+      let modelResponse: ModelResponse | undefined;
+      for await (const event of input.streamModel(input.request)) {
+        if (event.type === "model.delta") {
+          yield { type: "model.delta", text: event.text };
+        } else {
+          modelResponse = event.response;
+        }
+      }
+      if (!modelResponse) {
+        throw new ModelProviderResponseError(
+          "model_provider_response_shape_invalid",
+          `Model provider for ${input.runRequest.role} returned an incomplete stream`
+        );
+      }
+      return {
+        ...modelResponse,
+        call: {
+          durationMs: modelResponse.call?.durationMs ?? 0,
+          supportsStreaming: modelResponse.call?.supportsStreaming ?? false,
+          streamingEnabled: modelResponse.call?.streamingEnabled ?? false,
           attempt
         }
       };

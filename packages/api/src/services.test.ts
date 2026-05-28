@@ -2820,7 +2820,8 @@ describe("demo workbench service", () => {
     });
     const requestBody = JSON.parse(String(fetchCalls[0]?.init?.body));
     expect(requestBody.model).toBe("glm-5.1");
-    expect(requestBody.stream).toBe(false);
+    expect(requestBody.stream).toBe(true);
+    expect(requestBody.stream_options).toEqual({ include_usage: true });
     expect(requestBody.messages).toHaveLength(1);
     expect(requestBody.messages[0]).toMatchObject({ role: "user" });
     expect(requestBody.messages[0].content).toContain("Return exactly one JSON object");

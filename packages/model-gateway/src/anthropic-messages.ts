@@ -217,6 +217,56 @@ export async function* streamAnthropicMessages(
     let inputTokens: number | undefined;
     let outputTokens: number | undefined;
 
+    if (!isEventStreamResponse(response)) {
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        if (controller.signal.aborted) {
+          throw createTimeoutError(input.route.provider);
+        }
+        throw new ModelProviderResponseError(
+          "model_provider_response_json_invalid",
+          `Model provider ${input.route.provider} returned invalid JSON`
+        );
+      }
+      const parsed = parseAnthropicMessagesResponse(payload, input.route.provider);
+      for (const bounded of chunkText(parsed.text, maxStreamDeltaChars)) {
+        yield {
+          type: "model.delta",
+          text: bounded
+        };
+      }
+      yield {
+        type: "model.completed",
+        response: {
+          provider: input.route.provider,
+          ...(input.route.providerName ? { providerName: input.route.providerName } : {}),
+          api: "anthropic-messages",
+          model: parsed.model ?? input.route.model,
+          baseUrlConfigured: true,
+          apiKeyEnvConfigured: true,
+          ...(input.route.modelCapabilities
+            ? { modelCapabilities: { ...input.route.modelCapabilities } }
+            : {}),
+          text: parsed.text,
+          usage: {
+            inputTokens: parsed.inputTokens,
+            outputTokens: parsed.outputTokens,
+            totalTokens: parsed.inputTokens + parsed.outputTokens,
+            source: "provider_reported"
+          },
+          call: {
+            attempt: 1,
+            durationMs: elapsedMs(startedAtMs),
+            supportsStreaming: input.route.modelCapabilities?.supportsStreaming === true,
+            streamingEnabled: false
+          }
+        }
+      };
+      return;
+    }
+
     for await (const data of readSSEDataFrames(response, input.route.provider)) {
       const payload = parseStreamJson(data, input.route.provider);
       const parsed = parseAnthropicMessagesStreamFrame(payload, input.route.provider);
@@ -294,6 +344,10 @@ export async function* streamAnthropicMessages(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isEventStreamResponse(response: Response): boolean {
+  return response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
 }
 
 async function performAnthropicMessagesRequest({

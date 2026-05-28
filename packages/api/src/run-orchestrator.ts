@@ -7,6 +7,7 @@ import type {
 import type {
   AgentRuntimeAdapter,
   RuntimeEvent,
+  RuntimeRunRequest,
   RuntimeRunResult
 } from "@lp-agent/runtime-adapters";
 import type { AgentRole } from "@lp-agent/model-gateway";
@@ -104,6 +105,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
   await input.repositories.runs.save(startedRun);
 
   const preRuntimeEvents: RunEventRecord[] = [];
+  let runtimeStartedEvent: RunEventRecord | undefined;
   let result: RuntimeRunResult;
   try {
     if (input.beforeRuntime) {
@@ -134,7 +136,17 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
         preRuntimeEvents.push(event);
       }
     }
-    result = await input.runtime.run({
+    runtimeStartedEvent = toRunEventRecord({
+      event: toRunStartedEvent(input),
+      runId: input.runId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      sequence: preRuntimeEvents.length + 1,
+      createdAt: nextRepositoryTimestamp(input.repositories, now)
+    });
+    await input.repositories.runEvents.save(runtimeStartedEvent);
+
+    result = await executeRuntimeStep(input, {
       runId: input.runId,
       projectId: input.projectId,
       taskId: input.taskId,
@@ -163,7 +175,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
         runId: input.runId,
         projectId: input.projectId,
         taskId: input.taskId,
-        sequence: preRuntimeEvents.length + 1,
+        sequence: preRuntimeEvents.length + (runtimeStartedEvent ? 1 : 0) + 1,
         createdAt: completedAt
       })
     );
@@ -183,14 +195,14 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     runId: input.runId,
     role: input.role,
     state: result.state
-  });
+  }).filter((event) => event.type !== "run.started");
   const events = runtimeEvents.map((event, index) =>
     toRunEventRecord({
       event,
       runId: input.runId,
       projectId: input.projectId,
       taskId: input.taskId,
-      sequence: preRuntimeEvents.length + index + 1,
+      sequence: preRuntimeEvents.length + (runtimeStartedEvent ? 1 : 0) + index + 1,
       createdAt: completedAt
     })
   );
@@ -200,10 +212,36 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
 
   return {
     run,
-    events: [...preRuntimeEvents, ...events],
+    events: [
+      ...preRuntimeEvents,
+      ...(runtimeStartedEvent ? [runtimeStartedEvent] : []),
+      ...events
+    ],
     contextPack,
     result
   };
+}
+
+async function executeRuntimeStep(
+  input: RunAgentStepInput,
+  request: RuntimeRunRequest
+): Promise<RuntimeRunResult> {
+  if (!input.runtime.stream) {
+    return input.runtime.run(request);
+  }
+
+  let terminalResult: RuntimeRunResult | undefined;
+  for await (const event of input.runtime.stream(request)) {
+    if (event.type === "completed") {
+      terminalResult = event.result;
+      break;
+    }
+  }
+
+  if (!terminalResult) {
+    throw new Error("Runtime stream completed without terminal result.");
+  }
+  return terminalResult;
 }
 
 function toRunRecordState(state: RuntimeRunResult["state"]): RunRecord["state"] {
@@ -227,6 +265,15 @@ function toThrownRunFailedEvent(input: {
     role: input.role,
     state: "failed",
     errorName: input.error instanceof Error ? input.error.name : undefined
+  };
+}
+
+function toRunStartedEvent(input: RunAgentStepInput): RuntimeEvent {
+  return {
+    type: "run.started",
+    message: `${input.role} run started`,
+    runId: input.runId,
+    role: input.role
   };
 }
 

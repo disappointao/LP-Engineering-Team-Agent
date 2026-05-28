@@ -1591,6 +1591,7 @@ button {
 
 .taskProgressCard {
   display: grid;
+  gap: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -1697,6 +1698,120 @@ button {
   color: var(--accent);
   font-size: 0.78rem;
   font-weight: 820;
+}
+
+.taskNarrativeTimeline {
+  display: grid;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.taskNarrativeStep {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.taskNarrativeStep:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 23px;
+  bottom: -7px;
+  left: 6px;
+  width: 1px;
+  background: var(--line);
+}
+
+.taskNarrativeDot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border: 2px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.taskNarrativeStep[data-status="running"] .taskNarrativeDot {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.11);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+.taskNarrativeStep[data-status="complete"] .taskNarrativeDot {
+  background: var(--accent);
+}
+
+.taskNarrativeStep[data-status="failed"] .taskNarrativeDot {
+  border-color: #fecaca;
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.11);
+}
+
+.taskNarrativeBody {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.taskNarrativeTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.taskNarrativeTopline strong {
+  min-width: 0;
+  color: #2f3338;
+  font-size: 0.82rem;
+  font-weight: 820;
+  overflow-wrap: anywhere;
+}
+
+.taskNarrativeTopline span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.taskNarrativeBody p {
+  margin: 0;
+  color: #4d535b;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.taskNarrativeChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.taskNarrativeChips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 7px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 780;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .liveTaskError {
