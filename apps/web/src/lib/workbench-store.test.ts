@@ -3187,6 +3187,87 @@ describe("web workbench store", () => {
     );
   });
 
+  it("upgrades a projectless general task to an LP task without changing task id", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+
+    const startedChat = await store.startStreamingChatPrompt({
+      projectId: null,
+      taskId: null,
+      prompt: "Help me plan a campaign."
+    });
+    expect(startedChat.ok).toBe(true);
+    if (!startedChat.ok) {
+      throw new Error("expected ordinary chat task");
+    }
+    await expect(
+      store.completeStreamingChatPrompt({
+        taskId: startedChat.taskId,
+        messageId: startedChat.assistantMessageId,
+        content: startedChat.assistantContent
+      })
+    ).resolves.toEqual({ ok: true });
+
+    const startedLp = await store.startLiveTaskPrompt({
+      projectId: null,
+      taskId: startedChat.taskId,
+      prompt: "Create a landing page for summer running shoes.",
+      implicitProjectName: "Untitled LP Project"
+    });
+
+    expect(startedLp).toMatchObject({
+      ok: true,
+      taskId: startedChat.taskId,
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+    if (!startedLp.ok || !startedLp.projectId) {
+      throw new Error("expected upgraded LP task");
+    }
+
+    await expect(startedLp.completion).resolves.toMatchObject({
+      ok: true,
+      taskId: startedChat.taskId,
+      taskType: "lp_generation",
+      projectId: startedLp.projectId
+    });
+    await expect(repositories.tasks.getById(startedChat.taskId)).resolves.toMatchObject({
+      id: startedChat.taskId,
+      type: "lp_generation",
+      projectId: startedLp.projectId
+    });
+    await expect(repositories.messages.listForTask(startedChat.taskId)).resolves.toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "Help me plan a campaign."
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "I created a task thread and can continue from here."
+      }),
+      expect.objectContaining({
+        role: "user",
+        content: "Create a landing page for summer running shoes."
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "LP artifacts are ready for review."
+      })
+    ]);
+
+    const pageState = await store.getPageState({
+      projectId: startedLp.projectId,
+      taskId: startedChat.taskId
+    });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected upgraded task page");
+    }
+    expect(pageState.task.id).toBe(startedChat.taskId);
+    expect(pageState.task.type).toBe("lp_generation");
+    expect(pageState.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
+  });
+
   describe("streaming chat prompt", () => {
     it("starts an ordinary chat stream and persists refreshable messages", async () => {
       const repositories = createInMemoryWorkbenchRepositories();

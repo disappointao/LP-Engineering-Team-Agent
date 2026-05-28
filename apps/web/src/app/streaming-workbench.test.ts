@@ -12,6 +12,7 @@ import {
   createStreamingTerminalHref,
   createStreamingChatRequestBody,
   getLiveTaskSubmitAcceptedStreamingState,
+  getLiveTaskSubmitTaskId,
   getTerminalStreamingStateAfterRefresh,
   getPromptSubmissionControlState,
   getVisibleStreamingStatus,
@@ -445,6 +446,21 @@ describe("streaming workbench live task fallback", () => {
       projectId: "project_1",
       taskId: "task_1"
     });
+  });
+
+  it("uses the current ordinary chat task id when an LP fallback starts", () => {
+    expect(
+      getLiveTaskSubmitTaskId({
+        liveTaskId: undefined,
+        streamingTaskId: "task_general"
+      })
+    ).toBe("task_general");
+    expect(
+      getLiveTaskSubmitTaskId({
+        liveTaskId: "task_lp",
+        streamingTaskId: undefined
+      })
+    ).toBe("task_lp");
   });
 
   it("starts live task submit and skips the native fallback path for lp fallback", () => {

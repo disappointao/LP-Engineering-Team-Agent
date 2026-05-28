@@ -3021,7 +3021,10 @@ async function prepareLpTaskPrompt(input: {
   projectId: string;
   previousPageVersionId?: string;
 }> {
-  let projectId = input.requestedProjectId;
+  const existingTask = input.requestedTaskId
+    ? await input.repositories.tasks.getById(input.requestedTaskId)
+    : undefined;
+  let projectId = input.requestedProjectId ?? existingTask?.projectId;
   if (!projectId) {
     const project = await input.service.createProject({
       name: deriveImplicitProjectName(input.prompt, input.implicitProjectName)
@@ -3029,32 +3032,53 @@ async function prepareLpTaskPrompt(input: {
     projectId = project.id;
   }
 
-  const existingTask = input.requestedTaskId
-    ? await input.repositories.tasks.getById(input.requestedTaskId)
-    : undefined;
   const reusableTask =
     existingTask && existingTask.type === "lp_generation" && existingTask.projectId === projectId
       ? existingTask
       : undefined;
-  const task = reusableTask
-    ? { ...reusableTask }
-    : (
-        await createTaskThread({
-          repositories: input.repositories,
-          title: deriveTaskTitle(input.prompt),
-          type: "lp_generation",
-          projectId,
-          userMessage: input.prompt
-        })
-      ).task;
+  const upgradableGeneralTask =
+    existingTask &&
+    existingTask.type === "general_chat" &&
+    (!existingTask.projectId || existingTask.projectId === projectId)
+      ? existingTask
+      : undefined;
+  let task: TaskRecord;
   if (reusableTask) {
+    task = { ...reusableTask };
     await appendTaskMessage({
       repositories: input.repositories,
       taskId: reusableTask.id,
       role: "user",
       content: input.prompt
     });
+  } else if (upgradableGeneralTask) {
+    task = {
+      ...upgradableGeneralTask,
+      type: "lp_generation",
+      projectId
+    };
+    await input.repositories.tasks.save(task);
+    await appendTaskMessage({
+      repositories: input.repositories,
+      taskId: task.id,
+      role: "user",
+      content: input.prompt
+    });
+    await saveTaskSnapshot({
+      repositories: input.repositories,
+      taskId: task.id,
+      projectId
+    });
   } else {
+    task = (
+      await createTaskThread({
+        repositories: input.repositories,
+        title: deriveTaskTitle(input.prompt),
+        type: "lp_generation",
+        projectId,
+        userMessage: input.prompt
+      })
+    ).task;
     await saveTaskSnapshot({
       repositories: input.repositories,
       taskId: task.id,

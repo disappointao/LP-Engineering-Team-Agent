@@ -304,6 +304,16 @@ export function createLiveTaskSubmitRequestBody({
   };
 }
 
+export function getLiveTaskSubmitTaskId({
+  liveTaskId,
+  streamingTaskId
+}: {
+  liveTaskId?: string;
+  streamingTaskId?: string;
+}): string | undefined {
+  return liveTaskId ?? streamingTaskId;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -665,6 +675,10 @@ export function StreamingWorkbench({
     prompt: string;
   }) => {
     try {
+      const submitTaskId = getLiveTaskSubmitTaskId({
+        liveTaskId,
+        streamingTaskId: taskId
+      });
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -675,7 +689,7 @@ export function StreamingWorkbench({
             prompt,
             implicitProjectName,
             ...(projectId ? { projectId } : {}),
-            ...(liveTaskId ? { taskId: liveTaskId } : {})
+            ...(submitTaskId ? { taskId: submitTaskId } : {})
           })
         )
       });

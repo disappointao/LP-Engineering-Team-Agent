@@ -229,6 +229,8 @@ Stage 28 的设计重点是把当前“先跑 Planner/Builder/Reviewer，成功�
 
 这个边界很重要：Agent 工作流的用户体验不能只展示最终成功产物。真正可用的 Agent 系统要让失败、阻塞、部分完成和后续修改都有同一个可观察上下文。
 
+普通聊天 task 里触发 LP 生成时，也应该优先保留当前 task anchor，而不是为用户强制切到一个新任务窗口。实现上可以把当前 `general_chat` task 原地升级为 `lp_generation`，必要时创建或绑定隐式 project，再把 LP user message、run、snapshot 和 artifact facts 继续写到同一个 `taskId` 下。这样既符合 ChatGPT/Manus 一类产品“同一对话里承接复杂工作流”的心智，也避免旧普通消息和新 LP 产物被拆散；只有用户明确要求另开任务，或当前 task 已绑定到不兼容 project 时，才应该创建新 task。
+
 ### 2.14 Intent router 是任务入口的运行边界
 
 普通聊天和复杂任务共用一个 composer 后，系统不能只按“当前页面是不是 LP task”来决定每次输入的含义。同一个 LP task 里，用户可能是在问“为什么这样设计”，也可能是在要求“把首屏文案改强一点”，还可能是在发起另一个新页面。把这些输入都默认送进 Planner / Builder / Reviewer / Deployer，会让普通问题误触发复杂任务。
