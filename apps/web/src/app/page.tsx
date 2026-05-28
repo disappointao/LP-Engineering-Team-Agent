@@ -1178,20 +1178,23 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     ) : null}
                     {chat.turns.map((turn, turnIndex) => {
                       const isLatestTurn = turnIndex === chat.turns.length - 1;
-                      const shouldShowLpTaskDetails =
-                        isLatestTurn &&
+                      const turnHasLpAgentWork =
                         pageState.kind === "task_ready" &&
                         hasLpAgentWorkForTurn(pageState, turn);
+                      const shouldShowLpTaskDetails =
+                        isLatestTurn &&
+                        turnHasLpAgentWork;
                       const shouldShowLiveTaskPanel =
                         isLatestTurn &&
                         pageState.kind === "task_ready" &&
                         shouldShowLiveTaskPanelForTurn(pageState, turn);
+                      const assistantIntro = turnHasLpAgentWork ? chat.assistantIntro : "";
                       const hasRecoveryRows =
                         pageState.kind === "task_ready" &&
                         (pageState.recovery?.runs.length ?? 0) > 0;
                       const shouldShowAssistantTurn = shouldRenderAssistantTurn({
                         assistantCompletion: turn.assistantCompletion,
-                        assistantIntro: chat.assistantIntro,
+                        assistantIntro,
                         hasLpTaskDetails: shouldShowLpTaskDetails,
                         hasLiveTaskPanel: shouldShowLiveTaskPanel
                       });
@@ -1213,8 +1216,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                             </div>
 
                             <div className="assistantMessage">
-                              {chat.assistantIntro ? (
-                                <ChatMessageContent content={chat.assistantIntro} />
+                              {assistantIntro ? (
+                                <ChatMessageContent content={assistantIntro} />
                               ) : null}
 
                               <ChatMessageContent content={turn.assistantCompletion} />

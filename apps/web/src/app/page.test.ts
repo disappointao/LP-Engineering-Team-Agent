@@ -998,7 +998,13 @@ describe("HomePage project flow errors", () => {
     });
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const text = collectText(page).join(" ");
+    const lpIntroOccurrences = text.split(
+      "I will turn this request into a framework-free landing page"
+    ).length - 1;
 
+    expect(text).toContain("The layout prioritizes the sale message and CTA.");
+    expect(lpIntroOccurrences).toBe(1);
     expect(collectComponentProps(page, "LiveTaskPanel")).toHaveLength(0);
     expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
     expect(
