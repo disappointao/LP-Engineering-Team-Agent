@@ -948,7 +948,7 @@ describe("HomePage project flow errors", () => {
     expect(processBlocks).toHaveLength(0);
   });
 
-  it("hides latest LP progress when a timestamped ordinary chat turn is newer than old run events", async () => {
+  it("keeps the completed LP preview entry when ordinary chat is newer than old run events", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState({
@@ -1011,7 +1011,8 @@ describe("HomePage project flow errors", () => {
       collectElements(page, "section").filter(
         (section) => section.props?.className === "deliveryBlock"
       )
-    ).toHaveLength(0);
+    ).toHaveLength(1);
+    expect(collectComponentProps(page, "ArtifactPreviewDrawer")).toHaveLength(1);
     expect(
       collectElements(page, "section").filter(
         (section) => section.props?.className === "inlinePreview"
@@ -4132,15 +4133,25 @@ describe("HomePage project flow errors", () => {
     const text = collectText(page);
     const spacedText = text.join(" ");
     const tightText = text.join("");
+    const [drawerProps] = collectComponentProps(page, "ArtifactPreviewDrawer");
 
     expect(spacedText).toContain("Agent process");
     expect(tightText).toContain("3/3");
     expect(spacedText).toContain("Task complete");
-    expect(spacedText).toContain("Static LP preview");
-    expect(spacedText).toContain("index.single.html");
-    expect(spacedText).toContain("index.html");
-    expect(spacedText).toContain("styles.css");
-    expect(spacedText).toContain("script.js");
+    expect(drawerProps).toMatchObject({
+      labels: {
+        close: "Close preview",
+        exportTitle: "Exports",
+        open: "Preview and export",
+        previewTitle: "Static LP preview"
+      },
+      downloadLinks: [
+        expect.objectContaining({ filename: "index.single.html" }),
+        expect.objectContaining({ filename: "index.html" }),
+        expect.objectContaining({ filename: "styles.css" }),
+        expect.objectContaining({ filename: "script.js" })
+      ]
+    });
     expect(spacedText).not.toContain("Prepare a deployment skill command");
     expect(spacedText).not.toContain("deployment-handoff.json");
     expect(spacedText).not.toContain("PR handoff");

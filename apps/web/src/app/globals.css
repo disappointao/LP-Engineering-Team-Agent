@@ -2129,6 +2129,23 @@ button {
   padding: 11px;
 }
 
+button.artifactCard {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.artifactPreviewDrawerTrigger {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.artifactPreviewDrawerTrigger:hover {
+  border-color: var(--accent-line);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
 .artifactCard span {
   color: var(--accent);
   font-size: 0.72rem;
@@ -2293,6 +2310,92 @@ button {
   min-height: 300px;
   border: 0;
   background: #ffffff;
+}
+
+.artifactPreviewDrawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.artifactPreviewDrawerBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(28, 31, 35, 0.28);
+  cursor: pointer;
+}
+
+.artifactPreviewDrawerPanel {
+  position: relative;
+  z-index: 1;
+  width: min(720px, calc(100vw - 32px));
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: -24px 0 54px rgba(15, 23, 42, 0.18);
+}
+
+.artifactPreviewDrawerHeader {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 16px;
+}
+
+.artifactPreviewDrawerHeader h2,
+.artifactPreviewDrawerExports h3 {
+  margin: 0;
+  color: #25292e;
+  font-size: 0.98rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.artifactPreviewDrawerClose {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0 11px;
+}
+
+.artifactPreviewDrawerPreview {
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.artifactPreviewDrawerPreview .previewFrame {
+  height: 100%;
+  min-height: 100%;
+}
+
+.artifactPreviewDrawerExports {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 14px 16px 16px;
+}
+
+.artifactPreviewDrawerExports .artifactGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0;
 }
 
 .suggestionBlock {

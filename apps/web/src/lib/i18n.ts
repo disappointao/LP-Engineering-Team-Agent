@@ -361,6 +361,8 @@ export interface WorkbenchCopy {
     artifactWorkspaceManifestTitle: string;
     artifactWorkspaceExportTitle: string;
     artifactWorkspaceOpenLabel: string;
+    artifactPreviewDrawerOpenLabel: string;
+    artifactPreviewDrawerCloseLabel: string;
     artifactWorkspaceUnavailableLabel: string;
     suggestionsTitle: string;
     resultRating: string;
@@ -1037,6 +1039,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       artifactWorkspaceManifestTitle: "File manifest",
       artifactWorkspaceExportTitle: "Exports",
       artifactWorkspaceOpenLabel: "Open artifact workspace",
+      artifactPreviewDrawerOpenLabel: "Preview and export",
+      artifactPreviewDrawerCloseLabel: "Close preview",
       artifactWorkspaceUnavailableLabel: "Artifact workspace is unavailable.",
       suggestionsTitle: "Suggested next prompts",
       resultRating: "How is this result?",
@@ -1712,6 +1716,8 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       artifactWorkspaceManifestTitle: "文件清单",
       artifactWorkspaceExportTitle: "导出",
       artifactWorkspaceOpenLabel: "打开产物工作区",
+      artifactPreviewDrawerOpenLabel: "预览与导出",
+      artifactPreviewDrawerCloseLabel: "关闭预览",
       artifactWorkspaceUnavailableLabel: "产物工作区暂不可用。",
       suggestionsTitle: "推荐追问",
       resultRating: "这个结果怎么样？",

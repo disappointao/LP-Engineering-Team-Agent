@@ -200,6 +200,8 @@ describe("web i18n", () => {
     expect(en.chat.artifactWorkspaceManifestTitle).toBe("File manifest");
     expect(en.chat.artifactWorkspaceExportTitle).toBe("Exports");
     expect(en.chat.artifactWorkspaceOpenLabel).toBe("Open artifact workspace");
+    expect(en.chat.artifactPreviewDrawerOpenLabel).toBe("Preview and export");
+    expect(en.chat.artifactPreviewDrawerCloseLabel).toBe("Close preview");
     expect(en.chat.artifactWorkspaceUnavailableLabel).toBe("Artifact workspace is unavailable.");
     expect(zh.chat.artifactWorkspaceTitle).toBe("产物工作区");
     expect(zh.chat.artifactWorkspaceSubtitle).toBe("查看当前任务的静态 LP 文件、预览、片段和导出。");
@@ -210,6 +212,8 @@ describe("web i18n", () => {
     expect(zh.chat.artifactWorkspaceManifestTitle).toBe("文件清单");
     expect(zh.chat.artifactWorkspaceExportTitle).toBe("导出");
     expect(zh.chat.artifactWorkspaceOpenLabel).toBe("打开产物工作区");
+    expect(zh.chat.artifactPreviewDrawerOpenLabel).toBe("预览与导出");
+    expect(zh.chat.artifactPreviewDrawerCloseLabel).toBe("关闭预览");
     expect(zh.chat.artifactWorkspaceUnavailableLabel).toBe("产物工作区暂不可用。");
   });
 

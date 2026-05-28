@@ -64,6 +64,10 @@ import {
   toSkillManagementNotice
 } from "./skills-models-management-view-model";
 import { AgentDetailsDisclosure } from "./agent-details-disclosure";
+import {
+  ArtifactPreviewDrawer,
+  type ArtifactPreviewDrawerDownloadLink
+} from "./artifact-preview-drawer";
 import { ChatMessageContent } from "./chat-message-content";
 import { StreamingWorkbench } from "./streaming-workbench";
 
@@ -240,6 +244,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const downloadLinks = completedSnapshot
     ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
     : undefined;
+  const drawerDownloadLinks = downloadLinks
+    ? createDrawerDownloadLinks({ copy, downloadLinks })
+    : undefined;
   const chat =
     pageState.kind === "task_ready"
       ? completedSnapshot && downloadLinks
@@ -264,6 +271,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               copy.chat.generalToolOperation
           })
       : undefined;
+  const lastLpAgentWorkTurnIndex =
+    chat?.turns.reduce(
+      (lastIndex, turn, turnIndex) =>
+        hasLpAgentWorkForTurn(pageState, turn) ? turnIndex : lastIndex,
+      -1
+    ) ?? -1;
   const composer = chat?.composer ?? {
     placeholder: copy.chat.composerPlaceholder,
     addAttachmentLabel: copy.chat.addAttachmentLabel,
@@ -1184,6 +1197,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       const shouldShowLpTaskDetails =
                         isLatestTurn &&
                         turnHasLpAgentWork;
+                      const shouldShowLpArtifactDelivery =
+                        turnIndex === lastLpAgentWorkTurnIndex &&
+                        turnHasLpAgentWork;
                       const shouldShowLiveTaskPanel =
                         isLatestTurn &&
                         pageState.kind === "task_ready" &&
@@ -1195,7 +1211,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       const shouldShowAssistantTurn = shouldRenderAssistantTurn({
                         assistantCompletion: turn.assistantCompletion,
                         assistantIntro,
-                        hasLpTaskDetails: shouldShowLpTaskDetails,
+                        hasLpTaskDetails:
+                          shouldShowLpTaskDetails || shouldShowLpArtifactDelivery,
                         hasLiveTaskPanel: shouldShowLiveTaskPanel
                       });
 
@@ -1222,7 +1239,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
                               <ChatMessageContent content={turn.assistantCompletion} />
 
-                              {shouldShowLpTaskDetails && completedSnapshot ? (
+                              {shouldShowLpArtifactDelivery && completedSnapshot ? (
                               <>
                                 <section
                                   className="deliveryBlock"
@@ -1233,18 +1250,21 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                     <span>{copy.chat.resultRating}</span>
                                   </div>
                                   <div className="artifactGrid">
-                                    {chat.artifacts.map((artifact) => (
-                                      <a
-                                        className="artifactCard"
-                                        download={artifact.filename}
-                                        href={artifact.href}
-                                        key={artifact.id}
+                                    {drawerDownloadLinks ? (
+                                      <ArtifactPreviewDrawer
+                                        downloadLinks={drawerDownloadLinks}
+                                        labels={{
+                                          close: copy.chat.artifactPreviewDrawerCloseLabel,
+                                          exportTitle: copy.chat.artifactWorkspaceExportTitle,
+                                          open: copy.chat.artifactPreviewDrawerOpenLabel,
+                                          previewTitle: copy.chat.previewTitle
+                                        }}
                                       >
-                                        <span>{artifact.kind}</span>
-                                        <strong>{artifact.filename}</strong>
-                                        <small>{copy.chat.bytesLabel(artifact.bytes)}</small>
-                                      </a>
-                                    ))}
+                                        <LPPreview
+                                          artifacts={completedSnapshot.pageVersion.artifacts}
+                                        />
+                                      </ArtifactPreviewDrawer>
+                                    ) : null}
                                     <a
                                       className="artifactCard"
                                       href={createWorkbenchHref({
@@ -1267,13 +1287,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   ) : null}
                                 </section>
 
-                                <section
-                                  className="inlinePreview"
-                                  aria-label={copy.chat.previewTitle}
-                                >
-                                  <div className="previewTitle">{copy.chat.previewTitle}</div>
-                                  <LPPreview artifacts={completedSnapshot.pageVersion.artifacts} />
-                                </section>
                               </>
                             ) : null}
 
@@ -2272,6 +2285,21 @@ function createWorkbenchHref({
   }
   const serialized = query.toString();
   return serialized.length > 0 ? `/?${serialized}` : "/";
+}
+
+function createDrawerDownloadLinks({
+  copy,
+  downloadLinks
+}: {
+  copy: ReturnType<typeof getWorkbenchCopy>;
+  downloadLinks: ArtifactDownloadLink[];
+}): ArtifactPreviewDrawerDownloadLink[] {
+  return downloadLinks.map((link) => ({
+    filename: link.filename,
+    href: link.href,
+    label: link.label,
+    bytesLabel: copy.chat.bytesLabel(link.bytes)
+  }));
 }
 
 function getModelRouteTargetLabel(routeRow: ModelManagementRouteRow): string {
