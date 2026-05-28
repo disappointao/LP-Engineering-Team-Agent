@@ -178,6 +178,7 @@ export function buildTaskNarrativeViewModel({
   });
   const steps = taskNarrativeSteps.map((step, index) => {
     const role = step.role;
+    const roleEvents = runEvents.filter((event) => eventBelongsToRole(event, role));
     const status = getNarrativeStatus({
       artifactProgress,
       highestStartedStepIndex,
@@ -190,7 +191,11 @@ export function buildTaskNarrativeViewModel({
     return {
       id: role,
       title: step.title,
-      body: getNarrativeBody(step, status),
+      body: getNarrativeBody({
+        roleEvents,
+        status,
+        step
+      }),
       status,
       statusLabel: getNarrativeStatusLabel(status),
       chips: buildNarrativeChips({
@@ -394,19 +399,38 @@ function hasNarrativeCompletionEvidence({
   return hasRoleEventType(runEvents, role, completionEventsByRole[role]);
 }
 
-function getNarrativeBody(
-  step: (typeof taskNarrativeSteps)[number],
-  status: TaskNarrativeStatus
-): string {
+function getNarrativeBody({
+  roleEvents,
+  status,
+  step
+}: {
+  roleEvents: TaskProgressRunEvent[];
+  status: TaskNarrativeStatus;
+  step: (typeof taskNarrativeSteps)[number];
+}): string {
   switch (status) {
     case "complete":
       return step.completeBody;
     case "failed":
-      return "这一阶段失败，可稍后重试或继续恢复。";
+      return getNarrativeFailureBody(roleEvents);
     case "running":
       return step.runningBody;
     case "pending":
       return step.pendingBody;
+  }
+}
+
+function getNarrativeFailureBody(roleEvents: TaskProgressRunEvent[]): string {
+  const errorCode = getLatestNarrativeErrorCode(roleEvents);
+  switch (errorCode) {
+    case "model_provider_request_timeout":
+      return "模型响应超时，已停止生成。可以重试，或换用响应更快的模型。";
+    case "model_provider_http_error":
+      return "模型服务返回错误，已停止生成。可以稍后重试。";
+    case "model_provider_api_key_missing":
+      return "模型密钥缺失，已停止生成。请检查项目模型配置。";
+    default:
+      return "这一阶段失败，可稍后重试或继续恢复。";
   }
 }
 
@@ -440,6 +464,8 @@ function buildNarrativeChips({
   addChip(chips, roleEvents.some((event) => event.type === "handoff.consumed"), "接收上一步结果");
   addChip(chips, roleEvents.some((event) => event.type === "model.completed"), "模型已响应");
   addChip(chips, roleEvents.some((event) => event.type === "model.retry.scheduled"), "模型重试中");
+  addChip(chips, hasNarrativeErrorCode(roleEvents, "model_provider_request_timeout"), "模型响应超时");
+  addChip(chips, roleEvents.some((event) => event.type === "model.retry.exhausted"), "已重试");
   addChip(
     chips,
     roleEvents.some((event) => event.type === "model.output.repair_started"),
@@ -474,6 +500,22 @@ function getNarrativeArtifactFileCount({
     .find((event) => event.type === "artifact.workspace.created" && event.payload?.fileCount)
     ?.payload?.fileCount;
   return eventCount ?? artifactProgress?.fileCount;
+}
+
+function getLatestNarrativeErrorCode(
+  roleEvents: TaskProgressRunEvent[]
+): string | undefined {
+  return [...roleEvents]
+    .reverse()
+    .find((event) => typeof event.payload?.errorCode === "string")
+    ?.payload?.errorCode;
+}
+
+function hasNarrativeErrorCode(
+  roleEvents: TaskProgressRunEvent[],
+  errorCode: string
+): boolean {
+  return roleEvents.some((event) => event.payload?.errorCode === errorCode);
 }
 
 function addChip(chips: string[], condition: boolean, label: string): void {

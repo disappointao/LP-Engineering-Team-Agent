@@ -236,6 +236,98 @@ describe("LiveTaskStatusSummary", () => {
     expect(text).not.toContain("<!doctype html");
     expect(text).not.toContain("raw artifact");
   });
+
+  it("renders a safe timeout reason when LP file generation fails", () => {
+    const copy = {
+      ...getWorkbenchCopy("en").chat,
+      roleLabels: getWorkbenchCopy("en").modelsView.roleLabels
+    };
+    const payload = createPayload({
+      runs: [
+        {
+          runId: "run_planner_brief_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          role: "planner",
+          state: "completed",
+          runRecordState: "completed",
+          startedAt: "2026-05-21T00:00:00.000Z",
+          completedAt: "2026-05-21T00:00:02.000Z",
+          recoveryActions: []
+        },
+        {
+          runId: "run_builder_version_1",
+          projectId: "project_1",
+          taskId: "task_1",
+          role: "builder",
+          state: "failed",
+          runRecordState: "failed",
+          startedAt: "2026-05-21T00:00:03.000Z",
+          completedAt: "2026-05-21T00:04:03.000Z",
+          diagnosticSummary: {
+            code: "run_failed",
+            message: "Run failed.",
+            source: "run_event",
+            eventType: "run.failed",
+            errorName: "ModelProviderRequestError"
+          },
+          recoveryActions: ["retry_run"]
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_context_loaded",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "runtime.context.loaded",
+          createdAt: "2026-05-21T00:00:03.000Z",
+          payload: { role: "builder" }
+        },
+        {
+          id: "event_retry_scheduled",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.retry.scheduled",
+          createdAt: "2026-05-21T00:02:03.000Z",
+          payload: { role: "builder", errorCode: "model_provider_request_timeout" }
+        },
+        {
+          id: "event_retry_exhausted",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.retry.exhausted",
+          createdAt: "2026-05-21T00:04:03.000Z",
+          payload: { role: "builder", errorCode: "model_provider_request_timeout" }
+        },
+        {
+          id: "event_failed",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "run.failed",
+          createdAt: "2026-05-21T00:04:03.000Z",
+          payload: {
+            role: "builder",
+            errorCode: "model_provider_request_timeout",
+            errorName: "ModelProviderRequestError"
+          }
+        }
+      ]
+    });
+
+    const rendered = LiveTaskStatusSummary({ payload, copy });
+    const text = collectText(rendered).join(" ");
+
+    expect(text).toContain("生成静态 LP 文件");
+    expect(text).toContain("模型响应超时，已停止生成。可以重试，或换用响应更快的模型。");
+    expect(text).toContain("模型响应超时");
+    expect(text).toContain("已重试");
+    expect(text).not.toContain("ModelProviderRequestError");
+    expect(text).not.toContain("model_provider_request_timeout");
+  });
 });
 
 describe("live task panel polling helpers", () => {
