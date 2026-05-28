@@ -4112,6 +4112,20 @@ describe("web workbench store", () => {
     expect(builderRuntime.requests.at(-1)?.context?.artifactWorkspace.workspaceId).toBe(
       "artifact_workspace_1"
     );
+    const pageState = await store.getPageState({
+      projectId: first.projectId,
+      taskId: first.taskId
+    });
+    expect(pageState.kind).toBe("task_ready");
+    if (pageState.kind !== "task_ready") {
+      throw new Error("expected task page state");
+    }
+    expect(pageState.artifactDiff?.previousPageVersionId).toBe("version_1");
+    expect(pageState.artifactDiff?.files.map((file) => [file.path, file.state])).toEqual([
+      ["index.html", "unchanged"],
+      ["styles.css", "unchanged"],
+      ["script.js", "unchanged"]
+    ]);
     const messages = await repositories.messages.listForTask("task_1");
     expect(messages.map((message) => message.role)).toEqual([
       "user",
@@ -4833,7 +4847,7 @@ describe("web workbench store", () => {
     expect(JSON.stringify(pageState.artifactDiff)).not.toContain("window.lpAgent");
   });
 
-  it("falls back to current artifact metadata when legacy previous diff is unavailable", async () => {
+  it("uses task lineage before legacy brief diff when comparing artifact metadata", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const store = createWebWorkbenchStore({ repositories });
 
@@ -4913,21 +4927,21 @@ describe("web workbench store", () => {
     if (pageState.kind !== "task_ready") {
       throw new Error("Expected task-ready state.");
     }
-    expect(pageState.artifactDiff?.previousPageVersionId).toBeUndefined();
+    expect(pageState.artifactDiff?.previousPageVersionId).toBe(firstPageVersion.id);
     expect(pageState.artifactDiff?.files).toMatchObject([
       {
         path: "index.html",
-        state: "initial",
+        state: "unchanged",
         canPreview: true
       },
       {
         path: "styles.css",
-        state: "initial",
+        state: "unchanged",
         canPreview: true
       },
       {
         path: "script.js",
-        state: "initial",
+        state: "unchanged",
         canPreview: true
       }
     ]);

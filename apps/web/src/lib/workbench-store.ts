@@ -1418,6 +1418,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               service,
               repositories,
               projectId: snapshot.project.id,
+              taskId: task.id,
               currentPageVersion: snapshot.currentPageVersion,
               selectedPath: input?.artifactPath
             })
@@ -2115,6 +2116,7 @@ async function buildWebArtifactDiffState(input: {
   service: DemoWorkbenchService;
   repositories: WorkbenchRepositories;
   projectId: string;
+  taskId?: string;
   currentPageVersion: NonNullable<WorkbenchSnapshot["currentPageVersion"]>;
   selectedPath?: string | null;
 }): Promise<WebArtifactDiffState | undefined> {
@@ -2123,12 +2125,21 @@ async function buildWebArtifactDiffState(input: {
     return undefined;
   }
 
-  const previousPageVersion = await findPreviousPageVersionForBrief({
-    repositories: input.repositories,
-    currentPageVersionId: input.currentPageVersion.id,
-    projectId: input.projectId,
-    briefId: input.currentPageVersion.briefId
-  });
+  const previousPageVersion =
+    (input.taskId
+      ? await findPreviousPageVersionForTask({
+          repositories: input.repositories,
+          currentPageVersionId: input.currentPageVersion.id,
+          projectId: input.projectId,
+          taskId: input.taskId
+        })
+      : undefined) ??
+    (await findPreviousPageVersionForBrief({
+      repositories: input.repositories,
+      currentPageVersionId: input.currentPageVersion.id,
+      projectId: input.projectId,
+      briefId: input.currentPageVersion.briefId
+    }));
   const diffFiles = previousPageVersion
     ? await buildDiffFileViews({
         service: input.service,
@@ -2318,6 +2329,36 @@ async function findPreviousPageVersionForBrief(input: {
         pageVersion.id !== input.currentPageVersionId
     );
   return candidates.at(-1);
+}
+
+async function findPreviousPageVersionForTask(input: {
+  repositories: WorkbenchRepositories;
+  currentPageVersionId: string;
+  projectId: string;
+  taskId: string;
+}) {
+  const runEvents = await input.repositories.runEvents.listForTask(input.taskId);
+  const pageVersionIds = runEvents
+    .filter((event) => event.type === "artifact.workspace.created")
+    .map((event) => event.payload.pageVersionId)
+    .filter((pageVersionId): pageVersionId is string => typeof pageVersionId === "string");
+  const currentIndex = pageVersionIds.lastIndexOf(input.currentPageVersionId);
+  const previousPageVersionIds =
+    currentIndex >= 0
+      ? pageVersionIds.slice(0, currentIndex)
+      : pageVersionIds.filter((pageVersionId) => pageVersionId !== input.currentPageVersionId);
+
+  for (let index = previousPageVersionIds.length - 1; index >= 0; index -= 1) {
+    const pageVersionId = previousPageVersionIds[index];
+    if (!pageVersionId) {
+      continue;
+    }
+    const pageVersion = await input.repositories.pageVersions.getById(pageVersionId);
+    if (pageVersion?.projectId === input.projectId) {
+      return pageVersion;
+    }
+  }
+  return undefined;
 }
 
 function toShortSha256(sha256: string): string {
@@ -2731,6 +2772,7 @@ async function routeExistingLpTaskPromptIntent(input: {
         service: input.service,
         repositories: input.repositories,
         projectId: snapshot.project.id,
+        taskId: input.task.id,
         currentPageVersion: snapshot.currentPageVersion
       })
     : undefined;
@@ -2857,6 +2899,7 @@ async function refreshLpTaskFollowupSuggestionCache(input: {
         service: input.service,
         repositories: input.repositories,
         projectId: snapshot.project.id,
+        taskId: input.task.id,
         currentPageVersion: snapshot.currentPageVersion
       })
     : undefined;
