@@ -179,6 +179,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const initialLiveTaskPayload = initialLiveTaskState?.ok
     ? initialLiveTaskState.value
     : undefined;
+  const isArtifactDeliveryTerminal = initialLiveTaskPayload?.isTerminal ?? true;
   const modelState = getPageModelState(pageState);
   const mcpState = getPageMCPState(pageState);
   const mcpManagement = buildMCPManagementViewModel({ copy, mcpState });
@@ -1259,8 +1260,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   aria-label={copy.chat.artifactsTitle}
                                 >
                                   <div className="deliveryHeader">
-                                    <strong>{copy.chat.taskComplete}</strong>
-                                    <span>{copy.chat.resultRating}</span>
+                                    <strong>
+                                      {isArtifactDeliveryTerminal
+                                        ? copy.chat.taskComplete
+                                        : copy.chat.artifactCurrentVersionLabel}
+                                    </strong>
+                                    <span>
+                                      {isArtifactDeliveryTerminal
+                                        ? copy.chat.resultRating
+                                        : copy.chat.liveTaskRunning}
+                                    </span>
                                   </div>
                                   <div className="artifactGrid">
                                     {drawerDownloadLinks ? (

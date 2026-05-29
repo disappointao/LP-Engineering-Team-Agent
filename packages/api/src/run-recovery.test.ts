@@ -273,6 +273,38 @@ describe("run recovery views", () => {
     expect(views.map((view) => view.runId)).not.toContain("run_planner_brief_1");
   });
 
+  it("does not include task-bound runs from another task whose run id matches the snapshot", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    await saveTask(repositories);
+    await repositories.tasks.save({
+      id: "task_2",
+      title: "Another landing page run",
+      type: "lp_generation",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: timestamp
+    });
+    await repositories.taskSnapshots.save({
+      taskId: "task_1",
+      projectId: "project_1",
+      briefId: "brief_1",
+      pageVersionId: "version_1",
+      createdAt: timestamp
+    });
+    await saveRun(repositories, {
+      id: "run_builder_version_1",
+      projectId: "project_1",
+      taskId: "task_2",
+      role: "builder",
+      state: "completed",
+      completedAt: "2026-05-20T00:00:04.000Z"
+    });
+
+    const views = await listRunRecoveryViewsForTask({ repositories, taskId: "task_1" });
+
+    expect(views.map((view) => view.runId)).not.toContain("run_builder_version_1");
+  });
+
   it("keeps completed repaired runs non-actionable", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     await saveTask(repositories);

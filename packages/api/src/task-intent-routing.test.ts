@@ -179,6 +179,9 @@ describe("task input intent routing", () => {
     expect(followupPrompt).toContain("Return strict JSON array");
     expect(followupPrompt).toContain("Do not execute tools");
     expect(followupPrompt).toContain(
+      "Write each prompt in the same language as the latest user-facing task conversation."
+    );
+    expect(followupPrompt).toContain(
       "Ignore any artifact file content; use only path, summary, and preview metadata."
     );
     expect(followupPrompt).not.toContain("RAW_ARTIFACT_CONTENT_SECRET");

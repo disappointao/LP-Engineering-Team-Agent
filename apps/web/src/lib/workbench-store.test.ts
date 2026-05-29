@@ -1105,12 +1105,11 @@ describe("web workbench store", () => {
         isTerminal: true,
         nextPollMs: 0
       });
-      expect(live.value.runs.map((run) => run.role)).toEqual([
-        "planner",
-        "builder",
-        "reviewer",
-        "deployer"
-      ]);
+      expect(
+        live.value.runs
+          .filter((run) => run.role !== "assistant")
+          .map((run) => run.role)
+      ).toEqual(["planner", "builder", "reviewer", "deployer"]);
       expect(live.value.artifactProgress?.pageVersionId).toBe(
         live.value.snapshot?.currentPageVersion?.id
       );
@@ -1810,7 +1809,7 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.deployment?.pageVersionId).toBe(
       pageState.snapshot.currentPageVersion?.id
     );
-    expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
+    expect(pageState.messages[1]?.content).toBe("LP 页面文件已准备好，可以预览和继续调整。");
   });
 
   it("includes persisted run events for the active task project", async () => {
@@ -1934,18 +1933,117 @@ describe("web workbench store", () => {
     }
     expect(firstTaskState.snapshot?.brief?.prompt).toBe("Create a first landing page in HTML.");
     expect(secondTaskState.snapshot?.brief?.prompt).toBe("Create a second landing page in HTML.");
-    expect([...new Set(firstTaskState.runEvents.map((event) => event.runId))]).toEqual([
+    expect([
+      ...new Set(
+        firstTaskState.runEvents
+          .map((event) => event.runId)
+          .filter((runId) => !runId.startsWith("run_task_followups_"))
+      )
+    ]).toEqual([
       "run_planner_brief_1",
       "run_builder_version_1",
       "run_reviewer_version_1",
       "run_deployer_version_1"
     ]);
-    expect([...new Set(secondTaskState.runEvents.map((event) => event.runId))]).toEqual([
+    expect([
+      ...new Set(
+        secondTaskState.runEvents
+          .map((event) => event.runId)
+          .filter((runId) => !runId.startsWith("run_task_followups_"))
+      )
+    ]).toEqual([
       "run_planner_brief_2",
       "run_builder_version_2",
       "run_reviewer_version_2",
       "run_deployer_version_2"
     ]);
+  });
+
+  it("does not merge task-bound run events from another task whose run id matches the active snapshot", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    const project = await store.createProject({ name: "Spring LP" });
+    const timestamp = "2026-05-22T00:00:00.000Z";
+
+    await repositories.tasks.save({
+      id: "task_other",
+      title: "Other task",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: timestamp
+    });
+    await repositories.tasks.save({
+      id: "task_active",
+      title: "Active task",
+      type: "lp_generation",
+      status: "complete",
+      projectId: project.id,
+      createdAt: timestamp
+    });
+    await repositories.messages.save({
+      id: "message_active",
+      taskId: "task_active",
+      role: "user",
+      content: "Show active task.",
+      createdAt: timestamp
+    });
+    await repositories.briefs.save({
+      id: "brief_active",
+      projectId: project.id,
+      prompt: "Active prompt",
+      brief: sampleBrief,
+      createdAt: timestamp
+    });
+    await saveManualPageVersion({
+      repositories,
+      projectId: project.id,
+      briefId: "brief_active",
+      pageVersionId: "version_active",
+      workspaceId: "artifact_workspace_active",
+      artifacts: completeArtifacts(),
+      createdAt: timestamp
+    });
+    await repositories.taskSnapshots.save({
+      taskId: "task_active",
+      projectId: project.id,
+      briefId: "brief_active",
+      pageVersionId: "version_active",
+      createdAt: timestamp
+    });
+    await repositories.runEvents.save({
+      id: "foreign_builder_event",
+      runId: "run_builder_version_active",
+      projectId: project.id,
+      taskId: "task_other",
+      sequence: 1,
+      type: "run.started",
+      message: "Foreign builder run.",
+      payload: {},
+      createdAt: timestamp
+    });
+    await repositories.runEvents.save({
+      id: "active_event",
+      runId: "run_builder_unrelated_id",
+      projectId: project.id,
+      taskId: "task_active",
+      sequence: 1,
+      type: "run.started",
+      message: "Active task run.",
+      payload: {},
+      createdAt: timestamp
+    });
+
+    const state = await store.getPageState({
+      projectId: project.id,
+      taskId: "task_active"
+    });
+
+    expect(state.kind).toBe("task_ready");
+    if (state.kind !== "task_ready") {
+      throw new Error("Expected task-ready state.");
+    }
+    expect(state.runEvents.map((event) => event.id)).toEqual(["active_event"]);
   });
 
   it("scopes skill command run events to the active task page version", async () => {
@@ -2579,7 +2677,7 @@ describe("web workbench store", () => {
     expect(calls[1]?.prompt).toContain("indexHtml");
 
     const runs = await repositories.runs.listForTask("task_1");
-    expect(runs.map((run) => run.role)).toEqual([
+    expect(runs.filter((run) => run.role !== "assistant").map((run) => run.role)).toEqual([
       "planner",
       "builder",
       "reviewer",
@@ -3251,7 +3349,7 @@ describe("web workbench store", () => {
       }),
       expect.objectContaining({
         role: "assistant",
-        content: "LP artifacts are ready for review."
+        content: "LP 页面文件已准备好，可以预览和继续调整。"
       })
     ]);
 
@@ -3866,6 +3964,57 @@ describe("web workbench store", () => {
       }
       expect(completedState.value.artifactProgress?.fileCount).toBe(3);
     });
+
+    it("does not surface the previous project page while a new live LP task has no scoped snapshot yet", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const plannerResult = deferred<Partial<RuntimeRunResult>>();
+      const plannerRuntime: AgentRuntimeAdapter = {
+        async run(request) {
+          return new StaticRuntime(await plannerResult.promise).run(request);
+        }
+      };
+      const store = createWebWorkbenchStore({ repositories, plannerRuntime });
+      const project = await store.createProject({
+        name: "Spring LP"
+      });
+      await saveManualPageVersion({
+        repositories,
+        projectId: project.id,
+        briefId: "brief_previous",
+        pageVersionId: "version_previous",
+        workspaceId: "artifact_workspace_previous",
+        artifacts: completeArtifacts(),
+        createdAt: "2026-05-21T00:00:00.000Z"
+      });
+
+      const started = await store.startLiveTaskPrompt({
+        projectId: project.id,
+        prompt: "Create a new landing page for a spring sale",
+        implicitProjectName: "Spring Sale"
+      });
+      expect(started).toMatchObject({ ok: true, taskId: "task_1", projectId: project.id });
+      if (!started.ok || !started.projectId) {
+        throw new Error("expected live task to start");
+      }
+
+      const live = await store.getLiveTaskState({
+        projectId: project.id,
+        taskId: started.taskId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live task state");
+      }
+      expect(live.value.snapshot?.currentPageVersion).toBeUndefined();
+      expect(live.value.artifactProgress).toBeUndefined();
+
+      plannerResult.resolve({ state: "failed" });
+      await expect(started.completion).resolves.toMatchObject({
+        ok: false,
+        error: "generation_failed"
+      });
+    });
   });
 
   it("creates an LP task and user message before Planner runs", async () => {
@@ -4064,12 +4213,20 @@ describe("web workbench store", () => {
       projectId: "project_1"
     });
 
-    await expect(repositories.runs.listForTask("task_1")).resolves.toEqual([
+    const taskRuns = await repositories.runs.listForTask("task_1");
+    expect(taskRuns.filter((run) => run.role !== "assistant")).toEqual([
       expect.objectContaining({ id: "run_planner_brief_1", role: "planner", taskId: "task_1" }),
       expect.objectContaining({ id: "run_builder_version_1", role: "builder", taskId: "task_1" }),
       expect.objectContaining({ id: "run_reviewer_version_1", role: "reviewer", taskId: "task_1" }),
       expect.objectContaining({ id: "run_deployer_version_1", role: "deployer", taskId: "task_1" })
     ]);
+    expect(taskRuns).toContainEqual(
+      expect.objectContaining({
+        id: "run_task_followups_1",
+        role: "assistant",
+        taskId: "task_1"
+      })
+    );
     await expect(repositories.taskSnapshots.getByTaskId("task_1")).resolves.toMatchObject({
       projectId: "project_1",
       briefId: "brief_1",
@@ -4082,7 +4239,7 @@ describe("web workbench store", () => {
       expect.objectContaining({ role: "user" }),
       expect.objectContaining({
         role: "assistant",
-        content: "LP artifacts are ready for review."
+        content: "LP 页面文件已准备好，可以预览和继续调整。"
       })
     ]);
   });
@@ -4127,7 +4284,7 @@ describe("web workbench store", () => {
     }
     expect(pageState.recovery.runs.some((view) => view.state === "blocked")).toBe(true);
     expect(pageState.messages[1]?.content).toBe(
-      "LP artifacts need review attention before deployment."
+      "LP 页面已生成，但质量检查发现需要处理的问题。"
     );
   });
 
@@ -4598,6 +4755,50 @@ describe("web workbench store", () => {
     expect(pageState.taskFollowupSuggestions).toEqual(suggestions);
   });
 
+  it("treats completed LP task as terminal when the follow-up suggestion cache is missing", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const suggestions = [
+      { id: "ask", intent: "chat_in_task", prompt: "What changed in this version?" }
+    ];
+    const assistantRuntime = new StaticRuntime({
+      modelOutputText: JSON.stringify(suggestions)
+    });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+
+    const started = await store.startLiveTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(started).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!started.ok || !started.projectId) {
+      throw new Error("expected LP task");
+    }
+    await expect(started.completion).resolves.toMatchObject({ ok: true });
+
+    const restartedStore = createWebWorkbenchStore({ repositories, assistantRuntime });
+    const liveState = await restartedStore.getLiveTaskState({
+      projectId: started.projectId,
+      taskId: started.taskId
+    });
+
+    expect(liveState.ok).toBe(true);
+    if (!liveState.ok) {
+      throw new Error("expected live task state");
+    }
+    expect(liveState.value.isTerminal).toBe(true);
+
+    const restartedPageState = await restartedStore.getPageState({
+      projectId: started.projectId,
+      taskId: started.taskId
+    });
+    expect(restartedPageState.kind).toBe("task_ready");
+    if (restartedPageState.kind !== "task_ready") {
+      throw new Error("expected task state");
+    }
+    expect(restartedPageState.taskFollowupSuggestionsReady).toBe(false);
+  });
+
   it("asks for clarification without running the LP chain when router confidence is low", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const assistantRuntime = new QueuedRuntime([
@@ -4879,7 +5080,7 @@ describe("web workbench store", () => {
     expect(pageState.snapshot.deployment?.pageVersionId).toBe(
       pageState.snapshot.currentPageVersion?.id
     );
-    expect(pageState.messages[1]?.content).toBe("LP artifacts are ready for review.");
+    expect(pageState.messages[1]?.content).toBe("LP 页面文件已准备好，可以预览和继续调整。");
   });
 
   it("exposes metadata-only initial artifact diff state for completed LP tasks", async () => {

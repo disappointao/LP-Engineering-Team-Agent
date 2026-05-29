@@ -964,9 +964,6 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       if (!currentPageVersion) {
         return true;
       }
-      if (!pageState.taskFollowupSuggestionsReady) {
-        return false;
-      }
       if (currentPageVersion.reviewStatus === "pending") {
         return false;
       }
@@ -1415,13 +1412,11 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         taskRunEvents,
         snapshotRunEvents
       });
-      const snapshot = snapshotRef
-        ? await service.getSnapshotForRecords({
-            projectId: snapshotRef.projectId,
-            briefId: snapshotRef.briefId,
-            pageVersionId: snapshotRef.pageVersionId
-          })
-        : undefined;
+      const snapshot = await loadTaskScopedSnapshot({
+        service,
+        project: taskProject,
+        snapshotRef
+      });
       const artifactDiff =
         task.type === "lp_generation" && snapshot?.currentPageVersion
           ? await buildWebArtifactDiffState({
@@ -2371,6 +2366,26 @@ async function findPreviousPageVersionForTask(input: {
   return undefined;
 }
 
+async function loadTaskScopedSnapshot(input: {
+  service: DemoWorkbenchService;
+  project: ProjectRecord | undefined;
+  snapshotRef: WorkbenchTaskSnapshotRecord | undefined;
+}): Promise<WorkbenchSnapshot | undefined> {
+  if (!input.snapshotRef) {
+    return undefined;
+  }
+
+  if (!input.snapshotRef.briefId && !input.snapshotRef.pageVersionId) {
+    return input.project ? { project: { ...input.project } } : undefined;
+  }
+
+  return input.service.getSnapshotForRecords({
+    projectId: input.snapshotRef.projectId,
+    briefId: input.snapshotRef.briefId,
+    pageVersionId: input.snapshotRef.pageVersionId
+  });
+}
+
 function toShortSha256(sha256: string): string {
   return sha256.slice(0, 12);
 }
@@ -2394,7 +2409,9 @@ function filterRunEventsForSnapshot(
   }
 
   return runEvents.filter(
-    (event) => runIds.has(event.runId) || isSkillCommandRunEventForSnapshot(event, snapshot)
+    (event) =>
+      (event.taskId === undefined && runIds.has(event.runId)) ||
+      isSkillCommandRunEventForSnapshot(event, snapshot)
   );
 }
 
@@ -2922,6 +2939,7 @@ async function refreshLpTaskFollowupSuggestionCache(input: {
   const suggestions = await generateLpTaskFollowupSuggestions({
     service: input.service,
     projectId: input.projectId,
+    taskId: input.task.id,
     task: input.task,
     recentMessages: messages.slice(-6).map((message) => ({
       role: message.role,
@@ -2935,6 +2953,7 @@ async function refreshLpTaskFollowupSuggestionCache(input: {
 async function generateLpTaskFollowupSuggestions(input: {
   service: DemoWorkbenchService;
   projectId: string;
+  taskId: string;
   task: TaskRecord;
   recentMessages: TaskIntentRecentMessage[];
   artifactSummary: TaskIntentArtifactSummary;
@@ -2942,6 +2961,7 @@ async function generateLpTaskFollowupSuggestions(input: {
   try {
     return await input.service.generateTaskFollowupSuggestions({
       projectId: input.projectId,
+      taskId: input.taskId,
       taskTitle: input.task.title,
       taskStatus: input.task.status,
       recentMessages: input.recentMessages,
@@ -3132,8 +3152,8 @@ async function completePreparedLpTaskPrompt(input: {
     const pageVersion = await input.repositories.pageVersions.getById(chain.pageVersionId);
     const assistantSummary =
       pageVersion?.reviewStatus === "failed"
-        ? "LP artifacts need review attention before deployment."
-        : "LP artifacts are ready for review.";
+        ? "LP 页面已生成，但质量检查发现需要处理的问题。"
+        : "LP 页面文件已准备好，可以预览和继续调整。";
     await appendTaskMessage({
       repositories: input.repositories,
       taskId: input.task.id,

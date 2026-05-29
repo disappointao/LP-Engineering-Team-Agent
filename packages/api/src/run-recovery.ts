@@ -125,7 +125,11 @@ export async function listRunRecoveryViewsForTask(
         workerRuntime: input.workerRuntime,
         runId
       });
-      if (result.ok && result.view.projectId === task.projectId) {
+      if (
+        result.ok &&
+        result.view.projectId === task.projectId &&
+        (result.view.taskId === undefined || result.view.taskId === input.taskId)
+      ) {
         viewsByRunId.set(runId, result.view);
       }
     }
@@ -322,6 +326,9 @@ async function runBelongsToTaskScope(
   }
   if (run.taskId === input.taskId) {
     return true;
+  }
+  if (run.taskId !== undefined) {
+    return false;
   }
 
   const snapshot = await input.repositories.taskSnapshots.getByTaskId(input.taskId);

@@ -267,6 +267,10 @@ Stage 29 v0 先用短轮询 task state refresh，而不是直接上 SSE。这里
 
 Stage 29 implementation plan 采用两段式体验：普通聊天仍先尝试 `/api/chat/stream`；当服务端判断 prompt 是 LP 任务并返回 `fallback.required` 时，客户端调用 `/api/tasks/submit` live task submit route 创建 task 并启动 in-process LP chain，然后通过 `/api/tasks/[taskId]/state` task state polling 观察 repository facts。这个边界保留了 Stage 26 的 text streaming，同时让 LP workflow 不再依赖阻塞式 form submit 才能回到页面。
 
+真实模型联调补充了一个 task-scoped live state 边界：同一个 project 下会有很多历史 LP task，run recovery、run events、artifact workspace 和 snapshot 不能只靠 `briefId` / `pageVersionId` 反推归属。新的 task 如果只有 `projectId` snapshot，表示它还没有自己的 artifact fact，不能回退展示项目里最新旧页面；snapshot-derived run id 只能用于兼容没有 `taskId` 的历史 unscoped event/run，带 `taskId` 的 run 必须严格匹配当前 task。否则普通对话里触发 LP 后，页面会混入同项目旧任务的失败事件、旧 artifact 或错误恢复按钮。
+
+LP follow-up suggestions 也是显示模型，不是 task terminal fact。建议项可以用内存 cache 加速展示，但刷新服务后 cache 为空时，已完成的 LP 不能因此继续轮询或显示“进行中”；是否终态应优先看 run/recovery、worker queue、reviewStatus、deployment 和 artifact facts。只有仍有 `queued` / `running` / `waiting_for_approval` / `cancelling` run 或 worker job 时，live task 才应该保持非终态。
+
 ### 2.16 Provider usage 和 token streaming 不是同一件事
 
 真实模型接入后，可观察性要拆成几层：

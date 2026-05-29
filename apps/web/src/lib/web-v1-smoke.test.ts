@@ -110,12 +110,11 @@ describe("Web V1 smoke", () => {
       throw new Error("expected live smoke state");
     }
     expect(liveState.value.artifactProgress?.fileCount).toBe(3);
-    expect(liveState.value.runs.map((run) => run.role)).toEqual([
-      "planner",
-      "builder",
-      "reviewer",
-      "deployer"
-    ]);
+    expect(
+      liveState.value.runs
+        .filter((run) => run.role !== "assistant")
+        .map((run) => run.role)
+    ).toEqual(["planner", "builder", "reviewer", "deployer"]);
     const liveStateJson = JSON.stringify(liveState.value).toLowerCase();
 
     for (const marker of rawArtifactContentSentinels) {

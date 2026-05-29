@@ -194,6 +194,7 @@ export function buildTaskFollowupSuggestionsPrompt(
     "Do not execute tools, modify artifacts, or generate task output.",
     "Ignore any artifact file content; use only path, summary, and preview metadata.",
     "Suggest 2-3 options when useful. Use only these intents: chat_in_task, agent_continue, agent_new_task.",
+    "Write each prompt in the same language as the latest user-facing task conversation.",
     "Return strict JSON array with items shaped {\"id\":\"optional_stable_id\",\"intent\":\"chat_in_task|agent_continue|agent_new_task\",\"prompt\":\"short user-facing prompt\"}.",
     "",
     formatTask(input.task),

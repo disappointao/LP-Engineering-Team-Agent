@@ -5,6 +5,7 @@ const pageMocks = vi.hoisted(() => ({
   currentProjectId: undefined as string | undefined,
   currentTaskId: undefined as string | undefined,
   getPageStateMock: vi.fn(),
+  getLiveTaskStateMock: vi.fn(),
   pageState: {
     kind: "empty",
     projects: [],
@@ -79,7 +80,8 @@ vi.mock("next/link", () => ({
 
 vi.mock("../lib/workbench-store", () => ({
   getWebWorkbenchStore: vi.fn(() => ({
-    getPageState: pageMocks.getPageStateMock.mockImplementation(async () => pageMocks.pageState)
+    getPageState: pageMocks.getPageStateMock.mockImplementation(async () => pageMocks.pageState),
+    getLiveTaskState: pageMocks.getLiveTaskStateMock
   }))
 }));
 
@@ -614,6 +616,7 @@ beforeEach(() => {
   pageMocks.currentProjectId = undefined;
   pageMocks.currentTaskId = undefined;
   pageMocks.getPageStateMock.mockReset();
+  pageMocks.getLiveTaskStateMock.mockReset();
   pageMocks.pageState = {
     kind: "empty",
     projects: [],
@@ -4157,6 +4160,77 @@ describe("HomePage project flow errors", () => {
     expect(spacedText).not.toContain("PR handoff");
     expect(spacedText).not.toContain("Deployments");
     expect(spacedText).not.toContain("Repository URL");
+  });
+
+  it("labels existing artifacts as the current version while an LP continuation is running", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState({
+      messages: [
+        {
+          id: "message_1",
+          taskId: "task_1",
+          role: "user",
+          content: "Create a summer shoe landing page.",
+          createdAt: "2026-05-12T08:00:00.000Z"
+        },
+        {
+          id: "message_2",
+          taskId: "task_1",
+          role: "assistant",
+          content: "LP 页面文件已准备好，可以预览和继续调整。",
+          createdAt: "2026-05-12T08:01:00.000Z"
+        },
+        {
+          id: "message_3",
+          taskId: "task_1",
+          role: "user",
+          content: "Make the hero more premium.",
+          createdAt: "2026-05-12T08:02:00.000Z"
+        }
+      ],
+      runEvents: [
+        {
+          id: "event_planner_adjustment",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_planner_adjustment",
+          sequence: 1,
+          type: "run.started",
+          message: "Planner started.",
+          payload: { role: "planner" },
+          createdAt: "2026-05-12T08:02:01.000Z"
+        }
+      ]
+    });
+    pageMocks.getLiveTaskStateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        taskId: "task_1",
+        projectId: "project_1",
+        taskType: "lp_generation",
+        taskStatus: "complete",
+        stateVersion: "running",
+        isTerminal: false,
+        nextPollMs: 1200,
+        updatedAt: "2026-05-12T08:02:02.000Z",
+        messages: [],
+        runs: [],
+        runEvents: [],
+        recovery: { runs: [] },
+        workerQueue: emptyWorkerQueue,
+        interrupt: unavailableInterrupt
+      }
+    });
+
+    const page = await HomePage({
+      searchParams: Promise.resolve({})
+    });
+    const text = collectText(page).join(" ");
+
+    expect(text).toContain("Current");
+    expect(text).toContain("Task is running");
+    expect(text).not.toContain("Task complete");
   });
 
   it("renders artifact diff cards and a selected bounded snippet", async () => {
