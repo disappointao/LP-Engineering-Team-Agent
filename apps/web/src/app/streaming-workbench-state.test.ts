@@ -19,18 +19,18 @@ describe("streaming workbench state", () => {
     });
   });
 
-  it("stores running status labels for slow first-token streams", () => {
+  it("keeps running status labels out of localized visible copy", () => {
     const state = reduceStreamingWorkbenchEvent(createInitialStreamingWorkbenchState(), {
       type: "run.status",
       taskId: "task_1",
       state: "running",
-      label: "Connecting to model provider"
+      label: "Generating response"
     });
 
     expect(state).toMatchObject({
       status: "streaming",
       taskId: "task_1",
-      statusMessage: "Connecting to model provider"
+      statusMessage: undefined
     });
   });
 

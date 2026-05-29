@@ -40,6 +40,7 @@ type StreamingWorkbenchAction =
   | { type: "event"; event: ChatStreamEvent }
   | { type: "error"; message: string }
   | { type: "clear_transient_after_refresh" }
+  | { type: "clear_terminal_after_route_sync" }
   | { type: "clear_live_task_submit_after_refresh" };
 
 function streamingWorkbenchReducer(
@@ -63,6 +64,8 @@ function streamingWorkbenchReducer(
       };
     case "clear_transient_after_refresh":
       return getTerminalStreamingStateAfterRefresh(state, true);
+    case "clear_terminal_after_route_sync":
+      return createInitialStreamingWorkbenchState();
     case "clear_live_task_submit_after_refresh":
       return getLiveTaskSubmitAcceptedStreamingState();
   }
@@ -94,11 +97,37 @@ export function getTerminalStreamingStateAfterRefresh(
     return state;
   }
 
-  if (state.status === "completed" || state.status === "fallback_required") {
+  if (state.status === "completed") {
+    return state;
+  }
+  if (state.status === "fallback_required") {
     return createInitialStreamingWorkbenchState();
   }
 
   return state;
+}
+
+export function shouldClearTerminalStreamingStateAfterRouteSync({
+  didRequestRefresh,
+  state,
+  routeTaskId,
+  liveTaskId
+}: {
+  didRequestRefresh: boolean;
+  state: StreamingWorkbenchState;
+  routeTaskId?: string;
+  liveTaskId?: string;
+}): boolean {
+  if (!didRequestRefresh) {
+    return false;
+  }
+  if (state.status !== "completed") {
+    return false;
+  }
+  if (!state.taskId) {
+    return false;
+  }
+  return routeTaskId === state.taskId || liveTaskId === state.taskId;
 }
 
 export function getLiveTaskSubmitAcceptedStreamingState(): StreamingWorkbenchState {
@@ -526,6 +555,7 @@ export function StreamingWorkbench({
   const liveTaskFallbackHandoffRef = useRef(
     createInitialLiveTaskFallbackHandoffState()
   );
+  const terminalRefreshPendingRef = useRef(false);
   const submittedPromptRef = useRef("");
   const stateRef = useRef(createInitialStreamingWorkbenchState());
   const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
@@ -582,6 +612,25 @@ export function StreamingWorkbench({
     fallbackSubmitPendingRef.current = false;
     formRef.current?.requestSubmit();
   }, [fallbackPrompt]);
+
+  useEffect(() => {
+    if (
+      !shouldClearTerminalStreamingStateAfterRouteSync({
+        didRequestRefresh: terminalRefreshPendingRef.current,
+        state,
+        routeTaskId: taskId,
+        liveTaskId
+      })
+    ) {
+      return;
+    }
+
+    terminalRefreshPendingRef.current = false;
+    setVisibleSubmittedPrompt(undefined);
+    const nextState = createInitialStreamingWorkbenchState();
+    applyState(nextState);
+    dispatch({ type: "clear_terminal_after_route_sync" });
+  }, [liveTaskId, state, taskId]);
 
   const applyState = (nextState: StreamingWorkbenchState) => {
     stateRef.current = nextState;
@@ -744,7 +793,7 @@ export function StreamingWorkbench({
   };
 
   const refreshAndClearTerminalState = () => {
-    setVisibleSubmittedPrompt(undefined);
+    terminalRefreshPendingRef.current = true;
     replaceWithTerminalTaskRoute();
     router.refresh();
     const nextState = getTerminalStreamingStateAfterRefresh(stateRef.current, true);

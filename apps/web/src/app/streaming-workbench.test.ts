@@ -21,6 +21,7 @@ import {
   startLiveTaskFallbackHandoff,
   shouldRequestFallbackSubmitAfterCommit,
   shouldStartLiveTaskAfterFallback,
+  shouldClearTerminalStreamingStateAfterRouteSync,
   shouldSubmitDirectlyToLiveTask,
   getComposerSubmitIntent,
   getStreamingSubmitDecision,
@@ -170,16 +171,34 @@ describe("streaming workbench composer primary action", () => {
 });
 
 describe("streaming workbench terminal refresh state", () => {
-  it("clears completed transient assistant state after requesting a refresh", () => {
+  it("keeps completed transient assistant state visible while refresh is pending", () => {
     const completedState: StreamingWorkbenchState = {
       ...createInitialStreamingWorkbenchState(),
       status: "completed",
+      taskId: "task_1",
       assistantContent: "Persisted assistant reply"
     };
 
     expect(getTerminalStreamingStateAfterRefresh(completedState, true)).toEqual(
-      createInitialStreamingWorkbenchState()
+      completedState
     );
+  });
+
+  it("clears completed transient assistant state after the terminal task route is loaded", () => {
+    const completedState: StreamingWorkbenchState = {
+      ...createInitialStreamingWorkbenchState(),
+      status: "completed",
+      taskId: "task_1",
+      assistantContent: "Persisted assistant reply"
+    };
+
+    expect(
+      shouldClearTerminalStreamingStateAfterRouteSync({
+        didRequestRefresh: true,
+        state: completedState,
+        routeTaskId: "task_1"
+      })
+    ).toBe(true);
   });
 
   it("keeps terminal error state visible after requesting a refresh", () => {
@@ -264,21 +283,21 @@ describe("streaming workbench visible status", () => {
     persistence_failed: "The response was generated but could not be saved."
   };
 
-  it("uses running stream status labels before the first token arrives", () => {
+  it("uses localized running status copy before the first token arrives", () => {
     const state: StreamingWorkbenchState = {
       ...createInitialStreamingWorkbenchState(),
       status: "streaming",
-      statusMessage: "Connecting to model provider"
+      statusMessage: undefined
     };
 
     expect(
       getVisibleStreamingStatus(
         state,
-        "Generating response",
+        "正在生成回复",
         "The chat response could not be generated.",
         errorMessages
       )
-    ).toBe("Connecting to model provider");
+    ).toBe("正在生成回复");
   });
 
   it("uses localized typed error messages instead of raw server messages", () => {

@@ -78,7 +78,7 @@ export function reduceStreamingWorkbenchEvent(
           ...state,
           status: "streaming",
           taskId: event.taskId,
-          statusMessage: event.label
+          statusMessage: undefined
         };
       }
       if (event.state === "completed") {
