@@ -79,6 +79,7 @@ export type RunAgentStepBeforeRuntime = (
 export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentStepResult> {
   const now = input.now ?? (() => new Date());
   const startedAt = nextRepositoryTimestamp(input.repositories, now);
+  let nextEventSequence = 1;
   const contextPack = await assembleContextPack({
     repositories: input.repositories,
     service: input.service,
@@ -105,8 +106,23 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
   await input.repositories.runs.save(startedRun);
 
   const preRuntimeEvents: RunEventRecord[] = [];
+  const streamedRuntimeEvents: RunEventRecord[] = [];
   let runtimeStartedEvent: RunEventRecord | undefined;
   let result: RuntimeRunResult;
+  const persistRunEvent = async (event: RuntimeEvent): Promise<RunEventRecord> => {
+    const record = toRunEventRecord({
+      event,
+      runId: input.runId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      sequence: nextEventSequence,
+      createdAt: nextRepositoryTimestamp(input.repositories, now)
+    });
+    await input.repositories.runEvents.save(record);
+    nextEventSequence += 1;
+    return record;
+  };
+
   try {
     if (input.beforeRuntime) {
       const drafts = await input.beforeRuntime({
@@ -119,7 +135,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
           runId: input.runId,
           projectId: input.projectId,
           taskId: input.taskId,
-          sequence: preRuntimeEvents.length + 1,
+          sequence: nextEventSequence,
           createdAt: nextRepositoryTimestamp(input.repositories, now)
         });
         if (draft.beforePersist) {
@@ -133,18 +149,11 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
           }
           throw error;
         }
+        nextEventSequence += 1;
         preRuntimeEvents.push(event);
       }
     }
-    runtimeStartedEvent = toRunEventRecord({
-      event: toRunStartedEvent(input),
-      runId: input.runId,
-      projectId: input.projectId,
-      taskId: input.taskId,
-      sequence: preRuntimeEvents.length + 1,
-      createdAt: nextRepositoryTimestamp(input.repositories, now)
-    });
-    await input.repositories.runEvents.save(runtimeStartedEvent);
+    runtimeStartedEvent = await persistRunEvent(toRunStartedEvent(input));
 
     result = await executeRuntimeStep(input, {
       runId: input.runId,
@@ -153,6 +162,8 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       role: input.role,
       input: contextPack.input,
       context: contextPack.runtimeContext
+    }, async (event) => {
+      streamedRuntimeEvents.push(await persistRunEvent(event));
     });
     if (input.finalizeResult) {
       result = await input.finalizeResult({ result, contextPack });
@@ -175,7 +186,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
         runId: input.runId,
         projectId: input.projectId,
         taskId: input.taskId,
-        sequence: preRuntimeEvents.length + (runtimeStartedEvent ? 1 : 0) + 1,
+        sequence: nextEventSequence,
         createdAt: completedAt
       })
     );
@@ -202,7 +213,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
       runId: input.runId,
       projectId: input.projectId,
       taskId: input.taskId,
-      sequence: preRuntimeEvents.length + (runtimeStartedEvent ? 1 : 0) + index + 1,
+      sequence: nextEventSequence + index,
       createdAt: completedAt
     })
   );
@@ -215,6 +226,7 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
     events: [
       ...preRuntimeEvents,
       ...(runtimeStartedEvent ? [runtimeStartedEvent] : []),
+      ...streamedRuntimeEvents,
       ...events
     ],
     contextPack,
@@ -224,16 +236,46 @@ export async function runAgentStep(input: RunAgentStepInput): Promise<RunAgentSt
 
 async function executeRuntimeStep(
   input: RunAgentStepInput,
-  request: RuntimeRunRequest
+  request: RuntimeRunRequest,
+  onStreamRuntimeEvent?: (event: RuntimeEvent) => Promise<void>
 ): Promise<RuntimeRunResult> {
   if (!input.runtime.stream) {
     return input.runtime.run(request);
   }
 
   let terminalResult: RuntimeRunResult | undefined;
+  let chunkCount = 0;
+  let receivedChars = 0;
+  let lastPersistedProgressChars = 0;
+  await onStreamRuntimeEvent?.(toModelStreamStartedEvent(request));
   for await (const event of input.runtime.stream(request)) {
+    if (event.type === "model.delta") {
+      chunkCount += 1;
+      receivedChars += event.text.length;
+      if (
+        chunkCount === 1 ||
+        receivedChars - lastPersistedProgressChars >= streamProgressCharInterval
+      ) {
+        lastPersistedProgressChars = receivedChars;
+        await onStreamRuntimeEvent?.(
+          toModelStreamProgressEvent({
+            request,
+            chunkCount,
+            receivedChars
+          })
+        );
+      }
+      continue;
+    }
     if (event.type === "completed") {
       terminalResult = event.result;
+      await onStreamRuntimeEvent?.(
+        toModelStreamCompletedEvent({
+          request,
+          chunkCount,
+          receivedChars
+        })
+      );
       break;
     }
   }
@@ -242,6 +284,55 @@ async function executeRuntimeStep(
     throw new Error("Runtime stream completed without terminal result.");
   }
   return terminalResult;
+}
+
+const streamProgressCharInterval = 512;
+
+function toModelStreamStartedEvent(request: RuntimeRunRequest): RuntimeEvent {
+  return {
+    type: "model.stream.started",
+    message: `${request.role} model stream started`,
+    runId: request.runId,
+    role: request.role
+  };
+}
+
+function toModelStreamProgressEvent({
+  request,
+  chunkCount,
+  receivedChars
+}: {
+  request: RuntimeRunRequest;
+  chunkCount: number;
+  receivedChars: number;
+}): RuntimeEvent {
+  return {
+    type: "model.stream.progress",
+    message: `${request.role} model stream in progress`,
+    runId: request.runId,
+    role: request.role,
+    chunkCount,
+    receivedChars
+  };
+}
+
+function toModelStreamCompletedEvent({
+  request,
+  chunkCount,
+  receivedChars
+}: {
+  request: RuntimeRunRequest;
+  chunkCount: number;
+  receivedChars: number;
+}): RuntimeEvent {
+  return {
+    type: "model.stream.completed",
+    message: `${request.role} model stream completed`,
+    runId: request.runId,
+    role: request.role,
+    chunkCount,
+    receivedChars
+  };
 }
 
 function toRunRecordState(state: RuntimeRunResult["state"]): RunRecord["state"] {

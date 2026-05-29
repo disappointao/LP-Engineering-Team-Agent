@@ -1716,6 +1716,10 @@ button {
   padding: 7px 0;
 }
 
+.taskNarrativeStep[data-collapsed="true"] {
+  padding: 5px 0;
+}
+
 .taskNarrativeStep:not(:last-child)::after {
   content: "";
   position: absolute;
@@ -1788,6 +1792,66 @@ button {
   color: #4d535b;
   font-size: 0.78rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.taskNarrativeDetails {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.taskNarrativeDetail {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+  min-width: 0;
+  color: #4d535b;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.taskNarrativeDetail > span {
+  width: 9px;
+  height: 9px;
+  margin-top: 3px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.taskNarrativeDetail[data-status="running"] > span {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
+}
+
+.taskNarrativeDetail[data-status="complete"] > span {
+  border-color: var(--accent-line);
+  background: var(--accent);
+}
+
+.taskNarrativeDetail[data-status="failed"] > span {
+  border-color: #fecaca;
+  background: #dc2626;
+}
+
+.taskNarrativeDetail div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.taskNarrativeDetail strong {
+  color: #3b4148;
+  font-weight: 780;
+}
+
+.taskNarrativeDetail em {
+  color: var(--muted);
+  font-style: normal;
   overflow-wrap: anywhere;
 }
 

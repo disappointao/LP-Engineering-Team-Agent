@@ -537,6 +537,8 @@ export interface LiveTaskRunEventPayload {
   pageVersionId?: string;
   kind?: string;
   fileCount?: number;
+  chunkCount?: number;
+  receivedChars?: number;
   handoffId?: string;
   fromRunId?: string;
   fromRole?: string;
@@ -577,7 +579,13 @@ type LiveTaskStringPayloadKey =
   | "errorName"
   | "errorCode";
 
-type LiveTaskNumberPayloadKey = "skillCount" | "toolCount" | "fileCount" | "status";
+type LiveTaskNumberPayloadKey =
+  | "skillCount"
+  | "toolCount"
+  | "fileCount"
+  | "chunkCount"
+  | "receivedChars"
+  | "status";
 
 export interface LiveTaskRunEvent {
   id: string;
@@ -1132,6 +1140,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       "skillCount",
       "toolCount",
       "fileCount",
+      "chunkCount",
+      "receivedChars",
       "status"
     ];
 

@@ -42,6 +42,23 @@ const payload = {
 };
 
 describe("live task state helpers", () => {
+  it("can start from a server-rendered payload", () => {
+    const state = createInitialLiveTaskState(payload);
+
+    expect(state.status).toBe("ready");
+    expect(state.payload?.stateVersion).toBe("v1");
+  });
+
+  it("resets to a new server-rendered payload", () => {
+    const state = reduceLiveTaskState(createInitialLiveTaskState(), {
+      type: "reset",
+      payload
+    });
+
+    expect(state.status).toBe("ready");
+    expect(state.payload?.taskId).toBe("task_1");
+  });
+
   it("stores the latest payload and keeps polling while non-terminal", () => {
     const state = reduceLiveTaskState(createInitialLiveTaskState(), {
       type: "payload",

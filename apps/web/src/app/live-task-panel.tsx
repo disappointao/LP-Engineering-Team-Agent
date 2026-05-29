@@ -29,6 +29,7 @@ import {
 export interface LiveTaskPanelProps {
   taskId?: string;
   initialProjectId?: string;
+  initialPayload?: LiveTaskStatePayload;
   initialPreviewVersionKey?: string;
   copy: LiveTaskCopy;
 }
@@ -292,21 +293,47 @@ function renderTaskNarrativeTimeline({
 
 function renderTaskNarrativeStep(step: TaskNarrativeStepViewModel) {
   return (
-    <div className="taskNarrativeStep" data-status={step.status} key={step.id}>
+    <div
+      className="taskNarrativeStep"
+      data-collapsed={step.isCollapsed ? "true" : "false"}
+      data-status={step.status}
+      key={step.id}
+    >
       <div className="taskNarrativeDot" aria-hidden="true" />
       <div className="taskNarrativeBody">
         <div className="taskNarrativeTopline">
           <strong>{step.title}</strong>
           <span>{step.statusLabel}</span>
         </div>
-        <p>{step.body}</p>
-        {step.chips.length > 0 ? (
-          <div className="taskNarrativeChips">
-            {step.chips.map((chip) => (
-              <span key={chip}>{chip}</span>
-            ))}
-          </div>
-        ) : null}
+        {step.isCollapsed ? null : (
+          <>
+            <p>{step.body}</p>
+            {step.details.length > 0 ? (
+              <div className="taskNarrativeDetails" aria-label={`${step.title}过程`}>
+                {step.details.map((detail) => (
+                  <div
+                    className="taskNarrativeDetail"
+                    data-status={detail.status}
+                    key={detail.id}
+                  >
+                    <span aria-hidden="true" />
+                    <div>
+                      <strong>{detail.title}</strong>
+                      {detail.description ? <em>{detail.description}</em> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {step.chips.length > 0 ? (
+              <div className="taskNarrativeChips">
+                {step.chips.map((chip) => (
+                  <span key={chip}>{chip}</span>
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -315,18 +342,21 @@ function renderTaskNarrativeStep(step: TaskNarrativeStepViewModel) {
 export function LiveTaskPanel({
   taskId,
   initialProjectId: acceptedInitialProjectId,
+  initialPayload,
   initialPreviewVersionKey,
   copy
 }: LiveTaskPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(
     reduceLiveTaskState,
-    createInitialLiveTaskState()
+    createInitialLiveTaskState(initialPayload?.taskId === taskId ? initialPayload : undefined)
   );
   const stateRef = useRef(state);
   const previousPreviewVersionKeyRef = useRef(initialPreviewVersionKey);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const initialProjectId = acceptedInitialProjectId?.trim() || undefined;
+  const initialPayloadForTask = initialPayload?.taskId === taskId ? initialPayload : undefined;
+  const initialPayloadStateVersion = initialPayloadForTask?.stateVersion;
 
   useEffect(() => {
     previousPreviewVersionKeyRef.current = initialPreviewVersionKey;
@@ -338,7 +368,11 @@ export function LiveTaskPanel({
     }
 
     let isMounted = true;
-    stateRef.current = createInitialLiveTaskState();
+    stateRef.current = createInitialLiveTaskState(initialPayloadForTask);
+    dispatch({
+      type: "reset",
+      ...(initialPayloadForTask ? { payload: initialPayloadForTask } : {})
+    });
     previousPreviewVersionKeyRef.current = initialPreviewVersionKey;
 
     const clearPollTimer = () => {
@@ -412,7 +446,9 @@ export function LiveTaskPanel({
       applyPayload(result.payload);
     };
 
-    void pollTaskState();
+    if (!initialPayloadForTask?.isTerminal) {
+      void pollTaskState();
+    }
 
     return () => {
       isMounted = false;
@@ -420,6 +456,7 @@ export function LiveTaskPanel({
     };
   }, [
     copy.liveTaskRefreshError,
+    initialPayloadStateVersion,
     initialPreviewVersionKey,
     initialProjectId,
     router,

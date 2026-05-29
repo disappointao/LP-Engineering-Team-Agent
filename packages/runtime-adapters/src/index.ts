@@ -118,6 +118,28 @@ export type RuntimeEvent =
       streamingEnabled?: ModelResponse["call"]["streamingEnabled"];
     }
   | {
+      type: "model.stream.started";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+    }
+  | {
+      type: "model.stream.progress";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      chunkCount: number;
+      receivedChars: number;
+    }
+  | {
+      type: "model.stream.completed";
+      message: string;
+      runId?: string;
+      role?: AgentRole;
+      chunkCount: number;
+      receivedChars: number;
+    }
+  | {
       type: "model.retry.scheduled";
       message: string;
       runId?: string;

@@ -1112,6 +1112,20 @@ pnpm --filter @lp-agent/model-gateway test
 - Failure injection 的价值是验证 safe diagnostics 和 non-leakage。raw model output、raw provider response、secret、base URL、raw skill content、完整 artifact 内容、本机路径和 worker raw details 不能因为测试或调试参数进入 UI。
 - 通过 isolated Playwright JSON state 构造 fail-closed edge case 是可接受的，但只能用于 UI 无法合法创建的状态，并且不能污染用户本地 state 或绕开产品安全边界。
 
+### 增量：LP 安全流式过程反馈
+
+当前实现状态：
+
+- `runAgentStep()` 消费 `runtime.stream` 时会在 run 仍处于 running 状态期间持久化安全的 stream lifecycle event：`model.stream.started`、`model.stream.progress`、`model.stream.completed`。
+- `model.stream.progress` 只记录 chunk count 和 received character count 这类安全计数，不保存 raw model delta、raw JSON、HTML/CSS/JS 片段或 provider 原始响应。
+- Web `LiveTaskPanel` 从 safe run events 投影出 Manus 风格的阶段内过程：当前阶段展开显示“接收模型流式响应”等细动作，已完成或等待中的阶段自动折叠，详细工程事实仍保留在高级 run timeline/recovery。
+
+学习重点：
+
+- 模型流式 delta 是执行材料，不是用户可见事实源。为了避免泄露 raw artifact、secret、provider response 或未校验模型输出，UI 应消费安全过程事件，而不是直接消费 raw delta。
+- 流式体验需要两个层次：底层 runtime 持续消费 provider stream，上层 run event 只发布可恢复、可刷新、可审计的安全状态。
+- 细粒度反馈不应把 agent 内部角色名直接推给用户；planner/builder/reviewer/deployer 仍是 orchestration fact，前端应映射成“理解需求、生成页面、检查质量、准备交付”等用户语言。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。

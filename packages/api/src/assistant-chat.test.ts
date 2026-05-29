@@ -50,7 +50,8 @@ describe("assistant chat prompt", () => {
       trace: { injected: ["skills:1"], omitted: [] }
     });
 
-    expect(prompt).toContain("Project: Spring Campaign");
+    expect(prompt).toContain("Active workspace: Spring Campaign");
+    expect(prompt).not.toContain("project_1");
     expect(prompt).toContain("Skill: Brand Voice@1.0.0");
     expect(prompt).toContain("Earlier buyer question");
     expect(prompt).toContain("How should this LP speak to buyers?");
@@ -82,6 +83,25 @@ describe("assistant chat prompt", () => {
 
     expect(prompt.length).toBeLessThanOrEqual(12000);
     expect(prompt).toContain(`User message:\n${userPrompt}`);
+  });
+
+  it("hides internal provider project labels from ordinary chat prompts", () => {
+    const prompt = createAssistantChatPrompt({
+      userPrompt: "你好，测试一下首页回复状态",
+      project: { id: "project_4", name: "Local Real Provider" },
+      context: {
+        skills: [],
+        mcpTools: [],
+        approval: { state: "not_required" },
+        artifactWorkspace: { mode: "memory", writableFiles: [] }
+      },
+      trace: { injected: [], omitted: [] }
+    });
+
+    expect(prompt).not.toContain("Local Real Provider");
+    expect(prompt).not.toContain("project_4");
+    expect(prompt).toContain("Active workspace: default user workspace");
+    expect(prompt).toContain("must not be mentioned");
   });
 
   it("creates a safe context summary without raw skill content", () => {

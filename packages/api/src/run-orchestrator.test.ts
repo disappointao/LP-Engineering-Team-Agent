@@ -37,9 +37,19 @@ describe("run agent step finalization", () => {
     const events = await repositories.runEvents.listForRun("run_planner_stream_1");
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "model.completed",
       "run.completed"
     ]);
+    expect(events.find((event) => event.type === "model.stream.progress")).toMatchObject({
+      payload: {
+        chunkCount: 1,
+        receivedChars: 9,
+        role: "planner"
+      }
+    });
     expect(JSON.stringify(events)).not.toContain("Planning ");
   });
 
@@ -67,6 +77,18 @@ describe("run agent step finalization", () => {
       expect.objectContaining({
         sequence: 1,
         type: "run.started"
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        type: "model.stream.started"
+      }),
+      expect.objectContaining({
+        sequence: 3,
+        type: "model.stream.progress",
+        payload: expect.objectContaining({
+          chunkCount: 1,
+          receivedChars: 22
+        })
       })
     ]);
 

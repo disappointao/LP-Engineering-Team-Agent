@@ -774,16 +774,34 @@ p {
 export const bundleSingleFileHtml = (artifact: StaticArtifacts): string => {
   const stylesheetMarker = '<link rel="stylesheet" href="styles.css">';
   const scriptMarker = '  <script src="script.js"></script>';
+  const styleTag = `<style>\n${escapeStyleContent(artifact.stylesCss)}\n</style>`;
+  const scriptTag = `  <script>\n${escapeScriptContent(artifact.scriptJs)}\n  </script>`;
 
-  if (!artifact.indexHtml.includes(stylesheetMarker)) {
-    throw new Error("Cannot bundle HTML without expected stylesheet marker.");
-  }
+  const withStyles = artifact.indexHtml.includes(stylesheetMarker)
+    ? artifact.indexHtml.replace(stylesheetMarker, styleTag)
+    : insertBeforeClosingTag({
+        html: artifact.indexHtml,
+        closingTag: "</head>",
+        content: styleTag
+      });
 
-  if (!artifact.indexHtml.includes(scriptMarker)) {
-    throw new Error("Cannot bundle HTML without expected script marker.");
-  }
-
-  return artifact.indexHtml
-    .replace(stylesheetMarker, `<style>\n${escapeStyleContent(artifact.stylesCss)}\n</style>`)
-    .replace(scriptMarker, `  <script>\n${escapeScriptContent(artifact.scriptJs)}\n  </script>`);
+  return withStyles.includes(scriptMarker)
+    ? withStyles.replace(scriptMarker, scriptTag)
+    : insertBeforeClosingTag({
+        html: withStyles,
+        closingTag: "</body>",
+        content: scriptTag
+      });
 };
+
+function insertBeforeClosingTag(input: {
+  html: string;
+  closingTag: "</head>" | "</body>";
+  content: string;
+}): string {
+  const index = input.html.toLowerCase().lastIndexOf(input.closingTag);
+  if (index === -1) {
+    return `${input.html}\n${input.content}`;
+  }
+  return `${input.html.slice(0, index)}${input.content}\n${input.html.slice(index)}`;
+}

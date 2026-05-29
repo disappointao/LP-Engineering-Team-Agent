@@ -111,14 +111,18 @@ describe("static artifact generation", () => {
     expect(bundled).toContain("<\\/script>");
   });
 
-  it("throws when bundling HTML without expected asset markers", () => {
-    expect(() =>
-      bundleSingleFileHtml({
-        indexHtml: "<!doctype html><html><head></head><body></body></html>",
-        stylesCss: "",
-        scriptJs: ""
-      })
-    ).toThrow("Cannot bundle HTML without expected stylesheet marker.");
+  it("bundles model HTML that omits expected local asset markers", () => {
+    const bundled = bundleSingleFileHtml({
+      indexHtml: "<!doctype html><html><head><title>LP</title></head><body><main>Hero</main></body></html>",
+      stylesCss: "body { color: #111827; }",
+      scriptJs: "window.lpAgent = true;"
+    });
+
+    expect(bundled).toContain("<style>");
+    expect(bundled).toContain("body { color: #111827; }");
+    expect(bundled).toContain("<script>");
+    expect(bundled).toContain("window.lpAgent = true;");
+    expect(bundled).toContain("<main>Hero</main>");
   });
 });
 

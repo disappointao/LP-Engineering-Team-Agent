@@ -902,40 +902,52 @@ describe("demo workbench service", () => {
       "deployer"
     ]);
     expect(runs.every((run: RunRecord) => run.state === "completed")).toBe(true);
-    expect(events.map((event: RunEventRecord) => `${event.runId}:${event.sequence}:${event.type}`)).toEqual([
-      "run_planner_brief_1:1:run.started",
-      "run_planner_brief_1:2:runtime.context.loaded",
-      "run_planner_brief_1:3:model.completed",
-      "run_planner_brief_1:4:run.completed",
-      "run_planner_brief_1:5:handoff.created",
-      "run_builder_version_1:1:handoff.consumed",
-      "run_builder_version_1:2:run.started",
-      "run_builder_version_1:3:runtime.context.loaded",
-      "run_builder_version_1:4:model.completed",
-      "run_builder_version_1:5:artifact.created",
-      "run_builder_version_1:6:run.completed",
-      "run_builder_version_1:7:artifact.workspace.created",
-      "run_builder_version_1:8:handoff.created",
-      "run_reviewer_version_1:1:handoff.consumed",
-      "run_reviewer_version_1:2:run.started",
-      "run_reviewer_version_1:3:runtime.context.loaded",
-      "run_reviewer_version_1:4:model.completed",
-      "run_reviewer_version_1:5:review.completed",
-      "run_reviewer_version_1:6:run.completed",
-      "run_reviewer_version_1:7:handoff.created",
-      "run_deployer_version_1:1:handoff.consumed",
-      "run_deployer_version_1:2:run.started",
-      "run_deployer_version_1:3:runtime.context.loaded",
-      "run_deployer_version_1:4:model.completed",
-      "run_deployer_version_1:5:run.completed"
-    ]);
+	    expect(events.map((event: RunEventRecord) => `${event.runId}:${event.sequence}:${event.type}`)).toEqual([
+	      "run_planner_brief_1:1:run.started",
+	      "run_planner_brief_1:2:model.stream.started",
+	      "run_planner_brief_1:3:model.stream.progress",
+	      "run_planner_brief_1:4:model.stream.completed",
+	      "run_planner_brief_1:5:runtime.context.loaded",
+	      "run_planner_brief_1:6:model.completed",
+	      "run_planner_brief_1:7:run.completed",
+	      "run_planner_brief_1:8:handoff.created",
+	      "run_builder_version_1:1:handoff.consumed",
+	      "run_builder_version_1:2:run.started",
+	      "run_builder_version_1:3:model.stream.started",
+	      "run_builder_version_1:4:model.stream.progress",
+	      "run_builder_version_1:5:model.stream.completed",
+	      "run_builder_version_1:6:runtime.context.loaded",
+	      "run_builder_version_1:7:model.completed",
+	      "run_builder_version_1:8:artifact.created",
+	      "run_builder_version_1:9:run.completed",
+	      "run_builder_version_1:10:artifact.workspace.created",
+	      "run_builder_version_1:11:handoff.created",
+	      "run_reviewer_version_1:1:handoff.consumed",
+	      "run_reviewer_version_1:2:run.started",
+	      "run_reviewer_version_1:3:model.stream.started",
+	      "run_reviewer_version_1:4:model.stream.progress",
+	      "run_reviewer_version_1:5:model.stream.completed",
+	      "run_reviewer_version_1:6:runtime.context.loaded",
+	      "run_reviewer_version_1:7:model.completed",
+	      "run_reviewer_version_1:8:review.completed",
+	      "run_reviewer_version_1:9:run.completed",
+	      "run_reviewer_version_1:10:handoff.created",
+	      "run_deployer_version_1:1:handoff.consumed",
+	      "run_deployer_version_1:2:run.started",
+	      "run_deployer_version_1:3:model.stream.started",
+	      "run_deployer_version_1:4:model.stream.progress",
+	      "run_deployer_version_1:5:model.stream.completed",
+	      "run_deployer_version_1:6:runtime.context.loaded",
+	      "run_deployer_version_1:7:model.completed",
+	      "run_deployer_version_1:8:run.completed"
+	    ]);
     expect(runs[1]?.contextSummary.injected).toEqual(
       expect.arrayContaining(["artifactWorkspace:memory"])
     );
     const workspaceEvent = events.find((event) => event.type === "artifact.workspace.created");
-    expect(workspaceEvent).toMatchObject({
-      runId: "run_builder_version_1",
-      sequence: 7,
+	    expect(workspaceEvent).toMatchObject({
+	      runId: "run_builder_version_1",
+	      sequence: 10,
       payload: expect.objectContaining({
         workspaceId: pageVersion.artifactWorkspaceId,
         pageVersionId: pageVersion.id,
@@ -3056,6 +3068,9 @@ describe("demo workbench service", () => {
     const events = await repositories.runEvents.listForRun("run_planner_brief_1");
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "model.output.parse_failed",
@@ -3139,6 +3154,9 @@ describe("demo workbench service", () => {
     const events = await repositories.runEvents.listForProject(project.id);
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "model.output.parse_failed",
@@ -3235,6 +3253,9 @@ describe("demo workbench service", () => {
     const events = await repositories.runEvents.listForProject(project.id);
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "model.output.parse_failed",
@@ -3374,6 +3395,9 @@ describe("demo workbench service", () => {
     expect(builderEvents.map((event) => event.type)).toEqual([
       "handoff.consumed",
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "artifact.created",
@@ -3523,6 +3547,9 @@ describe("demo workbench service", () => {
     expect(builderEvents.map((event) => event.type)).toEqual([
       "handoff.consumed",
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "artifact.created",
@@ -3672,6 +3699,9 @@ describe("demo workbench service", () => {
     expect(builderEvents.map((event) => event.type)).toEqual([
       "handoff.consumed",
       "run.started",
+      "model.stream.started",
+      "model.stream.progress",
+      "model.stream.completed",
       "runtime.context.loaded",
       "model.completed",
       "artifact.created",

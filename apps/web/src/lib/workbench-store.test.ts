@@ -3465,11 +3465,17 @@ describe("web workbench store", () => {
         })
       ]);
       const events = await repositories.runEvents.listForTask(started.taskId);
-      expect(events.map((event) => event.runId)).toEqual([
-        runs[0]?.id,
-        runs[0]?.id,
-        runs[0]?.id,
-        runs[0]?.id
+      expect(events.map((event) => event.runId)).toEqual(
+        Array.from({ length: 7 }, () => runs[0]?.id)
+      );
+      expect(events.map((event) => event.type)).toEqual([
+        "run.started",
+        "model.stream.started",
+        "model.stream.progress",
+        "model.stream.completed",
+        "runtime.context.loaded",
+        "model.completed",
+        "run.completed"
       ]);
     });
 

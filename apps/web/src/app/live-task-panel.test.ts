@@ -130,7 +130,7 @@ describe("LiveTaskStatusSummary", () => {
     expect(text).toContain("生成静态页面文件");
     expect(text).toContain("3 / 4");
     expect(text).toContain("处理中");
-    expect(text).toContain("页面文件已准备好");
+    expect(text).not.toContain("页面文件已准备好");
     expect(text).not.toContain("3 files");
     expect(text).not.toContain("2 changed");
     expect(text).not.toContain("Live task progress");
@@ -197,6 +197,33 @@ describe("LiveTaskStatusSummary", () => {
           payload: { role: "builder", fromRole: "planner", toRole: "builder" }
         },
         {
+          id: "event_model_stream_started",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.stream.started",
+          createdAt: "2026-05-21T00:00:03.200Z",
+          payload: { role: "builder" }
+        },
+        {
+          id: "event_model_stream_progress",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.stream.progress",
+          createdAt: "2026-05-21T00:00:03.500Z",
+          payload: { role: "builder", chunkCount: 6, receivedChars: 1024 }
+        },
+        {
+          id: "event_model_stream_completed",
+          projectId: "project_1",
+          taskId: "task_1",
+          runId: "run_builder_version_1",
+          type: "model.stream.completed",
+          createdAt: "2026-05-21T00:00:03.900Z",
+          payload: { role: "builder", chunkCount: 6, receivedChars: 1024 }
+        },
+        {
           id: "event_model_completed",
           projectId: "project_1",
           taskId: "task_1",
@@ -228,9 +255,13 @@ describe("LiveTaskStatusSummary", () => {
     const text = collectText(rendered).join(" ");
 
     expect(text).toContain("生成静态 LP 文件");
-    expect(text).toContain("正在编写框架无关 HTML/CSS/JS。");
+    expect(text).toContain("模型响应已完成，正在校验输出并准备下一步。");
     expect(text).toContain("上下文已装载");
     expect(text).toContain("接收上一步结果");
+    expect(text).toContain("模型流已连接");
+    expect(text).toContain("模型流已完成");
+    expect(text).toContain("接收模型流式响应");
+    expect(text).toContain("安全响应已接收完成。");
     expect(text).toContain("模型已响应");
     expect(text).toContain("文件已生成：3 个");
     expect(text).not.toContain("<!doctype html");

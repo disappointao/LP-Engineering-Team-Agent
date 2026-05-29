@@ -47,6 +47,15 @@ export interface TaskNarrativeStepViewModel {
   status: TaskNarrativeStatus;
   statusLabel: string;
   chips: string[];
+  details: TaskNarrativeDetailViewModel[];
+  isCollapsed: boolean;
+}
+
+export interface TaskNarrativeDetailViewModel {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskNarrativeStatus;
 }
 
 export interface TaskNarrativeViewModel {
@@ -120,17 +129,18 @@ export function buildTaskProgressViewModel({
   const runs = payload?.runs ?? [];
   const activeRun = runs.find((run) => activeRunStates.has(String(run.state)));
   const failedRun = [...runs].reverse().find((run) => failedRunStates.has(String(run.state)));
-  const currentRun = activeRun ?? failedRun;
+  const hasArtifacts = Boolean(artifactProgress?.artifactWorkspaceId);
+  const currentRun = activeRun ?? (hasArtifacts ? undefined : failedRun);
   const activeStepIndex = getActiveStepIndex({
     hasCurrentRun: Boolean(currentRun),
-    hasArtifacts: Boolean(artifactProgress?.artifactWorkspaceId),
+    hasArtifacts,
     isTerminal: payload?.isTerminal,
     role: currentRun?.role
   });
   const status = getTaskProgressStatus({
     activeRun,
     failedRun,
-    hasArtifacts: Boolean(artifactProgress?.artifactWorkspaceId),
+    hasArtifacts,
     isTerminal: payload?.isTerminal
   });
 
@@ -138,7 +148,10 @@ export function buildTaskProgressViewModel({
     activeStepIndex,
     currentLabel: taskSteps[activeStepIndex] ?? fallbackTaskStep,
     progressLabel: `${activeStepIndex + 1} / ${taskSteps.length}`,
-    resultLabel: artifactProgress?.artifactWorkspaceId ? "页面文件已准备好" : undefined,
+    resultLabel:
+      status === "complete" && artifactProgress?.artifactWorkspaceId
+        ? "页面文件已准备好"
+        : undefined,
     status,
     statusLabel: getTaskProgressStatusLabel(status)
   };
@@ -170,6 +183,7 @@ export function buildTaskNarrativeViewModel({
   }
 
   const latestRunByRole = getLatestRunByNarrativeRole(runs);
+  const activeNarrativeStepIndex = getActiveNarrativeStepIndex(latestRunByRole);
   const highestStartedStepIndex = getHighestStartedNarrativeStepIndex({
     artifactProgress,
     latestRunByRole,
@@ -181,6 +195,7 @@ export function buildTaskNarrativeViewModel({
     const roleEvents = runEvents.filter((event) => eventBelongsToRole(event, role));
     const status = getNarrativeStatus({
       artifactProgress,
+      activeNarrativeStepIndex,
       highestStartedStepIndex,
       index,
       role,
@@ -203,7 +218,15 @@ export function buildTaskNarrativeViewModel({
         role,
         runEvents,
         snapshot: payload.snapshot
-      })
+      }),
+      details: buildNarrativeDetails({
+        artifactProgress,
+        role,
+        roleEvents,
+        snapshot: payload.snapshot,
+        status
+      }),
+      isCollapsed: status !== "running" && status !== "failed"
     };
   });
 
@@ -337,6 +360,7 @@ function getHighestStartedNarrativeStepIndex({
 
 function getNarrativeStatus({
   artifactProgress,
+  activeNarrativeStepIndex,
   highestStartedStepIndex,
   index,
   role,
@@ -345,6 +369,7 @@ function getNarrativeStatus({
   snapshot
 }: {
   artifactProgress?: TaskProgressArtifactProgress;
+  activeNarrativeStepIndex: number;
   highestStartedStepIndex: number;
   index: number;
   role: TaskNarrativeRole;
@@ -354,6 +379,14 @@ function getNarrativeStatus({
 }): TaskNarrativeStatus {
   if (run && activeRunStates.has(String(run.state))) {
     return "running";
+  }
+  if (activeNarrativeStepIndex >= 0) {
+    if (index > activeNarrativeStepIndex) {
+      return "pending";
+    }
+    if (index < activeNarrativeStepIndex) {
+      return "complete";
+    }
   }
   if (
     run &&
@@ -370,6 +403,15 @@ function getNarrativeStatus({
     return "complete";
   }
   return "pending";
+}
+
+function getActiveNarrativeStepIndex(
+  latestRunByRole: Map<TaskNarrativeRole, TaskProgressRun>
+): number {
+  return taskNarrativeSteps.findIndex((step) => {
+    const run = latestRunByRole.get(step.role);
+    return run !== undefined && activeRunStates.has(String(run.state));
+  });
 }
 
 function hasNarrativeCompletionEvidence({
@@ -413,8 +455,22 @@ function getNarrativeBody({
       return step.completeBody;
     case "failed":
       return getNarrativeFailureBody(roleEvents);
-    case "running":
+    case "running": {
+      if (
+        hasRoleEvent(roleEvents, "model.stream.completed") ||
+        hasRoleEvent(roleEvents, "model.completed")
+      ) {
+        return "模型响应已完成，正在校验输出并准备下一步。";
+      }
+      const latestProgress = getLatestStreamProgress(roleEvents);
+      if (latestProgress?.chunkCount) {
+        return "正在接收模型响应，安全进度会持续更新。";
+      }
+      if (hasRoleEvent(roleEvents, "model.stream.started")) {
+        return "模型响应流已连接，正在等待内容。";
+      }
       return step.runningBody;
+    }
     case "pending":
       return step.pendingBody;
   }
@@ -462,6 +518,15 @@ function buildNarrativeChips({
   const chips: string[] = [];
   addChip(chips, roleEvents.some((event) => event.type === "runtime.context.loaded"), "上下文已装载");
   addChip(chips, roleEvents.some((event) => event.type === "handoff.consumed"), "接收上一步结果");
+  addChip(chips, roleEvents.some((event) => event.type === "model.stream.started"), "模型流已连接");
+  const latestStreamProgress = getLatestStreamProgress(roleEvents);
+  addChip(
+    chips,
+    latestStreamProgress !== undefined &&
+      !roleEvents.some((event) => event.type === "model.stream.completed"),
+    "流式响应中"
+  );
+  addChip(chips, roleEvents.some((event) => event.type === "model.stream.completed"), "模型流已完成");
   addChip(chips, roleEvents.some((event) => event.type === "model.completed"), "模型已响应");
   addChip(chips, roleEvents.some((event) => event.type === "model.retry.scheduled"), "模型重试中");
   addChip(chips, hasNarrativeErrorCode(roleEvents, "model_provider_request_timeout"), "模型响应超时");
@@ -485,7 +550,195 @@ function buildNarrativeChips({
   addChip(chips, fileCount !== undefined && fileCount > 0, `文件已生成：${fileCount ?? 0} 个`);
   addChip(chips, role === "deployer" && Boolean(snapshot?.deployment), "交付已准备");
 
-  return chips.slice(0, 5);
+  return chips.slice(0, 7);
+}
+
+function buildNarrativeDetails({
+  artifactProgress,
+  role,
+  roleEvents,
+  snapshot,
+  status
+}: {
+  artifactProgress?: TaskProgressArtifactProgress;
+  role: TaskNarrativeRole;
+  roleEvents: TaskProgressRunEvent[];
+  snapshot?: TaskProgressSnapshot;
+  status: TaskNarrativeStatus;
+}): TaskNarrativeDetailViewModel[] {
+  const details: TaskNarrativeDetailViewModel[] = [];
+  details.push({
+    id: `${role}-context`,
+    title: "装载任务上下文",
+    status: getDetailStatus({
+      complete: hasRoleEvent(roleEvents, "runtime.context.loaded"),
+      status
+    })
+  });
+
+  if (role !== "planner") {
+    details.push({
+      id: `${role}-handoff`,
+      title: "接收上一阶段结果",
+      status: getDetailStatus({
+        complete: hasRoleEvent(roleEvents, "handoff.consumed"),
+        status
+      })
+    });
+  }
+
+  const latestStreamProgress = getLatestStreamProgress(roleEvents);
+  details.push({
+    id: `${role}-stream`,
+    title: "接收模型流式响应",
+    ...(latestStreamProgress
+      ? {
+          description: hasRoleEvent(roleEvents, "model.stream.completed")
+            ? "安全响应已接收完成。"
+            : "正在持续接收安全响应。"
+        }
+      : {}),
+    status: getDetailStatus({
+      complete: hasRoleEvent(roleEvents, "model.stream.completed") ||
+        hasRoleEvent(roleEvents, "model.completed"),
+      running: hasRoleEvent(roleEvents, "model.stream.started") ||
+        latestStreamProgress !== undefined,
+      status
+    })
+  });
+
+  details.push(...buildRoleSpecificNarrativeDetails({
+    artifactProgress,
+    role,
+    roleEvents,
+    snapshot,
+    status
+  }));
+
+  return details;
+}
+
+function buildRoleSpecificNarrativeDetails({
+  artifactProgress,
+  role,
+  roleEvents,
+  snapshot,
+  status
+}: {
+  artifactProgress?: TaskProgressArtifactProgress;
+  role: TaskNarrativeRole;
+  roleEvents: TaskProgressRunEvent[];
+  snapshot?: TaskProgressSnapshot;
+  status: TaskNarrativeStatus;
+}): TaskNarrativeDetailViewModel[] {
+  if (role === "planner") {
+    return [
+      {
+        id: "planner-parse",
+        title: "整理页面目标与卖点",
+        status: getDetailStatus({
+          complete: hasRoleEvent(roleEvents, "model.output.parsed") ||
+            hasRoleEvent(roleEvents, "model.output.repaired"),
+          running: hasRoleEvent(roleEvents, "model.completed"),
+          status
+        })
+      },
+      {
+        id: "planner-handoff",
+        title: "交接页面规划",
+        status: getDetailStatus({
+          complete: hasRoleEvent(roleEvents, "handoff.created"),
+          running: hasRoleEvent(roleEvents, "model.output.parsed") ||
+            hasRoleEvent(roleEvents, "model.output.repaired"),
+          status
+        })
+      }
+    ];
+  }
+
+  if (role === "builder") {
+    const fileCount = getNarrativeArtifactFileCount({ artifactProgress, roleEvents });
+    return [
+      {
+        id: "builder-validate",
+        title: "校验静态文件结构",
+        status: getDetailStatus({
+          complete: hasRoleEvent(roleEvents, "model.output.parsed") ||
+            hasRoleEvent(roleEvents, "model.output.repaired"),
+          running: hasRoleEvent(roleEvents, "model.completed"),
+          status
+        })
+      },
+      {
+        id: "builder-files",
+        title: "写入静态页面文件",
+        ...(fileCount ? { description: `已准备 ${fileCount} 个文件。` } : {}),
+        status: getDetailStatus({
+          complete: Boolean(artifactProgress?.artifactWorkspaceId) ||
+            hasRoleEvent(roleEvents, "artifact.workspace.created"),
+          running: hasRoleEvent(roleEvents, "model.output.parsed") ||
+            hasRoleEvent(roleEvents, "model.output.repaired"),
+          status
+        })
+      }
+    ];
+  }
+
+  if (role === "reviewer") {
+    return [
+      {
+        id: "reviewer-checks",
+        title: "检查首屏、CTA 和响应式",
+        status: getDetailStatus({
+          complete: hasRoleEvent(roleEvents, "review.completed"),
+          running: hasRoleEvent(roleEvents, "model.completed"),
+          status
+        })
+      },
+      {
+        id: "reviewer-handoff",
+        title: "确认交付是否可继续",
+        status: getDetailStatus({
+          complete: hasRoleEvent(roleEvents, "handoff.created"),
+          running: hasRoleEvent(roleEvents, "review.completed"),
+          status
+        })
+      }
+    ];
+  }
+
+  return [
+    {
+      id: "deployer-preview",
+      title: "准备预览和导出",
+      status: getDetailStatus({
+        complete: Boolean(snapshot?.deployment) || hasRoleEvent(roleEvents, "run.completed"),
+        running: hasRoleEvent(roleEvents, "model.completed"),
+        status
+      })
+    }
+  ];
+}
+
+function getDetailStatus({
+  complete,
+  running = false,
+  status
+}: {
+  complete: boolean;
+  running?: boolean;
+  status: TaskNarrativeStatus;
+}): TaskNarrativeStatus {
+  if (complete) {
+    return "complete";
+  }
+  if (status === "failed") {
+    return "failed";
+  }
+  if (running || status === "running") {
+    return "running";
+  }
+  return "pending";
 }
 
 function getNarrativeArtifactFileCount({
@@ -509,6 +762,27 @@ function getLatestNarrativeErrorCode(
     .reverse()
     .find((event) => typeof event.payload?.errorCode === "string")
     ?.payload?.errorCode;
+}
+
+function getLatestStreamProgress(
+  roleEvents: TaskProgressRunEvent[]
+): { chunkCount: number; receivedChars?: number } | undefined {
+  const progress = [...roleEvents]
+    .reverse()
+    .find((event) => event.type === "model.stream.progress");
+  const chunkCount = progress?.payload?.chunkCount;
+  if (typeof chunkCount !== "number" || chunkCount < 1) {
+    return undefined;
+  }
+  const receivedChars = progress?.payload?.receivedChars;
+  return {
+    chunkCount,
+    ...(typeof receivedChars === "number" && receivedChars > 0 ? { receivedChars } : {})
+  };
+}
+
+function hasRoleEvent(roleEvents: TaskProgressRunEvent[], type: string): boolean {
+  return roleEvents.some((event) => event.type === type);
 }
 
 function hasNarrativeErrorCode(

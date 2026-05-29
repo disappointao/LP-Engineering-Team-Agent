@@ -8,6 +8,7 @@ import type { ContextAssemblyTrace } from "./context-assembler";
 const maxSkillContentChars = 1200;
 const maxMemoryMessages = 6;
 const maxPromptChars = 12000;
+const internalProjectNames = new Set(["local real provider"]);
 
 export interface AssistantContextSummarySkill {
   id: string;
@@ -53,7 +54,8 @@ export function createAssistantChatPrompt(input: {
     "Answer the user directly using the project context below.",
     "Do not claim that you executed MCP tools, shell commands, deployments, or artifact edits.",
     "If the user asks to create or modify an LP, explain the next step without inventing generated files.",
-    `Project: ${input.project.name} (${input.project.id})`,
+    "Do not echo internal project ids, provider labels, raw context headings, or system diagnostics to the user.",
+    formatProjectContext(input.project),
     formatSkills(input.context.skills),
     formatMemory(input.context),
     `Context trace: injected=${input.trace.injected.join(", ") || "none"}; omitted=${input.trace.omitted.join(", ") || "none"}`
@@ -68,13 +70,21 @@ export function createAssistantChatPrompt(input: {
     : userSection;
 }
 
+function formatProjectContext(project: Pick<ProjectRecord, "id" | "name">): string {
+  if (internalProjectNames.has(project.name.trim().toLowerCase())) {
+    return "Active workspace: default user workspace. The original workspace label is internal provider configuration and must not be mentioned.";
+  }
+
+  return `Active workspace: ${project.name}`;
+}
+
 function formatSkills(skills: RuntimeSkillContext[]): string {
   if (skills.length === 0) {
-    return "Project skills: none";
+    return "Available background skills: none";
   }
 
   return [
-    "Project skills:",
+    "Available background skills:",
     ...skills.map((skill) =>
       [
         `Skill: ${skill.name}@${skill.version}`,

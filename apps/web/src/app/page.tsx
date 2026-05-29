@@ -43,6 +43,7 @@ import {
   type RunRecoveryFlowErrorCode,
   type SkillFlowErrorCode,
   type WebArtifactDiffState,
+  type LiveTaskStatePayload,
   type WebProjectModelState,
   type WorkerQueueFlowErrorCode,
   type WorkbenchPageState
@@ -167,6 +168,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     taskId: currentTaskId,
     artifactPath
   });
+  const initialLiveTaskState =
+    pageState.kind === "task_ready" && typeof store.getLiveTaskState === "function"
+      ? await store.getLiveTaskState({
+          taskId: pageState.task.id,
+          projectId: pageState.task.projectId,
+          artifactPath
+        })
+      : undefined;
+  const initialLiveTaskPayload = initialLiveTaskState?.ok
+    ? initialLiveTaskState.value
+    : undefined;
   const modelState = getPageModelState(pageState);
   const mcpState = getPageMCPState(pageState);
   const mcpManagement = buildMCPManagementViewModel({ copy, mcpState });
@@ -487,15 +499,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="conversationViewport">
             <div className="conversationStack">
               {activeView === "artifacts"
-                ? ArtifactWorkspaceView({
-                    completedSnapshot,
-                    copy,
-                    downloadLinks,
-                    initialPreviewVersionKey,
-                    liveTaskCopy,
-                    pageState,
-                    previewSearchParams
-                  })
+	                ? ArtifactWorkspaceView({
+	                    completedSnapshot,
+	                    copy,
+	                    downloadLinks,
+	                    initialLiveTaskPayload,
+	                    initialPreviewVersionKey,
+	                    liveTaskCopy,
+	                    pageState,
+	                    previewSearchParams
+	                  })
                 : null}
 
               {activeView === "skills" ? (
@@ -1294,6 +1307,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                 <LiveTaskPanel
                                   taskId={pageState.task.id}
                                   initialProjectId={pageState.task.projectId}
+                                  initialPayload={initialLiveTaskPayload}
                                   initialPreviewVersionKey={initialPreviewVersionKey}
                                   copy={liveTaskCopy}
                                 />
@@ -2038,6 +2052,7 @@ function ArtifactWorkspaceView({
   completedSnapshot,
   copy,
   downloadLinks,
+  initialLiveTaskPayload,
   initialPreviewVersionKey,
   liveTaskCopy,
   pageState,
@@ -2046,6 +2061,7 @@ function ArtifactWorkspaceView({
   completedSnapshot: CompletedArtifactSnapshot | undefined;
   copy: ReturnType<typeof getWorkbenchCopy>;
   downloadLinks: ArtifactDownloadLink[] | undefined;
+  initialLiveTaskPayload?: LiveTaskStatePayload;
   initialPreviewVersionKey: string | undefined;
   liveTaskCopy: {
     liveTaskArtifactReady: string;
@@ -2118,6 +2134,7 @@ function ArtifactWorkspaceView({
       <LiveTaskPanel
         taskId={pageState.task.id}
         initialProjectId={pageState.task.projectId}
+        initialPayload={initialLiveTaskPayload}
         initialPreviewVersionKey={initialPreviewVersionKey}
         copy={liveTaskCopy}
       />

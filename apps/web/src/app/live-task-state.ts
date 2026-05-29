@@ -10,14 +10,22 @@ export interface LiveTaskPanelState {
 }
 
 export type LiveTaskPanelAction =
+  | { type: "reset"; payload?: LiveTaskStatePayload }
   | { type: "loading" }
   | { type: "payload"; payload: LiveTaskStatePayload }
   | { type: "error"; message: string };
 
-export function createInitialLiveTaskState(): LiveTaskPanelState {
-  return {
-    status: "idle"
-  };
+export function createInitialLiveTaskState(
+  payload?: LiveTaskStatePayload
+): LiveTaskPanelState {
+  if (payload) {
+    return {
+      status: "ready",
+      payload,
+      lastPreviewVersionKey: payload.artifactProgress?.previewVersionKey
+    };
+  }
+  return { status: "idle" };
 }
 
 export function reduceLiveTaskState(
@@ -25,6 +33,8 @@ export function reduceLiveTaskState(
   action: LiveTaskPanelAction
 ): LiveTaskPanelState {
   switch (action.type) {
+    case "reset":
+      return createInitialLiveTaskState(action.payload);
     case "loading":
       return {
         ...state,
