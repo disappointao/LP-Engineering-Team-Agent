@@ -253,7 +253,7 @@ function renderTaskProgressPanel({
   return (
     <section
       aria-label={copy.liveTaskTitle}
-      className="taskProgressCard"
+      className="taskProgressCard agentTaskProgressCard"
       data-status={progress?.status ?? "idle"}
     >
       {renderLiveTaskStatusContent({ payload, copy })}

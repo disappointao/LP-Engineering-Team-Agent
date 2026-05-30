@@ -1273,6 +1273,93 @@ describe("web workbench store", () => {
       expect(live.value.nextPollMs).toBe(1200);
     });
 
+    it("keeps LP generation live after Planner completes before page files exist", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const createdAt = "2026-05-20T00:00:00.000Z";
+      const projectId = "project_1";
+      const taskId = "task_1";
+      const briefId = "brief_1";
+
+      await repositories.projects.save({
+        id: projectId,
+        name: "Planner Gap Project",
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: taskId,
+        title: "Create a planner gap LP",
+        type: "lp_generation",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.messages.save({
+        id: "message_1",
+        taskId,
+        role: "user",
+        content: "Create a planner gap LP",
+        createdAt
+      });
+      await repositories.briefs.save({
+        id: briefId,
+        projectId,
+        prompt: "Create a planner gap LP",
+        brief: sampleBrief,
+        createdAt
+      });
+      await repositories.taskSnapshots.save({
+        taskId,
+        projectId,
+        briefId,
+        createdAt
+      });
+      await repositories.runs.save({
+        id: `run_planner_${briefId}`,
+        projectId,
+        taskId,
+        role: "planner",
+        state: "completed",
+        startedAt: createdAt,
+        completedAt: "2026-05-20T00:00:01.000Z",
+        contextSummary: {
+          injected: [],
+          omitted: []
+        }
+      });
+      await repositories.runEvents.save({
+        id: "event_planner_completed",
+        runId: `run_planner_${briefId}`,
+        projectId,
+        taskId,
+        sequence: 1,
+        type: "run.completed",
+        message: "Planner run completed",
+        payload: {
+          type: "run.completed",
+          runId: `run_planner_${briefId}`,
+          role: "planner",
+          state: "completed"
+        },
+        createdAt: "2026-05-20T00:00:01.000Z"
+      });
+
+      const live = await store.getLiveTaskState({
+        taskId,
+        projectId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(live.value.snapshot?.brief?.id).toBe(briefId);
+      expect(live.value.snapshot?.currentPageVersion).toBeUndefined();
+      expect(live.value.artifactProgress).toBeUndefined();
+      expect(live.value.isTerminal).toBe(false);
+      expect(live.value.nextPollMs).toBe(1200);
+    });
+
     it("fails closed when the requested project does not own the task", async () => {
       const store = createWebWorkbenchStore();
       const first = await store.submitTaskPrompt({

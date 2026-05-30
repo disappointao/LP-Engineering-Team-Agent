@@ -51,7 +51,7 @@ export function ArtifactPreviewDrawer({
     <>
       <button
         aria-expanded={isOpen}
-        className="artifactCard artifactPreviewDrawerTrigger"
+        className="artifactCard artifactPreviewDrawerTrigger agentPreviewTrigger"
         onClick={() => setIsOpen(true)}
         type="button"
       >
@@ -60,17 +60,17 @@ export function ArtifactPreviewDrawer({
         <small>{labels.exportTitle}</small>
       </button>
       {isOpen ? (
-        <div className="artifactPreviewDrawerLayer">
+        <div className="artifactPreviewDrawerLayer agentPreviewDrawerLayer">
           <button
             aria-label={labels.close}
-            className="artifactPreviewDrawerBackdrop"
+            className="artifactPreviewDrawerBackdrop agentPreviewDrawerBackdrop"
             onClick={() => setIsOpen(false)}
             type="button"
           />
           <aside
             aria-labelledby={titleId}
             aria-modal="true"
-            className="artifactPreviewDrawerPanel"
+            className="artifactPreviewDrawerPanel agentPreviewDrawerPanel"
             role="dialog"
           >
             <header className="artifactPreviewDrawerHeader">

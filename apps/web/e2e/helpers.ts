@@ -62,15 +62,15 @@ export async function expectStaticLpArtifacts(page: Page) {
   await expect(artifactChanges).toBeVisible();
 
   for (const filePath of ["index.html", "styles.css", "script.js"]) {
-    await expect(
-      generatedFiles.getByRole("link", {
-        name: new RegExp(`^static file\\s+${escapeRegExp(filePath)}\\s+`)
-      })
-    ).toBeVisible();
     await expect(artifactChanges.getByText(filePath, { exact: true })).toBeVisible();
+    await expect(
+      artifactChanges.getByRole("link", { name: `Preview snippet: ${filePath}` })
+    ).toBeVisible();
   }
 
-  await expect(page.getByLabel("Static LP preview")).toBeVisible();
+  await expect(
+    generatedFiles.getByRole("button", { name: /Static LP preview\s+Preview and export/ })
+  ).toBeVisible();
 }
 
 export async function expectRunTimeline(page: Page) {
@@ -194,8 +194,8 @@ export async function expectWorkbenchLayoutContract(page: Page) {
   const sendBox = await getRequiredBox(page.getByRole("button", { name: "Send" }), "send button");
 
   expect(Math.round(sidebarBox.x)).toBe(0);
-  expect(sidebarBox.width).toBeGreaterThanOrEqual(250);
-  expect(sidebarBox.width).toBeLessThanOrEqual(270);
+  expect(sidebarBox.width).toBeGreaterThanOrEqual(280);
+  expect(sidebarBox.width).toBeLessThanOrEqual(300);
   expect(sidebarBox.height).toBeGreaterThanOrEqual(safeViewport.height - 1);
 
   expect(workspaceBox.x).toBeGreaterThanOrEqual(sidebarBox.x + sidebarBox.width - 1);

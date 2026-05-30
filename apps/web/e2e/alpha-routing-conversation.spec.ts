@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { expectOrdinaryChatThread, submitPrompt } from "./helpers";
+import {
+  expectOrdinaryChatThread,
+  expectStaticLpArtifacts,
+  submitPrompt
+} from "./helpers";
 
 test("keeps ordinary chat free of recommended follow-up prompts", async ({ page }) => {
   const prompt = "Help me organize a launch messaging checklist";
@@ -107,6 +111,7 @@ test("routes LP continue-style follow-ups with latest-turn task progress", async
 
   expect(submitResponse.ok()).toBe(true);
   await expect(page.getByLabel("You").getByText(prompt, { exact: true })).toBeVisible();
+  await expectStaticLpArtifacts(page);
   await expect(page.getByLabel("Suggested next prompts")).toBeVisible();
 
   const followUpResponsePromise = page.waitForResponse(

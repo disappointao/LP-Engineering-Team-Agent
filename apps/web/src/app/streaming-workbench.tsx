@@ -974,7 +974,7 @@ export function StreamingWorkbench({
             </div>
           ) : null}
           {shouldRenderStreamingTurn(state) ? (
-            <article className="assistantTurn streamingTurn" aria-live="polite">
+            <article className="assistantTurn agentAssistantTurn streamingTurn" aria-live="polite">
               <div className="assistantIdentity">
                 <div className="assistantAvatar">LP</div>
                 <strong>LP Agent</strong>
@@ -992,7 +992,7 @@ export function StreamingWorkbench({
       </div>
       <form
         action={action}
-        className="composerDock"
+        className="composerDock agentComposerDock"
         onSubmit={handleSubmit}
         ref={formRef}
       >
@@ -1006,7 +1006,7 @@ export function StreamingWorkbench({
             value={promptSubmissionControls.hiddenPromptValue}
           />
         )}
-        <div className="composer">
+        <div className="composer agentComposer">
           <textarea
             aria-label={promptLabel}
             disabled={promptSubmissionControls.visiblePromptDisabled}

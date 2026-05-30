@@ -1012,7 +1012,7 @@ describe("HomePage project flow errors", () => {
     expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(0);
     expect(
       collectElements(page, "section").filter(
-        (section) => section.props?.className === "deliveryBlock"
+        (section) => hasClass(section as ReactTestElement, "deliveryBlock")
       )
     ).toHaveLength(1);
     expect(collectComponentProps(page, "ArtifactPreviewDrawer")).toHaveLength(1);
@@ -1317,6 +1317,23 @@ describe("HomePage project flow errors", () => {
       streamingWorkbenchPath?.some((element) => hasClass(element, "conversationStack"))
     ).toBe(false);
     expect(hasClass(parent, "chatWorkspace")).toBe(true);
+  });
+
+  it("renders productized agent workspace hooks for layout polish", async () => {
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const [shell] = collectElements(page, "main");
+    const [sidebar] = collectElements(page, "aside");
+    const [workspace] = collectElements(page, "section").filter((section) =>
+      hasClass(section as ReactTestElement, "chatWorkspace")
+    );
+    const [topBar] = collectElements(page, "header").filter((header) =>
+      hasClass(header as ReactTestElement, "topBar")
+    );
+
+    expect(hasClass(shell as ReactTestElement, "agentShell")).toBe(true);
+    expect(hasClass(sidebar as ReactTestElement, "agentSidebar")).toBe(true);
+    expect(hasClass(workspace as ReactTestElement, "agentWorkspace")).toBe(true);
+    expect(hasClass(topBar as ReactTestElement, "agentTopBar")).toBe(true);
   });
 
   it("renders an enabled interrupt button for interruptible task state", async () => {
@@ -1738,7 +1755,13 @@ describe("HomePage project flow errors", () => {
     expect(text).toContain("Skill content");
     expect(textareas.some((textarea) => textarea.props?.name === "manifestJson")).toBe(true);
     expect(textareas.some((textarea) => textarea.props?.name === "content")).toBe(true);
-    expect(sections.some((section) => section.props?.className === "chatWorkspace" && section.props?.["aria-label"] === "Skills")).toBe(true);
+    expect(
+      sections.some(
+        (section) =>
+          hasClass(section as ReactTestElement, "chatWorkspace") &&
+          section.props?.["aria-label"] === "Skills"
+      )
+    ).toBe(true);
   });
 
   it("renders skills management lifecycle, notices, and safe runtime summary", async () => {

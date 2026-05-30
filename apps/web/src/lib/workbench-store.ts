@@ -962,7 +962,13 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     if (pageState.task.type === "lp_generation") {
       const currentPageVersion = pageState.snapshot?.currentPageVersion;
       if (!currentPageVersion) {
-        return true;
+        const hasTerminalRun = pageState.recovery.runs.some((run) =>
+          ["blocked", "cancelled", "failed"].includes(run.state)
+        );
+        if (hasTerminalRun) {
+          return true;
+        }
+        return pageState.messages.at(-1)?.role === "assistant";
       }
       if (currentPageVersion.reviewStatus === "pending") {
         return false;

@@ -32,7 +32,11 @@ export function AgentDetailsDisclosure({
   }, [didReadStoredState, open, storageKey]);
 
   return (
-    <section className="agentDetails" data-open={open ? "true" : "false"}>
+    <section
+      aria-label={open ? undefined : title}
+      className="agentDetails"
+      data-open={open ? "true" : "false"}
+    >
       <button
         aria-expanded={open}
         className="agentDetailsSummary"
@@ -55,7 +59,7 @@ export function AgentDetailsDisclosure({
         <small>{countLabel}</small>
       </button>
       <div aria-hidden={!open} className="agentDetailsBody">
-        {children}
+        {open ? children : null}
       </div>
     </section>
   );

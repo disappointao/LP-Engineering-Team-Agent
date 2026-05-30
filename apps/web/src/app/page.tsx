@@ -327,10 +327,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   };
 
   return (
-    <main className="appShell">
-      <aside className="sidebar" aria-label={copy.nav.label}>
-        <div className="sidebarTop">
-          <div className="brandBlock">
+    <main className="appShell agentShell">
+      <aside className="sidebar agentSidebar" aria-label={copy.nav.label}>
+        <div className="sidebarTop agentSidebarTop">
+          <div className="brandBlock agentBrandBlock">
             <div className="brandMark">LP</div>
             <div>
               <div className="brand">{copy.sidebar.team}</div>
@@ -345,7 +345,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </Link>
         </div>
 
-        <nav className="navList" aria-label={copy.nav.label}>
+        <nav className="navList agentNavList" aria-label={copy.nav.label}>
           <Link
             aria-current={activeView === "workbench" ? "page" : undefined}
             className={activeView === "workbench" ? "navItem navItemActive" : "navItem"}
@@ -470,7 +470,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </aside>
 
       <section
-        className="chatWorkspace"
+        className="chatWorkspace agentWorkspace"
         aria-label={
           activeView === "artifacts"
             ? copy.nav.artifacts
@@ -483,8 +483,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 : copy.nav.workbench
         }
       >
-        <header className="topBar">
-          <div className="topBarTitle">
+        <header className="topBar agentTopBar">
+          <div className="topBarTitle agentTopBarTitle">
             <strong>{copy.chat.topbarModel}</strong>
             <span>{activeProject?.name ?? activeTask?.title ?? copy.sidebar.newTask}</span>
             {skillsManagement.activeSkillCount > 0 ? (
@@ -1239,7 +1239,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                           </div>
 
                           {shouldShowAssistantTurn ? (
-                          <article className="assistantTurn">
+                          <article className="assistantTurn agentAssistantTurn">
                             <div className="assistantIdentity">
                               <div className="assistantAvatar">LP</div>
                               <strong>{chat.assistantName}</strong>
@@ -1256,7 +1256,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                               {shouldShowLpArtifactDelivery && completedSnapshot ? (
                               <>
                                 <section
-                                  className="deliveryBlock"
+                                  className="deliveryBlock agentDeliveryBlock"
                                   aria-label={copy.chat.artifactsTitle}
                                 >
                                   <div className="deliveryHeader">
@@ -1626,7 +1626,7 @@ function AgentProcessBlock({
   }
 
   return (
-    <section className="processBlock" aria-label={title}>
+    <section className="processBlock agentProcessBlock" aria-label={title}>
       <div className="processHeader">
         <strong>{title}</strong>
         <span>{events.length}/{events.length}</span>
@@ -1672,7 +1672,7 @@ function RunTimelineBlock({
   });
 
   return (
-    <section className="runTimelineBlock" aria-label={timeline.title}>
+    <section className="runTimelineBlock agentRunTimelineBlock" aria-label={timeline.title}>
       <div className="runTimelineHeader">
         <div>
           <strong>{timeline.title}</strong>
@@ -1728,7 +1728,7 @@ function RecoveryBlock({
   const guidanceActions = new Set(["request_approval", "resolve_blocker", "inspect_manually"]);
 
   return (
-    <section className="recoveryBlock" aria-label={copy.chat.recoveryTitle}>
+    <section className="recoveryBlock agentRecoveryBlock" aria-label={copy.chat.recoveryTitle}>
       <div className="recoveryHeader">
         <div>
           <strong>{copy.chat.recoveryTitle}</strong>
