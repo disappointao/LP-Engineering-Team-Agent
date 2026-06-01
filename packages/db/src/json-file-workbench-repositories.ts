@@ -42,6 +42,8 @@ import type {
   SkillVersionRepository,
   ToolObservationRecord,
   ToolObservationRepository,
+  WorkbenchDeletionRepository,
+  WorkbenchDeletionResult,
   WorkbenchMessageRecord,
   WorkbenchMessageRepository,
   WorkbenchRepositories,
@@ -122,6 +124,7 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
   readonly runEvents: RunEventRepository;
   readonly toolObservations: ToolObservationRepository;
   readonly agentHandoffs: AgentHandoffRepository;
+  readonly deletion: WorkbenchDeletionRepository;
 
   constructor(filePath: string) {
     this.projects = new JsonFileProjectRepository(filePath);
@@ -146,6 +149,91 @@ class JsonFileWorkbenchRepositories implements WorkbenchRepositories {
     this.runEvents = new JsonFileRunEventRepository(filePath);
     this.toolObservations = new JsonFileToolObservationRepository(filePath);
     this.agentHandoffs = new JsonFileAgentHandoffRepository(filePath);
+    this.deletion = new JsonFileWorkbenchDeletionRepository(filePath);
+  }
+}
+
+class JsonFileWorkbenchDeletionRepository implements WorkbenchDeletionRepository {
+  constructor(private readonly filePath: string) {}
+
+  async deleteTask(input: { taskId: string }): Promise<WorkbenchDeletionResult> {
+    await updateState(this.filePath, (state) => {
+      const runIds = new Set(
+        state.runs.filter((run) => run.taskId === input.taskId).map((run) => run.id)
+      );
+      state.agentHandoffs = state.agentHandoffs.filter(
+        (handoff) => handoff.taskId !== input.taskId && !runIds.has(handoff.fromRunId)
+      );
+      state.toolObservations = state.toolObservations.filter(
+        (observation) => observation.taskId !== input.taskId && !runIds.has(observation.runId)
+      );
+      state.runEvents = state.runEvents.filter(
+        (event) => event.taskId !== input.taskId && !runIds.has(event.runId)
+      );
+      state.runs = state.runs.filter((run) => run.taskId !== input.taskId);
+      state.messages = state.messages.filter((message) => message.taskId !== input.taskId);
+      state.taskSnapshots = state.taskSnapshots.filter(
+        (snapshot) => snapshot.taskId !== input.taskId
+      );
+      state.tasks = state.tasks.filter((task) => task.id !== input.taskId);
+    });
+    return { deletedTaskIds: [input.taskId] };
+  }
+
+  async deleteProject(input: { projectId: string }): Promise<WorkbenchDeletionResult> {
+    let deletedTaskIds: string[] = [];
+    await updateState(this.filePath, (state) => {
+      deletedTaskIds = state.tasks
+        .filter((task) => task.projectId === input.projectId)
+        .map((task) => task.id);
+      const deletedTaskIdSet = new Set(deletedTaskIds);
+      state.agentHandoffs = state.agentHandoffs.filter(
+        (handoff) => handoff.projectId !== input.projectId
+      );
+      state.toolObservations = state.toolObservations.filter(
+        (observation) => observation.projectId !== input.projectId
+      );
+      state.runEvents = state.runEvents.filter((event) => event.projectId !== input.projectId);
+      state.runs = state.runs.filter((run) => run.projectId !== input.projectId);
+      state.messages = state.messages.filter((message) => !deletedTaskIdSet.has(message.taskId));
+      state.taskSnapshots = state.taskSnapshots.filter(
+        (snapshot) => !deletedTaskIdSet.has(snapshot.taskId)
+      );
+      state.tasks = state.tasks.filter((task) => task.projectId !== input.projectId);
+      state.deployments = state.deployments.filter(
+        (deployment) => deployment.projectId !== input.projectId
+      );
+      state.artifactWorkspaceFiles = state.artifactWorkspaceFiles.filter(
+        (file) => file.projectId !== input.projectId
+      );
+      state.artifactWorkspaces = state.artifactWorkspaces.filter(
+        (workspace) => workspace.projectId !== input.projectId
+      );
+      state.pageVersions = state.pageVersions.filter(
+        (pageVersion) => pageVersion.projectId !== input.projectId
+      );
+      state.briefs = state.briefs.filter((brief) => brief.projectId !== input.projectId);
+      state.projectMembers = state.projectMembers.filter(
+        (member) => member.projectId !== input.projectId
+      );
+      state.skillBindings = state.skillBindings.filter(
+        (binding) => !(binding.scope === "project" && binding.targetKey === input.projectId)
+      );
+      state.modelRoutingPolicies = state.modelRoutingPolicies.filter(
+        (policy) => !(policy.scope === "project" && policy.targetKey === input.projectId)
+      );
+      state.modelProviders = state.modelProviders.filter(
+        (provider) => !(provider.scope === "project" && provider.targetKey === input.projectId)
+      );
+      state.mcpToolApprovals = state.mcpToolApprovals.filter(
+        (approval) => approval.projectId !== input.projectId
+      );
+      state.mcpConnectors = state.mcpConnectors.filter(
+        (connector) => !(connector.scope === "project" && connector.targetKey === input.projectId)
+      );
+      state.projects = state.projects.filter((project) => project.id !== input.projectId);
+    });
+    return { deletedTaskIds };
   }
 }
 

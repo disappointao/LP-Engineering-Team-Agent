@@ -125,6 +125,24 @@ test("keeps sidebar project and task switches client-side", async ({ page }) => 
   ).resolves.toBe(taskMarker);
 });
 
+test("deletes sidebar tasks and projects with confirmation", async ({ page }) => {
+  const projectName = "Sidebar delete project";
+  const prompt = "Help me plan a task that will be deleted";
+
+  await createProject(page, projectName);
+  await page.getByLabel("LP request").fill(prompt);
+  await page.getByLabel("LP request").press("Enter");
+  await expect(page.getByLabel("You").getByText(prompt, { exact: true })).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: `Delete task ${prompt}` }).click();
+  await expect(page.locator("a.taskItem", { hasText: prompt })).toHaveCount(0);
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: `Delete project ${projectName}` }).click();
+  await expect(page.getByRole("link", { name: projectName, exact: true })).toHaveCount(0);
+});
+
 test("routes LP chat-style follow-ups without showing latest-turn task progress", async ({ page }) => {
   const prompt = "Generate a browser contract static HTML landing page";
   const followUpPrompt = "Why did you choose this layout?";

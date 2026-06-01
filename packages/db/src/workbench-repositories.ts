@@ -426,6 +426,15 @@ export interface AgentHandoffRepository {
   listAll(): Promise<AgentHandoffRecord[]>;
 }
 
+export interface WorkbenchDeletionResult {
+  deletedTaskIds: string[];
+}
+
+export interface WorkbenchDeletionRepository {
+  deleteTask(input: { taskId: string }): Promise<WorkbenchDeletionResult>;
+  deleteProject(input: { projectId: string }): Promise<WorkbenchDeletionResult>;
+}
+
 export interface WorkbenchRepositories {
   projects: ProjectRepository;
   workspaceMembers: WorkspaceMemberRepository;
@@ -449,6 +458,7 @@ export interface WorkbenchRepositories {
   runEvents: RunEventRepository;
   toolObservations: ToolObservationRepository;
   agentHandoffs: AgentHandoffRepository;
+  deletion: WorkbenchDeletionRepository;
 }
 
 export function createInMemoryWorkbenchRepositories(): WorkbenchRepositories {
@@ -478,6 +488,50 @@ class InMemoryWorkbenchRepositories implements WorkbenchRepositories {
   readonly runEvents = new InMemoryRunEventRepository();
   readonly toolObservations = new InMemoryToolObservationRepository();
   readonly agentHandoffs = new InMemoryAgentHandoffRepository();
+  readonly deletion = new InMemoryWorkbenchDeletionRepository(this);
+}
+
+class InMemoryWorkbenchDeletionRepository implements WorkbenchDeletionRepository {
+  constructor(private readonly repositories: InMemoryWorkbenchRepositories) {}
+
+  async deleteTask(input: { taskId: string }): Promise<WorkbenchDeletionResult> {
+    const taskRuns = await this.repositories.runs.listForTask(input.taskId);
+    const runIds = new Set(taskRuns.map((run) => run.id));
+    this.repositories.agentHandoffs.deleteForTask(input.taskId);
+    this.repositories.agentHandoffs.deleteForRunIds(runIds);
+    this.repositories.toolObservations.deleteForTask(input.taskId);
+    this.repositories.toolObservations.deleteForRunIds(runIds);
+    this.repositories.runEvents.deleteForTask(input.taskId);
+    this.repositories.runEvents.deleteForRunIds(runIds);
+    this.repositories.runs.deleteForTask(input.taskId);
+    this.repositories.messages.deleteForTask(input.taskId);
+    this.repositories.taskSnapshots.deleteByTaskId(input.taskId);
+    this.repositories.tasks.deleteById(input.taskId);
+    return { deletedTaskIds: [input.taskId] };
+  }
+
+  async deleteProject(input: { projectId: string }): Promise<WorkbenchDeletionResult> {
+    const deletedTaskIds = this.repositories.tasks.deleteForProject(input.projectId);
+    this.repositories.messages.deleteForTasks(new Set(deletedTaskIds));
+    this.repositories.taskSnapshots.deleteForTasks(new Set(deletedTaskIds));
+    this.repositories.agentHandoffs.deleteForProject(input.projectId);
+    this.repositories.toolObservations.deleteForProject(input.projectId);
+    this.repositories.runEvents.deleteForProject(input.projectId);
+    this.repositories.runs.deleteForProject(input.projectId);
+    this.repositories.deployments.deleteForProject(input.projectId);
+    this.repositories.artifactWorkspaceFiles.deleteForProject(input.projectId);
+    this.repositories.artifactWorkspaces.deleteForProject(input.projectId);
+    this.repositories.pageVersions.deleteForProject(input.projectId);
+    this.repositories.briefs.deleteForProject(input.projectId);
+    this.repositories.projectMembers.deleteForProject(input.projectId);
+    this.repositories.skillBindings.deleteForProject(input.projectId);
+    this.repositories.modelRoutingPolicies.deleteForProject(input.projectId);
+    this.repositories.modelProviders.deleteForProject(input.projectId);
+    this.repositories.mcpToolApprovals.deleteForProject(input.projectId);
+    this.repositories.mcpConnectors.deleteForProject(input.projectId);
+    this.repositories.projects.deleteById(input.projectId);
+    return { deletedTaskIds };
+  }
 }
 
 class InMemoryRunRepository implements RunRepository {
@@ -507,6 +561,22 @@ class InMemoryRunRepository implements RunRepository {
   async listAll(): Promise<RunRecord[]> {
     return [...this.runs.values()].map(copyRun);
   }
+
+  deleteForTask(taskId: string): void {
+    for (const [id, run] of this.runs.entries()) {
+      if (run.taskId === taskId) {
+        this.runs.delete(id);
+      }
+    }
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, run] of this.runs.entries()) {
+      if (run.projectId === projectId) {
+        this.runs.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryRunEventRepository implements RunEventRepository {
@@ -530,6 +600,30 @@ class InMemoryRunEventRepository implements RunEventRepository {
 
   async listAll(): Promise<RunEventRecord[]> {
     return this.timelineSortedEvents(() => true);
+  }
+
+  deleteForTask(taskId: string): void {
+    for (const [id, event] of this.events.entries()) {
+      if (event.taskId === taskId) {
+        this.events.delete(id);
+      }
+    }
+  }
+
+  deleteForRunIds(runIds: Set<string>): void {
+    for (const [id, event] of this.events.entries()) {
+      if (runIds.has(event.runId)) {
+        this.events.delete(id);
+      }
+    }
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, event] of this.events.entries()) {
+      if (event.projectId === projectId) {
+        this.events.delete(id);
+      }
+    }
   }
 
   private sequenceSortedEvents(matches: (event: RunEventRecord) => boolean): RunEventRecord[] {
@@ -564,6 +658,30 @@ class InMemoryToolObservationRepository implements ToolObservationRepository {
 
   async listAll(): Promise<ToolObservationRecord[]> {
     return this.sortedObservations(() => true);
+  }
+
+  deleteForTask(taskId: string): void {
+    for (const [id, observation] of this.observations.entries()) {
+      if (observation.taskId === taskId) {
+        this.observations.delete(id);
+      }
+    }
+  }
+
+  deleteForRunIds(runIds: Set<string>): void {
+    for (const [id, observation] of this.observations.entries()) {
+      if (runIds.has(observation.runId)) {
+        this.observations.delete(id);
+      }
+    }
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, observation] of this.observations.entries()) {
+      if (observation.projectId === projectId) {
+        this.observations.delete(id);
+      }
+    }
   }
 
   private sortedObservations(
@@ -624,6 +742,30 @@ class InMemoryAgentHandoffRepository implements AgentHandoffRepository {
 
   async listAll(): Promise<AgentHandoffRecord[]> {
     return this.sortedHandoffs(() => true);
+  }
+
+  deleteForTask(taskId: string): void {
+    for (const [id, handoff] of this.handoffs.entries()) {
+      if (handoff.taskId === taskId) {
+        this.handoffs.delete(id);
+      }
+    }
+  }
+
+  deleteForRunIds(runIds: Set<string>): void {
+    for (const [id, handoff] of this.handoffs.entries()) {
+      if (runIds.has(handoff.fromRunId)) {
+        this.handoffs.delete(id);
+      }
+    }
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, handoff] of this.handoffs.entries()) {
+      if (handoff.projectId === projectId) {
+        this.handoffs.delete(id);
+      }
+    }
   }
 
   private sortedHandoffs(matches: (handoff: AgentHandoffRecord) => boolean): AgentHandoffRecord[] {
@@ -705,6 +847,14 @@ class InMemorySkillBindingRepository implements SkillBindingRepository {
   async listAll(): Promise<SkillBindingRecord[]> {
     return [...this.bindings.values()].map(copySkillBinding);
   }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, binding] of this.bindings.entries()) {
+      if (binding.scope === "project" && binding.targetKey === projectId) {
+        this.bindings.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryModelProviderRepository implements ModelProviderRepository {
@@ -727,6 +877,14 @@ class InMemoryModelProviderRepository implements ModelProviderRepository {
 
   async listAll(): Promise<ModelProviderRecord[]> {
     return [...this.providers.values()].map(copyModelProvider);
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, provider] of this.providers.entries()) {
+      if (provider.scope === "project" && provider.targetKey === projectId) {
+        this.providers.delete(id);
+      }
+    }
   }
 }
 
@@ -764,6 +922,14 @@ class InMemoryModelRoutingPolicyRepository implements ModelRoutingPolicyReposito
   async listAll(): Promise<ModelRoutingPolicyRecord[]> {
     return [...this.policies.values()].map(copyModelRoutingPolicy);
   }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, policy] of this.policies.entries()) {
+      if (policy.scope === "project" && policy.targetKey === projectId) {
+        this.policies.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryMCPConnectorRepository implements MCPConnectorRepository {
@@ -786,6 +952,14 @@ class InMemoryMCPConnectorRepository implements MCPConnectorRepository {
 
   async listAll(): Promise<MCPConnectorRecord[]> {
     return [...this.connectors.values()].map(copyMCPConnector);
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, connector] of this.connectors.entries()) {
+      if (connector.scope === "project" && connector.targetKey === projectId) {
+        this.connectors.delete(id);
+      }
+    }
   }
 }
 
@@ -819,6 +993,14 @@ class InMemoryMCPToolApprovalRepository implements MCPToolApprovalRepository {
   async listAll(): Promise<MCPToolApprovalRecord[]> {
     return [...this.approvals.values()].map(copyMCPToolApproval);
   }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, approval] of this.approvals.entries()) {
+      if (approval.projectId === projectId) {
+        this.approvals.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryProjectRepository implements ProjectRepository {
@@ -835,6 +1017,10 @@ class InMemoryProjectRepository implements ProjectRepository {
 
   async listAll(): Promise<ProjectRecord[]> {
     return [...this.projects.values()].map(copyProject);
+  }
+
+  deleteById(projectId: string): void {
+    this.projects.delete(projectId);
   }
 }
 
@@ -906,6 +1092,14 @@ class InMemoryProjectMemberRepository implements ProjectMemberRepository {
     return this.sortedMembers(() => true);
   }
 
+  deleteForProject(projectId: string): void {
+    for (const [id, member] of this.members.entries()) {
+      if (member.projectId === projectId) {
+        this.members.delete(id);
+      }
+    }
+  }
+
   private sortedMembers(matches: (member: ProjectMemberRecord) => boolean) {
     return [...this.members.values()]
       .filter(matches)
@@ -936,6 +1130,14 @@ class InMemoryBriefRepository implements BriefRepository {
   async listAll(): Promise<BriefRecord[]> {
     return [...this.briefs.values()].map(copyBriefRecord);
   }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, brief] of this.briefs.entries()) {
+      if (brief.projectId === projectId) {
+        this.briefs.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryPageVersionRepository implements PageVersionRepository {
@@ -959,6 +1161,14 @@ class InMemoryPageVersionRepository implements PageVersionRepository {
 
   async listAll(): Promise<PageVersionRecord[]> {
     return [...this.pageVersions.values()].map(copyPageVersion);
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, pageVersion] of this.pageVersions.entries()) {
+      if (pageVersion.projectId === projectId) {
+        this.pageVersions.delete(id);
+      }
+    }
   }
 }
 
@@ -984,6 +1194,14 @@ class InMemoryArtifactWorkspaceRepository implements ArtifactWorkspaceRepository
 
   async listAll(): Promise<ArtifactWorkspaceRecord[]> {
     return this.sortedWorkspaces(() => true);
+  }
+
+  deleteForProject(projectId: string): void {
+    for (const [id, workspace] of this.workspaces.entries()) {
+      if (workspace.projectId === projectId) {
+        this.workspaces.delete(id);
+      }
+    }
   }
 
   private sortedWorkspaces(
@@ -1020,6 +1238,14 @@ class InMemoryArtifactWorkspaceFileRepository implements ArtifactWorkspaceFileRe
     return this.sortedFiles(() => true);
   }
 
+  deleteForProject(projectId: string): void {
+    for (const [id, file] of this.files.entries()) {
+      if (file.projectId === projectId) {
+        this.files.delete(id);
+      }
+    }
+  }
+
   private sortedFiles(
     matches: (file: ArtifactWorkspaceFileRecord) => boolean
   ): ArtifactWorkspaceFileRecord[] {
@@ -1048,6 +1274,14 @@ class InMemoryDeploymentRepository implements DeploymentRepository {
       .at(-1);
     return deployment ? copyDeployment(deployment) : undefined;
   }
+
+  deleteForProject(projectId: string): void {
+    for (const [pageVersionId, deployment] of this.deploymentsByPageVersion.entries()) {
+      if (deployment.projectId === projectId) {
+        this.deploymentsByPageVersion.delete(pageVersionId);
+      }
+    }
+  }
 }
 
 class InMemoryWorkbenchTaskRepository implements WorkbenchTaskRepository {
@@ -1064,6 +1298,21 @@ class InMemoryWorkbenchTaskRepository implements WorkbenchTaskRepository {
 
   async listAll(): Promise<WorkbenchTaskRecord[]> {
     return [...this.tasks.values()].map(copyWorkbenchTask);
+  }
+
+  deleteById(taskId: string): void {
+    this.tasks.delete(taskId);
+  }
+
+  deleteForProject(projectId: string): string[] {
+    const deletedTaskIds: string[] = [];
+    for (const [id, task] of this.tasks.entries()) {
+      if (task.projectId === projectId) {
+        deletedTaskIds.push(id);
+        this.tasks.delete(id);
+      }
+    }
+    return deletedTaskIds;
   }
 }
 
@@ -1088,6 +1337,22 @@ class InMemoryWorkbenchMessageRepository implements WorkbenchMessageRepository {
   async listAll(): Promise<WorkbenchMessageRecord[]> {
     return [...this.messages.values()].map(copyWorkbenchMessage);
   }
+
+  deleteForTask(taskId: string): void {
+    for (const [id, message] of this.messages.entries()) {
+      if (message.taskId === taskId) {
+        this.messages.delete(id);
+      }
+    }
+  }
+
+  deleteForTasks(taskIds: Set<string>): void {
+    for (const [id, message] of this.messages.entries()) {
+      if (taskIds.has(message.taskId)) {
+        this.messages.delete(id);
+      }
+    }
+  }
 }
 
 class InMemoryWorkbenchTaskSnapshotRepository implements WorkbenchTaskSnapshotRepository {
@@ -1100,6 +1365,16 @@ class InMemoryWorkbenchTaskSnapshotRepository implements WorkbenchTaskSnapshotRe
   async getByTaskId(taskId: string): Promise<WorkbenchTaskSnapshotRecord | undefined> {
     const snapshot = this.snapshotsByTask.get(taskId);
     return snapshot ? copyWorkbenchTaskSnapshot(snapshot) : undefined;
+  }
+
+  deleteByTaskId(taskId: string): void {
+    this.snapshotsByTask.delete(taskId);
+  }
+
+  deleteForTasks(taskIds: Set<string>): void {
+    for (const taskId of taskIds) {
+      this.snapshotsByTask.delete(taskId);
+    }
   }
 }
 

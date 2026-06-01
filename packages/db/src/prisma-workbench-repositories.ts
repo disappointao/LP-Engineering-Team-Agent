@@ -68,6 +68,8 @@ import type {
   SkillVersionRepository,
   ToolObservationRecord,
   ToolObservationRepository,
+  WorkbenchDeletionRepository,
+  WorkbenchDeletionResult,
   WorkbenchMessageRecord,
   WorkbenchMessageRepository,
   WorkbenchRepositories,
@@ -184,7 +186,76 @@ export function createPrismaWorkbenchRepositories(
     runs: createRunRepository(options.prisma.run),
     runEvents: createRunEventRepository(options.prisma.runEvent),
     toolObservations: createToolObservationRepository(options.prisma.toolObservation),
-    agentHandoffs: createAgentHandoffRepository(options.prisma.agentHandoff)
+    agentHandoffs: createAgentHandoffRepository(options.prisma.agentHandoff),
+    deletion: createWorkbenchDeletionRepository(options.prisma)
+  };
+}
+
+function createWorkbenchDeletionRepository(
+  prisma: PrismaWorkbenchClient
+): WorkbenchDeletionRepository {
+  return {
+    async deleteTask(input): Promise<WorkbenchDeletionResult> {
+      const runs = await prisma.run.findMany({ where: { taskId: input.taskId } });
+      const runIds = runs
+        .map((run) => run.id)
+        .filter((id): id is string => typeof id === "string");
+      for (const runId of runIds) {
+        await prisma.agentHandoff.deleteMany({ where: { fromRunId: runId } });
+        await prisma.toolObservation.deleteMany({ where: { runId } });
+        await prisma.runEvent.deleteMany({ where: { runId } });
+      }
+      await prisma.agentHandoff.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.toolObservation.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.runEvent.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.run.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.workbenchMessage.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.workbenchTaskSnapshot.deleteMany({ where: { taskId: input.taskId } });
+      await prisma.workbenchTask.deleteMany({ where: { id: input.taskId } });
+      return { deletedTaskIds: [input.taskId] };
+    },
+
+    async deleteProject(input): Promise<WorkbenchDeletionResult> {
+      const tasks = await prisma.workbenchTask.findMany({
+        where: { projectId: input.projectId }
+      });
+      const deletedTaskIds = tasks
+        .map((task) => task.id)
+        .filter((id): id is string => typeof id === "string");
+      for (const taskId of deletedTaskIds) {
+        await prisma.workbenchMessage.deleteMany({ where: { taskId } });
+        await prisma.workbenchTaskSnapshot.deleteMany({ where: { taskId } });
+      }
+
+      await prisma.agentHandoff.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.toolObservation.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.runEvent.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.run.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.workbenchMessage.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.workbenchTaskSnapshot.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.workbenchTask.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.mCPToolApproval.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.deployment.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.artifactWorkspaceFile.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.artifactWorkspace.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.pageVersion.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.lPBrief.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.projectMember.deleteMany({ where: { projectId: input.projectId } });
+      await prisma.skillBinding.deleteMany({
+        where: { scope: "project", targetKey: input.projectId }
+      });
+      await prisma.modelRoutingPolicy.deleteMany({
+        where: { scope: "project", targetKey: input.projectId }
+      });
+      await prisma.modelProvider.deleteMany({
+        where: { scope: "project", targetKey: input.projectId }
+      });
+      await prisma.mCPConnector.deleteMany({
+        where: { scope: "project", targetKey: input.projectId }
+      });
+      await prisma.project.deleteMany({ where: { id: input.projectId } });
+      return { deletedTaskIds };
+    }
   };
 }
 

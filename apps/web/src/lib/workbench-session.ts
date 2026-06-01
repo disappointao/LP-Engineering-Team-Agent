@@ -18,6 +18,16 @@ export async function setCurrentProjectId(projectId: string): Promise<void> {
   });
 }
 
+export async function clearCurrentProjectId(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(CURRENT_PROJECT_COOKIE, "", {
+    httpOnly: true,
+    maxAge: 0,
+    sameSite: "lax",
+    path: "/"
+  });
+}
+
 export async function getCurrentTaskId(): Promise<string | undefined> {
   const cookieStore = await cookies();
   const value = cookieStore.get(CURRENT_TASK_COOKIE)?.value.trim();

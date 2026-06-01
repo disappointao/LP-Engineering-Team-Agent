@@ -103,6 +103,8 @@ vi.mock("./live-task-panel", () => ({
 
 import HomePage from "./page";
 import {
+  deleteProjectAction,
+  deleteTaskAction,
   executeRunRecoveryAction,
   executeSkillCommandAction,
   interruptCurrentTaskAction,
@@ -202,6 +204,7 @@ function collectElements(node: unknown, type: string): Array<{ props?: Record<st
     if (
       typeof element.type === "function" &&
       (element.type.name === "InterruptSubmitButton" ||
+        element.type.name === "DeleteSubmitButton" ||
         element.type.name === "ManagementSubmitButton")
     ) {
       return collectElements(
@@ -748,6 +751,34 @@ describe("HomePage project flow errors", () => {
     );
 
     expect(taskSelectLink?.props?.href).toBe("/?projectId=project_1&taskId=task_1");
+  });
+
+  it("renders confirmed delete controls for sidebar projects and tasks", async () => {
+    pageMocks.currentProjectId = "project_1";
+    pageMocks.currentTaskId = "task_1";
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const deleteForms = collectElements(page, "form").filter(
+      (form) => form.props?.className === "sidebarDeleteForm"
+    );
+
+    expect(deleteForms.map((form) => form.props?.action)).toEqual([
+      deleteProjectAction,
+      deleteTaskAction
+    ]);
+    expect(deleteForms.map(collectFormPayload)).toEqual([
+      { projectId: "project_1" },
+      { taskId: "task_1" }
+    ]);
+
+    const deleteButtons = collectElements(page, "button").filter(
+      (button) => button.props?.className === "sidebarDeleteButton"
+    );
+    expect(deleteButtons.map((button) => button.props?.["aria-label"])).toEqual([
+      "Delete project Completed LP",
+      "Delete task Create a no git spring ecommerce landing page."
+    ]);
   });
 
   it("renders quick prompts as submit forms instead of inert buttons", async () => {

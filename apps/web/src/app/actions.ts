@@ -15,6 +15,7 @@ import {
   type WorkerQueueFlowErrorCode
 } from "../lib/workbench-store";
 import {
+  clearCurrentProjectId,
   clearCurrentTaskId,
   getCurrentTaskId,
   getCurrentProjectId,
@@ -72,6 +73,18 @@ function buildManagementViewRedirectHref(
 
 function redirectWithError(error: ProjectFlowErrorCode): never {
   redirect(`/?error=${encodeURIComponent(error)}`);
+}
+
+function buildWorkbenchRedirectHref(input: { projectId?: string; taskId?: string }): string {
+  const query = new URLSearchParams();
+  if (input.projectId) {
+    query.set("projectId", input.projectId);
+  }
+  if (input.taskId) {
+    query.set("taskId", input.taskId);
+  }
+  const serialized = query.toString();
+  return serialized.length > 0 ? `/?${serialized}` : "/";
 }
 
 function redirectToInterruptError(error: InterruptFlowErrorCode): never {
@@ -331,6 +344,62 @@ export async function selectTaskAction(formData: FormData): Promise<void> {
   }
   revalidatePath("/");
   redirect("/");
+}
+
+export async function deleteTaskAction(formData: FormData): Promise<void> {
+  const taskId = String(formData.get("taskId") ?? "").trim();
+  if (taskId.length === 0) {
+    redirectWithError("project_not_found");
+  }
+
+  const store = await getWebWorkbenchStore();
+  const result = await store.deleteTask({ taskId });
+  if (!result.ok) {
+    redirectWithError("project_not_found");
+  }
+
+  if (result.projectId) {
+    await setCurrentProjectId(result.projectId);
+  }
+  if (result.nextTaskId) {
+    await setCurrentTaskId(result.nextTaskId);
+  } else {
+    await clearCurrentTaskId();
+  }
+  revalidatePath("/");
+  redirect(buildWorkbenchRedirectHref({
+    projectId: result.projectId,
+    taskId: result.nextTaskId
+  }));
+}
+
+export async function deleteProjectAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  if (projectId.length === 0) {
+    redirectWithError("project_not_found");
+  }
+
+  const store = await getWebWorkbenchStore();
+  const result = await store.deleteProject({ projectId });
+  if (!result.ok) {
+    redirectWithError("project_not_found");
+  }
+
+  if (result.nextProjectId) {
+    await setCurrentProjectId(result.nextProjectId);
+  } else {
+    await clearCurrentProjectId();
+  }
+  if (result.nextTaskId) {
+    await setCurrentTaskId(result.nextTaskId);
+  } else {
+    await clearCurrentTaskId();
+  }
+  revalidatePath("/");
+  redirect(buildWorkbenchRedirectHref({
+    projectId: result.nextProjectId,
+    taskId: result.nextTaskId
+  }));
 }
 
 export async function submitPromptAction(formData: FormData): Promise<void> {

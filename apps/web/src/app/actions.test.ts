@@ -10,10 +10,13 @@ const mocks = vi.hoisted(() => ({
   getWebWorkbenchStore: vi.fn(),
   createProject: vi.fn(),
   getPageState: vi.fn(),
+  clearCurrentProjectId: vi.fn(),
   clearCurrentTaskId: vi.fn(),
   setCurrentProjectId: vi.fn(),
   setCurrentTaskId: vi.fn(),
   submitTaskPrompt: vi.fn(),
+  deleteProject: vi.fn(),
+  deleteTask: vi.fn(),
   interruptCurrentTask: vi.fn(),
   createSkillDraft: vi.fn(),
   validateSkillVersion: vi.fn(),
@@ -43,6 +46,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../lib/workbench-session", () => ({
   getCurrentProjectId: vi.fn(async () => mocks.currentProjectId),
   getCurrentTaskId: vi.fn(async () => mocks.currentTaskId),
+  clearCurrentProjectId: mocks.clearCurrentProjectId,
   clearCurrentTaskId: mocks.clearCurrentTaskId,
   setCurrentProjectId: mocks.setCurrentProjectId,
   setCurrentTaskId: mocks.setCurrentTaskId
@@ -58,6 +62,8 @@ import {
   createModelProviderAction,
   createProjectAction,
   createSkillDraftAction,
+  deleteProjectAction,
+  deleteTaskAction,
   executeMCPToolAction,
   executeRunRecoveryAction,
   executeSkillCommandAction,
@@ -167,6 +173,8 @@ describe("submitPromptAction", () => {
       createProject: mocks.createProject,
       getPageState: mocks.getPageState,
       submitTaskPrompt: mocks.submitTaskPrompt,
+      deleteProject: mocks.deleteProject,
+      deleteTask: mocks.deleteTask,
       interruptCurrentTask: mocks.interruptCurrentTask,
       createSkillDraft: mocks.createSkillDraft,
       validateSkillVersion: mocks.validateSkillVersion,
@@ -192,6 +200,7 @@ describe("submitPromptAction", () => {
       projects: [],
       tasks: []
     });
+    mocks.clearCurrentProjectId.mockClear();
     mocks.clearCurrentTaskId.mockClear();
     mocks.setCurrentProjectId.mockClear();
     mocks.setCurrentTaskId.mockClear();
@@ -201,6 +210,18 @@ describe("submitPromptAction", () => {
       taskId: "task_1",
       taskType: "lp_generation",
       projectId: "project_2"
+    });
+    mocks.deleteProject.mockReset();
+    mocks.deleteProject.mockResolvedValue({
+      ok: true,
+      nextProjectId: "project_3",
+      nextTaskId: "task_3"
+    });
+    mocks.deleteTask.mockReset();
+    mocks.deleteTask.mockResolvedValue({
+      ok: true,
+      projectId: "project_2",
+      nextTaskId: "task_2"
     });
     mocks.interruptCurrentTask.mockReset();
     mocks.interruptCurrentTask.mockResolvedValue({
@@ -379,6 +400,37 @@ describe("submitPromptAction", () => {
     expect(mocks.setCurrentTaskId).not.toHaveBeenCalled();
     expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("deletes a task and redirects to the next task in the same project", async () => {
+    await expectRedirect(
+      deleteTaskAction(buildSelectionForm({ taskId: "task_1" })),
+      "/?projectId=project_2&taskId=task_2"
+    );
+
+    expect(mocks.deleteTask).toHaveBeenCalledWith({ taskId: "task_1" });
+    expect(mocks.setCurrentProjectId).toHaveBeenCalledWith("project_2");
+    expect(mocks.setCurrentTaskId).toHaveBeenCalledWith("task_2");
+    expect(mocks.clearCurrentTaskId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("deletes a project and clears selection when nothing remains", async () => {
+    mocks.deleteProject.mockResolvedValue({
+      ok: true
+    });
+
+    await expectRedirect(
+      deleteProjectAction(buildSelectionForm({ projectId: "project_2" })),
+      "/"
+    );
+
+    expect(mocks.deleteProject).toHaveBeenCalledWith({ projectId: "project_2" });
+    expect(mocks.clearCurrentProjectId).toHaveBeenCalledTimes(1);
+    expect(mocks.clearCurrentTaskId).toHaveBeenCalledTimes(1);
+    expect(mocks.setCurrentProjectId).not.toHaveBeenCalled();
+    expect(mocks.setCurrentTaskId).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
   it("uses the hidden project id when URL-state forms provide one", async () => {

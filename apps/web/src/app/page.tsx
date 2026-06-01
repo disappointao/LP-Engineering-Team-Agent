@@ -5,6 +5,8 @@ import {
   bindSkillVersionAction,
   createMCPConnectorAction,
   createProjectAction,
+  deleteProjectAction,
+  deleteTaskAction,
   executeMCPToolAction,
   executeRunRecoveryAction,
   executeSkillCommandAction,
@@ -70,6 +72,7 @@ import {
   type ArtifactPreviewDrawerDownloadLink
 } from "./artifact-preview-drawer";
 import { ChatMessageContent } from "./chat-message-content";
+import { DeleteSubmitButton } from "./delete-submit-button";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -422,21 +425,32 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
             {pageState.projects.length > 0
               ? pageState.projects.map((project) => (
-                  <Link
-                    aria-current={project.id === activeProject?.id ? "page" : undefined}
-                    className={
-                      project.id === activeProject?.id
-                        ? "projectItem projectItemActive projectSelectButton"
-                        : "projectItem projectSelectButton"
-                    }
-                    data-workbench-link="true"
-                    href={createWorkbenchHref({ projectId: project.id })}
-                    key={project.id}
-                    prefetch={false}
-                    scroll={false}
-                  >
-                    <strong>{project.name}</strong>
-                  </Link>
+                  <div className="sidebarItemRow" key={project.id}>
+                    <Link
+                      aria-current={project.id === activeProject?.id ? "page" : undefined}
+                      className={
+                        project.id === activeProject?.id
+                          ? "projectItem projectItemActive projectSelectButton"
+                          : "projectItem projectSelectButton"
+                      }
+                      data-workbench-link="true"
+                      href={createWorkbenchHref({ projectId: project.id })}
+                      prefetch={false}
+                      scroll={false}
+                    >
+                      <strong>{project.name}</strong>
+                    </Link>
+                    <form action={deleteProjectAction} className="sidebarDeleteForm">
+                      <input name="projectId" type="hidden" value={project.id} />
+                      <DeleteSubmitButton
+                        ariaLabel={copy.sidebar.deleteProjectAria(project.name)}
+                        confirmMessage={copy.sidebar.deleteProjectConfirm(project.name)}
+                        pendingLabel={copy.sidebar.deletePending}
+                      >
+                        {copy.sidebar.deleteProject}
+                      </DeleteSubmitButton>
+                    </form>
+                  </div>
                 ))
               : null}
             <div className="projectItem">
@@ -463,25 +477,36 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
             {pageState.tasks.length > 0
               ? pageState.tasks.map((task) => (
-                  <Link
-                    aria-current={task.id === activeTask?.id ? "page" : undefined}
-                    className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
-                    data-workbench-link="true"
-                    href={createWorkbenchHref({
-                      projectId: task.projectId,
-                      taskId: task.id
-                    })}
-                    key={task.id}
-                    prefetch={false}
-                    scroll={false}
-                  >
-                    <span className="taskTitle">{task.title}</span>
-                    {task.projectId ? (
-                      <span className="taskProjectLabel">
-                        {projectNameById.get(task.projectId) ?? task.projectId}
-                      </span>
-                    ) : null}
-                  </Link>
+                  <div className="sidebarItemRow" key={task.id}>
+                    <Link
+                      aria-current={task.id === activeTask?.id ? "page" : undefined}
+                      className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                      data-workbench-link="true"
+                      href={createWorkbenchHref({
+                        projectId: task.projectId,
+                        taskId: task.id
+                      })}
+                      prefetch={false}
+                      scroll={false}
+                    >
+                      <span className="taskTitle">{task.title}</span>
+                      {task.projectId ? (
+                        <span className="taskProjectLabel">
+                          {projectNameById.get(task.projectId) ?? task.projectId}
+                        </span>
+                      ) : null}
+                    </Link>
+                    <form action={deleteTaskAction} className="sidebarDeleteForm">
+                      <input name="taskId" type="hidden" value={task.id} />
+                      <DeleteSubmitButton
+                        ariaLabel={copy.sidebar.deleteTaskAria(task.title)}
+                        confirmMessage={copy.sidebar.deleteTaskConfirm(task.title)}
+                        pendingLabel={copy.sidebar.deletePending}
+                      >
+                        {copy.sidebar.deleteTask}
+                      </DeleteSubmitButton>
+                    </form>
+                  </div>
                 ))
               : <p className="sidebarEmptyState">{copy.sidebar.emptyTasks}</p>}
           </div>

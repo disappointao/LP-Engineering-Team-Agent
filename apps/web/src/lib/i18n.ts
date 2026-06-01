@@ -63,6 +63,13 @@ export interface WorkbenchCopy {
     projectsLabel: string;
     tasksLabel: string;
     emptyTasks: string;
+    deleteProject: string;
+    deleteTask: string;
+    deletePending: string;
+    deleteProjectAria: (name: string) => string;
+    deleteTaskAria: (title: string) => string;
+    deleteProjectConfirm: (name: string) => string;
+    deleteTaskConfirm: (title: string) => string;
   };
   hero: {
     eyebrow: string;
@@ -510,7 +517,15 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       newTask: "New task",
       projectsLabel: "Project",
       tasksLabel: "All tasks",
-      emptyTasks: "No tasks yet. Start from the composer or a quick prompt."
+      emptyTasks: "No tasks yet. Start from the composer or a quick prompt.",
+      deleteProject: "Delete",
+      deleteTask: "Delete",
+      deletePending: "Deleting...",
+      deleteProjectAria: (name) => `Delete project ${name}`,
+      deleteTaskAria: (title) => `Delete task ${title}`,
+      deleteProjectConfirm: (name) =>
+        `Delete project "${name}" and all tasks in it? This cannot be undone.`,
+      deleteTaskConfirm: (title) => `Delete task "${title}"? This cannot be undone.`
     },
     hero: {
       eyebrow: "Ecommerce LP agent",
@@ -1191,7 +1206,14 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       newTask: "新建任务",
       projectsLabel: "项目",
       tasksLabel: "所有任务",
-      emptyTasks: "还没有任务。可以从输入框或快捷提示开始。"
+      emptyTasks: "还没有任务。可以从输入框或快捷提示开始。",
+      deleteProject: "删除",
+      deleteTask: "删除",
+      deletePending: "删除中...",
+      deleteProjectAria: (name) => `删除项目 ${name}`,
+      deleteTaskAria: (title) => `删除任务 ${title}`,
+      deleteProjectConfirm: (name) => `确定删除项目“${name}”以及其中所有任务吗？此操作不可撤销。`,
+      deleteTaskConfirm: (title) => `确定删除任务“${title}”吗？此操作不可撤销。`
     },
     hero: {
       eyebrow: "电商 LP 智能体",

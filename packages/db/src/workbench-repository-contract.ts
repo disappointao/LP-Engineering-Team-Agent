@@ -145,6 +145,142 @@ export function runCoreWorkbenchRepositoryContractTests(input: RepositoryContrac
       });
     });
 
+    it("deletes task-scoped records without deleting sibling tasks", async () => {
+      const repositories = await input.createRepositories();
+
+      await repositories.projects.save({
+        id: projectId,
+        name: "Spring sale",
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: taskId,
+        title: "Task to delete",
+        type: "general_chat",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: distractorTaskId,
+        title: "Sibling task",
+        type: "general_chat",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.messages.save({
+        id: userMessageId,
+        taskId,
+        role: "user",
+        content: "Delete me",
+        createdAt
+      });
+      await repositories.taskSnapshots.save({
+        taskId,
+        projectId,
+        createdAt
+      });
+      await repositories.runs.save({
+        id: builderRunId,
+        projectId,
+        taskId,
+        role: "assistant",
+        state: "completed",
+        startedAt: createdAt,
+        completedAt: "2026-05-14T00:00:01.000Z",
+        contextSummary: {
+          injected: [],
+          omitted: []
+        }
+      });
+      await repositories.runEvents.save({
+        id: firstRunEventId,
+        runId: builderRunId,
+        projectId,
+        taskId,
+        sequence: 1,
+        type: "run.completed",
+        message: "Run completed",
+        payload: { type: "run.completed" },
+        createdAt
+      });
+
+      await expect(repositories.deletion.deleteTask({ taskId })).resolves.toEqual({
+        deletedTaskIds: [taskId]
+      });
+
+      await expect(repositories.tasks.getById(taskId)).resolves.toBeUndefined();
+      await expect(repositories.tasks.getById(distractorTaskId)).resolves.toMatchObject({
+        id: distractorTaskId
+      });
+      await expect(repositories.messages.listForTask(taskId)).resolves.toEqual([]);
+      await expect(repositories.taskSnapshots.getByTaskId(taskId)).resolves.toBeUndefined();
+      await expect(repositories.runs.listForTask(taskId)).resolves.toEqual([]);
+      await expect(repositories.runEvents.listForTask(taskId)).resolves.toEqual([]);
+    });
+
+    it("deletes project-scoped records without deleting another project", async () => {
+      const repositories = await input.createRepositories();
+
+      await repositories.projects.save({
+        id: projectId,
+        name: "Project to delete",
+        createdAt
+      });
+      await repositories.projects.save({
+        id: distractorProjectId,
+        name: "Project to keep",
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: taskId,
+        title: "Project task",
+        type: "general_chat",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: distractorTaskId,
+        title: "Other project task",
+        type: "general_chat",
+        status: "complete",
+        projectId: distractorProjectId,
+        createdAt
+      });
+      await repositories.messages.save({
+        id: userMessageId,
+        taskId,
+        role: "user",
+        content: "Delete project",
+        createdAt
+      });
+      await repositories.projectMembers.save({
+        id: contractId("project_member_contract_1"),
+        projectId,
+        userId: "local-user",
+        role: "owner",
+        createdAt,
+        updatedAt: createdAt
+      });
+
+      await expect(repositories.deletion.deleteProject({ projectId })).resolves.toEqual({
+        deletedTaskIds: [taskId]
+      });
+
+      await expect(repositories.projects.getById(projectId)).resolves.toBeUndefined();
+      await expect(repositories.projects.getById(distractorProjectId)).resolves.toMatchObject({
+        id: distractorProjectId
+      });
+      await expect(repositories.tasks.getById(taskId)).resolves.toBeUndefined();
+      await expect(repositories.tasks.getById(distractorTaskId)).resolves.toMatchObject({
+        id: distractorTaskId
+      });
+      await expect(repositories.messages.listForTask(taskId)).resolves.toEqual([]);
+      await expect(repositories.projectMembers.listForProject(projectId)).resolves.toEqual([]);
+    });
+
     it("persists run timeline, tool observations, and agent handoffs with scoped ordering", async () => {
       const repositories = await input.createRepositories();
 

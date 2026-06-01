@@ -650,10 +650,30 @@ export type LiveTaskStateResult =
   | { ok: true; value: LiveTaskStatePayload }
   | { ok: false; error: LiveTaskStateErrorCode };
 
+export type DeleteWorkbenchRecordErrorCode = "project_not_found" | "task_not_found";
+
+export type DeleteTaskResult =
+  | {
+      ok: true;
+      projectId?: string;
+      nextTaskId?: string;
+    }
+  | { ok: false; error: DeleteWorkbenchRecordErrorCode };
+
+export type DeleteProjectResult =
+  | {
+      ok: true;
+      nextProjectId?: string;
+      nextTaskId?: string;
+    }
+  | { ok: false; error: DeleteWorkbenchRecordErrorCode };
+
 export interface WebWorkbenchStore {
   createProject(input: CreateProjectFormInput): Promise<ProjectRecord>;
   listProjects(): Promise<ProjectRecord[]>;
   listTasks(): Promise<TaskRecord[]>;
+  deleteProject(input: { projectId: string }): Promise<DeleteProjectResult>;
+  deleteTask(input: { taskId: string }): Promise<DeleteTaskResult>;
   getPageState(input?: {
     projectId?: string | null;
     taskId?: string | null;
@@ -909,6 +929,15 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
   const listTasks = async () =>
     (await repositories.tasks.listAll()).map((task) => ({ ...task }));
+
+  const findNextTaskForProject = async (
+    projectId: string | undefined
+  ): Promise<TaskRecord | undefined> => {
+    if (!projectId) {
+      return undefined;
+    }
+    return (await repositories.tasks.listAll()).find((task) => task.projectId === projectId);
+  };
 
   const listMessages = async (taskId: string) =>
     (await repositories.messages.listForTask(taskId)).map((message) => ({ ...message }));
@@ -1395,6 +1424,47 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
 
     listProjects,
     listTasks,
+
+    async deleteTask(input) {
+      const taskId = input.taskId.trim();
+      if (!taskId) {
+        return { ok: false, error: "task_not_found" };
+      }
+      const task = await repositories.tasks.getById(taskId);
+      if (!task) {
+        return { ok: false, error: "task_not_found" };
+      }
+
+      await repositories.deletion.deleteTask({ taskId });
+      const nextTask = await findNextTaskForProject(task.projectId);
+      return {
+        ok: true,
+        ...(task.projectId ? { projectId: task.projectId } : {}),
+        ...(nextTask ? { nextTaskId: nextTask.id } : {})
+      };
+    },
+
+    async deleteProject(input) {
+      const projectId = input.projectId.trim();
+      if (!projectId) {
+        return { ok: false, error: "project_not_found" };
+      }
+      const project = await repositories.projects.getById(projectId);
+      if (!project) {
+        return { ok: false, error: "project_not_found" };
+      }
+
+      await repositories.deletion.deleteProject({ projectId });
+      const nextProject = (await repositories.projects.listAll()).find(
+        (candidate) => candidate.id !== projectId
+      );
+      const nextTask = await findNextTaskForProject(nextProject?.id);
+      return {
+        ok: true,
+        ...(nextProject ? { nextProjectId: nextProject.id } : {}),
+        ...(nextTask ? { nextTaskId: nextTask.id } : {})
+      };
+    },
 
     async getPageState(input) {
       const currentProjects = await listProjects();

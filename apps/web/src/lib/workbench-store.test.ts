@@ -1396,12 +1396,143 @@ describe("web workbench store", () => {
       expect(live.value.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
       expect(live.value.snapshot?.deployment).toBeUndefined();
       expect(live.value.isTerminal).toBe(true);
-      expect(live.value.nextPollMs).toBe(0);
+    expect(live.value.nextPollMs).toBe(0);
+  });
+
+  it("deletes a task and removes its task-scoped state", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Deletion Project",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Delete this task",
+      type: "general_chat",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_2",
+      title: "Keep this task",
+      type: "general_chat",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-06-01T00:00:01.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Delete this task",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.runs.save({
+      id: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      role: "assistant",
+      state: "completed",
+      startedAt: "2026-06-01T00:00:00.000Z",
+      completedAt: "2026-06-01T00:00:00.500Z",
+      contextSummary: {
+        injected: [],
+        omitted: []
+      }
+    });
+    await repositories.runEvents.save({
+      id: "event_1",
+      runId: "run_1",
+      projectId: "project_1",
+      taskId: "task_1",
+      sequence: 1,
+      type: "run.completed",
+      message: "Run completed",
+      payload: { type: "run.completed" },
+      createdAt: "2026-06-01T00:00:00.500Z"
     });
 
-    it("keeps LP generation live after Planner completes before page files exist", async () => {
-      const repositories = createInMemoryWorkbenchRepositories();
-      const store = createWebWorkbenchStore({ repositories });
+    const result = await store.deleteTask({ taskId: "task_1" });
+
+    expect(result).toEqual({
+      ok: true,
+      projectId: "project_1",
+      nextTaskId: "task_2"
+    });
+    expect(await repositories.tasks.getById("task_1")).toBeUndefined();
+    expect(await repositories.messages.listForTask("task_1")).toEqual([]);
+    expect(await repositories.runs.listForTask("task_1")).toEqual([]);
+    expect(await repositories.runEvents.listForTask("task_1")).toEqual([]);
+    expect((await store.listTasks()).map((task) => task.id)).toEqual(["task_2"]);
+  });
+
+  it("deletes a project and removes its project-scoped tasks", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
+    await repositories.projects.save({
+      id: "project_1",
+      name: "Delete Project",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.projects.save({
+      id: "project_2",
+      name: "Keep Project",
+      createdAt: "2026-06-01T00:00:01.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_1",
+      title: "Delete project task",
+      type: "general_chat",
+      status: "complete",
+      projectId: "project_1",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.tasks.save({
+      id: "task_2",
+      title: "Keep project task",
+      type: "general_chat",
+      status: "complete",
+      projectId: "project_2",
+      createdAt: "2026-06-01T00:00:01.000Z"
+    });
+    await repositories.messages.save({
+      id: "message_1",
+      taskId: "task_1",
+      role: "user",
+      content: "Delete project task",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+    await repositories.projectMembers.save({
+      id: "member_1",
+      projectId: "project_1",
+      userId: "local-web-user",
+      role: "owner",
+      displayName: "Local Web User",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z"
+    });
+
+    const result = await store.deleteProject({ projectId: "project_1" });
+
+    expect(result).toEqual({
+      ok: true,
+      nextProjectId: "project_2",
+      nextTaskId: "task_2"
+    });
+    expect(await repositories.projects.getById("project_1")).toBeUndefined();
+    expect(await repositories.tasks.getById("task_1")).toBeUndefined();
+    expect(await repositories.messages.listForTask("task_1")).toEqual([]);
+    expect(await repositories.projectMembers.listForProject("project_1")).toEqual([]);
+    expect((await store.listProjects()).map((project) => project.id)).toEqual(["project_2"]);
+    expect((await store.listTasks()).map((task) => task.id)).toEqual(["task_2"]);
+  });
+
+  it("keeps LP generation live after Planner completes before page files exist", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const store = createWebWorkbenchStore({ repositories });
       const createdAt = "2026-05-20T00:00:00.000Z";
       const projectId = "project_1";
       const taskId = "task_1";
