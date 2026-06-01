@@ -339,7 +339,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
           <Link
             className="sidebarAction"
+            data-workbench-link="true"
             href={createWorkbenchHref({ projectId: activeProject?.id, newTask: true })}
+            scroll={false}
           >
             {copy.sidebar.newTask}
           </Link>
@@ -349,51 +351,61 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <Link
             aria-current={activeView === "workbench" ? "page" : undefined}
             className={activeView === "workbench" ? "navItem navItemActive" : "navItem"}
+            data-workbench-link="true"
             href={activeWorkbenchHref}
+            scroll={false}
           >
             {copy.nav.workbench}
           </Link>
           <Link
             aria-current={activeView === "artifacts" ? "page" : undefined}
             className={activeView === "artifacts" ? "navItem navItemActive" : "navItem"}
+            data-workbench-link="true"
             href={createWorkbenchHref({
               projectId: activeProject?.id,
               taskId: activeTask?.id,
               view: "artifacts"
             })}
+            scroll={false}
           >
             {copy.nav.artifacts}
           </Link>
           <Link
             aria-current={activeView === "skills" ? "page" : undefined}
             className={activeView === "skills" ? "navItem navItemActive" : "navItem"}
+            data-workbench-link="true"
             href={createWorkbenchHref({
               projectId: activeProject?.id,
               taskId: activeTask?.id,
               view: "skills"
             })}
+            scroll={false}
           >
             {copy.nav.skills}
           </Link>
           <Link
             aria-current={activeView === "models" ? "page" : undefined}
             className={activeView === "models" ? "navItem navItemActive" : "navItem"}
+            data-workbench-link="true"
             href={createWorkbenchHref({
               projectId: activeProject?.id,
               taskId: activeTask?.id,
               view: "models"
             })}
+            scroll={false}
           >
             {copy.nav.models}
           </Link>
           <Link
             aria-current={activeView === "mcp" ? "page" : undefined}
             className={activeView === "mcp" ? "navItem navItemActive" : "navItem"}
+            data-workbench-link="true"
             href={createWorkbenchHref({
               projectId: activeProject?.id,
               taskId: activeTask?.id,
               view: "mcp"
             })}
+            scroll={false}
           >
             {copy.nav.mcp}
           </Link>
@@ -410,8 +422,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       ? "projectItem projectItemActive projectSelectButton"
                       : "projectItem projectSelectButton"
                   }
+                  data-workbench-link="true"
                   href={createWorkbenchHref({ projectId: project.id })}
                   key={project.id}
+                  scroll={false}
                 >
                   <strong>{project.name}</strong>
                 </Link>
@@ -444,11 +458,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 <Link
                   aria-current={task.id === activeTask?.id ? "page" : undefined}
                   className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                  data-workbench-link="true"
                   href={createWorkbenchHref({
                     projectId: task.projectId,
                     taskId: task.id
                   })}
                   key={task.id}
+                  scroll={false}
                 >
                   <span className="taskTitle">{task.title}</span>
                   {task.projectId ? (
@@ -1287,18 +1303,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                         />
                                       </ArtifactPreviewDrawer>
                                     ) : null}
-                                    <a
+                                    <Link
                                       className="artifactCard"
+                                      data-workbench-link="true"
                                       href={createWorkbenchHref({
                                         projectId: activeProject?.id,
                                         taskId: activeTask?.id,
                                         view: "artifacts"
                                       })}
+                                      scroll={false}
                                     >
                                       <span>{copy.nav.artifacts}</span>
                                       <strong>{copy.chat.artifactWorkspaceOpenLabel}</strong>
                                       <small>{copy.chat.artifactWorkspaceSubtitle}</small>
-                                    </a>
+                                    </Link>
                                   </div>
                                   {pageState.kind === "task_ready" && pageState.artifactDiff ? (
                                     ArtifactDiffBlock({
@@ -2024,12 +2042,14 @@ function ArtifactDiffBlock({
             ) : null}
             {file.summary ? <p>{file.summary}</p> : null}
             {file.canPreview ? (
-              <a
+              <Link
                 aria-label={`${copy.previewSnippetLabel}: ${file.path}`}
+                data-workbench-link="true"
                 href={createArtifactPreviewHref(previewSearchParams, file.path)}
+                scroll={false}
               >
                 {copy.previewSnippetLabel}
-              </a>
+              </Link>
             ) : null}
           </div>
         ))}
@@ -2091,10 +2111,15 @@ function ArtifactWorkspaceView({
         <div className="artifactWorkspaceEmpty">
           <h1 id="artifact-workspace-title">{copy.chat.artifactWorkspaceEmptyTitle}</h1>
           <p>{copy.chat.artifactWorkspaceEmptyDescription}</p>
-          <a className="artifactCard" href="/">
+          <Link
+            className="artifactCard"
+            data-workbench-link="true"
+            href="/"
+            scroll={false}
+          >
             <span>{copy.nav.workbench}</span>
             <strong>{copy.nav.workbench}</strong>
-          </a>
+          </Link>
         </div>
       </section>
     );

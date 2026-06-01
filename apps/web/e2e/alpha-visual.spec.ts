@@ -5,6 +5,7 @@ import {
   expectDedicatedArtifactWorkspace,
   expectManagementLayoutContract,
   expectModelsManagementSurface,
+  expectOnlyWorkbenchContentScrolls,
   expectSkillsManagementSurface,
   expectStaticLpArtifacts,
   expectWorkbenchLayoutContract,
@@ -36,6 +37,15 @@ test("keeps the artifact workspace layout visually stable", async ({ page }, tes
   await page.screenshot({
     fullPage: false,
     path: testInfo.outputPath("artifact-workspace-layout.png")
+  });
+
+  await page.getByRole("link", { name: "Workbench", exact: true }).click();
+  await expect(page.getByLabel("Generated files")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectOnlyWorkbenchContentScrolls(page);
+  await page.screenshot({
+    fullPage: false,
+    path: testInfo.outputPath("artifact-workspace-mobile-scroll.png")
   });
 });
 

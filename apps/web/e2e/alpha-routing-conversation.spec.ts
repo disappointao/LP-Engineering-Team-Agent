@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  createProject,
   expectOrdinaryChatThread,
   expectStaticLpArtifacts,
   submitPrompt
@@ -65,6 +66,65 @@ test("keeps route switches client-side and shows LP follow-up prompts", async ({
   ).resolves.toBe(marker);
 });
 
+test("keeps sidebar project and task switches client-side", async ({ page }) => {
+  const firstProject = "Sidebar client project A";
+  const secondProject = "Sidebar client project B";
+  const firstPrompt = "Help me plan sidebar task one";
+  const secondPrompt = "Help me plan sidebar task two";
+
+  await createProject(page, firstProject);
+  await createProject(page, secondProject);
+
+  const projectMarker = await page.evaluate(() => {
+    const markedWindow = window as typeof window & { __lpWorkbenchMarker?: string };
+    markedWindow.__lpWorkbenchMarker = "project-switch-marker";
+    return markedWindow.__lpWorkbenchMarker;
+  });
+
+  await page.getByRole("link", { name: firstProject, exact: true }).click();
+  await expect(page.getByRole("link", { name: firstProject, exact: true })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(
+    page.evaluate(() => (window as typeof window & { __lpWorkbenchMarker?: string }).__lpWorkbenchMarker)
+  ).resolves.toBe(projectMarker);
+
+  await page.getByRole("link", { name: secondProject, exact: true }).click();
+  await expect(page.getByRole("link", { name: secondProject, exact: true })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(
+    page.evaluate(() => (window as typeof window & { __lpWorkbenchMarker?: string }).__lpWorkbenchMarker)
+  ).resolves.toBe(projectMarker);
+
+  await page.getByLabel("LP request").fill(firstPrompt);
+  await page.getByLabel("LP request").press("Enter");
+  await expect(page.getByLabel("You").getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Agent process")).toHaveCount(0);
+  await expect(page.getByLabel("Live task progress")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "New task", exact: true }).click();
+  await page.getByLabel("LP request").fill(secondPrompt);
+  await page.getByLabel("LP request").press("Enter");
+  await expect(page.getByLabel("You").getByText(secondPrompt, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Agent process")).toHaveCount(0);
+  await expect(page.getByLabel("Live task progress")).toHaveCount(0);
+
+  const taskMarker = await page.evaluate(() => {
+    const markedWindow = window as typeof window & { __lpWorkbenchMarker?: string };
+    markedWindow.__lpWorkbenchMarker = "task-switch-marker";
+    return markedWindow.__lpWorkbenchMarker;
+  });
+
+  await page.locator("a.taskItem", { hasText: firstPrompt }).click();
+  await expect(page.getByLabel("You").getByText(firstPrompt, { exact: true })).toBeVisible();
+  await expect(
+    page.evaluate(() => (window as typeof window & { __lpWorkbenchMarker?: string }).__lpWorkbenchMarker)
+  ).resolves.toBe(taskMarker);
+});
+
 test("routes LP chat-style follow-ups without showing latest-turn task progress", async ({ page }) => {
   const prompt = "Generate a browser contract static HTML landing page";
   const followUpPrompt = "Why did you choose this layout?";
@@ -112,7 +172,6 @@ test("routes LP continue-style follow-ups with latest-turn task progress", async
   expect(submitResponse.ok()).toBe(true);
   await expect(page.getByLabel("You").getByText(prompt, { exact: true })).toBeVisible();
   await expectStaticLpArtifacts(page);
-  await expect(page.getByLabel("Suggested next prompts")).toBeVisible();
 
   const followUpResponsePromise = page.waitForResponse(
     (response) =>

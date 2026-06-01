@@ -1,6 +1,6 @@
 # 项目路线图
 
-最后更新：2026-05-30
+最后更新：2026-06-01
 
 这份文档是 LP Engineering Team Agent 后续阶段任务规划的默认入口。后续询问“下一阶段做什么”时，先读本文件，再按需要读取 `docs/agent-development-learning.md`、`docs/superpowers/README.md` 和具体 stage spec/plan。
 
@@ -46,6 +46,7 @@
 - Manus-style Task Experience v0：Stage58 已完成，把 LP live task state 投影为用户可理解的 Manus 风格步骤卡，普通聊天保持纯对话不显示任务进度/运行时噪音，composer 主操作收敛为发送/停止单按钮；不改变底层 run orchestration、worker queue、artifact polling、真实 provider 或 interrupt 安全边界。
 - Task Intent Routing / AI Follow-ups v0：Stage59 已完成：新增 AI intent parser / service router、LP-only follow-up provider/cache、LP task input routing for `chat_in_task` / `agent_continue` / `agent_new_task` / `clarify`、Web follow-up rendering，以及 latest-turn task progress gating 的 browser-visible contract；普通聊天不显示推荐追问，LP task 内普通提问不再默认启动 agent continuation。
 - Agent Product Surface Polish / Live Polling Hardening v0：2026-05-30 增量已完成，Web shell、sidebar、topbar、composer、assistant turn、LP 过程卡、artifact preview drawer 和 mobile responsive surface 已按类 Manus/ChatGPT agent 产品方向打磨；完成态 `Agent process` 自动折叠为摘要且不重复暴露 landmark；LP live state 在 Planner 已完成但 page files 尚未写入、且没有 failed/cancelled/blocked run 时继续 polling，避免生成链路在 `Planner -> Builder` 间隙被前端误判终态。
+- Workbench Soft Navigation / Fixed Shell Polish v0：2026-06-01 增量已完成，所有 workbench 内部导航链接都显式走 client-side Link、`scroll={false}` 和 `data-workbench-link` contract，artifact workspace / snippet 内部跳转不再使用裸 `<a href="/...">`；desktop 和 narrow/mobile shell 都保持 body 不滚动，sidebar / topbar / composer 固定在各自区域，中间 `.conversationViewport` 独立滚动。
 - Skill-only alpha release candidate checklist v0：Stage 37 已整理 RC go/no-go、operator trial script、feedback template、triage 分类和已知限制；默认 gates 继续 deterministic/no-key/local-first。
 - Assistant streaming failure UX hardening v0：Stage 38 已为 ordinary chat provider streaming 增加 typed failure codes、localized Web failure copy、empty response guard、persistence failure copy 和 cancel-safe stream persistence guard。
 - LP artifact quality baseline v0：Stage 39 已新增质量 rubric、代表性 prompt fixtures、人工评审记录、安全证据规则，并对 Planner / Builder structured prompts 做小范围质量 hardening；三文件静态 artifact contract 和 policy 不变。
@@ -1243,6 +1244,8 @@ Stage58 v0 已把 Web workbench 的任务体验从“暴露运行时/调试过�
 ## 决策记录
 
 - 2026-05-30 Agent Product Surface Polish / Live Polling Hardening v0 已完成：Web workbench shell、sidebar、topbar、conversation stack、assistant turn、composer、LP progress cards、artifact preview drawer 和 mobile layout 已按 agent 产品形态打磨；completed `Agent process` 默认折叠并避免重复 accessible label；LP live state 在 Planner 已完成但 page files 尚未写入、且没有 failed/cancelled/blocked run 时保持 polling，修复 browser-visible follow-up LP continuation 中途停在等待态的问题。推荐下一阶段队列不变，仍为 Stage 52、Stage 53、Stage 55、Stage 56 和 conditional Stage 48。验证已完成：focused live-state regression red/green、focused Web Vitest 4 files / 241 tests passed、focused Playwright subset 9 passed 后修复重复 label、`pnpm alpha:e2e` 21 passed、`pnpm test` 65 files passed / 1283 tests passed / 2 skipped、`pnpm typecheck` passed、`pnpm build` passed、`git diff --check` passed，并用隔离 mock state 在 `localhost:3100` 完成 Playwright visual smoke（desktop no overflow、single `Agent process` label、drawer fixed full-height/right-aligned、mobile no horizontal overflow）。
+
+- 2026-06-01 Workbench Soft Navigation / Fixed Shell Polish v0 已完成：修复 sidebar project / task 切换和 artifact internal links 的导航体验，所有内部 workbench links 统一标记为 client-side soft navigation 并禁用默认 scroll reset；新增 browser contract 验证 project/task switch 保留 JS marker，避免被硬刷新；窄屏布局从 document scroll 改为 fixed shell + `.conversationViewport` 独立滚动，防止左侧/顶部/底部 chrome 跟着内容一起滚。推荐下一阶段队列不变，仍为 Stage 52、Stage 53、Stage 55、Stage 56 和 conditional Stage 48。
 
 - 2026-05-26 Stage59 Task Intent Routing / AI Follow-ups v0 已完成：`apps/web/e2e/alpha-routing-conversation.spec.ts` 覆盖普通聊天无推荐追问、完成 LP task follow-up suggestions、LP task chat-style follow-up 不显示 latest-turn task progress，以及 continue-style follow-up 显示 latest-turn task progress；no-key default mock runtime 通过 deterministic intent/follow-up fixture 覆盖 completed-but-non-JSON 输出，真实 runtime 和自定义 runtime 仍 fail closed；LP live task 在 follow-up cache 写入前保持 polling，避免 artifact refresh 早于推荐追问缓存导致页面缺失建议；chat-in-task 最新回合不再复用旧 artifact delivery / preview。roadmap / Superpowers README 同步 Stage59 完成态和 Stage52 回到默认下一阶段。最终验证已完成：focused API Vitest 182 tests passed、focused Web Vitest 186 tests passed、focused routing Playwright 4 passed、`pnpm test` 65 files passed / 1241 tests passed / 2 skipped、`pnpm typecheck` passed、`pnpm alpha:e2e` 20 passed、`git diff --check` passed。
 

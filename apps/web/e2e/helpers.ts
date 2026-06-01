@@ -76,8 +76,10 @@ export async function expectStaticLpArtifacts(page: Page) {
 export async function expectRunTimeline(page: Page) {
   const agentDetails = page.locator(".agentDetails").first();
   const summary = agentDetails.locator(".agentDetailsSummary");
+  await expect(summary).toBeEnabled();
   if ((await summary.getAttribute("aria-expanded")) !== "true") {
-    await agentDetails.locator(".agentDetailsSummary").click();
+    await summary.click();
+    await expect(summary).toHaveAttribute("aria-expanded", "true");
   }
   const runTimeline = agentDetails.locator(".runTimelineBlock");
   await expect(runTimeline).toBeVisible();
@@ -218,6 +220,67 @@ export async function expectWorkbenchLayoutContract(page: Page) {
   }
 
   await expectNoHorizontalOverflow(page);
+}
+
+export async function expectOnlyWorkbenchContentScrolls(page: Page) {
+  const viewport = page.locator(".conversationViewport");
+  const sidebar = page.locator("aside.sidebar");
+  const topBar = page.locator(".topBar");
+  const composer = page.locator("form.composerDock");
+
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(100);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect.poll(async () => viewport.evaluate((element) => element.scrollTop)).toBe(0);
+  const before = await page.evaluate(() => {
+    const boxFor = (selector: string) => {
+      const rect = document.querySelector(selector)?.getBoundingClientRect();
+      return rect ? { bottom: rect.bottom, top: rect.top } : undefined;
+    };
+    return {
+      bodyScrollY: window.scrollY,
+      viewportScrollTop: document.querySelector(".conversationViewport")?.scrollTop ?? 0,
+      sidebar: boxFor("aside.sidebar"),
+      topBar: boxFor(".topBar"),
+      composer: boxFor("form.composerDock")
+    };
+  });
+
+  await viewport.evaluate((element) => {
+    element.scrollTop = Math.min(260, element.scrollHeight - element.clientHeight);
+  });
+
+  await expect.poll(async () => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  const after = await page.evaluate(() => {
+    const boxFor = (selector: string) => {
+      const rect = document.querySelector(selector)?.getBoundingClientRect();
+      return rect ? { bottom: rect.bottom, top: rect.top } : undefined;
+    };
+    return {
+      bodyScrollY: window.scrollY,
+      viewportScrollTop: document.querySelector(".conversationViewport")?.scrollTop ?? 0,
+      sidebar: boxFor("aside.sidebar"),
+      topBar: boxFor(".topBar"),
+      composer: boxFor("form.composerDock")
+    };
+  });
+
+  expect(before.bodyScrollY).toBe(0);
+  expect(after.bodyScrollY).toBe(0);
+  expect(after.viewportScrollTop).toBeGreaterThan(before.viewportScrollTop);
+  expect(after.sidebar?.top).toBeCloseTo(before.sidebar?.top ?? 0, 0);
+  expect(after.topBar?.top).toBeCloseTo(before.topBar?.top ?? 0, 0);
+  expect(after.composer?.bottom).toBeCloseTo(before.composer?.bottom ?? 0, 0);
+  await expect(sidebar).toBeVisible();
+  await expect(topBar).toBeVisible();
+  await expect(composer).toBeVisible();
 }
 
 export async function expectArtifactWorkspaceLayoutContract(page: Page) {

@@ -1336,6 +1336,23 @@ describe("HomePage project flow errors", () => {
     expect(hasClass(topBar as ReactTestElement, "agentTopBar")).toBe(true);
   });
 
+  it("does not render raw internal anchors for workbench navigation", async () => {
+    pageMocks.pageState = createCompletedLpPageState();
+
+    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const rawInternalAnchors = collectElements(page, "a").filter((anchor) => {
+      const href = anchor.props?.href;
+      return (
+        typeof href === "string" &&
+        (href === "/" || href.startsWith("/?")) &&
+        anchor.props?.download === undefined &&
+        anchor.props?.["data-workbench-link"] !== "true"
+      );
+    });
+
+    expect(rawInternalAnchors.map((anchor) => anchor.props?.href)).toEqual([]);
+  });
+
   it("renders an enabled interrupt button for interruptible task state", async () => {
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = {
