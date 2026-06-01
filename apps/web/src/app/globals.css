@@ -2644,6 +2644,172 @@ button.artifactCard {
   padding: 0;
 }
 
+.lpPreviewWorkspace {
+  min-width: 0;
+}
+
+.liveTaskPreviewWorkspace {
+  display: grid;
+  min-width: 0;
+  padding-left: 40px;
+}
+
+.liveTaskPreviewWorkspace .lpPreviewWorkspaceTrigger {
+  width: min(100%, 420px);
+  min-height: 64px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  justify-items: start;
+}
+
+.liveTaskPreviewWorkspace .lpPreviewWorkspaceTrigger small {
+  grid-column: 1 / -1;
+}
+
+.lpPreviewWorkspace:has(.lpPreviewWorkspacePanel) {
+  position: fixed;
+  top: 58px;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: min(46vw, 720px);
+  min-width: 430px;
+  pointer-events: none;
+}
+
+.chatWorkspace:has(.lpPreviewWorkspacePanel) .conversationStack,
+.chatWorkspace:has(.lpPreviewWorkspacePanel) .composer {
+  width: min(100%, 640px);
+  margin-left: max(22px, calc((100% - min(100%, 640px) - min(46vw, 720px)) / 2));
+  margin-right: auto;
+}
+
+.lpPreviewWorkspaceTrigger {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.lpPreviewWorkspaceTrigger:hover,
+.lpPreviewWorkspaceTrigger:focus-visible {
+  border-color: var(--accent-line);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+  outline: 0;
+}
+
+.lpPreviewWorkspacePanel {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: -18px 0 44px rgba(40, 43, 45, 0.12);
+  pointer-events: auto;
+}
+
+.lpPreviewWorkspaceHeader,
+.lpPreviewWorkspaceToolbar,
+.lpPreviewWorkspaceExports {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.lpPreviewWorkspaceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lpPreviewWorkspaceHeader h2,
+.lpPreviewWorkspaceExports h3 {
+  margin: 0;
+  color: #25292e;
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.lpPreviewWorkspaceHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.lpPreviewWorkspaceToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lpPreviewWorkspaceClose,
+.lpPreviewInspectToggle,
+.lpPreviewClearSelection,
+.composerSelectedElement button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.lpPreviewInspectToggleActive {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.lpPreviewSelectedElement {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  background: #f7fbfa;
+  padding: 10px 14px;
+}
+
+.lpPreviewSelectedElement span {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 840;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.lpPreviewSelectedElement strong {
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.lpPreviewWorkspaceFrame {
+  min-height: 0;
+  background: #ffffff;
+}
+
+.lpPreviewWorkspaceFrame .previewFrame {
+  height: 100%;
+  min-height: 100%;
+}
+
+.lpPreviewWorkspaceExports {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface);
+}
+
+.lpPreviewWorkspaceExports .artifactGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0;
+}
+
 .suggestionBlock {
   display: grid;
   gap: 8px;
@@ -2684,7 +2850,8 @@ button.artifactCard {
 .composer {
   width: min(100%, 840px);
   min-height: 58px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   margin: 0 auto;
@@ -2693,6 +2860,43 @@ button.artifactCard {
   background: var(--surface);
   box-shadow: var(--shadow);
   padding: 8px;
+}
+
+.composerSelectedElement {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  padding: 6px;
+}
+
+.composerSelectedElement span {
+  flex: 0 0 auto;
+  min-height: 26px;
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--accent);
+}
+
+.composerSelectedElement strong {
+  min-width: 0;
+  flex: 1;
+  color: #1f3f3c;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composerSelectedElement button {
+  flex: 0 0 auto;
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .composer textarea {
@@ -3365,6 +3569,23 @@ body {
     padding: 30px 16px 28px;
   }
 
+  .chatWorkspace:has(.lpPreviewWorkspacePanel) .conversationStack,
+  .chatWorkspace:has(.lpPreviewWorkspacePanel) .composer {
+    width: min(100%, 920px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .lpPreviewWorkspace:has(.lpPreviewWorkspacePanel) {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    min-width: 0;
+    height: min(72dvh, 680px);
+  }
+
   .assistantTurn {
     grid-template-columns: 1fr;
   }
@@ -3402,12 +3623,11 @@ body {
   }
 
   .composer {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr;
   }
 
   .composer textarea {
-    order: -1;
-    flex-basis: 100%;
+    width: 100%;
   }
 
   .agentPreviewDrawerPanel {

@@ -9,14 +9,13 @@ import {
   type MutableRefObject
 } from "react";
 import { useRouter } from "next/navigation";
-import type { WorkbenchCopy } from "../lib/i18n";
+import type { ExportLabels, WorkbenchCopy } from "../lib/i18n";
 import type { LiveTaskStatePayload } from "../lib/workbench-store";
 import {
   createInitialLiveTaskState,
   getNextPollMs,
   reduceLiveTaskState,
   shouldPollLiveTask,
-  shouldRefreshForLiveArtifact,
   type LiveTaskPanelAction,
   type LiveTaskPanelState
 } from "./live-task-state";
@@ -25,6 +24,11 @@ import {
   buildTaskProgressViewModel,
   type TaskNarrativeStepViewModel
 } from "./task-progress-view-model";
+import {
+  LPPreviewWorkspace,
+  type LPPreviewWorkspaceExportLink,
+  type LPPreviewWorkspaceLabels
+} from "./lp-preview-workspace";
 
 export interface LiveTaskPanelProps {
   taskId?: string;
@@ -32,6 +36,7 @@ export interface LiveTaskPanelProps {
   initialPayload?: LiveTaskStatePayload;
   initialPreviewVersionKey?: string;
   copy: LiveTaskCopy;
+  exportLabels?: ExportLabels;
 }
 
 export type LiveTaskCopy = Pick<
@@ -42,6 +47,15 @@ export type LiveTaskCopy = Pick<
   | "liveTaskRefreshError"
   | "liveTaskRunning"
   | "liveTaskTitle"
+  | "artifactPreviewDrawerCloseLabel"
+  | "artifactPreviewWorkspaceClearSelectionLabel"
+  | "artifactPreviewWorkspaceInspectActiveLabel"
+  | "artifactPreviewWorkspaceInspectLabel"
+  | "artifactPreviewWorkspaceOpenLabel"
+  | "artifactPreviewWorkspaceSelectedEmptyLabel"
+  | "artifactPreviewWorkspaceSelectedLabel"
+  | "artifactWorkspaceExportTitle"
+  | "previewTitle"
   | "recoveryStateLabels"
 > & {
   roleLabels: WorkbenchCopy["modelsView"]["roleLabels"];
@@ -59,6 +73,12 @@ type LiveTaskStateRouteResponse =
 export type LiveTaskStateRouteResult =
   | { ok: true; payload: LiveTaskStatePayload }
   | { ok: false; error: string; retryable: boolean };
+
+export interface LiveTaskPreviewWorkspaceConfig {
+  previewUrl: string;
+  previewVersionKey: string;
+  exportLinks: LPPreviewWorkspaceExportLink[];
+}
 
 const retryPollMs = 3000;
 const permanentRouteErrors = new Set(["task_not_found", "project_not_found"]);
@@ -180,20 +200,121 @@ export function getLiveTaskPreviewRefreshDecision({
   const hasResetPreviewVersionKey = resetPreviewVersionKey !== undefined;
   const baselinePreviewVersionKey =
     hasResetPreviewVersionKey ? resetPreviewVersionKey : previousPreviewVersionKey;
-  const firstDefinedPreviewVersionKey =
-    !hasResetPreviewVersionKey &&
-    previousPreviewVersionKey === undefined &&
-    nextPreviewVersionKey !== undefined;
-
   return {
-    shouldRefresh:
-      firstDefinedPreviewVersionKey ||
-      shouldRefreshForLiveArtifact({
-        previousPreviewVersionKey: baselinePreviewVersionKey,
-        nextPreviewVersionKey
-      }),
+    shouldRefresh: false,
     nextPreviewVersionKey:
       nextPreviewVersionKey ?? baselinePreviewVersionKey
+  };
+}
+
+export function shouldRefreshLiveTaskPage({
+  hasRefreshedTerminal,
+  payload
+}: {
+  hasRefreshedTerminal: boolean;
+  payload?: LiveTaskStatePayload;
+}): boolean {
+  return payload?.isTerminal === true && !hasRefreshedTerminal;
+}
+
+export function getLiveTaskPreviewWorkspaceConfig({
+  taskId,
+  projectId,
+  payload,
+  exportLabels
+}: {
+  taskId?: string;
+  projectId?: string;
+  payload?: LiveTaskStatePayload;
+  exportLabels?: ExportLabels;
+}): LiveTaskPreviewWorkspaceConfig | undefined {
+  const artifactProgress = payload?.artifactProgress;
+  if (!taskId || !artifactProgress || !exportLabels) {
+    return undefined;
+  }
+
+  const sharedParams = new URLSearchParams();
+  const trimmedProjectId = projectId?.trim();
+  if (trimmedProjectId) {
+    sharedParams.set("projectId", trimmedProjectId);
+  }
+  sharedParams.set("version", artifactProgress.pageVersionId);
+
+  const previewParams = sharedParams.toString();
+  const exportBaseParams = new URLSearchParams(sharedParams);
+  const taskPath = `/api/tasks/${encodeURIComponent(taskId)}`;
+
+  return {
+    previewUrl: `${taskPath}/preview${previewParams ? `?${previewParams}` : ""}`,
+    previewVersionKey: artifactProgress.previewVersionKey,
+    exportLinks: [
+      createExportLink({
+        taskPath,
+        baseParams: exportBaseParams,
+        file: "single-html",
+        filename: "index.single.html",
+        label: exportLabels.singleHtml
+      }),
+      createExportLink({
+        taskPath,
+        baseParams: exportBaseParams,
+        file: "index-html",
+        filename: "index.html",
+        label: exportLabels.indexHtml
+      }),
+      createExportLink({
+        taskPath,
+        baseParams: exportBaseParams,
+        file: "styles-css",
+        filename: "styles.css",
+        label: exportLabels.stylesCss
+      }),
+      createExportLink({
+        taskPath,
+        baseParams: exportBaseParams,
+        file: "script-js",
+        filename: "script.js",
+        label: exportLabels.scriptJs
+      })
+    ]
+  };
+}
+
+function createExportLink({
+  taskPath,
+  baseParams,
+  file,
+  filename,
+  label
+}: {
+  taskPath: string;
+  baseParams: URLSearchParams;
+  file: string;
+  filename: string;
+  label: string;
+}): LPPreviewWorkspaceExportLink {
+  const params = new URLSearchParams(baseParams);
+  params.set("file", file);
+  return {
+    label,
+    filename,
+    href: `${taskPath}/export?${params.toString()}`
+  };
+}
+
+function createLiveTaskPreviewWorkspaceLabels(
+  copy: LiveTaskCopy
+): LPPreviewWorkspaceLabels {
+  return {
+    clearSelectedElement: copy.artifactPreviewWorkspaceClearSelectionLabel,
+    close: copy.artifactPreviewDrawerCloseLabel,
+    exportTitle: copy.artifactWorkspaceExportTitle,
+    inspect: copy.artifactPreviewWorkspaceInspectLabel,
+    inspectActive: copy.artifactPreviewWorkspaceInspectActiveLabel,
+    open: copy.artifactPreviewWorkspaceOpenLabel,
+    previewTitle: copy.previewTitle,
+    selectedElementEmpty: copy.artifactPreviewWorkspaceSelectedEmptyLabel,
+    selectedElementLabel: copy.artifactPreviewWorkspaceSelectedLabel
   };
 }
 
@@ -344,7 +465,8 @@ export function LiveTaskPanel({
   initialProjectId: acceptedInitialProjectId,
   initialPayload,
   initialPreviewVersionKey,
-  copy
+  copy,
+  exportLabels
 }: LiveTaskPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(
@@ -353,6 +475,7 @@ export function LiveTaskPanel({
   );
   const stateRef = useRef(state);
   const previousPreviewVersionKeyRef = useRef(initialPreviewVersionKey);
+  const terminalRefreshRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const initialProjectId = acceptedInitialProjectId?.trim() || undefined;
   const initialPayloadForTask = initialPayload?.taskId === taskId ? initialPayload : undefined;
@@ -369,6 +492,7 @@ export function LiveTaskPanel({
 
     let isMounted = true;
     stateRef.current = createInitialLiveTaskState(initialPayloadForTask);
+    terminalRefreshRef.current = initialPayloadForTask?.isTerminal === true;
     dispatch({
       type: "reset",
       ...(initialPayloadForTask ? { payload: initialPayloadForTask } : {})
@@ -423,6 +547,14 @@ export function LiveTaskPanel({
         router.refresh();
       }
 
+      if (shouldRefreshLiveTaskPage({
+        hasRefreshedTerminal: terminalRefreshRef.current,
+        payload
+      })) {
+        terminalRefreshRef.current = true;
+        router.refresh();
+      }
+
       if (shouldPollLiveTask(nextState)) {
         schedulePoll(getNextPollMs(nextState));
       }
@@ -466,6 +598,12 @@ export function LiveTaskPanel({
   const visiblePayload =
     taskId && state.payload?.taskId === taskId ? state.payload : undefined;
   const visibleErrorMessage = taskId ? state.errorMessage : undefined;
+  const previewWorkspaceConfig = getLiveTaskPreviewWorkspaceConfig({
+    taskId,
+    projectId: visiblePayload?.projectId ?? initialProjectId,
+    payload: visiblePayload,
+    exportLabels
+  });
 
   return (
     <section
@@ -486,6 +624,16 @@ export function LiveTaskPanel({
         payload: visiblePayload,
         copy
       })}
+      {previewWorkspaceConfig ? (
+        <div className="liveTaskPreviewWorkspace">
+          <LPPreviewWorkspace
+            exportLinks={previewWorkspaceConfig.exportLinks}
+            labels={createLiveTaskPreviewWorkspaceLabels(copy)}
+            previewUrl={previewWorkspaceConfig.previewUrl}
+            previewVersionKey={previewWorkspaceConfig.previewVersionKey}
+          />
+        </div>
+      ) : null}
       {visibleErrorMessage ? (
         <p className="liveTaskError" role="alert">
           {visibleErrorMessage}

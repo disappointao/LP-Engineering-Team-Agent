@@ -69,7 +69,7 @@ export async function expectStaticLpArtifacts(page: Page) {
   }
 
   await expect(
-    generatedFiles.getByRole("button", { name: /Static LP preview\s+Preview and export/ })
+    generatedFiles.getByRole("button", { name: /Static LP preview\s+Open preview/ })
   ).toBeVisible();
 }
 

@@ -1046,7 +1046,8 @@ describe("HomePage project flow errors", () => {
         (section) => hasClass(section as ReactTestElement, "deliveryBlock")
       )
     ).toHaveLength(1);
-    expect(collectComponentProps(page, "ArtifactPreviewDrawer")).toHaveLength(1);
+    expect(collectComponentProps(page, "ArtifactPreviewDrawer")).toHaveLength(0);
+    expect(collectComponentProps(page, "LPPreviewWorkspace")).toHaveLength(1);
     expect(
       collectElements(page, "section").filter(
         (section) => section.props?.className === "inlinePreview"
@@ -4212,25 +4213,37 @@ describe("HomePage project flow errors", () => {
     const text = collectText(page);
     const spacedText = text.join(" ");
     const tightText = text.join("");
-    const [drawerProps] = collectComponentProps(page, "ArtifactPreviewDrawer");
+    const [previewWorkspaceProps] = collectComponentProps(page, "LPPreviewWorkspace");
 
     expect(spacedText).toContain("Agent process");
     expect(tightText).toContain("3/3");
     expect(spacedText).toContain("Task complete");
-    expect(drawerProps).toMatchObject({
+    expect(collectComponentProps(page, "ArtifactPreviewDrawer")).toHaveLength(0);
+    expect(previewWorkspaceProps).toBeDefined();
+    expect(previewWorkspaceProps).toMatchObject({
       labels: {
         close: "Close preview",
         exportTitle: "Exports",
-        open: "Preview and export",
-        previewTitle: "Static LP preview"
+        inspect: "Inspect elements",
+        open: "Open preview",
+        previewTitle: "Static LP preview",
+        selectedElementEmpty: "No element selected"
       },
-      downloadLinks: [
-        expect.objectContaining({ filename: "index.single.html" }),
+      previewUrl: "/api/tasks/task_1/preview?projectId=project_1&version=version_1",
+      exportLinks: [
+        expect.objectContaining({
+          filename: "index.single.html",
+          href: "/api/tasks/task_1/export?projectId=project_1&version=version_1&file=single-html"
+        }),
         expect.objectContaining({ filename: "index.html" }),
         expect.objectContaining({ filename: "styles.css" }),
         expect.objectContaining({ filename: "script.js" })
       ]
     });
+    for (const link of previewWorkspaceProps!.exportLinks as Array<Record<string, unknown>>) {
+      expect(link.href).toEqual(expect.stringContaining("/api/tasks/task_1/export?"));
+      expect(String(link.href)).not.toContain("data:");
+    }
     expect(spacedText).not.toContain("Prepare a deployment skill command");
     expect(spacedText).not.toContain("deployment-handoff.json");
     expect(spacedText).not.toContain("PR handoff");

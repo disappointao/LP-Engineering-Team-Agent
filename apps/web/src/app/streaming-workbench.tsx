@@ -8,6 +8,11 @@ import {
   type ChatStreamEvent
 } from "../lib/chat-stream";
 import {
+  selectedPreviewElementChangeEvent,
+  sanitizeSelectedPreviewElement,
+  type SelectedPreviewElement
+} from "../lib/selected-preview-element";
+import {
   createInitialStreamingWorkbenchState,
   reduceStreamingWorkbenchEvent,
   type StreamingWorkbenchState
@@ -27,6 +32,8 @@ export interface StreamingWorkbenchProps {
   streamingStatusLabel: string;
   streamingErrorLabel: string;
   streamingErrorMessages: Record<ChatStreamErrorCode, string>;
+  selectedElementLabel?: string;
+  selectedElementClearLabel?: string;
   interruptAction: (formData: FormData) => Promise<void>;
   interruptState: "idle" | "stopping" | "cancelled" | "not_interruptible";
   interruptLabels: {
@@ -286,21 +293,25 @@ export interface StreamingChatRequestBody {
   prompt: string;
   projectId: string | null;
   taskId: string | null;
+  selectedElement?: SelectedPreviewElement;
 }
 
 export function createStreamingChatRequestBody({
   prompt,
   projectId,
-  taskId
+  taskId,
+  selectedElement
 }: {
   prompt: string;
   projectId?: string;
   taskId?: string;
+  selectedElement?: SelectedPreviewElement;
 }): StreamingChatRequestBody {
   return {
     prompt,
     projectId: projectId ?? null,
-    taskId: taskId ?? null
+    taskId: taskId ?? null,
+    ...(selectedElement ? { selectedElement } : {})
   };
 }
 
@@ -309,6 +320,7 @@ export interface LiveTaskSubmitRequestBody {
   implicitProjectName: string;
   projectId?: string;
   taskId?: string;
+  selectedElement?: SelectedPreviewElement;
 }
 
 interface LiveTaskSubmitSuccessPayload {
@@ -323,13 +335,15 @@ export function createLiveTaskSubmitRequestBody({
   prompt,
   implicitProjectName,
   projectId,
-  taskId
+  taskId,
+  selectedElement
 }: LiveTaskSubmitRequestBody): LiveTaskSubmitRequestBody {
   return {
     prompt,
     implicitProjectName,
     ...(projectId ? { projectId } : {}),
-    ...(taskId ? { taskId } : {})
+    ...(taskId ? { taskId } : {}),
+    ...(selectedElement ? { selectedElement } : {})
   };
 }
 
@@ -542,6 +556,8 @@ export function StreamingWorkbench({
   streamingStatusLabel,
   streamingErrorLabel,
   streamingErrorMessages,
+  selectedElementLabel = "Selected",
+  selectedElementClearLabel = "Clear",
   interruptAction,
   interruptState,
   interruptLabels
@@ -560,6 +576,7 @@ export function StreamingWorkbench({
   const stateRef = useRef(createInitialStreamingWorkbenchState());
   const [fallbackPrompt, setFallbackPrompt] = useState<string | undefined>(undefined);
   const [liveTaskSubmitPending, setLiveTaskSubmitPending] = useState(false);
+  const [selectedElement, setSelectedElement] = useState<SelectedPreviewElement | undefined>();
   const [visibleSubmittedPrompt, setVisibleSubmittedPrompt] = useState<string | undefined>();
   const [state, dispatch] = useReducer(
     streamingWorkbenchReducer,
@@ -581,6 +598,19 @@ export function StreamingWorkbench({
     interruptState,
     isPromptDisabled: promptSubmissionControls.visiblePromptDisabled
   });
+
+  useEffect(() => {
+    const handleSelectedElementChange = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      setSelectedElement(sanitizeSelectedPreviewElement(detail));
+    };
+    window.addEventListener(selectedPreviewElementChangeEvent, handleSelectedElementChange);
+    return () =>
+      window.removeEventListener(
+        selectedPreviewElementChangeEvent,
+        handleSelectedElementChange
+      );
+  }, []);
 
   useEffect(() => {
     const viewport = conversationViewportRef.current;
@@ -738,7 +768,8 @@ export function StreamingWorkbench({
             prompt,
             implicitProjectName,
             ...(projectId ? { projectId } : {}),
-            ...(submitTaskId ? { taskId: submitTaskId } : {})
+            ...(submitTaskId ? { taskId: submitTaskId } : {}),
+            ...(selectedElement ? { selectedElement } : {})
           })
         )
       });
@@ -844,7 +875,14 @@ export function StreamingWorkbench({
         headers: {
           "content-type": "application/json"
         },
-        body: JSON.stringify(createStreamingChatRequestBody({ prompt, projectId, taskId }))
+        body: JSON.stringify(
+          createStreamingChatRequestBody({
+            prompt,
+            projectId,
+            taskId,
+            ...(selectedElement ? { selectedElement } : {})
+          })
+        )
       });
 
       if (!response.ok || !response.body) {
@@ -999,6 +1037,13 @@ export function StreamingWorkbench({
         {projectId ? <input name="projectId" type="hidden" value={projectId} /> : null}
         {taskId ? <input name="taskId" type="hidden" value={taskId} /> : null}
         <input name="implicitProjectName" type="hidden" value={implicitProjectName} />
+        {selectedElement ? (
+          <input
+            name="selectedElement"
+            type="hidden"
+            value={JSON.stringify(selectedElement)}
+          />
+        ) : null}
         {promptSubmissionControls.hiddenPromptValue === undefined ? null : (
           <input
             name="prompt"
@@ -1007,6 +1052,15 @@ export function StreamingWorkbench({
           />
         )}
         <div className="composer agentComposer">
+          {selectedElement ? (
+            <div className="composerSelectedElement">
+              <span>{selectedElementLabel}</span>
+              <strong>{formatSelectedElementForComposer(selectedElement)}</strong>
+              <button onClick={() => setSelectedElement(undefined)} type="button">
+                {selectedElementClearLabel}
+              </button>
+            </div>
+          ) : null}
           <textarea
             aria-label={promptLabel}
             disabled={promptSubmissionControls.visiblePromptDisabled}
@@ -1042,4 +1096,9 @@ export function StreamingWorkbench({
       </form>
     </>
   );
+}
+
+function formatSelectedElementForComposer(element: SelectedPreviewElement): string {
+  const text = element.text ? ` · ${element.text}` : "";
+  return `${element.tagName} ${element.selector}${text}`;
 }

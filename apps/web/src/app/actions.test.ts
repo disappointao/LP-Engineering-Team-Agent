@@ -107,6 +107,7 @@ function buildPromptForm(input: {
   projectId?: string;
   prompt?: string;
   implicitProjectName?: string;
+  selectedElement?: string;
 } = {}): FormData {
   const formData = new FormData();
   if (input.projectId !== undefined) {
@@ -114,6 +115,9 @@ function buildPromptForm(input: {
   }
   formData.set("prompt", input.prompt ?? "Build a spring landing page.");
   formData.set("implicitProjectName", input.implicitProjectName ?? "Untitled LP Project");
+  if (input.selectedElement !== undefined) {
+    formData.set("selectedElement", input.selectedElement);
+  }
   return formData;
 }
 
@@ -480,6 +484,43 @@ describe("submitPromptAction", () => {
       projectId: "project_1",
       prompt: "Make the CTA stronger",
       implicitProjectName: "Untitled LP Project"
+    });
+  });
+
+  it("passes selected preview element context separately from native prompt submissions", async () => {
+    mocks.currentProjectId = "project_1";
+    mocks.currentTaskId = "task_1";
+    mocks.submitTaskPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_1",
+      taskType: "lp_generation",
+      projectId: "project_1"
+    });
+
+    await expectRedirect(
+      submitPromptAction(buildPromptForm({
+        prompt: "把这个标题改得更高级",
+        selectedElement: JSON.stringify({
+          selector: "main .hero-title",
+          tagName: "h1",
+          text: "Preview first",
+          outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+        })
+      })),
+      "/"
+    );
+
+    expect(mocks.submitTaskPrompt).toHaveBeenCalledWith({
+      taskId: "task_1",
+      projectId: "project_1",
+      prompt: "把这个标题改得更高级",
+      implicitProjectName: "Untitled LP Project",
+      selectedElement: {
+        selector: "main .hero-title",
+        tagName: "h1",
+        text: "Preview first",
+        outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+      }
     });
   });
 

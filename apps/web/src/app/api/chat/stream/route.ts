@@ -14,6 +14,7 @@ import {
   getCurrentProjectId,
   getCurrentTaskId
 } from "../../../../lib/workbench-session";
+import { sanitizeSelectedPreviewElement } from "../../../../lib/selected-preview-element";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ type ChatStreamRequest = {
   projectId?: string | null;
   taskId?: string | null;
   prompt?: unknown;
+  selectedElement?: unknown;
 };
 
 type ProjectFlowChatStreamErrorCode = Extract<
@@ -352,11 +354,13 @@ export async function POST(request: Request): Promise<Response> {
     sessionValue: sessionTaskId
   });
   const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+  const selectedElement = sanitizeSelectedPreviewElement(payload.selectedElement);
   const store = await getWebWorkbenchStore();
   const started = await store.startStreamingChatPrompt({
     projectId,
     taskId,
-    prompt
+    prompt,
+    ...(selectedElement ? { selectedElement } : {})
   });
 
   if (!started.ok) {

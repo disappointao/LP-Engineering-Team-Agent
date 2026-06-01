@@ -7,7 +7,7 @@
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @lp-agent/web dev",
     "smoke": "vitest run apps/web/src/lib/web-v1-smoke.test.ts",
-    "alpha:check": "vitest run apps/web/src/lib/web-v1-smoke.test.ts apps/web/src/lib/i18n.test.ts apps/web/src/app/page.test.ts apps/web/src/app/streaming-workbench.test.ts apps/web/src/app/live-task-panel.test.ts apps/web/src/app/api/chat/stream/route.test.ts apps/web/src/app/api/tasks/submit/route.test.ts \"apps/web/src/app/api/tasks/[taskId]/state/route.test.ts\"",
+    "alpha:check": "vitest run apps/web/src/lib/web-v1-smoke.test.ts apps/web/src/lib/i18n.test.ts apps/web/src/app/page.test.ts apps/web/src/app/streaming-workbench.test.ts apps/web/src/app/live-task-panel.test.ts apps/web/src/app/api/chat/stream/route.test.ts apps/web/src/app/api/tasks/submit/route.test.ts \"apps/web/src/app/api/tasks/[taskId]/state/route.test.ts\" \"apps/web/src/app/api/tasks/[taskId]/preview/route.test.ts\" \"apps/web/src/app/api/tasks/[taskId]/export/route.test.ts\"",
     "alpha:e2e": "playwright test --config playwright.config.ts",
     "alpha:e2e:install": "playwright install chromium",
     "real-provider:doctor": "node scripts/real-provider-doctor.mjs",

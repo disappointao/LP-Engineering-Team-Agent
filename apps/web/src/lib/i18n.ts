@@ -370,6 +370,12 @@ export interface WorkbenchCopy {
     artifactWorkspaceOpenLabel: string;
     artifactPreviewDrawerOpenLabel: string;
     artifactPreviewDrawerCloseLabel: string;
+    artifactPreviewWorkspaceOpenLabel: string;
+    artifactPreviewWorkspaceInspectLabel: string;
+    artifactPreviewWorkspaceInspectActiveLabel: string;
+    artifactPreviewWorkspaceSelectedEmptyLabel: string;
+    artifactPreviewWorkspaceSelectedLabel: string;
+    artifactPreviewWorkspaceClearSelectionLabel: string;
     artifactWorkspaceUnavailableLabel: string;
     suggestionsTitle: string;
     resultRating: string;
@@ -1056,6 +1062,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       artifactWorkspaceOpenLabel: "Open artifact workspace",
       artifactPreviewDrawerOpenLabel: "Preview and export",
       artifactPreviewDrawerCloseLabel: "Close preview",
+      artifactPreviewWorkspaceOpenLabel: "Open preview",
+      artifactPreviewWorkspaceInspectLabel: "Inspect elements",
+      artifactPreviewWorkspaceInspectActiveLabel: "Inspecting",
+      artifactPreviewWorkspaceSelectedEmptyLabel: "No element selected",
+      artifactPreviewWorkspaceSelectedLabel: "Selected element",
+      artifactPreviewWorkspaceClearSelectionLabel: "Clear selection",
       artifactWorkspaceUnavailableLabel: "Artifact workspace is unavailable.",
       suggestionsTitle: "Suggested next prompts",
       resultRating: "How is this result?",
@@ -1740,6 +1752,12 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       artifactWorkspaceOpenLabel: "打开产物工作区",
       artifactPreviewDrawerOpenLabel: "预览与导出",
       artifactPreviewDrawerCloseLabel: "关闭预览",
+      artifactPreviewWorkspaceOpenLabel: "打开预览",
+      artifactPreviewWorkspaceInspectLabel: "查看元素",
+      artifactPreviewWorkspaceInspectActiveLabel: "正在查看元素",
+      artifactPreviewWorkspaceSelectedEmptyLabel: "还没有选中元素",
+      artifactPreviewWorkspaceSelectedLabel: "已选中元素",
+      artifactPreviewWorkspaceClearSelectionLabel: "清除选择",
       artifactWorkspaceUnavailableLabel: "产物工作区暂不可用。",
       suggestionsTitle: "推荐追问",
       resultRating: "这个结果怎么样？",

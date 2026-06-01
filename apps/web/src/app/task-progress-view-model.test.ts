@@ -234,4 +234,44 @@ describe("task progress view model", () => {
       ["deployer", "pending"]
     ]);
   });
+
+  it("keeps narrative detail identifiers unique within each phase", () => {
+    const narrative = buildTaskNarrativeViewModel({
+      taskType: "lp_generation",
+      payload: {
+        isTerminal: true,
+        runs: [
+          { runId: "run_planner_brief_1", role: "planner", state: "completed" },
+          { runId: "run_builder_version_1", role: "builder", state: "completed" },
+          { runId: "run_reviewer_review_1", role: "reviewer", state: "completed" }
+        ],
+        taskId: "task_1",
+        runEvents: [
+          {
+            id: "event_reviewer_handoff_consumed",
+            projectId: "project_1",
+            taskId: "task_1",
+            runId: "run_reviewer_review_1",
+            type: "handoff.consumed",
+            createdAt: "2026-05-21T00:00:01.000Z",
+            payload: { role: "reviewer" }
+          },
+          {
+            id: "event_reviewer_handoff_created",
+            projectId: "project_1",
+            taskId: "task_1",
+            runId: "run_reviewer_review_1",
+            type: "handoff.created",
+            createdAt: "2026-05-21T00:00:02.000Z",
+            payload: { role: "reviewer" }
+          }
+        ]
+      }
+    });
+
+    for (const step of narrative?.steps ?? []) {
+      const detailIds = step.details.map((detail) => detail.id);
+      expect(new Set(detailIds).size).toBe(detailIds.length);
+    }
+  });
 });

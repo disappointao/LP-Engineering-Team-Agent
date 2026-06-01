@@ -71,6 +71,10 @@ import type {
 } from "@lp-agent/worker-runtime";
 import { chunkAssistantText } from "./chat-stream";
 import { getLocalWorkbenchUser } from "./local-identity";
+import {
+  appendSelectedPreviewElementContext,
+  type SelectedPreviewElement
+} from "./selected-preview-element";
 import { SimulatedToolCommandRunner } from "./simulated-tool-command-runner";
 import { createWebWorkbenchRepositories } from "./workbench-repository-factory";
 
@@ -689,17 +693,20 @@ export interface WebWorkbenchStore {
     projectId?: string | null;
     prompt: string;
     implicitProjectName: string;
+    selectedElement?: SelectedPreviewElement;
   }): Promise<SubmitTaskResult>;
   startLiveTaskPrompt(input: {
     taskId?: string | null;
     projectId?: string | null;
     prompt: string;
     implicitProjectName: string;
+    selectedElement?: SelectedPreviewElement;
   }): Promise<LiveTaskPromptStartResult>;
   startStreamingChatPrompt(input: {
     projectId?: string | null;
     taskId?: string | null;
     prompt: string;
+    selectedElement?: SelectedPreviewElement;
   }): Promise<StreamingChatStartResult>;
   completeStreamingChatPrompt(input: {
     taskId: string;
@@ -845,6 +852,27 @@ export function deriveImplicitProjectName(prompt: string, fallback: string): str
     : trimmedFallback.length > 0
       ? trimmedFallback
       : "Untitled LP Project";
+}
+
+const selectedElementModificationPattern =
+  /(改|修改|替换|调整|换成|改成|更新|优化|加|增加|删除|移除|change|update|replace|revise|make|turn|remove|delete|add)/i;
+
+function buildAgentPromptWithSelectedElement(
+  prompt: string,
+  selectedElement?: SelectedPreviewElement
+): string {
+  return appendSelectedPreviewElementContext({ prompt, selectedElement });
+}
+
+function shouldForceLpContinuationForSelectedElement(
+  prompt: string,
+  selectedElement?: SelectedPreviewElement
+): boolean {
+  return Boolean(
+    selectedElement &&
+      selectedElementModificationPattern.test(prompt) &&
+      prompt.trim().length > 0
+  );
 }
 
 export function deriveProjectSkillCommands(
@@ -1617,6 +1645,10 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       if (!prompt.ok) {
         return { ok: false, error: prompt.error };
       }
+      const agentPrompt = buildAgentPromptWithSelectedElement(
+        prompt.value,
+        input.selectedElement
+      );
 
       const taskType = classifyTaskPrompt(prompt.value);
       if (taskType !== "general_chat") {
@@ -1661,7 +1693,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         const assistant = await service.runAssistantChatStream({
           projectId: requestedProjectId,
           taskId: streamTaskId,
-          prompt: prompt.value
+          prompt: agentPrompt
         });
         if (!assistant.ok) {
           await appendStreamingChatUserMessage({
@@ -1767,6 +1799,14 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       if (!prompt.ok) {
         return { ok: false, error: prompt.error };
       }
+      const agentPrompt = buildAgentPromptWithSelectedElement(
+        prompt.value,
+        input.selectedElement
+      );
+      const forceSelectedElementContinuation = shouldForceLpContinuationForSelectedElement(
+        prompt.value,
+        input.selectedElement
+      );
 
       const requestedProjectId = await resolveProjectIdForPrompt(input.projectId);
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
@@ -1779,16 +1819,22 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         const continuationProjectId = requestedProjectId ?? existingTask?.projectId;
         if (
           existingTask?.type === "lp_generation" &&
-          existingTask.projectId !== undefined &&
-          existingTask.projectId === continuationProjectId
+            existingTask.projectId !== undefined &&
+            existingTask.projectId === continuationProjectId
         ) {
-          const routed = await routeExistingLpTaskPromptIntent({
-            repositories,
-            service,
-            task: existingTask,
-            projectId: continuationProjectId,
-            prompt: prompt.value
-          });
+          const routed: TaskInputIntent = forceSelectedElementContinuation
+            ? {
+                type: "agent_continue",
+                confidence: 1,
+                reason: "Selected preview element modification should continue the current LP task."
+              }
+            : await routeExistingLpTaskPromptIntent({
+                repositories,
+                service,
+                task: existingTask,
+                projectId: continuationProjectId,
+                prompt: agentPrompt
+              });
           if (routed.type === "chat_in_task") {
             return answerLpTaskChatInPlace({
               repositories,
@@ -1796,7 +1842,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
-              prompt: prompt.value
+              prompt: prompt.value,
+              agentPrompt
             });
           }
           if (routed.type === "agent_new_task") {
@@ -1808,6 +1855,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               requestedTaskId: undefined,
               requestedProjectId: continuationProjectId,
               prompt: prompt.value,
+              agentPrompt,
               implicitProjectName: input.implicitProjectName
             });
           }
@@ -1830,6 +1878,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             requestedTaskId,
             requestedProjectId: continuationProjectId,
             prompt: prompt.value,
+            agentPrompt,
             implicitProjectName: input.implicitProjectName
           });
         }
@@ -1845,6 +1894,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
           requestedTaskId,
           requestedProjectId,
           prompt: prompt.value,
+          agentPrompt,
           implicitProjectName: input.implicitProjectName
         });
       }
@@ -1875,6 +1925,14 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
       if (!prompt.ok) {
         return { ok: false, error: prompt.error };
       }
+      const agentPrompt = buildAgentPromptWithSelectedElement(
+        prompt.value,
+        input.selectedElement
+      );
+      const forceSelectedElementContinuation = shouldForceLpContinuationForSelectedElement(
+        prompt.value,
+        input.selectedElement
+      );
 
       const requestedProjectId = await resolveProjectIdForPrompt(input.projectId);
       if (requestedProjectId && !(await repositories.projects.getById(requestedProjectId))) {
@@ -1887,16 +1945,22 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         const continuationProjectId = requestedProjectId ?? existingTask?.projectId;
         if (
           existingTask?.type === "lp_generation" &&
-          existingTask.projectId !== undefined &&
-          existingTask.projectId === continuationProjectId
+            existingTask.projectId !== undefined &&
+            existingTask.projectId === continuationProjectId
         ) {
-          const routed = await routeExistingLpTaskPromptIntent({
-            repositories,
-            service,
-            task: existingTask,
-            projectId: continuationProjectId,
-            prompt: prompt.value
-          });
+          const routed: TaskInputIntent = forceSelectedElementContinuation
+            ? {
+                type: "agent_continue",
+                confidence: 1,
+                reason: "Selected preview element modification should continue the current LP task."
+              }
+            : await routeExistingLpTaskPromptIntent({
+                repositories,
+                service,
+                task: existingTask,
+                projectId: continuationProjectId,
+                prompt: agentPrompt
+              });
           if (routed.type === "chat_in_task") {
             const result = await answerLpTaskChatInPlace({
               repositories,
@@ -1904,7 +1968,8 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               taskFollowupSuggestionCache,
               task: existingTask,
               projectId: continuationProjectId,
-              prompt: prompt.value
+              prompt: prompt.value,
+              agentPrompt
             });
             return {
               ok: true,
@@ -1930,7 +1995,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
               currentUser,
               task: prepared.task,
               projectId: prepared.projectId,
-              prompt: prompt.value,
+              prompt: agentPrompt,
               previousPageVersionId: prepared.previousPageVersionId
             });
             completion.catch(() => undefined);
@@ -1975,7 +2040,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
             currentUser,
             task: prepared.task,
             projectId: prepared.projectId,
-            prompt: prompt.value,
+            prompt: agentPrompt,
             previousPageVersionId: prepared.previousPageVersionId
           });
           completion.catch(() => undefined);
@@ -2009,7 +2074,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         currentUser,
         task: prepared.task,
         projectId: prepared.projectId,
-        prompt: prompt.value,
+        prompt: agentPrompt,
         previousPageVersionId: prepared.previousPageVersionId
       });
       completion.catch(() => undefined);
@@ -2829,10 +2894,17 @@ async function runLpAgentChainForTask(input: {
   previousPageVersionId?: string;
   now?: () => Date;
 }): Promise<{ briefId: string; pageVersionId: string }> {
+  const previousPageVersion = input.previousPageVersionId
+    ? await input.repositories.pageVersions.getById(input.previousPageVersionId)
+    : undefined;
+  const previousBrief = previousPageVersion
+    ? await input.repositories.briefs.getById(previousPageVersion.briefId)
+    : undefined;
   const brief = await input.service.createBriefFromPrompt({
     projectId: input.projectId,
     taskId: input.taskId,
-    prompt: input.prompt
+    prompt: input.prompt,
+    ...(previousBrief ? { baseBrief: previousBrief.brief } : {})
   });
   await saveTaskSnapshot({
     repositories: input.repositories,
@@ -2925,6 +2997,7 @@ async function answerLpTaskChatInPlace(input: {
   task: TaskRecord;
   projectId: string;
   prompt: string;
+  agentPrompt?: string;
 }): Promise<SubmitTaskResult> {
   await appendTaskMessage({
     repositories: input.repositories,
@@ -2935,7 +3008,7 @@ async function answerLpTaskChatInPlace(input: {
   const assistant = await input.service.runAssistantChat({
     projectId: input.projectId,
     taskId: input.task.id,
-    prompt: input.prompt
+    prompt: input.agentPrompt ?? input.prompt
   });
   await appendTaskMessage({
     repositories: input.repositories,
@@ -3116,6 +3189,7 @@ async function runLpTaskPrompt(input: {
   requestedTaskId?: string;
   requestedProjectId?: string;
   prompt: string;
+  agentPrompt?: string;
   implicitProjectName: string;
 }): Promise<SubmitTaskResult> {
   const prepared = await prepareLpTaskPrompt({
@@ -3133,7 +3207,7 @@ async function runLpTaskPrompt(input: {
     currentUser: input.currentUser,
     task: prepared.task,
     projectId: prepared.projectId,
-    prompt: input.prompt,
+    prompt: input.agentPrompt ?? input.prompt,
     previousPageVersionId: prepared.previousPageVersionId
   });
 }

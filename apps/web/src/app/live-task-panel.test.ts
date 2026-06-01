@@ -5,6 +5,8 @@ import {
   fetchLiveTaskStateRoute,
   getLiveTaskFailureRetryMs,
   getLiveTaskPreviewRefreshDecision,
+  getLiveTaskPreviewWorkspaceConfig,
+  shouldRefreshLiveTaskPage,
   LiveTaskStatusSummary
 } from "./live-task-panel";
 import {
@@ -469,7 +471,7 @@ describe("live task panel polling helpers", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes on preview key changes and resets the task baseline", () => {
+  it("keeps preview key changes inside the live panel instead of refreshing the page", () => {
     const firstDecision = getLiveTaskPreviewRefreshDecision({
       previousPreviewVersionKey: "page_1|workspace_1|index.html:aaa",
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
@@ -489,11 +491,11 @@ describe("live task panel polling helpers", () => {
     });
 
     expect(firstDecision).toEqual({
-      shouldRefresh: true,
+      shouldRefresh: false,
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
     });
     expect(firstArtifactDecision).toEqual({
-      shouldRefresh: true,
+      shouldRefresh: false,
       nextPreviewVersionKey: "page_2|workspace_2|index.html:bbb"
     });
     expect(repeatDecision).toEqual({
@@ -504,5 +506,71 @@ describe("live task panel polling helpers", () => {
       shouldRefresh: false,
       nextPreviewVersionKey: "page_4|workspace_4|index.html:ddd"
     });
+  });
+
+  it("refreshes the page once when the live task reaches a terminal state", () => {
+    expect(
+      shouldRefreshLiveTaskPage({
+        hasRefreshedTerminal: false,
+        payload: createPayload({ isTerminal: false })
+      })
+    ).toBe(false);
+    expect(
+      shouldRefreshLiveTaskPage({
+        hasRefreshedTerminal: false,
+        payload: createPayload({ isTerminal: true })
+      })
+    ).toBe(true);
+    expect(
+      shouldRefreshLiveTaskPage({
+        hasRefreshedTerminal: true,
+        payload: createPayload({ isTerminal: true })
+      })
+    ).toBe(false);
+  });
+
+  it("builds lazy preview and export links after static artifacts are available", () => {
+    const payload = createPayload({
+      artifactProgress: {
+        pageVersionId: "page_1",
+        artifactWorkspaceId: "workspace_1",
+        fileCount: 3,
+        changedFileCount: 3,
+        previewVersionKey: "page_1|workspace_1|index.html:aaa"
+      }
+    });
+    const config = getLiveTaskPreviewWorkspaceConfig({
+      taskId: "task_1",
+      projectId: "project_1",
+      payload,
+      exportLabels: getWorkbenchCopy("en").exports
+    });
+
+    expect(config?.previewUrl).toBe(
+      "/api/tasks/task_1/preview?projectId=project_1&version=page_1"
+    );
+    expect(config?.previewVersionKey).toBe("page_1|workspace_1|index.html:aaa");
+    expect(config?.exportLinks.map((link) => [link.label, link.filename, link.href])).toEqual([
+      [
+        "Export Single HTML",
+        "index.single.html",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=single-html"
+      ],
+      [
+        "Export index.html",
+        "index.html",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=index-html"
+      ],
+      [
+        "Export styles.css",
+        "styles.css",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=styles-css"
+      ],
+      [
+        "Export script.js",
+        "script.js",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=script-js"
+      ]
+    ]);
   });
 });

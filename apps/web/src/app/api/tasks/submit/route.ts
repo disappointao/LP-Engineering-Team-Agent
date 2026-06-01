@@ -8,6 +8,7 @@ import {
   getCurrentProjectId,
   getCurrentTaskId
 } from "../../../../lib/workbench-session";
+import { sanitizeSelectedPreviewElement } from "../../../../lib/selected-preview-element";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ type LiveTaskSubmitRequest = {
   taskId?: unknown;
   prompt?: unknown;
   implicitProjectName?: unknown;
+  selectedElement?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +101,7 @@ export async function POST(request: Request): Promise<Response> {
     sessionValue: sessionTaskId
   });
   const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+  const selectedElement = sanitizeSelectedPreviewElement(payload.selectedElement);
   const implicitProjectName =
     typeof payload.implicitProjectName === "string"
       ? payload.implicitProjectName
@@ -108,7 +111,8 @@ export async function POST(request: Request): Promise<Response> {
     taskId,
     projectId,
     prompt,
-    implicitProjectName
+    implicitProjectName,
+    ...(selectedElement ? { selectedElement } : {})
   });
 
   if (!started.ok) {

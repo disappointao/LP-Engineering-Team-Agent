@@ -444,6 +444,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
         fetch: this.fetch,
         env: this.env,
         timeoutMs: this.timeoutMs,
+        streamTimeouts: this.streamTimeouts,
         anthropicVersion: this.anthropicVersion,
         maxTokens: this.maxTokens
       });
@@ -458,6 +459,7 @@ export class ProviderBackedModelGateway implements ModelGateway {
         fetch: this.fetch,
         env: this.env,
         timeoutMs: this.timeoutMs,
+        streamTimeouts: this.streamTimeouts,
         maxTokens: this.maxTokens
       });
       return;

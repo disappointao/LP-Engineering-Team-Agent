@@ -9,6 +9,22 @@ export interface ArtifactDownloadLink {
   bytes: number;
 }
 
+export interface ArtifactExportDescriptor {
+  label: string;
+  filename: string;
+  mimeType: string;
+  content: string;
+  bytes: number;
+}
+
+export interface TaskArtifactRouteLinkInput {
+  artifacts: StaticArtifacts;
+  labels?: Pick<ExportLabels, "singleHtml" | "indexHtml" | "stylesCss" | "scriptJs">;
+  pageVersionId?: string;
+  projectId?: string;
+  taskId: string;
+}
+
 export function createArtifactDownloadLinks(
   artifacts: StaticArtifacts,
   labels: Pick<ExportLabels, "singleHtml" | "indexHtml" | "stylesCss" | "scriptJs"> = {
@@ -18,13 +34,106 @@ export function createArtifactDownloadLinks(
     scriptJs: "Export script.js"
   }
 ): ArtifactDownloadLink[] {
-  const singleFileHtml = bundleSingleFileHtml(artifacts);
+  return createArtifactExportDescriptors(artifacts, labels).map((descriptor) =>
+    toDownloadLink(
+      descriptor.label,
+      descriptor.filename,
+      descriptor.mimeType,
+      descriptor.content
+    )
+  );
+}
 
+export function createTaskArtifactRouteDownloadLinks({
+  artifacts,
+  labels = {
+    singleHtml: "Export Single HTML",
+    indexHtml: "Export index.html",
+    stylesCss: "Export styles.css",
+    scriptJs: "Export script.js"
+  },
+  pageVersionId,
+  projectId,
+  taskId
+}: TaskArtifactRouteLinkInput): ArtifactDownloadLink[] {
+  const taskPath = `/api/tasks/${encodeURIComponent(taskId)}/export`;
   return [
-    toDownloadLink(labels.singleHtml, "index.single.html", "text/html", singleFileHtml),
-    toDownloadLink(labels.indexHtml, "index.html", "text/html", artifacts.indexHtml),
-    toDownloadLink(labels.stylesCss, "styles.css", "text/css", artifacts.stylesCss),
-    toDownloadLink(labels.scriptJs, "script.js", "text/javascript", artifacts.scriptJs)
+    {
+      label: labels.singleHtml,
+      filename: "index.single.html",
+      href: createTaskArtifactRouteHref({
+        file: "single-html",
+        pageVersionId,
+        projectId,
+        taskPath
+      }),
+      bytes: estimateSingleHtmlBytes(artifacts)
+    },
+    {
+      label: labels.indexHtml,
+      filename: "index.html",
+      href: createTaskArtifactRouteHref({
+        file: "index-html",
+        pageVersionId,
+        projectId,
+        taskPath
+      }),
+      bytes: artifacts.indexHtml.length
+    },
+    {
+      label: labels.stylesCss,
+      filename: "styles.css",
+      href: createTaskArtifactRouteHref({
+        file: "styles-css",
+        pageVersionId,
+        projectId,
+        taskPath
+      }),
+      bytes: artifacts.stylesCss.length
+    },
+    {
+      label: labels.scriptJs,
+      filename: "script.js",
+      href: createTaskArtifactRouteHref({
+        file: "script-js",
+        pageVersionId,
+        projectId,
+        taskPath
+      }),
+      bytes: artifacts.scriptJs.length
+    }
+  ];
+}
+
+export function createTaskArtifactPreviewUrl({
+  pageVersionId,
+  projectId,
+  taskId
+}: {
+  pageVersionId?: string;
+  projectId?: string;
+  taskId: string;
+}): string {
+  const params = createTaskArtifactRouteParams({ pageVersionId, projectId });
+  const query = params.toString();
+  return `/api/tasks/${encodeURIComponent(taskId)}/preview${query ? `?${query}` : ""}`;
+}
+
+export function createArtifactExportDescriptors(
+  artifacts: StaticArtifacts,
+  labels: Pick<ExportLabels, "singleHtml" | "indexHtml" | "stylesCss" | "scriptJs"> = {
+    singleHtml: "Export Single HTML",
+    indexHtml: "Export index.html",
+    stylesCss: "Export styles.css",
+    scriptJs: "Export script.js"
+  }
+): ArtifactExportDescriptor[] {
+  const singleFileHtml = bundleSingleFileHtml(artifacts);
+  return [
+    toExportDescriptor(labels.singleHtml, "index.single.html", "text/html", singleFileHtml),
+    toExportDescriptor(labels.indexHtml, "index.html", "text/html", artifacts.indexHtml),
+    toExportDescriptor(labels.stylesCss, "styles.css", "text/css", artifacts.stylesCss),
+    toExportDescriptor(labels.scriptJs, "script.js", "text/javascript", artifacts.scriptJs)
   ];
 }
 
@@ -67,4 +176,58 @@ function toDownloadLink(
     href: `data:${mimeType};charset=utf-8,${encodeURIComponent(content)}`,
     bytes: content.length
   };
+}
+
+function toExportDescriptor(
+  label: string,
+  filename: string,
+  mimeType: string,
+  content: string
+): ArtifactExportDescriptor {
+  return {
+    label,
+    filename,
+    mimeType,
+    content,
+    bytes: content.length
+  };
+}
+
+function createTaskArtifactRouteHref({
+  file,
+  pageVersionId,
+  projectId,
+  taskPath
+}: {
+  file: string;
+  pageVersionId?: string;
+  projectId?: string;
+  taskPath: string;
+}): string {
+  const params = createTaskArtifactRouteParams({ pageVersionId, projectId });
+  params.set("file", file);
+  return `${taskPath}?${params.toString()}`;
+}
+
+function createTaskArtifactRouteParams({
+  pageVersionId,
+  projectId
+}: {
+  pageVersionId?: string;
+  projectId?: string;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  const trimmedProjectId = projectId?.trim();
+  if (trimmedProjectId) {
+    params.set("projectId", trimmedProjectId);
+  }
+  const trimmedPageVersionId = pageVersionId?.trim();
+  if (trimmedPageVersionId) {
+    params.set("version", trimmedPageVersionId);
+  }
+  return params;
+}
+
+function estimateSingleHtmlBytes(artifacts: StaticArtifacts): number {
+  return artifacts.indexHtml.length + artifacts.stylesCss.length + artifacts.scriptJs.length;
 }

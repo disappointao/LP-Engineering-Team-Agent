@@ -220,6 +220,52 @@ describe("POST /api/chat/stream", () => {
     });
   });
 
+  it("passes selected preview element context separately before starting a provider stream", async () => {
+    mocks.startStreamingChatPrompt.mockResolvedValue({
+      ok: true,
+      taskId: "task_stream",
+      taskType: "general_chat",
+      projectId: "project_1",
+      userMessageId: "message_user",
+      assistantMessageId: "message_assistant",
+      assistantContent: "好的",
+      chunks: ["好的"],
+      contextSummary: deterministicContextSummary
+    });
+    mocks.completeStreamingChatPrompt.mockResolvedValue({ ok: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/chat/stream", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: "project_1",
+          taskId: "task_1",
+          prompt: "把这个标题改得更高级",
+          selectedElement: {
+            selector: "main .hero-title",
+            tagName: "h1",
+            text: "Preview first",
+            outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+          }
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.startStreamingChatPrompt).toHaveBeenCalledWith({
+      projectId: "project_1",
+      taskId: "task_1",
+      prompt: "把这个标题改得更高级",
+      selectedElement: {
+        selector: "main .hero-title",
+        tagName: "h1",
+        text: "Preview first",
+        outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+      }
+    });
+  });
+
   it("streams provider assistant deltas and persists the accumulated terminal content", async () => {
     mocks.startStreamingChatPrompt.mockResolvedValue({
       ok: true,

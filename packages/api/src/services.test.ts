@@ -3284,6 +3284,167 @@ describe("demo workbench service", () => {
     expect(serializedEvents).not.toContain("https://open.bigmodel.cn");
   });
 
+  it("keeps the user prompt topic when real planner fallback is needed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const schemaInvalidBrief = {
+      ...sampleBrief,
+      title: "RAW_MODEL_OUTPUT_SECRET",
+      sections: []
+    };
+    const fakeFetch: ModelFetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl_test",
+          model: "glm-5.1",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify(schemaInvalidBrief)
+              },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      prompt: "请帮我生成一个夏季女装连衣裙促销 LP，中文文案。"
+    });
+
+    expect(brief.brief.title).toBe("夏季连衣裙促销 LP");
+    expect(brief.brief.sections[0]?.headline).toBe("夏季连衣裙，清爽上新");
+    expect(brief.brief.productData.map((product) => product.name)).toEqual([
+      "法式碎花连衣裙",
+      "通勤系带衬衫裙"
+    ]);
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.find((event) => event.type === "model.output.fallback_used")).toMatchObject({
+      payload: expect.objectContaining({
+        title: "夏季连衣裙促销 LP",
+        productCount: 2
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
+  it("applies selected element title edits when real planner fallback is needed", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const schemaInvalidBrief = {
+      ...sampleBrief,
+      title: "RAW_MODEL_OUTPUT_SECRET",
+      sections: []
+    };
+    const fakeFetch: ModelFetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl_test",
+          model: "glm-5.1",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify(schemaInvalidBrief)
+              },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const service = new DemoWorkbenchService({
+      repositories,
+      now: fixedClock(),
+      env: {
+        REAL_MODEL_RUNTIME: "1",
+        OPENAI_COMPATIBLE_API_KEY: "sk-test-secret"
+      },
+      modelFetch: fakeFetch
+    });
+    const project = await service.createProject({ name: "Project" });
+    const provider = await service.createModelProvider({
+      projectId: project.id,
+      providerId: "zhipu_openai",
+      name: "智谱 OpenAI Compatible",
+      provider: "custom",
+      api: "openai-completions",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
+      modelId: "glm-5.1"
+    });
+    await service.upsertProjectModelRoute({
+      projectId: project.id,
+      role: "planner",
+      providerId: provider.id,
+      model: "glm-5.1"
+    });
+    const baseBrief = structuredClone(sampleBrief);
+    baseBrief.brandProfile.name = "Summer Dress Studio";
+    baseBrief.sections[0] = {
+      ...baseBrief.sections[0]!,
+      type: "hero",
+      headline: "夏季连衣裙，清爽上新"
+    };
+    baseBrief.seo.title = "夏季连衣裙，清爽上新 | Summer Dress Studio";
+
+    const brief = await service.createBriefFromPrompt({
+      projectId: project.id,
+      baseBrief,
+      prompt:
+        "把选中的首屏标题改成：夏日裙装限时上新。其它结构保持不变。\n\n" +
+        "[LP selected element context]\n" +
+        "用户当前选中的 LP 元素：\n" +
+        "selector=h1\n" +
+        "tag=h1\n" +
+        "text=夏季连衣裙，清爽上新\n" +
+        "html=<h1>夏季连衣裙，清爽上新</h1>\n" +
+        "[/LP selected element context]"
+    });
+
+    expect(brief.brief.sections[0]?.headline).toBe("夏日裙装限时上新");
+    expect(brief.brief.sections[1]?.headline).toBe(baseBrief.sections[1]?.headline);
+    expect(brief.brief.seo.title).toBe("夏日裙装限时上新 | Summer Dress Studio");
+    const events = await repositories.runEvents.listForProject(project.id);
+    expect(events.find((event) => event.type === "model.output.fallback_used")).toMatchObject({
+      payload: expect.objectContaining({
+        title: sampleBrief.title
+      })
+    });
+    expect(JSON.stringify(events)).not.toContain("RAW_MODEL_OUTPUT_SECRET");
+  });
+
   it("uses parsed real Builder artifacts when REAL_MODEL_RUNTIME is enabled", async () => {
     const repositories = createInMemoryWorkbenchRepositories();
     const modelBrief = {

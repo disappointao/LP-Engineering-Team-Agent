@@ -3746,6 +3746,48 @@ describe("web workbench store", () => {
       expect(pageState.messages[1]?.content).toBe(started.assistantContent);
     });
 
+    it("keeps selected preview context out of visible streaming chat messages", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const assistantRuntime = new StreamingRuntime(["可以"], "可以");
+      const store = createWebWorkbenchStore({ repositories, assistantRuntime });
+      const project = await store.createProject({ name: "Preview Project" });
+
+      const started = await store.startStreamingChatPrompt({
+        projectId: project.id,
+        taskId: null,
+        prompt: "这个标题是什么意思？",
+        selectedElement: {
+          selector: "main .hero-title",
+          tagName: "h1",
+          text: "Preview first",
+          outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+        }
+      });
+
+      expect(started.ok).toBe(true);
+      if (!started.ok) {
+        throw new Error("expected streaming chat start to succeed");
+      }
+      expect(assistantRuntime.requests.at(-1)?.input.prompt).toContain(
+        "selector=main .hero-title"
+      );
+      expect(assistantRuntime.requests.at(-1)?.input.prompt).toContain(
+        "[LP selected element context]"
+      );
+
+      const messages = await repositories.messages.listForTask(started.taskId);
+      expect(messages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "这个标题是什么意思？"
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          content: ""
+        })
+      ]);
+    });
+
     it("abandons unfinished streaming assistant placeholders before refresh", async () => {
       const repositories = createInMemoryWorkbenchRepositories();
       const store = createWebWorkbenchStore({ repositories });
@@ -4780,6 +4822,68 @@ describe("web workbench store", () => {
         content: "The landing page currently targets a spring sale campaign."
       })
     ]);
+  });
+
+  it("continues an existing LP task from a selected preview element without exposing context", async () => {
+    const repositories = createInMemoryWorkbenchRepositories();
+    const assistantRuntime = new QueuedRuntime([
+      { modelOutputText: JSON.stringify([]) },
+      { modelOutputText: JSON.stringify([]) }
+    ]);
+    const builderRuntime = new RecordingRuntime({
+      state: "completed",
+      artifacts: completeArtifacts()
+    });
+    const store = createWebWorkbenchStore({ repositories, assistantRuntime, builderRuntime });
+
+    const first = await store.submitTaskPrompt({
+      prompt: "Create a landing page for a spring sale",
+      implicitProjectName: "Spring Sale",
+      projectId: null
+    });
+    expect(first).toMatchObject({ ok: true, taskId: "task_1", projectId: "project_1" });
+    if (!first.ok || !first.projectId) {
+      throw new Error("expected first LP task");
+    }
+    const builderCallsAfterFirst = builderRuntime.requests.length;
+    const assistantCallsAfterFirst = assistantRuntime.requests.length;
+
+    const second = await store.submitTaskPrompt({
+      taskId: first.taskId,
+      projectId: first.projectId,
+      prompt: "把选中的首屏标题改成：夏日裙装限时上新。",
+      implicitProjectName: "Spring Sale",
+      selectedElement: {
+        selector: "main .hero-title",
+        tagName: "h1",
+        text: "夏季连衣裙，清爽上新",
+        outerHTML: "<h1 class=\"hero-title\">夏季连衣裙，清爽上新</h1>"
+      }
+    });
+
+    expect(second).toEqual({
+      ok: true,
+      taskId: first.taskId,
+      taskType: "lp_generation",
+      projectId: first.projectId
+    });
+    expect(builderRuntime.requests.length).toBeGreaterThan(builderCallsAfterFirst);
+    expect(assistantRuntime.requests).toHaveLength(assistantCallsAfterFirst + 1);
+    await expect(repositories.pageVersions.getById("version_2")).resolves.toMatchObject({
+      id: "version_2"
+    });
+    const secondBrief = await repositories.briefs.getById("brief_2");
+    expect(secondBrief?.brief.sections[0]?.headline).toBe("夏日裙装限时上新");
+    const messages = await repositories.messages.listForTask(first.taskId);
+    expect(messages.map((message) => message.content)).toEqual([
+      "Create a landing page for a spring sale",
+      "LP 页面文件已准备好，可以预览和继续调整。",
+      "把选中的首屏标题改成：夏日裙装限时上新。",
+      "LP 页面文件已准备好，可以预览和继续调整。"
+    ]);
+    expect(messages.map((message) => message.content).join("\n")).not.toContain(
+      "[LP selected element context]"
+    );
   });
 
   it("continues an LP task when the router classifies the prompt as agent continuation", async () => {

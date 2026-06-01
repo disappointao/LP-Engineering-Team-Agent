@@ -696,7 +696,7 @@ function buildRoleSpecificNarrativeDetails({
         })
       },
       {
-        id: "reviewer-handoff",
+        id: "reviewer-delivery-readiness",
         title: "确认交付是否可继续",
         status: getDetailStatus({
           complete: hasRoleEvent(roleEvents, "handoff.created"),

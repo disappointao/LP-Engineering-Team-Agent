@@ -8,6 +8,14 @@
 
 当前 / 近期阶段：
 
+- `specs/2026-06-01-preview-first-lp-workspace-design.md`
+  - 在 Stage59 和 2026-06-01 Web shell polish 后阅读。
+  - 定义新的 preview-first LP 工作区方向：LP task 先显示右侧预览空间、按需导出、iframe 元素查看器和 selected element composer context；后续再把 artifact workspace 文件持久化改成 lazy materialization。
+
+- `plans/2026-06-01-preview-first-lp-workspace.md`
+  - Preview-first LP Workspace 实施计划。
+  - 审计右侧预览工作区、client-side lazy export、iframe inspect bridge、selected element 上下文提交、browser acceptance 和真实模型 smoke 时阅读。
+
 - `specs/2026-05-26-task-intent-routing-ai-followups-design.md`
   - 在 Manus-style task experience design / plan 后阅读。
   - 定义 Stage59：LP-only AI 推荐追问、普通聊天不显示推荐追问，以及 LP task 内每次输入先由 AI intent router 判定普通问答 / 继续执行 / 新复杂任务 / 澄清；deterministic router 只作为 no-key 测试和安全兜底。

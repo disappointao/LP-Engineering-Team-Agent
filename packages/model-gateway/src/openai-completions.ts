@@ -238,7 +238,8 @@ export async function* streamOpenAIChatCompletions(
     }
 
     for await (const data of readSSEDataFrames(response, input.route.provider, {
-      onChunk: timeoutController.markProgress
+      onChunk: timeoutController.markProgress,
+      signal: timeoutController.signal
     })) {
       if (data === "[DONE]") {
         continue;
@@ -523,7 +524,7 @@ function parseStreamJson(data: string, providerId: string): unknown {
 async function* readSSEDataFrames(
   response: Response,
   providerId: string,
-  options: { onChunk?: () => void } = {}
+  options: { onChunk?: () => void; signal?: AbortSignal } = {}
 ): AsyncIterable<string> {
   let buffer = "";
   for await (const chunk of readResponseTextChunks(response, options)) {
@@ -553,7 +554,7 @@ async function* readSSEDataFrames(
 
 async function* readResponseTextChunks(
   response: Response,
-  options: { onChunk?: () => void } = {}
+  options: { onChunk?: () => void; signal?: AbortSignal } = {}
 ): AsyncIterable<string> {
   const body = response.body;
   if (!body || typeof body.getReader !== "function") {
@@ -567,7 +568,7 @@ async function* readResponseTextChunks(
   const decoder = new TextDecoder();
   try {
     for (;;) {
-      const read = await reader.read();
+      const read = await readResponseChunk(reader, options.signal);
       if (read.done) {
         break;
       }
@@ -580,6 +581,31 @@ async function* readResponseTextChunks(
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+async function readResponseChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal | undefined
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!signal) {
+    return reader.read();
+  }
+  if (signal.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
+  let removeAbortListener: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+  });
+
+  try {
+    return await Promise.race([reader.read(), aborted]);
+  } finally {
+    removeAbortListener?.();
   }
 }
 

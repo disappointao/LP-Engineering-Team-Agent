@@ -22,6 +22,7 @@ import {
   setCurrentProjectId,
   setCurrentTaskId
 } from "../lib/workbench-session";
+import { parseSelectedPreviewElementJson } from "../lib/selected-preview-element";
 import type {
   ModelManagementNotice,
   SkillManagementNotice
@@ -407,6 +408,7 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
   const currentTaskId = await getCurrentTaskId();
   const store = await getWebWorkbenchStore();
   const prompt = String(formData.get("prompt") ?? "");
+  const selectedElement = parseSelectedPreviewElementJson(formData.get("selectedElement"));
   const formProjectId = String(formData.get("projectId") ?? "").trim();
   const formTaskId = String(formData.get("taskId") ?? "").trim();
   const implicitProjectName = String(
@@ -417,7 +419,8 @@ export async function submitPromptAction(formData: FormData): Promise<void> {
     taskId: formTaskId || currentTaskId,
     projectId: formProjectId || currentProjectId,
     prompt,
-    implicitProjectName
+    implicitProjectName,
+    ...(selectedElement ? { selectedElement } : {})
   });
   if (!result.ok) {
     if (result.taskId) {

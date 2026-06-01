@@ -42,6 +42,23 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
 
   await expectRunTimeline(page);
   await expectStaticLpArtifacts(page);
+  await page
+    .getByLabel("Generated files")
+    .getByRole("button", { name: /Static LP preview\s+Open preview/ })
+    .click();
+  await expect(page.getByTestId("lp-preview-workspace-panel")).toBeVisible();
+  await page.getByRole("button", { name: "Inspect elements" }).click();
+  const previewFrame = page.frameLocator("iframe[title='Generated landing page preview']");
+  await previewFrame
+    .locator("#section_hero")
+    .getByRole("link", { name: "Shop the sale" })
+    .click();
+  const composer = page.locator(".agentComposer");
+  await expect(composer.getByText("Selected element", { exact: true })).toBeVisible();
+  await expect(composer.locator(".composerSelectedElement strong")).toContainText(
+    "Shop the sale"
+  );
+
   await expectSnippetFor(page, "index.html");
   await expectSnippetFor(page, "styles.css");
   await expectSnippetFor(page, "script.js");

@@ -1147,6 +1147,40 @@ pnpm --filter @lp-agent/model-gateway test
 - 完成过程应折叠为摘要，但事实仍要能展开审计。这样主对话保持产品化体验，同时 run events / recovery facts 仍可检查。
 - 可访问性标签也是产品 contract。折叠摘要和内部详情不能同时暴露同名 landmark，否则浏览器测试和辅助技术都会把一个 agent 过程识别成多个重复区域。
 
+### 增量：Preview-first LP workspace、按需导出和元素上下文
+
+当前实现状态：
+
+- LP 完成态和 live artifact progress 会优先提供右侧预览工作区，而不是要求用户先进入 artifact workspace 或等待 single HTML 打包产物。
+- 预览 HTML 在用户打开预览面板时通过 task preview route 按需读取，再放入 sandboxed iframe `srcDoc`；single HTML / `index.html` / `styles.css` / `script.js` 导出通过 route-backed lazy export 生成，避免每次任务完成都预先打包所有导出资源。
+- iframe 元素查看器通过注入的 inspector bridge 监听用户点击，向父页面 `postMessage` 一个经过裁剪的 selected element 摘要：selector、tagName、text 和 bounded outerHTML。composer 保存这个摘要，并在继续提交时通过 API 拼入 bounded selected-element context。
+- 这个机制不会把完整 artifact、raw model output、raw provider response 或 iframe DOM 全量塞进聊天消息；对模型只暴露用户选中的最小上下文。
+- Web/API 入口保存用户原始 prompt，selected element 作为结构化字段传到 store。store 再构造 agent-only prompt 给 intent router、assistant chat 或 LP chain；因此聊天列表、task title 和 follow-up context 不会显示 `[LP selected element context]`。
+- 当用户选中预览元素并明确提出修改时，LP task 会强制走 `agent_continue`，避免 intent router 把“改选中标题”误判为 `chat_in_task`。如果真实 Planner 输出 schema-invalid 且 repair 失败，fallback 会以上一版 `LPBrief` 为基底应用明确的 selected-element 修改，例如把 hero `h1` headline 改成用户指定文案，再交给 Builder 生成新版本。
+
+学习重点：
+
+- Preview-first 不是取消 artifact workspace，而是把用户最常用的“看结果、导出、指出要改哪里”前移到对话旁边。Artifact workspace 继续承担文件 manifest、snippet、hash、diff 和审计工作区职责。
+- “选择 DOM 后继续修改”应该走结构化上下文边界，而不是让模型重新猜用户指的是哪个元素。selected element context 必须 bounded、可清洗、可丢弃，不能成为任意 HTML 注入通道。
+- 对“用户明确选中了一个 DOM 元素并给出替换文案”的场景，不能完全依赖模型服从。真实模型可能返回 schema-invalid 或忽略局部改写；runtime fallback 应把这种明确编辑视为可确定补丁，在已验证旧 brief 的对应 section 上局部应用，仍保持 raw model output 不可信的安全边界。
+- 预览 iframe 需要 sandbox。即使为了元素选择注入了脚本，也应通过 `postMessage` 传递最小摘要，不应为了测试便利放宽到同源父页面直接读写完整 DOM。
+
+### 增量：真实 provider 流式超时和 prompt-aware fallback
+
+当前实现状态：
+
+- `runAgentStep()` 已消费 `runtime.stream`，并在 run 仍 running 时持久化安全的 stream lifecycle event。2026-06-01 增量进一步确认 LP chain 会从 `runtime.stream` 得到 terminal result，而不是只等非流式 `runtime.run()`。
+- Provider-backed OpenAI-compatible / Anthropic-compatible stream 调用会传递统一 `streamTimeouts`，并显式让 response body `reader.read()` 受 abort signal 控制。这样 provider 已返回 headers 但迟迟不吐 body、或中途长时间 idle 时，会触发 bounded timeout，而不是让 UI 一直停在“模型流已连接”。
+- 真实 Planner 输出 schema-invalid 且 repair 仍失败时，fallback brief 会读取原始用户 prompt 的安全主题信息。比如“夏季女装连衣裙促销 LP”会保留中文主题、商品名和 CTA，再交给真实 Builder 生成静态 HTML/CSS/JS。
+- 对继续调整任务，fallback 还可以接收上一版 `LPBrief` 作为 base brief。只有当 prompt 带有清洗后的 selected-element context 且有明确替换文案时，才会用 base brief 做局部 headline/SEO title 更新；这避免真实模型输出不稳定时丢失用户的精确修改。
+
+学习重点：
+
+- 流式接口的 timeout 不能只包住 `fetch()`。很多 provider 会先返回 response headers，真正卡住的是 body reader；`reader.read()` 也必须参与 first-byte、idle 和 max-duration 控制。
+- `model.stream.completed` 只说明 runtime stream 已拿到 terminal result；后面的 schema parse / repair / fallback 仍属于 run finalization。若这段很慢，后续还应继续增加安全中间事件，避免用户误以为任务停止。
+- Deterministic fallback 是安全兜底，不应该变成跑题兜底。fallback 可以保留 prompt 主题、语言和基本商品信息，但仍不能引用 raw invalid model output、secret、provider response 或未校验 artifact 内容。
+- Fallback 可以消费已校验的 repository facts（上一版 brief、snapshot、selected element 摘要），但不能消费 raw provider response。这样既能保证真实 provider 失败后的可用性，又不会把不可信输出混入 agent state。
+
 ## 5. 写代码时的维护原则
 
 - 先做最小闭环，再做智能增强。

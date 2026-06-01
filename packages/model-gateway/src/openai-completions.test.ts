@@ -313,6 +313,49 @@ describe("openai compatible chat completions model gateway", () => {
     }
   });
 
+  it("times out stalled streaming response bodies after headers arrive", async () => {
+    const gateway = new ProviderBackedModelGateway({
+      policy: createDefaultModelPolicy(),
+      providers: {
+        async getProvider() {
+          return createOpenAICompatibleProvider({
+            models: [{ id: "glm-5.1", supportsStreaming: true }]
+          });
+        }
+      },
+      fetch: async () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" }
+        }),
+      env: { OPENAI_COMPATIBLE_API_KEY: "sk-test-secret" },
+      streamTimeouts: {
+        firstByteMs: 10,
+        idleMs: 10,
+        maxDurationMs: 100
+      }
+    });
+
+    await expect(
+      Promise.race([
+        collectStream(
+          gateway.stream({
+            role: "planner",
+            projectId: "project_1",
+            prompt: "Plan",
+            routingPolicy: createPolicy()
+          })
+        ),
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error("test_timeout")), 250);
+        })
+      ])
+    ).rejects.toMatchObject({
+      name: "ModelProviderRequestError",
+      code: "model_provider_request_timeout"
+    });
+  });
+
   it("falls back to estimated usage when OpenAI-compatible streams omit usage", async () => {
     const gateway = new ProviderBackedModelGateway({
       policy: createDefaultModelPolicy(),

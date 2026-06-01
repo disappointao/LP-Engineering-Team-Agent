@@ -31,7 +31,8 @@ import {
   type ChatToolEvent
 } from "../lib/chat-workbench";
 import {
-  createArtifactDownloadLinks,
+  createTaskArtifactPreviewUrl,
+  createTaskArtifactRouteDownloadLinks,
   type ArtifactDownloadLink
 } from "../lib/export-links";
 import { getWorkbenchCopy, resolveLocaleFromAcceptLanguage } from "../lib/i18n";
@@ -67,12 +68,9 @@ import {
   toSkillManagementNotice
 } from "./skills-models-management-view-model";
 import { AgentDetailsDisclosure } from "./agent-details-disclosure";
-import {
-  ArtifactPreviewDrawer,
-  type ArtifactPreviewDrawerDownloadLink
-} from "./artifact-preview-drawer";
 import { ChatMessageContent } from "./chat-message-content";
 import { DeleteSubmitButton } from "./delete-submit-button";
+import { LPPreviewWorkspace } from "./lp-preview-workspace";
 import { StreamingWorkbench } from "./streaming-workbench";
 
 type PageSearchParamValue = string | string[] | undefined;
@@ -257,12 +255,26 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           pageVersion: pageState.snapshot.currentPageVersion
         }
       : undefined;
-  const downloadLinks = completedSnapshot
-    ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
-    : undefined;
-  const drawerDownloadLinks = downloadLinks
-    ? createDrawerDownloadLinks({ copy, downloadLinks })
-    : undefined;
+  const completedTaskId = completedSnapshot && activeTask ? activeTask.id : undefined;
+  const completedProjectId = activeProject?.id ?? activeTask?.projectId;
+  const downloadLinks =
+    completedSnapshot && completedTaskId
+      ? createTaskArtifactRouteDownloadLinks({
+          artifacts: completedSnapshot.pageVersion.artifacts,
+          labels: copy.exports,
+          pageVersionId: completedSnapshot.pageVersion.id,
+          ...(completedProjectId ? { projectId: completedProjectId } : {}),
+          taskId: completedTaskId
+        })
+      : undefined;
+  const completedPreviewUrl =
+    completedSnapshot && completedTaskId
+      ? createTaskArtifactPreviewUrl({
+          pageVersionId: completedSnapshot.pageVersion.id,
+          ...(completedProjectId ? { projectId: completedProjectId } : {}),
+          taskId: completedTaskId
+        })
+      : undefined;
   const chat =
     pageState.kind === "task_ready"
       ? completedSnapshot && downloadLinks
@@ -319,12 +331,24 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         ].join("|")
       : undefined;
   const liveTaskCopy = {
+    artifactPreviewDrawerCloseLabel: copy.chat.artifactPreviewDrawerCloseLabel,
+    artifactPreviewWorkspaceClearSelectionLabel:
+      copy.chat.artifactPreviewWorkspaceClearSelectionLabel,
+    artifactPreviewWorkspaceInspectActiveLabel:
+      copy.chat.artifactPreviewWorkspaceInspectActiveLabel,
+    artifactPreviewWorkspaceInspectLabel: copy.chat.artifactPreviewWorkspaceInspectLabel,
+    artifactPreviewWorkspaceOpenLabel: copy.chat.artifactPreviewWorkspaceOpenLabel,
+    artifactPreviewWorkspaceSelectedEmptyLabel:
+      copy.chat.artifactPreviewWorkspaceSelectedEmptyLabel,
+    artifactPreviewWorkspaceSelectedLabel: copy.chat.artifactPreviewWorkspaceSelectedLabel,
+    artifactWorkspaceExportTitle: copy.chat.artifactWorkspaceExportTitle,
     liveTaskArtifactReady: copy.chat.liveTaskArtifactReady,
     liveTaskCompleted: copy.chat.liveTaskCompleted,
     liveTaskIdle: copy.chat.liveTaskIdle,
     liveTaskRefreshError: copy.chat.liveTaskRefreshError,
     liveTaskRunning: copy.chat.liveTaskRunning,
     liveTaskTitle: copy.chat.liveTaskTitle,
+    previewTitle: copy.chat.previewTitle,
     recoveryStateLabels: copy.chat.recoveryStateLabels,
     roleLabels: copy.modelsView.roleLabels
   };
@@ -1211,6 +1235,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             streamingStatusLabel={copy.chat.streamingStatusLabel}
             streamingErrorLabel={copy.chat.streamingErrorLabel}
             streamingErrorMessages={copy.chat.streamingErrorMessages}
+            selectedElementLabel={copy.chat.artifactPreviewWorkspaceSelectedLabel}
+            selectedElementClearLabel={copy.chat.artifactPreviewWorkspaceClearSelectionLabel}
             interruptAction={interruptCurrentTaskAction}
             interruptState={pageState.kind === "task_ready"
               ? pageState.interrupt.state
@@ -1323,20 +1349,29 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                     </span>
                                   </div>
                                   <div className="artifactGrid">
-                                    {drawerDownloadLinks ? (
-                                      <ArtifactPreviewDrawer
-                                        downloadLinks={drawerDownloadLinks}
+                                    {completedPreviewUrl && downloadLinks ? (
+                                      <LPPreviewWorkspace
+                                        exportLinks={downloadLinks}
                                         labels={{
+                                          clearSelectedElement:
+                                            copy.chat.artifactPreviewWorkspaceClearSelectionLabel,
                                           close: copy.chat.artifactPreviewDrawerCloseLabel,
                                           exportTitle: copy.chat.artifactWorkspaceExportTitle,
-                                          open: copy.chat.artifactPreviewDrawerOpenLabel,
-                                          previewTitle: copy.chat.previewTitle
+                                          inspect:
+                                            copy.chat.artifactPreviewWorkspaceInspectLabel,
+                                          inspectActive:
+                                            copy.chat.artifactPreviewWorkspaceInspectActiveLabel,
+                                          open:
+                                            copy.chat.artifactPreviewWorkspaceOpenLabel,
+                                          previewTitle: copy.chat.previewTitle,
+                                          selectedElementEmpty:
+                                            copy.chat.artifactPreviewWorkspaceSelectedEmptyLabel,
+                                          selectedElementLabel:
+                                            copy.chat.artifactPreviewWorkspaceSelectedLabel
                                         }}
-                                      >
-                                        <LPPreview
-                                          artifacts={completedSnapshot.pageVersion.artifacts}
-                                        />
-                                      </ArtifactPreviewDrawer>
+                                        previewUrl={completedPreviewUrl}
+                                        previewVersionKey={completedSnapshot.pageVersion.id}
+                                      />
                                     ) : null}
                                     <Link
                                       className="artifactCard"
@@ -1373,6 +1408,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                   initialPayload={initialLiveTaskPayload}
                                   initialPreviewVersionKey={initialPreviewVersionKey}
                                   copy={liveTaskCopy}
+                                  exportLabels={copy.exports}
                                 />
                               ) : null}
 
@@ -2130,12 +2166,21 @@ function ArtifactWorkspaceView({
   initialLiveTaskPayload?: LiveTaskStatePayload;
   initialPreviewVersionKey: string | undefined;
   liveTaskCopy: {
+    artifactPreviewDrawerCloseLabel: string;
+    artifactPreviewWorkspaceClearSelectionLabel: string;
+    artifactPreviewWorkspaceInspectActiveLabel: string;
+    artifactPreviewWorkspaceInspectLabel: string;
+    artifactPreviewWorkspaceOpenLabel: string;
+    artifactPreviewWorkspaceSelectedEmptyLabel: string;
+    artifactPreviewWorkspaceSelectedLabel: string;
+    artifactWorkspaceExportTitle: string;
     liveTaskArtifactReady: string;
     liveTaskCompleted: string;
     liveTaskIdle: string;
     liveTaskRefreshError: string;
     liveTaskRunning: string;
     liveTaskTitle: string;
+    previewTitle: string;
     recoveryStateLabels: ReturnType<typeof getWorkbenchCopy>["chat"]["recoveryStateLabels"];
     roleLabels: ReturnType<typeof getWorkbenchCopy>["modelsView"]["roleLabels"];
   };
@@ -2209,6 +2254,7 @@ function ArtifactWorkspaceView({
         initialPayload={initialLiveTaskPayload}
         initialPreviewVersionKey={initialPreviewVersionKey}
         copy={liveTaskCopy}
+        exportLabels={copy.exports}
       />
 
       <section
@@ -2374,21 +2420,6 @@ function createWorkbenchHref({
   }
   const serialized = query.toString();
   return serialized.length > 0 ? `/?${serialized}` : "/";
-}
-
-function createDrawerDownloadLinks({
-  copy,
-  downloadLinks
-}: {
-  copy: ReturnType<typeof getWorkbenchCopy>;
-  downloadLinks: ArtifactDownloadLink[];
-}): ArtifactPreviewDrawerDownloadLink[] {
-  return downloadLinks.map((link) => ({
-    filename: link.filename,
-    href: link.href,
-    label: link.label,
-    bytesLabel: copy.chat.bytesLabel(link.bytes)
-  }));
 }
 
 function getModelRouteTargetLabel(routeRow: ModelManagementRouteRow): string {

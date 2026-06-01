@@ -29,6 +29,7 @@ import {
   startLiveTaskSubmitHandoff,
   StreamingContextSummary
 } from "./streaming-workbench";
+import type { SelectedPreviewElement } from "../lib/selected-preview-element";
 
 function collectText(node: unknown): string[] {
   if (node === null || node === undefined || typeof node === "boolean") {
@@ -340,6 +341,29 @@ describe("streaming workbench visible status", () => {
 });
 
 describe("streaming workbench chat stream request body", () => {
+  it("includes selected preview element context in streaming chat requests", () => {
+    const selectedElement: SelectedPreviewElement = {
+      selector: "main .hero-title",
+      tagName: "h1",
+      text: "Preview first",
+      outerHTML: "<h1 class=\"hero-title\">Preview first</h1>"
+    };
+
+    expect(
+      createStreamingChatRequestBody({
+        prompt: "把这个标题改得更高级",
+        projectId: "project_1",
+        taskId: "task_1",
+        selectedElement
+      })
+    ).toEqual({
+      prompt: "把这个标题改得更高级",
+      projectId: "project_1",
+      taskId: "task_1",
+      selectedElement
+    });
+  });
+
   it("sends explicit null project and task ids when no streaming context is available", () => {
     expect(
       createStreamingChatRequestBody({

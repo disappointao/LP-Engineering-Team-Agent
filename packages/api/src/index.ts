@@ -325,6 +325,7 @@ export interface CreateBriefFromPromptInput {
   prompt: string;
   taskId?: string;
   runId?: string;
+  baseBrief?: LPBrief;
 }
 
 export interface GeneratePageVersionInput {
@@ -767,6 +768,7 @@ export class DemoWorkbenchService {
                     result,
                     projectId: input.projectId,
                     userPrompt: input.prompt,
+                    baseBrief: input.baseBrief,
                     context: contextPack.runtimeContext,
                     error
                   });
@@ -789,11 +791,16 @@ export class DemoWorkbenchService {
       }
 
       const brief = await withRepositoryIdLock(this.repositories, async () => {
+        const resolvedBrief = applySelectedElementPromptModification({
+          prompt: input.prompt,
+          brief: parsedPlannerBrief ?? sampleBrief,
+          baseBrief: input.baseBrief
+        });
         const brief: BriefRecord = {
           id: briefId,
           projectId: input.projectId,
           prompt: input.prompt,
-          brief: copyBrief(parsedPlannerBrief ?? sampleBrief),
+          brief: resolvedBrief,
           createdAt: this.timestamp()
         };
         await this.repositories.briefs.save(brief);
@@ -3398,6 +3405,7 @@ async function repairPlannerResult(input: {
   result: RuntimeRunResult;
   projectId: string;
   userPrompt: string;
+  baseBrief?: LPBrief;
   context: RuntimeRunContext;
   error: PlannerLPBriefParseError;
 }): Promise<{ result: RuntimeRunResult; brief?: LPBrief }> {
@@ -3452,7 +3460,7 @@ async function repairPlannerResult(input: {
   } catch (error) {
     if (error instanceof PlannerLPBriefParseError) {
       if (error.reason === "schema_invalid") {
-        const brief = copyBrief(sampleBrief);
+        const brief = createPromptAwareFallbackBrief(input.userPrompt, input.baseBrief);
         return {
           brief,
           result: {
@@ -3493,6 +3501,309 @@ async function repairPlannerResult(input: {
     }
     throw error;
   }
+}
+
+function createPromptAwareFallbackBrief(prompt: string, baseBrief?: LPBrief): LPBrief {
+  const selectedElementBrief = createSelectedElementModifiedBrief(prompt, baseBrief);
+  if (selectedElementBrief) {
+    return selectedElementBrief;
+  }
+
+  const normalizedPrompt = prompt.replace(/\s+/g, " ").trim();
+  const hasChinese = /[\u3400-\u9fff]/.test(normalizedPrompt);
+
+  if (/连衣裙|裙装|女装|夏季|夏天/.test(normalizedPrompt)) {
+    return {
+      ...copyBrief(sampleBrief),
+      title: "夏季连衣裙促销 LP",
+      objective: "将活动流量转化为夏季女装和连衣裙购买。",
+      audience: "关注清爽穿搭、快速决策和限时优惠的女性消费者。",
+      offer: "夏季连衣裙限时促销，精选款式享受活动价。",
+      brandProfile: {
+        name: "Summer Dress Studio",
+        tone: "清爽、时髦、可信赖",
+        colors: ["#0f766e", "#f97316", "#111827"],
+        typography: "system sans-serif"
+      },
+      tone: "轻快、精炼、有购买引导",
+      constraints: ["Framework-free static output", "Mobile-first layout", "使用中文文案"],
+      sections: [
+        {
+          id: "section_hero",
+          type: "hero",
+          purpose: "快速传达夏季女装活动并引导用户查看商品。",
+          headline: "夏季连衣裙，清爽上新",
+          body: "精选适合通勤、约会和假日出行的轻盈裙装，用更少时间找到合适风格。",
+          media: [],
+          cta: {
+            label: "立即选购",
+            href: "#products",
+            intent: "primary conversion"
+          },
+          layoutHints: ["中文首屏大标题", "清晰活动利益点", "above-the-fold CTA"],
+          validationRules: ["include one primary CTA"]
+        },
+        {
+          id: "section_benefits",
+          type: "benefits",
+          purpose: "总结促销卖点。",
+          headline: "为什么值得现在入手",
+          body: "清凉面料、显瘦版型和限时优惠，让用户快速做出购买决策。",
+          media: [],
+          layoutHints: ["three compact benefit cards"],
+          validationRules: []
+        },
+        {
+          id: "section_products",
+          type: "product-grid",
+          purpose: "展示代表性商品。",
+          headline: "夏季热卖裙装",
+          body: "用两到三个商品卡片展示不同穿搭场景、价格和购买按钮。",
+          media: [],
+          layoutHints: ["responsive grid", "product cards with CTA"],
+          validationRules: ["use productData when present"]
+        },
+        {
+          id: "section_cta",
+          type: "cta",
+          purpose: "收尾并推动购买。",
+          headline: "限时优惠正在进行",
+          body: "喜欢的尺码和颜色可能很快售罄，现在下单锁定活动价。",
+          media: [],
+          cta: {
+            label: "查看活动款",
+            href: "#products",
+            intent: "final conversion"
+          },
+          layoutHints: ["simple centered CTA"],
+          validationRules: []
+        }
+      ],
+      cta: {
+        label: "立即选购",
+        href: "#products",
+        intent: "primary conversion"
+      },
+      assets: [],
+      productData: [
+        {
+          id: "product_1",
+          name: "法式碎花连衣裙",
+          description: "轻盈雪纺与收腰剪裁，适合约会和周末出行。",
+          price: "¥299"
+        },
+        {
+          id: "product_2",
+          name: "通勤系带衬衫裙",
+          description: "利落领口搭配可调腰带，覆盖上班和日常场景。",
+          price: "¥329"
+        }
+      ],
+      seo: {
+        title: "夏季连衣裙促销 | Summer Dress Studio",
+        description: "精选夏季女装连衣裙，限时活动价，快速查看卖点、商品和购买入口。"
+      },
+      tracking: {
+        events: ["cta_click", "product_click"]
+      },
+      complianceNotes: ["不要暗示优惠永久有效。"]
+    };
+  }
+
+  if (!hasChinese || normalizedPrompt.length < 6) {
+    return copyBrief(sampleBrief);
+  }
+
+  const topic = normalizedPrompt
+    .replace(/[。！？!?].*$/u, "")
+    .replace(/^请?帮我(?:生成|创建|做|写|设计)?/u, "")
+    .slice(0, 32)
+    .trim();
+  if (!topic || /brief|landing page/i.test(topic)) {
+    return copyBrief(sampleBrief);
+  }
+
+  return {
+    ...copyBrief(sampleBrief),
+    title: `${topic} LP`,
+    objective: `围绕“${topic}”生成可预览、可继续调整的静态落地页。`,
+    audience: "需要快速了解活动价值并完成转化的目标用户。",
+    offer: `${topic}限时活动。`,
+    brandProfile: {
+      name: "LP Campaign Studio",
+      tone: "清晰、可信赖、有行动引导",
+      colors: ["#0f766e", "#f97316", "#111827"],
+      typography: "system sans-serif"
+    },
+    tone: "中文、精炼、转化导向",
+    constraints: ["Framework-free static output", "Mobile-first layout", "使用中文文案"],
+    sections: sampleBrief.sections.map((section, index) => ({
+      ...section,
+      headline: index === 0 ? topic : section.headline,
+      body: index === 0
+        ? `围绕${topic}提炼清晰卖点、商品信息和行动入口。`
+        : section.body,
+      ...(section.cta
+        ? {
+            cta: {
+              label: index === 0 ? "立即查看" : "查看详情",
+              href: "#products",
+              intent: section.cta.intent
+            }
+          }
+        : {})
+    })),
+    cta: {
+      label: "立即查看",
+      href: "#products",
+      intent: "primary conversion"
+    },
+    productData: [
+      {
+        id: "product_1",
+        name: "精选方案",
+        description: `面向${topic}的主推选择。`,
+        price: "活动价"
+      }
+    ],
+    seo: {
+      title: `${topic} | LP Campaign Studio`,
+      description: `围绕${topic}生成的静态落地页预览。`
+    }
+  };
+}
+
+function applySelectedElementPromptModification(input: {
+  prompt: string;
+  brief: LPBrief;
+  baseBrief?: LPBrief;
+}): LPBrief {
+  return createSelectedElementModifiedBrief(input.prompt, input.baseBrief ?? input.brief)
+    ?? copyBrief(input.brief);
+}
+
+function createSelectedElementModifiedBrief(
+  prompt: string,
+  baseBrief?: LPBrief
+): LPBrief | undefined {
+  if (!baseBrief || !prompt.includes("[LP selected element context]")) {
+    return undefined;
+  }
+
+  const replacement = extractSelectedElementReplacementText(prompt);
+  const selectedElement = extractSelectedElementContext(prompt);
+  if (!replacement || !selectedElement) {
+    return undefined;
+  }
+
+  const nextBrief = copyBrief(baseBrief);
+  const targetSectionIndex = findSelectedElementSectionIndex(nextBrief, selectedElement);
+  if (targetSectionIndex === -1) {
+    return undefined;
+  }
+
+  const targetSection = nextBrief.sections[targetSectionIndex];
+  if (!targetSection) {
+    return undefined;
+  }
+
+  const previousHeadline = targetSection.headline;
+  nextBrief.sections[targetSectionIndex] = {
+    ...targetSection,
+    headline: replacement
+  };
+
+  if (nextBrief.title === previousHeadline || nextBrief.title.includes(previousHeadline)) {
+    nextBrief.title = nextBrief.title.replace(previousHeadline, replacement);
+  }
+  if (nextBrief.seo.title.includes(previousHeadline)) {
+    nextBrief.seo = {
+      ...nextBrief.seo,
+      title: nextBrief.seo.title.replace(previousHeadline, replacement)
+    };
+  } else if (targetSection.type === "hero" || selectedElement.tagName === "h1") {
+    const brandName = nextBrief.brandProfile.name.trim();
+    nextBrief.seo = {
+      ...nextBrief.seo,
+      title: brandName ? `${replacement} | ${brandName}` : replacement
+    };
+  }
+
+  return nextBrief;
+}
+
+function extractSelectedElementContext(prompt: string):
+  | {
+      selector: string;
+      tagName: string;
+      text: string;
+      html: string;
+    }
+  | undefined {
+  const block = prompt.match(
+    /\[LP selected element context\]([\s\S]*?)\[\/LP selected element context\]/u
+  )?.[1];
+  if (!block) {
+    return undefined;
+  }
+
+  return {
+    selector: extractSelectedElementContextLine(block, "selector"),
+    tagName: extractSelectedElementContextLine(block, "tag").toLowerCase(),
+    text: extractSelectedElementContextLine(block, "text"),
+    html: extractSelectedElementContextLine(block, "html")
+  };
+}
+
+function extractSelectedElementContextLine(block: string, key: string): string {
+  return block.match(new RegExp(`^${key}=(.*)$`, "im"))?.[1]?.trim() ?? "";
+}
+
+function extractSelectedElementReplacementText(prompt: string): string | undefined {
+  const userPrompt = prompt.split("[LP selected element context]")[0]?.trim() ?? prompt.trim();
+  const patterns = [
+    /(?:改成|换成|替换为|更新为|改为)\s*[“"']?([^。\n！？!?]+?)[”"']?(?:[。！？!?]|$)/u,
+    /(?:change|replace|update|revise|make)[\s\S]{0,80}?\b(?:to|as)\b\s*[“"']?([^。\n.!?]+?)[”"']?(?:[.!?]|$)/iu
+  ];
+  for (const pattern of patterns) {
+    const value = userPrompt.match(pattern)?.[1]?.trim();
+    if (value) {
+      return value.replace(/^[:：]\s*/u, "").trim();
+    }
+  }
+  return undefined;
+}
+
+function findSelectedElementSectionIndex(
+  brief: LPBrief,
+  selectedElement: {
+    selector: string;
+    tagName: string;
+    text: string;
+    html: string;
+  }
+): number {
+  const selector = selectedElement.selector.toLowerCase();
+  const tagName = selectedElement.tagName.toLowerCase();
+  const selectedText = selectedElement.text.trim();
+
+  const exactHeadlineIndex = selectedText
+    ? brief.sections.findIndex((section) => section.headline.trim() === selectedText)
+    : -1;
+  if (exactHeadlineIndex !== -1) {
+    return exactHeadlineIndex;
+  }
+
+  if (tagName === "h1" || /\bh1\b/.test(selector)) {
+    const heroIndex = brief.sections.findIndex(
+      (section) => section.type === "hero" || section.id.toLowerCase().includes("hero")
+    );
+    if (heroIndex !== -1) {
+      return heroIndex;
+    }
+  }
+
+  return -1;
 }
 
 function toPlannerParseFailureEvent(input: {
