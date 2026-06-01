@@ -1136,13 +1136,14 @@ pnpm --filter @lp-agent/model-gateway test
 
 - Web live task polling 的终态判断不只看“是否已有 `currentPageVersion`”。当 LP task 还没有 page files、没有 failed/cancelled/blocked run，且最新消息仍是用户请求时，前端必须继续 polling；这是 `Planner -> Builder` 之间的合法中间态。
 - 当 LP generation 已经出现 failed/cancelled/blocked run，或无产物状态下已经写入 assistant 终态回复时，Web 可以停止 polling 并展示 failure/recovery 或普通终态。
+- 对已经 review passed、但没有 deployment / delivery artifact 的历史 LP task，不能永久视为 live。当前实现给最近有 run/message 活动的任务保留 2 分钟 handoff grace，避免刚通过 Reviewer 时提前停止；超过宽限期仍没有 deployment fact 时视为终态，停止 polling，避免旧任务在用户切换 task/project 时持续抢占状态接口。
 - `AgentDetailsDisclosure` 在完成态默认只暴露折叠摘要，展开后才渲染内部 process/timeline/recovery 内容，避免历史完成过程占据主对话，也避免同一个 `Agent process` 在可访问性树里重复出现。
 - Artifact preview drawer、live progress card 和 completed process summary 都只消费 safe live state、run lifecycle view、artifact diff metadata 和 bounded preview/export contract，不读取 raw model output 或 raw artifact 片段。
 
 学习重点：
 
 - “没有 pageVersion” 不等于“任务结束”。对多步 agent chain 来说，brief 已写入但 page files 未落库是正常窗口期；如果这时停掉 polling，用户会看到卡死的等待态。
-- 终态判断应结合 run lifecycle、message boundary 和 artifact state。失败 run 可以终止 polling，用户请求后的无产物中间态不能终止 polling。
+- 终态判断应结合 run lifecycle、message boundary、artifact state 和最近活动时间。失败 run 可以终止 polling，用户请求后的无产物中间态不能终止 polling；但旧的 review-passed / no-deployment 状态也不能无限轮询，否则会制造后台噪音并拖慢 task switch 体感。
 - 完成过程应折叠为摘要，但事实仍要能展开审计。这样主对话保持产品化体验，同时 run events / recovery facts 仍可检查。
 - 可访问性标签也是产品 contract。折叠摘要和内部详情不能同时暴露同名 landmark，否则浏览器测试和辅助技术都会把一个 agent 过程识别成多个重复区域。
 

@@ -341,6 +341,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             className="sidebarAction"
             data-workbench-link="true"
             href={createWorkbenchHref({ projectId: activeProject?.id, newTask: true })}
+            prefetch={false}
             scroll={false}
           >
             {copy.sidebar.newTask}
@@ -353,6 +354,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             className={activeView === "workbench" ? "navItem navItemActive" : "navItem"}
             data-workbench-link="true"
             href={activeWorkbenchHref}
+            prefetch={false}
             scroll={false}
           >
             {copy.nav.workbench}
@@ -366,6 +368,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               taskId: activeTask?.id,
               view: "artifacts"
             })}
+            prefetch={false}
             scroll={false}
           >
             {copy.nav.artifacts}
@@ -379,6 +382,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               taskId: activeTask?.id,
               view: "skills"
             })}
+            prefetch={false}
             scroll={false}
           >
             {copy.nav.skills}
@@ -392,6 +396,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               taskId: activeTask?.id,
               view: "models"
             })}
+            prefetch={false}
             scroll={false}
           >
             {copy.nav.models}
@@ -405,76 +410,81 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               taskId: activeTask?.id,
               view: "mcp"
             })}
+            prefetch={false}
             scroll={false}
           >
             {copy.nav.mcp}
           </Link>
         </nav>
 
-        <div className="sidebarSection">
-          <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
-          {pageState.projects.length > 0
-            ? pageState.projects.map((project) => (
-                <Link
-                  aria-current={project.id === activeProject?.id ? "page" : undefined}
-                  className={
-                    project.id === activeProject?.id
-                      ? "projectItem projectItemActive projectSelectButton"
-                      : "projectItem projectSelectButton"
-                  }
-                  data-workbench-link="true"
-                  href={createWorkbenchHref({ projectId: project.id })}
-                  key={project.id}
-                  scroll={false}
-                >
-                  <strong>{project.name}</strong>
-                </Link>
-              ))
-            : null}
-          <div className="projectItem">
-            <strong>{copy.projectFlow.createTitle}</strong>
-            <form action={createProjectAction} className="sidebarProjectForm">
-              <input
-                aria-label={copy.projectFlow.projectNameLabel}
-                name="projectName"
-                placeholder={copy.projectFlow.projectNamePlaceholder}
-              />
-              <button type="submit">{copy.projectFlow.createProject}</button>
-            </form>
+        <div className="sidebarBody">
+          <div className="sidebarSection">
+            <div className="sidebarSectionTitle">{copy.sidebar.projectsLabel}</div>
+            {pageState.projects.length > 0
+              ? pageState.projects.map((project) => (
+                  <Link
+                    aria-current={project.id === activeProject?.id ? "page" : undefined}
+                    className={
+                      project.id === activeProject?.id
+                        ? "projectItem projectItemActive projectSelectButton"
+                        : "projectItem projectSelectButton"
+                    }
+                    data-workbench-link="true"
+                    href={createWorkbenchHref({ projectId: project.id })}
+                    key={project.id}
+                    prefetch={false}
+                    scroll={false}
+                  >
+                    <strong>{project.name}</strong>
+                  </Link>
+                ))
+              : null}
+            <div className="projectItem">
+              <strong>{copy.projectFlow.createTitle}</strong>
+              <form action={createProjectAction} className="sidebarProjectForm">
+                <input
+                  aria-label={copy.projectFlow.projectNameLabel}
+                  name="projectName"
+                  placeholder={copy.projectFlow.projectNamePlaceholder}
+                />
+                <button type="submit">{copy.projectFlow.createProject}</button>
+              </form>
+            </div>
           </div>
-        </div>
 
-        {activeProject
-          ? ProjectMembersBlock({
-              members: pageState.projectMembers ?? [],
-              copy: copy.collaboration
-            })
-          : null}
+          {activeProject
+            ? ProjectMembersBlock({
+                members: pageState.projectMembers ?? [],
+                copy: copy.collaboration
+              })
+            : null}
 
-        <div className="sidebarSection sidebarTasks">
-          <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
-          {pageState.tasks.length > 0
-            ? pageState.tasks.map((task) => (
-                <Link
-                  aria-current={task.id === activeTask?.id ? "page" : undefined}
-                  className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
-                  data-workbench-link="true"
-                  href={createWorkbenchHref({
-                    projectId: task.projectId,
-                    taskId: task.id
-                  })}
-                  key={task.id}
-                  scroll={false}
-                >
-                  <span className="taskTitle">{task.title}</span>
-                  {task.projectId ? (
-                    <span className="taskProjectLabel">
-                      {projectNameById.get(task.projectId) ?? task.projectId}
-                    </span>
-                  ) : null}
-                </Link>
-              ))
-            : <p className="sidebarEmptyState">{copy.sidebar.emptyTasks}</p>}
+          <div className="sidebarSection sidebarTasks">
+            <div className="sidebarSectionTitle">{copy.sidebar.tasksLabel}</div>
+            {pageState.tasks.length > 0
+              ? pageState.tasks.map((task) => (
+                  <Link
+                    aria-current={task.id === activeTask?.id ? "page" : undefined}
+                    className={task.id === activeTask?.id ? "taskItem taskItemActive" : "taskItem"}
+                    data-workbench-link="true"
+                    href={createWorkbenchHref({
+                      projectId: task.projectId,
+                      taskId: task.id
+                    })}
+                    key={task.id}
+                    prefetch={false}
+                    scroll={false}
+                  >
+                    <span className="taskTitle">{task.title}</span>
+                    {task.projectId ? (
+                      <span className="taskProjectLabel">
+                        {projectNameById.get(task.projectId) ?? task.projectId}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))
+              : <p className="sidebarEmptyState">{copy.sidebar.emptyTasks}</p>}
+          </div>
         </div>
 
         <div className="sidebarMeta">
@@ -1311,6 +1321,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                         taskId: activeTask?.id,
                                         view: "artifacts"
                                       })}
+                                      prefetch={false}
                                       scroll={false}
                                     >
                                       <span>{copy.nav.artifacts}</span>
@@ -2046,6 +2057,7 @@ function ArtifactDiffBlock({
                 aria-label={`${copy.previewSnippetLabel}: ${file.path}`}
                 data-workbench-link="true"
                 href={createArtifactPreviewHref(previewSearchParams, file.path)}
+                prefetch={false}
                 scroll={false}
               >
                 {copy.previewSnippetLabel}
@@ -2115,6 +2127,7 @@ function ArtifactWorkspaceView({
             className="artifactCard"
             data-workbench-link="true"
             href="/"
+            prefetch={false}
             scroll={false}
           >
             <span>{copy.nav.workbench}</span>

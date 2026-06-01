@@ -70,7 +70,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--chrome);
   padding: 14px 10px;
@@ -154,10 +154,15 @@ button {
 
 .sidebarAction:hover,
 .sidebarAction:focus-visible,
+.sidebarAction:focus,
 .projectSelectButton:hover,
 .projectSelectButton:focus-visible,
+.projectSelectButton:focus,
+.projectSelectButton:active,
 .taskItem:hover,
-.taskItem:focus-visible {
+.taskItem:focus-visible,
+.taskItem:focus,
+.taskItem:active {
   border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--accent);
@@ -188,6 +193,18 @@ button {
   display: grid;
   gap: 8px;
   padding-top: 8px;
+}
+
+.sidebarBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
 }
 
 .sidebarSectionTitle {
@@ -320,7 +337,7 @@ button {
 }
 
 .sidebarTasks {
-  flex: 1;
+  flex: 0 0 auto;
   align-content: start;
 }
 
@@ -2744,15 +2761,14 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(239, 238, 233, 0.86)),
     var(--chrome);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.62);
-  scrollbar-width: thin;
 }
 
-.agentSidebar::-webkit-scrollbar,
+.sidebarBody::-webkit-scrollbar,
 .conversationViewport::-webkit-scrollbar {
   width: 9px;
 }
 
-.agentSidebar::-webkit-scrollbar-thumb,
+.sidebarBody::-webkit-scrollbar-thumb,
 .conversationViewport::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
@@ -2789,12 +2805,11 @@ body {
   border-color: rgba(11, 122, 117, 0.26);
   background: rgba(255, 255, 255, 0.78);
   box-shadow: var(--shadow-soft);
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .sidebarAction:hover,
 .sidebarAction:focus-visible {
-  transform: translateY(-1px);
   box-shadow: 0 14px 34px rgba(11, 122, 117, 0.12);
 }
 
@@ -2809,12 +2824,12 @@ body {
 .navItem {
   min-height: 34px;
   border-radius: 7px;
-  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .navItem:hover,
 .navItem:focus-visible {
-  transform: translateX(2px);
+  color: var(--accent);
 }
 
 .navItemActive {
@@ -2825,7 +2840,7 @@ body {
 
 .projectItem,
 .taskItem {
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, color 140ms ease;
 }
 
 .projectItem {
@@ -2895,7 +2910,7 @@ body {
 }
 
 .conversationViewport {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .conversationStack {
@@ -2905,7 +2920,7 @@ body {
 }
 
 .userTurn {
-  animation: agentTurnIn 240ms ease;
+  animation: none;
 }
 
 .messageBubble {
@@ -2922,7 +2937,7 @@ body {
   grid-template-columns: 38px minmax(0, 1fr);
   column-gap: 12px;
   row-gap: 8px;
-  animation: agentTurnIn 260ms ease;
+  animation: none;
 }
 
 .agentAssistantTurn {
@@ -3241,17 +3256,21 @@ body {
     height: auto;
     min-height: 0;
     max-height: 42dvh;
-    overflow-y: auto;
+    overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
 
   .agentSidebar {
     max-height: 42dvh;
-    overflow-y: auto;
+    overflow: hidden;
     position: relative;
     z-index: 20;
     box-shadow: 0 14px 32px rgba(40, 43, 45, 0.08);
+  }
+
+  .sidebarBody {
+    gap: 12px;
   }
 
   .sidebarTop {

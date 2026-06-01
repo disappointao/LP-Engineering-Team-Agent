@@ -283,6 +283,86 @@ export async function expectOnlyWorkbenchContentScrolls(page: Page) {
   await expect(composer).toBeVisible();
 }
 
+export async function expectSidebarBodyScrollsIndependently(page: Page) {
+  const sidebar = page.locator("aside.sidebar");
+  const sidebarTop = page.locator(".sidebarTop");
+  const navList = page.locator(".navList");
+  const sidebarBody = page.locator(".sidebarBody");
+  const sidebarMeta = page.locator(".sidebarMeta");
+
+  await expect(sidebar).toBeVisible();
+  await expect(sidebarTop).toBeVisible();
+  await expect(navList).toBeVisible();
+  await expect(sidebarBody).toBeVisible();
+  await expect(sidebarMeta).toBeVisible();
+
+  const before = await page.evaluate(() => {
+    const boxFor = (selector: string) => {
+      const element = document.querySelector(selector);
+      const rect = element?.getBoundingClientRect();
+      return rect
+        ? {
+            bottom: rect.bottom,
+            top: rect.top
+          }
+        : undefined;
+    };
+    const sidebar = document.querySelector("aside.sidebar");
+    const sidebarBody = document.querySelector(".sidebarBody");
+    return {
+      bodyScrollY: window.scrollY,
+      sidebarOverflowY: sidebar ? getComputedStyle(sidebar).overflowY : undefined,
+      sidebarScrollTop: sidebar?.scrollTop ?? 0,
+      sidebarBodyScrollTop: sidebarBody?.scrollTop ?? 0,
+      sidebarBodyCanScroll:
+        sidebarBody !== null && sidebarBody.scrollHeight > sidebarBody.clientHeight,
+      sidebarTop: boxFor(".sidebarTop"),
+      navList: boxFor(".navList"),
+      sidebarMeta: boxFor(".sidebarMeta")
+    };
+  });
+
+  expect(before.sidebarOverflowY).toBe("hidden");
+  expect(before.sidebarBodyCanScroll).toBe(true);
+
+  await sidebarBody.evaluate((element) => {
+    element.scrollTop = Math.min(320, element.scrollHeight - element.clientHeight);
+  });
+  await expect
+    .poll(async () => sidebarBody.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+
+  const after = await page.evaluate(() => {
+    const boxFor = (selector: string) => {
+      const element = document.querySelector(selector);
+      const rect = element?.getBoundingClientRect();
+      return rect
+        ? {
+            bottom: rect.bottom,
+            top: rect.top
+          }
+        : undefined;
+    };
+    const sidebar = document.querySelector("aside.sidebar");
+    const sidebarBody = document.querySelector(".sidebarBody");
+    return {
+      bodyScrollY: window.scrollY,
+      sidebarScrollTop: sidebar?.scrollTop ?? 0,
+      sidebarBodyScrollTop: sidebarBody?.scrollTop ?? 0,
+      sidebarTop: boxFor(".sidebarTop"),
+      navList: boxFor(".navList"),
+      sidebarMeta: boxFor(".sidebarMeta")
+    };
+  });
+
+  expect(after.bodyScrollY).toBe(0);
+  expect(after.sidebarScrollTop).toBe(0);
+  expect(after.sidebarBodyScrollTop).toBeGreaterThan(before.sidebarBodyScrollTop);
+  expect(after.sidebarTop?.top).toBeCloseTo(before.sidebarTop?.top ?? 0, 0);
+  expect(after.navList?.top).toBeCloseTo(before.navList?.top ?? 0, 0);
+  expect(after.sidebarMeta?.bottom).toBeCloseTo(before.sidebarMeta?.bottom ?? 0, 0);
+}
+
 export async function expectArtifactWorkspaceLayoutContract(page: Page) {
   const workspace = page.getByLabel("Artifact workspace");
   const hero = workspace.locator(".artifactWorkspaceHero");

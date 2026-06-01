@@ -949,6 +949,29 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
     logs: []
   });
 
+  const liveTaskTransitionGraceMs = 2 * 60 * 1000;
+
+  function hasRecentLiveTaskActivity(pageState: TaskReadyPageState): boolean {
+    const timestamps = [
+      pageState.task.createdAt,
+      ...pageState.messages.map((message) => message.createdAt),
+      ...pageState.runEvents.map((event) => event.createdAt),
+      ...pageState.recovery.runs.flatMap((run) => [
+        run.startedAt,
+        run.completedAt
+      ])
+    ];
+    const latestTimestamp =
+      timestamps
+        .map((timestamp) => (timestamp ? Date.parse(timestamp) : Number.NaN))
+        .filter(Number.isFinite)
+        .sort((left, right) => right - left)[0] ?? 0;
+    if (latestTimestamp <= 0) {
+      return false;
+    }
+    return Date.now() - latestTimestamp <= liveTaskTransitionGraceMs;
+  }
+
   function isLiveTaskTerminal(pageState: TaskReadyPageState): boolean {
     const runningRun = pageState.recovery.runs.some((run) =>
       ["queued", "running", "waiting_for_approval", "cancelling"].includes(run.state)
@@ -974,7 +997,7 @@ export function createWebWorkbenchStore(options: WebWorkbenchStoreOptions = {}):
         return false;
       }
       if (currentPageVersion.reviewStatus === "passed" && !pageState.snapshot?.deployment) {
-        return false;
+        return !hasRecentLiveTaskActivity(pageState);
       }
     }
 

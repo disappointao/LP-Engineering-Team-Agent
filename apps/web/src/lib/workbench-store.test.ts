@@ -1124,10 +1124,10 @@ describe("web workbench store", () => {
       expect(JSON.stringify(live.value)).not.toContain("window.lpAgent");
     });
 
-    it("keeps passed LP review live until the deployment handoff is created", async () => {
+    it("keeps recent passed LP review live while deployment handoff can still be consumed", async () => {
       const repositories = createInMemoryWorkbenchRepositories();
       const store = createWebWorkbenchStore({ repositories });
-      const createdAt = "2026-05-20T00:00:00.000Z";
+      const createdAt = new Date().toISOString();
       const projectId = "project_1";
       const taskId = "task_1";
       const briefId = "brief_1";
@@ -1271,6 +1271,132 @@ describe("web workbench store", () => {
       expect(live.value.snapshot?.deployment).toBeUndefined();
       expect(live.value.isTerminal).toBe(false);
       expect(live.value.nextPollMs).toBe(1200);
+    });
+
+    it("treats stale passed LP review without deployment as terminal", async () => {
+      const repositories = createInMemoryWorkbenchRepositories();
+      const store = createWebWorkbenchStore({ repositories });
+      const createdAt = "2026-05-20T00:00:00.000Z";
+      const projectId = "project_1";
+      const taskId = "task_1";
+      const briefId = "brief_1";
+      const pageVersionId = "version_1";
+      const workspaceId = "artifact_workspace_1";
+      const artifacts = completeArtifacts();
+
+      await repositories.projects.save({
+        id: projectId,
+        name: "Stale Review Gap Project",
+        createdAt
+      });
+      await repositories.tasks.save({
+        id: taskId,
+        title: "Create a stale review gap LP",
+        type: "lp_generation",
+        status: "complete",
+        projectId,
+        createdAt
+      });
+      await repositories.messages.save({
+        id: "message_1",
+        taskId,
+        role: "user",
+        content: "Create a stale review gap LP",
+        createdAt
+      });
+      await repositories.messages.save({
+        id: "message_2",
+        taskId,
+        role: "assistant",
+        content: "LP artifacts are ready for review.",
+        createdAt
+      });
+      await repositories.briefs.save({
+        id: briefId,
+        projectId,
+        prompt: "Create a stale review gap LP",
+        brief: sampleBrief,
+        createdAt
+      });
+      await saveManualPageVersion({
+        repositories,
+        projectId,
+        briefId,
+        pageVersionId,
+        workspaceId,
+        artifacts,
+        createdAt
+      });
+      await repositories.taskSnapshots.save({
+        taskId,
+        projectId,
+        briefId,
+        pageVersionId,
+        createdAt
+      });
+
+      const roles = ["planner", "builder", "reviewer"] as const;
+      for (const [index, role] of roles.entries()) {
+        const runId = `run_${role}_1`;
+        await repositories.runs.save({
+          id: runId,
+          projectId,
+          taskId,
+          role,
+          state: "completed",
+          startedAt: `2026-05-20T00:00:0${index}.000Z`,
+          completedAt: `2026-05-20T00:00:0${index}.500Z`,
+          contextSummary: {
+            injected: [],
+            omitted: []
+          }
+        });
+        await repositories.runEvents.save({
+          id: `event_${role}_completed`,
+          runId,
+          projectId,
+          taskId,
+          sequence: 1,
+          type: "run.completed",
+          message: `${role} run completed`,
+          payload: {
+            type: "run.completed",
+            runId,
+            role,
+            state: "completed"
+          },
+          createdAt: `2026-05-20T00:00:0${index}.500Z`
+        });
+      }
+      await repositories.agentHandoffs.save({
+        id: "handoff_reviewer_deployer",
+        projectId,
+        taskId,
+        fromRunId: "run_reviewer_1",
+        fromRole: "reviewer",
+        toRole: "deployer",
+        state: "ready",
+        summary: "Reviewer passed page version",
+        artifactRefs: {
+          pageVersionId
+        },
+        createdAt,
+        updatedAt: createdAt
+      });
+
+      const live = await store.getLiveTaskState({
+        taskId,
+        projectId
+      });
+
+      expect(live.ok).toBe(true);
+      if (!live.ok) {
+        throw new Error("expected live state");
+      }
+      expect(live.value.snapshot?.currentPageVersion?.reviewStatus).toBe("passed");
+      expect(live.value.snapshot?.deployment).toBeUndefined();
+      expect(live.value.isTerminal).toBe(true);
+      expect(live.value.nextPollMs).toBe(0);
     });
 
     it("keeps LP generation live after Planner completes before page files exist", async () => {

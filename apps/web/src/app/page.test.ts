@@ -1340,17 +1340,22 @@ describe("HomePage project flow errors", () => {
     pageMocks.pageState = createCompletedLpPageState();
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
-    const rawInternalAnchors = collectElements(page, "a").filter((anchor) => {
+    const internalAnchors = collectElements(page, "a").filter((anchor) => {
       const href = anchor.props?.href;
       return (
         typeof href === "string" &&
         (href === "/" || href.startsWith("/?")) &&
-        anchor.props?.download === undefined &&
-        anchor.props?.["data-workbench-link"] !== "true"
+        anchor.props?.download === undefined
       );
     });
+    const rawInternalAnchors = internalAnchors.filter(
+      (anchor) => anchor.props?.["data-workbench-link"] !== "true"
+    );
 
     expect(rawInternalAnchors.map((anchor) => anchor.props?.href)).toEqual([]);
+    expect(internalAnchors.map((anchor) => anchor.props?.prefetch)).toEqual(
+      internalAnchors.map(() => false)
+    );
   });
 
   it("renders an enabled interrupt button for interruptible task state", async () => {
