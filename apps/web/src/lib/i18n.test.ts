@@ -181,6 +181,10 @@ describe("web i18n", () => {
     expect(zh.chat.previewSnippetLabel).toBe("预览片段");
     expect(zh.chat.snippetUnavailableMessage).toBe("片段暂不可用。");
     expect(zh.chat.bytesLabel(1280)).toBe("1,280 字节");
+    expect(en.chat.artifactsTitle).toBe("Generated page");
+    expect(zh.chat.artifactsTitle).toBe("生成页面");
+    expect(en.exports.separatedFiles).toBe("Export HTML/CSS/JS ZIP");
+    expect(zh.exports.separatedFiles).toBe("导出 HTML/CSS/JS 文件包");
   });
 
   it("includes dedicated artifact workspace copy in both locales", () => {

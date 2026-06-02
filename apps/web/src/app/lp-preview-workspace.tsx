@@ -152,13 +152,37 @@ export function LPPreviewWorkspace({
               <h2 id={titleId}>{labels.previewTitle}</h2>
               <p>{selectedElement ? formatSelectedElement(selectedElement) : labels.selectedElementEmpty}</p>
             </div>
-            <button
-              className="lpPreviewWorkspaceClose"
-              onClick={() => setIsOpen(false)}
-              type="button"
-            >
-              {labels.close}
-            </button>
+            <div className="lpPreviewWorkspaceHeaderActions">
+              {downloadLinks.length > 0 ? (
+                <details className="lpPreviewExportMenu">
+                  <summary>{labels.exportTitle}</summary>
+                  <div className="lpPreviewExportMenuList">
+                    {downloadLinks.map((link) => (
+                      <a
+                        className="lpPreviewExportMenuLink"
+                        download={link.filename}
+                        href={link.href}
+                        key={link.filename}
+                      >
+                        <span>{link.label}</span>
+                        <small>
+                          {link.bytes !== undefined
+                            ? `${link.filename} · ${link.bytes.toLocaleString()} bytes`
+                            : link.filename}
+                        </small>
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+              <button
+                className="lpPreviewWorkspaceClose"
+                onClick={() => setIsOpen(false)}
+                type="button"
+              >
+                {labels.close}
+              </button>
+            </div>
           </header>
 
           <div className="lpPreviewWorkspaceToolbar">
@@ -199,29 +223,6 @@ export function LPPreviewWorkspace({
               <LPPreview artifacts={artifacts} inspectMode={inspectMode} />
             ) : null}
           </div>
-
-          <section
-            className="lpPreviewWorkspaceExports"
-            aria-labelledby={`${titleId}-exports`}
-          >
-            <h3 id={`${titleId}-exports`}>{labels.exportTitle}</h3>
-            <div className="artifactGrid artifactWorkspaceExportGrid">
-              {downloadLinks.map((link) => (
-                <a
-                  className="artifactCard"
-                  download={link.filename}
-                  href={link.href}
-                  key={link.filename}
-                >
-                  <span>{link.label}</span>
-                  <strong>{link.filename}</strong>
-                  {link.bytes !== undefined ? (
-                    <small>{link.bytes.toLocaleString()} bytes</small>
-                  ) : null}
-                </a>
-              ))}
-            </div>
-          </section>
         </aside>
       ) : null}
     </div>

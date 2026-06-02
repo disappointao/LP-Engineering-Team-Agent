@@ -31,6 +31,7 @@ import {
   type ChatToolEvent
 } from "../lib/chat-workbench";
 import {
+  createArtifactDownloadLinks,
   createTaskArtifactPreviewUrl,
   createTaskArtifactRouteDownloadLinks,
   type ArtifactDownloadLink
@@ -260,12 +261,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const downloadLinks =
     completedSnapshot && completedTaskId
       ? createTaskArtifactRouteDownloadLinks({
-          artifacts: completedSnapshot.pageVersion.artifacts,
           labels: copy.exports,
           pageVersionId: completedSnapshot.pageVersion.id,
           ...(completedProjectId ? { projectId: completedProjectId } : {}),
           taskId: completedTaskId
         })
+      : undefined;
+  const artifactWorkspaceDownloadLinks =
+    activeView === "artifacts" && completedSnapshot
+      ? createArtifactDownloadLinks(completedSnapshot.pageVersion.artifacts, copy.exports)
       : undefined;
   const completedPreviewUrl =
     completedSnapshot && completedTaskId
@@ -578,7 +582,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 	                ? ArtifactWorkspaceView({
 	                    completedSnapshot,
 	                    copy,
-	                    downloadLinks,
+	                    downloadLinks: artifactWorkspaceDownloadLinks,
 	                    initialLiveTaskPayload,
 	                    initialPreviewVersionKey,
 	                    liveTaskCopy,
@@ -1348,7 +1352,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                         : copy.chat.liveTaskRunning}
                                     </span>
                                   </div>
-                                  <div className="artifactGrid">
+                                  <div className="artifactGrid artifactGridPreviewOnly">
                                     {completedPreviewUrl && downloadLinks ? (
                                       <LPPreviewWorkspace
                                         exportLinks={downloadLinks}
@@ -1373,29 +1377,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                                         previewVersionKey={completedSnapshot.pageVersion.id}
                                       />
                                     ) : null}
-                                    <Link
-                                      className="artifactCard"
-                                      data-workbench-link="true"
-                                      href={createWorkbenchHref({
-                                        projectId: activeProject?.id,
-                                        taskId: activeTask?.id,
-                                        view: "artifacts"
-                                      })}
-                                      prefetch={false}
-                                      scroll={false}
-                                    >
-                                      <span>{copy.nav.artifacts}</span>
-                                      <strong>{copy.chat.artifactWorkspaceOpenLabel}</strong>
-                                      <small>{copy.chat.artifactWorkspaceSubtitle}</small>
-                                    </Link>
                                   </div>
-                                  {pageState.kind === "task_ready" && pageState.artifactDiff ? (
-                                    ArtifactDiffBlock({
-                                      artifactDiff: pageState.artifactDiff,
-                                      copy: copy.chat,
-                                      previewSearchParams
-                                    })
-                                  ) : null}
                                 </section>
 
                               </>
@@ -2310,7 +2292,9 @@ function ArtifactWorkspaceView({
             >
               <span>{link.label}</span>
               <strong>{link.filename}</strong>
-              <small>{copy.chat.bytesLabel(link.bytes)}</small>
+              {link.bytes !== undefined ? (
+                <small>{copy.chat.bytesLabel(link.bytes)}</small>
+              ) : null}
             </a>
           ))}
         </div>

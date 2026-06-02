@@ -70,6 +70,28 @@ describe("GET /api/tasks/[taskId]/export", () => {
     expect(body).not.toContain('href="styles.css"');
   });
 
+  it("packages separated HTML CSS and JS files only when requested", async () => {
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request("http://localhost/api/tasks/task_1/export?file=split-zip"),
+      { params: Promise.resolve({ taskId: "task_1" }) }
+    );
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const body = new TextDecoder().decode(bytes);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toContain("lp-static-files.zip");
+    expect(response.headers.get("content-type")).toBe("application/zip");
+    expect(bytes[0]).toBe(0x50);
+    expect(bytes[1]).toBe(0x4b);
+    expect(body).toContain("index.html");
+    expect(body).toContain("styles.css");
+    expect(body).toContain("script.js");
+    expect(body).toContain("<main>Hero</main>");
+    expect(body).toContain("window.lpExportReady = true");
+  });
+
   it("rejects unknown export formats", async () => {
     const { GET } = await import("./route");
 

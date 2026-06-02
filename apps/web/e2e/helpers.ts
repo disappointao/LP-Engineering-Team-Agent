@@ -40,7 +40,7 @@ export async function expectOrdinaryChatThread(page: Page, prompt: string) {
 
 export async function expectNoStaticArtifactPreview(page: Page) {
   await expect(page.getByLabel("Static LP preview")).toHaveCount(0);
-  await expect(page.getByLabel("Generated files")).toHaveCount(0);
+  await expect(page.getByLabel("Generated page")).toHaveCount(0);
 }
 
 export async function expectStaticLpArtifacts(page: Page) {
@@ -55,21 +55,12 @@ export async function expectStaticLpArtifacts(page: Page) {
   ).toBeVisible();
   await expect(liveTaskProgress.getByText("Artifact workspace ready")).toHaveCount(0);
 
-  const generatedFiles = page.getByLabel("Generated files");
-  await expect(generatedFiles).toBeVisible();
-
-  const artifactChanges = page.getByLabel("Artifact changes");
-  await expect(artifactChanges).toBeVisible();
-
-  for (const filePath of ["index.html", "styles.css", "script.js"]) {
-    await expect(artifactChanges.getByText(filePath, { exact: true })).toBeVisible();
-    await expect(
-      artifactChanges.getByRole("link", { name: `Preview snippet: ${filePath}` })
-    ).toBeVisible();
-  }
+  const generatedPage = page.getByLabel("Generated page");
+  await expect(generatedPage).toBeVisible();
+  await expect(page.getByLabel("Artifact changes")).toHaveCount(0);
 
   await expect(
-    generatedFiles.getByRole("button", { name: /Static LP preview\s+Open preview/ })
+    generatedPage.getByRole("button", { name: /Static LP preview\s+Open preview/ })
   ).toBeVisible();
 }
 
@@ -102,21 +93,6 @@ export async function expectRunTimeline(page: Page) {
   await expect(marker).toBeVisible();
   await expect(runTimeline.getByText(/Handoff ready|Handoff consumed|Handoff blocked/).first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
-}
-
-export async function expectSnippetFor(page: Page, filePath: string) {
-  const artifactChanges = page.getByLabel("Artifact changes");
-  await artifactChanges
-    .getByRole("link", { name: `Preview snippet: ${filePath}` })
-    .click();
-
-  await expect(page).toHaveURL(
-    new RegExp(`[?&]artifactPath=${escapeRegExp(encodeURIComponent(filePath))}(?:&|$)`)
-  );
-
-  const snippetHeader = artifactChanges.locator(".artifactSnippetHeader");
-  await expect(snippetHeader.getByText("Snippet preview", { exact: true })).toBeVisible();
-  await expect(snippetHeader.getByText(filePath, { exact: true })).toBeVisible();
 }
 
 export async function expectDedicatedArtifactWorkspace(page: Page) {

@@ -32,6 +32,7 @@ type MCPManagementPendingCopyKey = "create" | "enable" | "disable" | "approval" 
 export interface ExportLabels {
   handoff: string;
   singleHtml: string;
+  separatedFiles: string;
   indexHtml: string;
   stylesCss: string;
   scriptJs: string;
@@ -1052,7 +1053,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       completion: "The landing page is ready as static HTML/CSS/JS. You can download the single HTML file or the separated files.",
       taskComplete: "Task complete",
       toolsTitle: "Agent process",
-      artifactsTitle: "Generated files",
+      artifactsTitle: "Generated page",
       artifactWorkspaceTitle: "Artifact workspace",
       artifactWorkspaceSubtitle: "Inspect the current task's static LP files, preview, snippets, and exports.",
       artifactWorkspaceEmptyTitle: "No artifact workspace yet",
@@ -1188,6 +1189,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     exports: {
       handoff: "Export PR Handoff",
       singleHtml: "Export Single HTML",
+      separatedFiles: "Export HTML/CSS/JS ZIP",
       indexHtml: "Export index.html",
       stylesCss: "Export styles.css",
       scriptJs: "Export script.js",
@@ -1742,7 +1744,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
       completion: "落地页已经生成静态 HTML/CSS/JS。你可以下载单文件 HTML，也可以下载分离文件。",
       taskComplete: "任务已完成",
       toolsTitle: "智能体过程",
-      artifactsTitle: "生成文件",
+      artifactsTitle: "生成页面",
       artifactWorkspaceTitle: "产物工作区",
       artifactWorkspaceSubtitle: "查看当前任务的静态 LP 文件、预览、片段和导出。",
       artifactWorkspaceEmptyTitle: "还没有产物工作区",
@@ -1877,6 +1879,7 @@ const copyByLocale: Record<Locale, WorkbenchCopy> = {
     exports: {
       handoff: "导出 PR 交接",
       singleHtml: "导出单文件 HTML",
+      separatedFiles: "导出 HTML/CSS/JS 文件包",
       indexHtml: "导出 index.html",
       stylesCss: "导出 styles.css",
       scriptJs: "导出 script.js",

@@ -2359,6 +2359,10 @@ button {
   padding: 0 13px;
 }
 
+.artifactGridPreviewOnly {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .artifactCard,
 .allFilesCard {
   min-width: 0;
@@ -2672,15 +2676,15 @@ button.artifactCard {
   right: 0;
   bottom: 0;
   z-index: 40;
-  width: min(46vw, 720px);
-  min-width: 430px;
+  width: min(52vw, 860px);
+  min-width: 500px;
   pointer-events: none;
 }
 
 .chatWorkspace:has(.lpPreviewWorkspacePanel) .conversationStack,
 .chatWorkspace:has(.lpPreviewWorkspacePanel) .composer {
   width: min(100%, 640px);
-  margin-left: max(22px, calc((100% - min(100%, 640px) - min(46vw, 720px)) / 2));
+  margin-left: max(22px, calc((100% - min(100%, 640px) - min(52vw, 860px)) / 2));
   margin-right: auto;
 }
 
@@ -2699,8 +2703,8 @@ button.artifactCard {
 .lpPreviewWorkspacePanel {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   border-left: 1px solid var(--line);
   background: var(--surface);
   box-shadow: -18px 0 44px rgba(40, 43, 45, 0.12);
@@ -2708,8 +2712,7 @@ button.artifactCard {
 }
 
 .lpPreviewWorkspaceHeader,
-.lpPreviewWorkspaceToolbar,
-.lpPreviewWorkspaceExports {
+.lpPreviewWorkspaceToolbar {
   border-bottom: 1px solid var(--line);
   padding: 12px 14px;
 }
@@ -2722,7 +2725,7 @@ button.artifactCard {
 }
 
 .lpPreviewWorkspaceHeader h2,
-.lpPreviewWorkspaceExports h3 {
+.lpPreviewExportMenuLink span {
   margin: 0;
   color: #25292e;
   font-size: 0.96rem;
@@ -2743,7 +2746,16 @@ button.artifactCard {
   gap: 8px;
 }
 
+.lpPreviewWorkspaceHeaderActions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .lpPreviewWorkspaceClose,
+.lpPreviewExportMenu summary,
 .lpPreviewInspectToggle,
 .lpPreviewClearSelection,
 .composerSelectedElement button {
@@ -2756,6 +2768,62 @@ button.artifactCard {
   font-size: 0.78rem;
   font-weight: 800;
   padding: 0 10px;
+}
+
+.lpPreviewExportMenu {
+  position: relative;
+}
+
+.lpPreviewExportMenu summary {
+  display: grid;
+  place-items: center;
+  list-style: none;
+  cursor: pointer;
+}
+
+.lpPreviewExportMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.lpPreviewExportMenuList {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  width: min(280px, calc(100vw - 28px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 8px;
+}
+
+.lpPreviewExportMenuLink {
+  display: grid;
+  gap: 3px;
+  border-radius: 7px;
+  color: inherit;
+  padding: 9px 10px;
+  text-decoration: none;
+}
+
+.lpPreviewExportMenuLink:hover,
+.lpPreviewExportMenuLink:focus-visible {
+  background: var(--surface-raised);
+  outline: 0;
+}
+
+.lpPreviewExportMenuLink span {
+  font-weight: 850;
+}
+
+.lpPreviewExportMenuLink small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .lpPreviewInspectToggleActive {
@@ -2789,25 +2857,17 @@ button.artifactCard {
 
 .lpPreviewWorkspaceFrame {
   min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
   background: #ffffff;
 }
 
 .lpPreviewWorkspaceFrame .previewFrame {
+  display: block;
+  width: 100%;
   height: 100%;
   min-height: 100%;
-}
-
-.lpPreviewWorkspaceExports {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid var(--line);
-  border-bottom: 0;
-  background: var(--surface);
-}
-
-.lpPreviewWorkspaceExports .artifactGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 0;
+  border: 0;
 }
 
 .suggestionBlock {

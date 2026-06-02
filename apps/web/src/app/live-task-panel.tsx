@@ -258,23 +258,9 @@ export function getLiveTaskPreviewWorkspaceConfig({
       createExportLink({
         taskPath,
         baseParams: exportBaseParams,
-        file: "index-html",
-        filename: "index.html",
-        label: exportLabels.indexHtml
-      }),
-      createExportLink({
-        taskPath,
-        baseParams: exportBaseParams,
-        file: "styles-css",
-        filename: "styles.css",
-        label: exportLabels.stylesCss
-      }),
-      createExportLink({
-        taskPath,
-        baseParams: exportBaseParams,
-        file: "script-js",
-        filename: "script.js",
-        label: exportLabels.scriptJs
+        file: "split-zip",
+        filename: "lp-static-files.zip",
+        label: exportLabels.separatedFiles
       })
     ]
   };

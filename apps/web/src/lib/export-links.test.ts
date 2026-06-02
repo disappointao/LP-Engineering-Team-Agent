@@ -73,19 +73,10 @@ describe("artifact export links", () => {
   });
 
   it("creates task artifact route links without bundling export content", () => {
-    const artifacts: StaticArtifacts = {
-      indexHtml: "<html><body>LP</body></html>",
-      stylesCss: "body { color: red; }",
-      scriptJs: "console.log('ready');"
-    };
-
     const links = createTaskArtifactRouteDownloadLinks({
-      artifacts,
       labels: {
         singleHtml: "Single",
-        indexHtml: "Index",
-        stylesCss: "Styles",
-        scriptJs: "Script"
+        separatedFiles: "Separated"
       },
       pageVersionId: "page_1",
       projectId: "project_1",
@@ -106,19 +97,9 @@ describe("artifact export links", () => {
         "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=single-html"
       ],
       [
-        "Index",
-        "index.html",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=index-html"
-      ],
-      [
-        "Styles",
-        "styles.css",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=styles-css"
-      ],
-      [
-        "Script",
-        "script.js",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=script-js"
+        "Separated",
+        "lp-static-files.zip",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=split-zip"
       ]
     ]);
     expect(links.every((link) => !link.href.startsWith("data:"))).toBe(true);

@@ -139,6 +139,8 @@ Artifact quality 和 artifact safety 需要分开理解。安全 policy 是代�
 
 V1 polished alpha 把 artifact workspace 从“已有 runtime 边界和 workbench 内 preview/export”提升为第一版 Web 的独立用户工作区目标。这个变化不意味着把完整 artifact 内容放进 message、timeline 或 model context；正确边界仍然是 manifest/hash/summary、controlled artifact reader、bounded snippet 和 safe export。Web 变得更完整，但 Agent 上下文注入仍坚持 metadata-first。
 
+2026-06-02 的 LP 预览体验补充了一个产品边界：聊天任务里的 LP 交付应默认 preview-first，不再直接展示 `index.html` / `styles.css` / `script.js` 文件卡、snippet 链接或导出卡；这些文件级能力保留在独立 `Artifacts` workspace。右侧 `LPPreviewWorkspace` 只在打开面板时读取预览 HTML，导出菜单只暴露“单文件 HTML”和“HTML/CSS/JS 文件包”两个按需 route；后端只在用户点击导出 route 时打包 single HTML 或 zip。这样既减少生成阶段等待和 token/CPU 浪费，也继续保持完整 artifact 内容不进入默认聊天消息、run timeline 或 model context。
+
 ### 2.8 多 Agent 协调
 
 Planner、Builder、Reviewer、Deployer 不是四个名字而已。真正难点是它们之间怎么交接：

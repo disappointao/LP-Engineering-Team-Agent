@@ -6,7 +6,6 @@ import {
   expectDedicatedArtifactWorkspace,
   expectNoVisibleTextLeaks,
   expectRunTimeline,
-  expectSnippetFor,
   expectStaticLpArtifacts,
   expectWorkspaceSnippetFor,
   submitPrompt,
@@ -43,10 +42,18 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
   await expectRunTimeline(page);
   await expectStaticLpArtifacts(page);
   await page
-    .getByLabel("Generated files")
+    .getByLabel("Generated page")
     .getByRole("button", { name: /Static LP preview\s+Open preview/ })
     .click();
-  await expect(page.getByTestId("lp-preview-workspace-panel")).toBeVisible();
+  const previewPanel = page.getByTestId("lp-preview-workspace-panel");
+  await expect(previewPanel).toBeVisible();
+  await previewPanel.getByText("Exports", { exact: true }).click();
+  await expect(previewPanel.getByRole("link", { name: /index\.single\.html/ })).toBeVisible();
+  await expect(previewPanel.getByRole("link", { name: /lp-static-files\.zip/ })).toBeVisible();
+  const previewBox = await previewPanel
+    .locator("iframe[title='Generated landing page preview']")
+    .boundingBox();
+  expect(previewBox?.height ?? 0).toBeGreaterThan(360);
   await page.getByRole("button", { name: "Inspect elements" }).click();
   const previewFrame = page.frameLocator("iframe[title='Generated landing page preview']");
   await previewFrame
@@ -59,32 +66,26 @@ test("runs an LP live task and exposes static artifacts", async ({ page }) => {
     "Shop the sale"
   );
 
-  await expectSnippetFor(page, "index.html");
-  await expectSnippetFor(page, "styles.css");
-  await expectSnippetFor(page, "script.js");
-
   await expectDedicatedArtifactWorkspace(page);
   await expectWorkspaceSnippetFor(page, "index.html");
   await expectWorkspaceSnippetFor(page, "styles.css");
   await expectWorkspaceSnippetFor(page, "script.js");
 
-  await page.goto("/?artifactPath=unknown.txt");
+  await page.goto("/?view=artifacts&artifactPath=unknown.txt");
   await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();
   await expectNoVisibleTextLeaks(page, [
     "ARTIFACT_QUERY_SECRET",
     "../secret.css",
     "..%2Fsecret.css"
   ]);
-  await expectStaticLpArtifacts(page);
 
-  await page.goto("/?artifactPath=..%2Fsecret.css%3Ftoken%3DARTIFACT_QUERY_SECRET");
+  await page.goto("/?view=artifacts&artifactPath=..%2Fsecret.css%3Ftoken%3DARTIFACT_QUERY_SECRET");
   await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();
   await expectNoVisibleTextLeaks(page, [
     "ARTIFACT_QUERY_SECRET",
     "../secret.css",
     "..%2Fsecret.css"
   ]);
-  await expectStaticLpArtifacts(page);
 
   await page.goto("/?view=artifacts&artifactPath=unknown.txt");
   await expect(page.getByText("Snippet is unavailable.", { exact: true })).toBeVisible();

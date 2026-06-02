@@ -557,19 +557,9 @@ describe("live task panel polling helpers", () => {
         "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=single-html"
       ],
       [
-        "Export index.html",
-        "index.html",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=index-html"
-      ],
-      [
-        "Export styles.css",
-        "styles.css",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=styles-css"
-      ],
-      [
-        "Export script.js",
-        "script.js",
-        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=script-js"
+        "Export HTML/CSS/JS ZIP",
+        "lp-static-files.zip",
+        "/api/tasks/task_1/export?projectId=project_1&version=page_1&file=split-zip"
       ]
     ]);
   });

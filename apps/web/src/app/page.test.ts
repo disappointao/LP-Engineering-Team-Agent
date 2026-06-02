@@ -1158,17 +1158,21 @@ describe("HomePage project flow errors", () => {
     expect(collectComponentProps(page, "AgentDetailsDisclosure")).toHaveLength(1);
   });
 
-  it("preserves active project and task context in artifact workspace entry links", async () => {
+  it("preserves active project and task context in the artifact workspace nav link", async () => {
     pageMocks.currentProjectId = "project_1";
     pageMocks.currentTaskId = "task_1";
     pageMocks.pageState = createCompletedLpPageState();
 
     const page = await HomePage({ searchParams: Promise.resolve({}) });
-    const artifactWorkspaceLink = collectElements(page, "a").find(
+    const artifactWorkspaceEntryLink = collectElements(page, "a").find(
       (link) => collectText(link.props?.children).join(" ").includes("Open artifact workspace")
     );
+    const artifactsNavLink = collectElements(page, "a").find(
+      (link) => collectText(link.props?.children).join("") === "Artifacts"
+    );
 
-    expect(artifactWorkspaceLink?.props?.href).toBe(
+    expect(artifactWorkspaceEntryLink).toBeUndefined();
+    expect(artifactsNavLink?.props?.href).toBe(
       "/?view=artifacts&projectId=project_1&taskId=task_1"
     );
   });
@@ -4235,9 +4239,10 @@ describe("HomePage project flow errors", () => {
           filename: "index.single.html",
           href: "/api/tasks/task_1/export?projectId=project_1&version=version_1&file=single-html"
         }),
-        expect.objectContaining({ filename: "index.html" }),
-        expect.objectContaining({ filename: "styles.css" }),
-        expect.objectContaining({ filename: "script.js" })
+        expect.objectContaining({
+          filename: "lp-static-files.zip",
+          href: "/api/tasks/task_1/export?projectId=project_1&version=version_1&file=split-zip"
+        })
       ]
     });
     for (const link of previewWorkspaceProps!.exportLinks as Array<Record<string, unknown>>) {
@@ -4249,6 +4254,11 @@ describe("HomePage project flow errors", () => {
     expect(spacedText).not.toContain("PR handoff");
     expect(spacedText).not.toContain("Deployments");
     expect(spacedText).not.toContain("Repository URL");
+    expect(spacedText).not.toContain("Artifact changes");
+    expect(spacedText).not.toContain("Preview snippet");
+    expect(spacedText).not.toContain("index.html static LP file");
+    expect(spacedText).not.toContain("styles.css static LP file");
+    expect(spacedText).not.toContain("script.js static LP file");
   });
 
   it("labels existing artifacts as the current version while an LP continuation is running", async () => {
@@ -4371,7 +4381,7 @@ describe("HomePage project flow errors", () => {
     });
 
     const page = await HomePage({
-      searchParams: Promise.resolve({ artifactPath: "styles.css" })
+      searchParams: Promise.resolve({ view: "artifacts", artifactPath: "styles.css" })
     });
     const text = collectText(page).join(" ");
 
@@ -4557,7 +4567,7 @@ describe("HomePage project flow errors", () => {
     });
 
     const page = await HomePage({
-      searchParams: Promise.resolve({ artifactPath: "styles.css" })
+      searchParams: Promise.resolve({ view: "artifacts", artifactPath: "styles.css" })
     });
     const links = collectElements(page, "a").filter(
       (link) => collectText(link.props?.children).join("") === "Preview snippet"
@@ -4614,7 +4624,7 @@ describe("HomePage project flow errors", () => {
     expect(JSON.stringify(artifactDiff)).not.toContain("FULL_PREVIEW_JS_SECRET");
     pageMocks.pageState = pageState;
 
-    const page = await HomePage({ searchParams: Promise.resolve({}) });
+    const page = await HomePage({ searchParams: Promise.resolve({ view: "artifacts" }) });
     const visibleText = collectText(page).join(" ");
 
     expect(visibleText).toContain("Artifact changes");
@@ -4661,6 +4671,7 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({
       searchParams: Promise.resolve({
+        view: "artifacts",
         artifactPath: "../styles.css?token=ARTIFACT_QUERY_SECRET"
       })
     });
@@ -4696,6 +4707,7 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({
       searchParams: Promise.resolve({
+        view: "artifacts",
         artifactPath: "../secret.css?token=ARTIFACT_QUERY_SECRET"
       })
     });
@@ -4748,6 +4760,7 @@ describe("HomePage project flow errors", () => {
 
     const page = await HomePage({
       searchParams: Promise.resolve({
+        view: "artifacts",
         interruptError: "interrupt_failed",
         artifactPath: "styles.css"
       })

@@ -6,7 +6,7 @@ export interface ArtifactDownloadLink {
   label: string;
   filename: string;
   href: string;
-  bytes: number;
+  bytes?: number;
 }
 
 export interface ArtifactExportDescriptor {
@@ -18,8 +18,7 @@ export interface ArtifactExportDescriptor {
 }
 
 export interface TaskArtifactRouteLinkInput {
-  artifacts: StaticArtifacts;
-  labels?: Pick<ExportLabels, "singleHtml" | "indexHtml" | "stylesCss" | "scriptJs">;
+  labels?: Pick<ExportLabels, "singleHtml" | "separatedFiles">;
   pageVersionId?: string;
   projectId?: string;
   taskId: string;
@@ -45,12 +44,9 @@ export function createArtifactDownloadLinks(
 }
 
 export function createTaskArtifactRouteDownloadLinks({
-  artifacts,
   labels = {
     singleHtml: "Export Single HTML",
-    indexHtml: "Export index.html",
-    stylesCss: "Export styles.css",
-    scriptJs: "Export script.js"
+    separatedFiles: "Export HTML/CSS/JS ZIP"
   },
   pageVersionId,
   projectId,
@@ -66,41 +62,17 @@ export function createTaskArtifactRouteDownloadLinks({
         pageVersionId,
         projectId,
         taskPath
-      }),
-      bytes: estimateSingleHtmlBytes(artifacts)
+      })
     },
     {
-      label: labels.indexHtml,
-      filename: "index.html",
+      label: labels.separatedFiles,
+      filename: "lp-static-files.zip",
       href: createTaskArtifactRouteHref({
-        file: "index-html",
+        file: "split-zip",
         pageVersionId,
         projectId,
         taskPath
-      }),
-      bytes: artifacts.indexHtml.length
-    },
-    {
-      label: labels.stylesCss,
-      filename: "styles.css",
-      href: createTaskArtifactRouteHref({
-        file: "styles-css",
-        pageVersionId,
-        projectId,
-        taskPath
-      }),
-      bytes: artifacts.stylesCss.length
-    },
-    {
-      label: labels.scriptJs,
-      filename: "script.js",
-      href: createTaskArtifactRouteHref({
-        file: "script-js",
-        pageVersionId,
-        projectId,
-        taskPath
-      }),
-      bytes: artifacts.scriptJs.length
+      })
     }
   ];
 }
@@ -226,8 +198,4 @@ function createTaskArtifactRouteParams({
     params.set("version", trimmedPageVersionId);
   }
   return params;
-}
-
-function estimateSingleHtmlBytes(artifacts: StaticArtifacts): number {
-  return artifacts.indexHtml.length + artifacts.stylesCss.length + artifacts.scriptJs.length;
 }
